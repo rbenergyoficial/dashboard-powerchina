@@ -3,12 +3,24 @@
 <head><title>Autenticando...</title></head>
 <body>
 <script>
-if (window.opener) {
-  window.opener._oauthCode = Object.fromEntries(new URLSearchParams(window.location.search));
-  window.close();
-} else {
-  window.location.replace('/');
-}
+(function(){
+  var p = new URLSearchParams(window.location.search);
+  var code = p.get('code');
+  var state = p.get('state');
+  if (code && state) {
+    try {
+      localStorage.setItem('mrd_oauth_code', code);
+      localStorage.setItem('mrd_oauth_state', state);
+      localStorage.setItem('mrd_oauth_ts', Date.now());
+    } catch(e) {}
+    if (window.opener) {
+      try { window.opener._oauthCode = {code: code, state: state}; } catch(e) {}
+    }
+    window.close();
+  } else {
+    window.location.replace('/');
+  }
+})();
 </script>
 </body>
 </html>
