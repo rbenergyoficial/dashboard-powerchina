@@ -382,13 +382,12 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa .ppa-top-controls .fbar-label{margin:0;font-size:10px;letter-spacing:.08em}
 #page-ppa .ppa-compact-select{min-width:118px}
 #page-ppa .ppa-local-controls{display:none!important}
-#page-ppa .ppa-donut-shell{position:relative;height:300px;width:100%;padding:8px 6px 4px}
-#page-ppa .ppa-donut-shell canvas{cursor:pointer}
-#page-ppa .ppa-click-hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);padding:4px 10px;border-radius:999px;background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.28);color:#cdb9ff;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;pointer-events:none}
+#page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:300px;width:100%;padding:8px 6px 4px;gap:20px}
+#page-ppa .ppa-donut-shell canvas{flex:0 0 48%;height:100%!important;cursor:pointer}
+#page-ppa .ppa-split-info{flex:1;display:flex;flex-direction:column;justify-content:center;min-width:0}
 #page-ppa #sec-ppa-analysis .cc-body{height:300px!important;max-height:300px!important;overflow:hidden}
 #page-ppa #sec-ppa-analysis .cc-body.ppa-comp-body{height:300px!important;max-height:300px!important;overflow:hidden}
 #page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:300px!important}
-#page-ppa .ppa-donut-shell canvas{height:100%!important}
 #page-ppa .ppa-card-zone{margin-top:-4px}
 #page-ppa #sec-ppa-performance .chart-row{display:flex;flex-direction:row;gap:14px;align-items:stretch}
 #page-ppa #sec-ppa-performance .cc:first-child{flex:0 0 70%;max-width:70%;min-width:0;box-sizing:border-box}
@@ -1067,7 +1066,7 @@ body.page-must-active #kpiGrid{display:none!important;}
       <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub">PPA BRK vs demais parques</div></div></div>
-          <div class="ppa-donut-shell"><canvas id="cPPAsplit"></canvas><div class="ppa-click-hint">Clique para filtrar o escopo</div></div>
+          <div class="ppa-donut-shell"><canvas id="cPPAsplit"></canvas><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
         </div>
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Taxa de Conclusão por Parque</div><div class="cc-sub">% atingido da meta contratada</div></div></div>
@@ -4312,6 +4311,12 @@ function renderPagePPA(type){
   // ── Participação (donut) ──
   if(charts['cPPAsplit']){try{charts['cPPAsplit'].destroy();}catch(e){}delete charts['cPPAsplit'];}
   const splitCtx=document.getElementById('cPPAsplit');
+  const _ppaSetScope=(scope)=>{
+    filters.ppaPark='todos';filters.ppaChartScope=scope;
+    const _ss=s=>{ const el=document.getElementById(s); if(el) el.value=scope; };
+    _ss('ppaTopScopeSel');_ss('ppaChartScopeSel');_ss('ppaProgScopeSel');
+    renderPagePPA();
+  };
   if(splitCtx) charts['cPPAsplit']=new Chart(splitCtx,{
     type:'doughnut',
     data:{
@@ -4321,33 +4326,49 @@ function renderPagePPA(type){
         backgroundColor:['rgba(168,85,247,.78)','rgba(45,212,191,.56)'],
         hoverBackgroundColor:['rgba(168,85,247,.96)','rgba(45,212,191,.82)'],
         borderColor:['rgba(168,85,247,.95)','rgba(45,212,191,.88)'],
-        borderWidth:2.5,
-        hoverOffset:16,
-        spacing:3,
-        radius:'92%'
+        borderWidth:2.5,hoverOffset:16,spacing:3,radius:'92%'
       }]
     },
     options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      animation:{duration:0},
-      cutout:'68%',
+      responsive:true,maintainAspectRatio:false,animation:{duration:0},cutout:'68%',
       plugins:{
-        legend:{position:'bottom',labels:{color:'#c8d4f0',font:{size:12,family:"'Inter'"},usePointStyle:true,pointStyle:'rectRounded',padding:18}},
-        tooltip:{callbacks:{label:c=>` ${translateAnyText(c.label)}: ${_fmtMWh(c.parsed)} MWh (${(c.parsed/((gerTotal+naoPpaTotal)||1)*100).toFixed(1)}%)`,afterLabel:c=>c.dataIndex===0?translateAnyText('Clique para focar PPA BRK'):translateAnyText('Clique para focar ML / demais parques')}}
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>` ${translateAnyText(c.label)}: ${_fmtMWh(c.parsed)} MWh (${(c.parsed/((gerTotal+naoPpaTotal)||1)*100).toFixed(1)}%)`}}
       },
       onClick:(evt,elements)=>{
         if(!elements||!elements.length) return;
-        const idx=elements[0].index;
-        filters.ppaPark='todos';
-        filters.ppaChartScope=idx===0?'ppa':'ml';
-        const topScopeSel=document.getElementById('ppaTopScopeSel'); if(topScopeSel) topScopeSel.value=filters.ppaChartScope;
-        const chartScopeSel=document.getElementById('ppaChartScopeSel'); if(chartScopeSel) chartScopeSel.value=filters.ppaChartScope;
-        const progScopeSel=document.getElementById('ppaProgScopeSel'); if(progScopeSel) progScopeSel.value=filters.ppaChartScope;
-        renderPagePPA();
+        _ppaSetScope(elements[0].index===0?'ppa':'ml');
       }
     }
   });
+  // ── Painel lateral do donut ──
+  const _si=document.getElementById('ppaSplitInfo');
+  if(_si){
+    const _tot=(gerTotal||0)+(naoPpaTotal||0);
+    const _pp=_tot>0?(gerTotal/_tot*100).toFixed(1):'0.0';
+    const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
+    const _cs=filters.ppaChartScope||'todos';
+    const _lbl='font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase';
+    const _card=(scope,cor,corBg,nome,val,pct)=>{
+      const ativo=_cs===scope;
+      return `<div data-scope="${scope}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;border:1.5px solid ${cor}${ativo?'bb':'44'};background:${corBg}${ativo?'22':'0d'};cursor:pointer;margin-bottom:9px;transition:border-color .15s,background .15s">
+        <div>
+          <div style="${_lbl};color:${cor};margin-bottom:4px">● ${nome}</div>
+          <div style="font-size:17px;font-weight:800;color:#e8e0ff;letter-spacing:-.03em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:3px">MWh</span></div>
+        </div>
+        <div style="background:${corBg}33;border-radius:8px;padding:6px 12px;font-size:16px;font-weight:800;color:${cor};letter-spacing:-.02em">${pct}%</div>
+      </div>`;
+    };
+    _si.innerHTML=
+      `<div style="${_lbl};color:#4a5a6a;margin-bottom:4px">TOTAL DO PERÍODO</div>`+
+      `<div style="font-size:20px;font-weight:800;color:#fff;letter-spacing:-.04em;margin-bottom:16px">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:5px">MWh</span></div>`+
+      _card('ppa','#A855F7','rgba(168,85,247','PPA BRK',gerTotal,_pp)+
+      _card('ml','#2DD4BF','rgba(45,212,191','ML / Demais',naoPpaTotal,_pm)+
+      `<div data-scope="todos" style="text-align:center;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6a7a9a;background:rgba(255,255,255,.03)">↺ Todos os escopos</div>`;
+    _si.querySelectorAll('[data-scope]').forEach(el=>{
+      el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
+    });
+  }
 
   // ── % da Meta Atingida por parque ──
   mkChart('cPPAcomp',{
