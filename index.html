@@ -4251,22 +4251,37 @@ function renderPagePPA(type){
     }
   });
 
-  // ── Evolução diária do mês ──
-  const ev=M.daily;
+  // ── Evolução PPA/ML: mensal ou diária conforme filtro principal ──
   const evScope=(chartSel==='todos'?chartParksBase:[chartSel]);
-  const evData=ev.map(r=> +evScope.reduce((s,p)=>s+num(r[p]),0).toFixed(2));
-  const evDayLabels=ev.map(r=>String(r.data.getDate()));
-  const evMonthLabel=ev.length>0?MNS[ev[0].data.getMonth()+1].toLowerCase()+'/'+ev[0].data.getFullYear():'';
-  const evType=getToggle('ppaevo')||'line';
+  const evType=getToggle('ppaevo')||'bar';
+  const evGran=(filters.gran==='dia'&&typeof smartGran==='function')?smartGran():filters.gran;
+  const evIsMonthly=(evGran==='mes'||(evGran==='dia'&&filters.mes==='todos'));
+  let evLabels,evData,evXTitle;
+  if(evIsMonthly){
+    const filtMonths=ppa.months.filter(mm=>{
+      if(filters.ano!=='todos'){const yr=mm.daily.length>0?mm.daily[0]?.data?.getFullYear():null;return yr===+filters.ano;}
+      return true;
+    });
+    evLabels=filtMonths.map(mm=>MNS[mm.mesNum]||mm.mes.slice(0,3));
+    evData=filtMonths.map(mm=>+evScope.reduce((s,p)=>s+num(mm.produzida[p]),0).toFixed(2));
+    evXTitle=filters.ano!=='todos'?String(filters.ano):'';
+  } else {
+    const ev=M.daily;
+    evLabels=ev.map(r=>String(r.data.getDate()));
+    evData=ev.map(r=>+evScope.reduce((s,p)=>s+num(r[p]),0).toFixed(2));
+    evXTitle=ev.length>0?MNS[ev[0].data.getMonth()+1].toLowerCase()+'/'+ev[0].data.getFullYear():'';
+  }
   const evDataset=evType==='line'
-    ?{label:(sel==='todos'?'PPA BRK':sel)+' (MWh)',data:evData,borderColor:'#A855F7',
+    ?{label:(sel==='todos'?'PPA/ML':sel)+' (MWh)',data:evData,borderColor:'#A855F7',
       backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'transparent';const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,'rgba(168,85,247,.02)');g.addColorStop(1,'rgba(168,85,247,.34)');return g;},
-      fill:true,tension:.35,pointRadius:0,borderWidth:2.5}
-    :{label:(sel==='todos'?'PPA BRK':sel)+' (MWh)',data:evData,
+      fill:true,tension:.35,pointRadius:2,borderWidth:2.5}
+    :{label:(sel==='todos'?'PPA/ML':sel)+' (MWh)',data:evData,
       backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'rgba(168,85,247,.6)';const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(168,85,247,.85)');g.addColorStop(1,'rgba(168,85,247,.35)');return g;},
-      borderColor:'#A855F7',borderWidth:1.4,borderRadius:6,maxBarThickness:20};
-  mkChart('cPPAevo',{type:evType,data:{labels:evDayLabels,datasets:[evDataset]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},
-    scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:9,weight:'700'}},title:{display:true,text:evMonthLabel,color:'#8090b8',font:{size:10},padding:{top:6}}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
+      borderColor:'#A855F7',borderWidth:1.4,borderRadius:6,barPercentage:0.7,categoryPercentage:0.86};
+  const evXAxis={...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:evIsMonthly?11:9,weight:'700'}}};
+  if(evXTitle) evXAxis.title={display:true,text:evXTitle,color:'#b8c4e0',font:{size:11,weight:'700',family:"'Inter',system-ui"},padding:{top:4}};
+  mkChart('cPPAevo',{type:evType,data:{labels:evLabels,datasets:[evDataset]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},
+    scales:{x:evXAxis,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Meta vs Produzido ──
   mkChart('cPPAmeta',{type:'bar',data:{labels:allParks,datasets:[
