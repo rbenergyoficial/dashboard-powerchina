@@ -4349,21 +4349,21 @@ function renderPagePPA(type){
     const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
     const _cs=filters.ppaChartScope||'todos';
     const _lbl='font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase';
-    const _card=(scope,cor,corBg,nome,val,pct)=>{
+    const _card=(scope,cor,bgAtivo,bgInativo,nome,val,pct)=>{
       const ativo=_cs===scope;
-      return `<div data-scope="${scope}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;border:1.5px solid ${cor}${ativo?'bb':'44'};background:${corBg}${ativo?'22':'0d'};cursor:pointer;margin-bottom:9px;transition:border-color .15s,background .15s">
+      return `<div data-scope="${scope}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;border:1.5px solid ${cor}${ativo?'cc':'40'};background:${ativo?bgAtivo:bgInativo};cursor:pointer;margin-bottom:9px;transition:border-color .15s,background .15s">
         <div>
           <div style="${_lbl};color:${cor};margin-bottom:4px">● ${nome}</div>
           <div style="font-size:17px;font-weight:800;color:#e8e0ff;letter-spacing:-.03em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:3px">MWh</span></div>
         </div>
-        <div style="background:${corBg}33;border-radius:8px;padding:6px 12px;font-size:16px;font-weight:800;color:${cor};letter-spacing:-.02em">${pct}%</div>
+        <div style="background:${cor}33;border-radius:8px;padding:6px 12px;font-size:16px;font-weight:800;color:${cor};letter-spacing:-.02em">${pct}%</div>
       </div>`;
     };
     _si.innerHTML=
       `<div style="${_lbl};color:#4a5a6a;margin-bottom:4px">TOTAL DO PERÍODO</div>`+
       `<div style="font-size:20px;font-weight:800;color:#fff;letter-spacing:-.04em;margin-bottom:16px">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:5px">MWh</span></div>`+
-      _card('ppa','#A855F7','rgba(168,85,247','PPA BRK',gerTotal,_pp)+
-      _card('ml','#2DD4BF','rgba(45,212,191','ML / Demais',naoPpaTotal,_pm)+
+      _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',gerTotal,_pp)+
+      _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm)+
       `<div data-scope="todos" style="text-align:center;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6a7a9a;background:rgba(255,255,255,.03)">↺ Todos os escopos</div>`;
     _si.querySelectorAll('[data-scope]').forEach(el=>{
       el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
