@@ -390,8 +390,8 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:300px!important}
 #page-ppa .ppa-donut-shell canvas{height:100%!important}
 #page-ppa .ppa-card-zone{margin-top:-4px}
-#page-ppa #sec-ppa-performance .chart-row{display:flex;flex-direction:column;gap:14px}
-#page-ppa #sec-ppa-performance .cc{flex:1 1 100%;min-width:0;width:100%}
+#page-ppa #sec-ppa-performance .chart-row{display:flex;flex-direction:row;gap:14px;align-items:stretch}
+#page-ppa #sec-ppa-performance .cc:first-child{flex:0 0 70%;max-width:70%;min-width:0;box-sizing:border-box}
 #page-ppa #sec-ppa-performance .cc-head{margin-bottom:10px}
 #page-ppa #sec-ppa-performance .cc-body{overflow:hidden;height:360px!important;min-height:360px!important;max-height:360px!important;flex:none}
 #page-ppa #sec-ppa-performance .cc-body canvas{width:100%!important;height:100%!important}
@@ -1041,7 +1041,7 @@ body.page-must-active #kpiGrid{display:none!important;}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="10"/></svg>
         DESEMPENHO POR PARQUE
       </div>
-      <div class="chart-row" style="flex-direction:column">
+      <div class="chart-row">
         <div class="cc">
           <div class="cc-head" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><div style="min-width:240px;flex:1 1 260px"><div class="cc-title" id="ppaMainChartTitle">Geração × Meta</div><div class="cc-sub" id="ppaMainChartSub">Visão diária ou mensal · tooltip com valores e percentuais · filtro por período, mês, escopo e parque</div></div><div class="ppa-local-controls" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex:1 1 640px;padding:8px 10px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03)"><span class="fbar-label" style="margin:0;font-size:10px;letter-spacing:.08em">Mês</span><select class="fselect" id="ppaChartMonthSel"></select><span class="fbar-label" style="margin:0;font-size:10px;letter-spacing:.08em">Escopo</span><select class="fselect" id="ppaChartScopeSel"></select><span class="fbar-label" style="margin:0;font-size:10px;letter-spacing:.08em">Parque</span><select class="fselect" id="ppaChartParkSel"></select><span class="fbar-label" style="margin:0;font-size:10px;letter-spacing:.08em">Visão</span><select class="fselect" id="ppaChartGranSel"></select><div class="toggle-grp" id="tg-ppamain"><button class="toggle-btn on" data-chart="ppamain" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ppamain" data-t="line">LINE</button></div></div></div>
           <div class="cc-body" style="height:360px;position:relative;display:flex;flex-direction:column"><div style="flex:1 1 auto;min-height:0"><canvas id="cPPARank"></canvas></div><div id="ppaXAxisMonthTag" style="height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;letter-spacing:.04em;color:#FFFFFF;text-transform:none"></div></div>
@@ -10939,14 +10939,14 @@ window._ppaChartGet=function(id){return charts[id];};
             var _ov2=document.createElement('div');
             _ov2.id='ppaRankStatsV40';
             _ov2.className='cc';
-            _ov2.style.cssText='width:100%;min-width:0;box-sizing:border-box';
+            _ov2.style.cssText='flex:0 0 calc(30% - 14px);max-width:calc(30% - 14px);min-width:0;box-sizing:border-box';
             var _sHead=document.createElement('div');
             _sHead.className='cc-head';
             _sHead.style.cssText='margin-bottom:10px';
             _sHead.innerHTML='<div><div class="cc-title">Análise do Período</div><div class="cc-sub">Geração apurada vs meta · projeção e ritmo necessário</div></div>';
             var _sBody=document.createElement('div');
             _sBody.className='cc-body';
-            _sBody.style.cssText='height:auto;box-sizing:border-box;display:flex;flex-direction:column;color:#D8D9DA';
+            _sBody.style.cssText='height:360px;overflow-y:auto;box-sizing:border-box;display:flex;flex-direction:column;color:#D8D9DA';
             _sBody.innerHTML='<div style="display:flex;flex-direction:column;height:100%">'+_html+'</div>';
             _ov2.appendChild(_sHead);
             _ov2.appendChild(_sBody);
