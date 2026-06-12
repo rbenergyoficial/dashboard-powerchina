@@ -1042,7 +1042,7 @@ body.page-must-active #kpiGrid{display:none!important;}
       </div>
       <div class="chart-row cols-2">
         <div class="cc">
-          <div class="cc-head"><div><div class="cc-title">Evolução da Geração PPA/ML</div><div class="cc-sub">Energia dos parques PPA e ML · visão complementar por mês vigente</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Evolução da Geração PPA/ML</div><div class="cc-sub">Energia dos parques PPA e ML · visão complementar por mês vigente</div></div><div class="toggle-grp" id="tg-ppaevo"><button class="toggle-btn on" data-chart="ppaevo" data-t="line">LINE</button><button class="toggle-btn" data-chart="ppaevo" data-t="bar">BAR</button></div></div>
           <div class="cc-body" style="height:300px"><canvas id="cPPAevo"></canvas></div>
         </div>
         <div class="cc">
@@ -4253,15 +4253,20 @@ function renderPagePPA(type){
 
   // ── Evolução diária do mês ──
   const ev=M.daily;
-  const evLabels=ev.map(r=>String(r.data.getDate()).padStart(2,'0')+'/'+MNS[r.data.getMonth()+1]);
   const evScope=(chartSel==='todos'?chartParksBase:[chartSel]);
   const evData=ev.map(r=> +evScope.reduce((s,p)=>s+num(r[p]),0).toFixed(2));
-  mkChart('cPPAevo',{type:'line',data:{labels:evLabels,datasets:[
-    {label:(sel==='todos'?'PPA BRK':sel)+' (MWh)',data:evData,borderColor:'#A855F7',
+  const evDayLabels=ev.map(r=>String(r.data.getDate()));
+  const evMonthLabel=ev.length>0?MNS[ev[0].data.getMonth()+1].toLowerCase()+'/'+ev[0].data.getFullYear():'';
+  const evType=getToggle('ppaevo')||'line';
+  const evDataset=evType==='line'
+    ?{label:(sel==='todos'?'PPA BRK':sel)+' (MWh)',data:evData,borderColor:'#A855F7',
       backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'transparent';const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,'rgba(168,85,247,.02)');g.addColorStop(1,'rgba(168,85,247,.34)');return g;},
       fill:true,tension:.35,pointRadius:0,borderWidth:2.5}
-  ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},
-    scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
+    :{label:(sel==='todos'?'PPA BRK':sel)+' (MWh)',data:evData,
+      backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'rgba(168,85,247,.6)';const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(168,85,247,.85)');g.addColorStop(1,'rgba(168,85,247,.35)');return g;},
+      borderColor:'#A855F7',borderWidth:1.4,borderRadius:6,maxBarThickness:20};
+  mkChart('cPPAevo',{type:evType,data:{labels:evDayLabels,datasets:[evDataset]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},
+    scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:9,weight:'700'}},title:{display:true,text:evMonthLabel,color:'#8090b8',font:{size:10},padding:{top:6}}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Meta vs Produzido ──
   mkChart('cPPAmeta',{type:'bar',data:{labels:allParks,datasets:[
@@ -4919,6 +4924,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
     else if(chartId==='ufv1') renderUFV1(t);
     else if(chartId==='must') renderPageMUST(t);
     else if(chartId==='ppamain') renderPagePPA(t);
+    else if(chartId==='ppaevo') renderPagePPA();
     else if(chartId==='ufvliq') renderUFVliq(t);
     else if(chartId==='ufv2') renderUFV2(t);
     else if(chartId==='adv4') renderAdv4(t);
