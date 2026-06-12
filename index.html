@@ -91,6 +91,19 @@ body.revealed .chart-row .cc:nth-child(2){animation-delay:.26s}
 .btn-refresh svg{width:13px;height:13px;}
 .btn-refresh.spinning svg{animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;transition:all .35s;cursor:default;white-space:nowrap;border:1px solid transparent;}
+.sync-pill .sp-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s;}
+.sync-pill.sp-ready{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08);color:#6b7a9a;}
+.sync-pill.sp-ready .sp-dot{background:#6b7a9a;}
+.sync-pill.sp-updating{background:rgba(87,148,242,.1);border-color:rgba(87,148,242,.25);color:#5794F2;}
+.sync-pill.sp-updating .sp-dot{background:#5794F2;animation:sp-pulse .8s ease-in-out infinite;}
+.sync-pill.sp-ok{background:rgba(15,202,138,.08);border-color:rgba(15,202,138,.22);color:#0fca8a;}
+.sync-pill.sp-ok .sp-dot{background:#0fca8a;animation:sp-pulse 2s ease-in-out 3;}
+.sync-pill.sp-warn{background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.25);color:#FFD166;cursor:pointer;}
+.sync-pill.sp-warn .sp-dot{background:#FFD166;animation:sp-pulse .9s ease-in-out infinite;}
+.sync-pill.sp-error{background:rgba(240,82,82,.08);border-color:rgba(240,82,82,.22);color:#f05252;}
+.sync-pill.sp-error .sp-dot{background:#f05252;animation:sp-pulse 1.2s ease-in-out infinite;}
+@keyframes sp-pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(1.5);}}
 .badge-status{display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;
   background:#0fca8a0d;border:1px solid #0fca8a22;font-size:10px;font-weight:600;
   color:var(--green);letter-spacing:.4px;text-transform:uppercase;}
@@ -549,6 +562,9 @@ body.page-must-active #kpiGrid{display:none!important;}
       </svg>
       Atualizar Dados
     </button>
+    <div id="syncPill" class="sync-pill sp-ready" title="Status da última atualização">
+      <span class="sp-dot"></span><span class="sp-label">Aguardando</span>
+    </div>
     <div class="badge-status"><span class="dot"></span>Operacional</div>
   </div>
 </header>
@@ -5030,6 +5046,7 @@ async function autoLoadFromUrl(){
   document.getElementById('progClose').style.display='none';
   document.getElementById('progBar').style.background='linear-gradient(90deg,#1565c0,#6b8bf5)';
   setBusy(true);
+  setSyncStatus('updating','Carregando...');
   progUpdate('☁️ Carregando dados…','Buscando base de dados atualizada…',20);
   try{
     const resp=await fetch(DATA_URL,{cache:'no-cache'});
@@ -5072,6 +5089,28 @@ function progUpdate(title,msg,pct,detail=''){
   document.getElementById('progBar').style.width=pct+'%';
   document.getElementById('progDetail').textContent=detail;
 }
+// ── Indicador de status de sincronização ──
+let _syncLastLoad=0;
+function setSyncStatus(state,label){
+  const el=document.getElementById('syncPill');
+  if(!el) return;
+  el.className='sync-pill sp-'+state;
+  el.querySelector('.sp-label').textContent=label;
+  el.onclick=(state==='warn')?()=>autoLoadFromUrl():null;
+  el.title=state==='warn'?'Clique para carregar os dados atualizados':'Status da última atualização';
+}
+async function checkNewData(){
+  if(!DATA_URL||_syncLastLoad===0) return;
+  try{
+    const r=await fetch(DATA_URL,{method:'HEAD',cache:'no-store'});
+    if(!r.ok) return;
+    const lm=r.headers.get('Last-Modified');
+    if(!lm) return;
+    if(new Date(lm).getTime()>_syncLastLoad) setSyncStatus('warn','Atualização disponível');
+  }catch(e){}
+}
+setInterval(checkNewData,5*60*1000);
+
 function progDone(ok,msg){
   document.getElementById('progTitle').innerHTML=ok
     ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0fca8a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="20 6 9 17 4 12"/></svg>Atualizado!'
@@ -5082,6 +5121,8 @@ function progDone(ok,msg){
   document.getElementById('progClose').style.display='block';
   document.getElementById('refreshBtn').classList.remove('spinning');
   document.getElementById('refreshBtn').disabled=false;
+  if(ok){const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setSyncStatus('ok','Atualizado · '+t);_syncLastLoad=Date.now();}
+  else{setSyncStatus('error','Falha na atualização');}
 }
 function closeProgModal(){document.getElementById('progModal').classList.remove('open');}
 
@@ -5099,6 +5140,7 @@ async function onRefreshClick(){
   document.getElementById('progClose').style.display='none';
   document.getElementById('progBar').style.background='linear-gradient(90deg,#1565c0,#6b8bf5)';
   setBusy(true);
+  setSyncStatus('updating','Atualizando...');
   progUpdate('🔄 Autenticando…','Validando sessão Microsoft…',10);
   try{
     const tok=await getAccessToken(cid);
