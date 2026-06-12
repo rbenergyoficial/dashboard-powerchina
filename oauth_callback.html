@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><title>Autenticando...</title></head>
+<body>
+<script>
+if (window.opener) {
+  window.opener._oauthCode = Object.fromEntries(new URLSearchParams(window.location.search));
+  window.close();
+} else {
+  window.location.replace('/');
+}
+</script>
+</body>
+</html>
