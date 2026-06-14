@@ -11941,5 +11941,203 @@ window._ppaChartGet=function(id){return charts[id];};
   setTimeout(function(){try{buildGauges();}catch(e){}},500);
   setTimeout(function(){try{buildGauges();}catch(e){}},1500);
 })();
+</script>
+<script>
+/* V44 — Projection bars + historical irradiance avg for cPPARank daily view */
+(function(){
+  if(window.__ppaProjV44__) return;
+  window.__ppaProjV44__ = true;
+  if(typeof mkChart !== 'function') return;
+
+  window._ppaProjV44 = false; // toggle state: false = off
+
+  var _origV44 = mkChart;
+
+  mkChart = function(id, cfg){
+    /* ── Projection data injection ── */
+    if(id === 'cPPARank' && window._ppaProjV44 && cfg && cfg.data){
+      try{
+        var labels = cfg.data.labels || [];
+        if(!labels.length) throw 'no labels';
+        var s0 = String(labels[0]);
+        /* isNumDay: single-month daily view → labels "1","2",…,"30" */
+        var isNumDay = s0.indexOf('/')<0 && /^\d+$/.test(s0) && parseInt(s0)>=1
+                       && labels.length<=31 && parseInt(String(labels[labels.length-1]))<=31;
+
+        if(isNumDay && cfg.data.datasets && cfg.data.datasets.length>=2){
+          var fs = (typeof filters!=='undefined') ? filters : {};
+          var cy = parseInt(fs.ppaCalYear)||0;
+          var cm = (fs.ppaCalMonth!=null) ? parseInt(fs.ppaCalMonth) : -1;
+
+          if(cy>0 && cm>=0){
+            var daysInMonth = new Date(cy, cm+1, 0).getDate();
+            var existingCount = labels.length;
+            var lastDay = parseInt(String(labels[existingCount-1])) || existingCount;
+
+            /* extra labels for remainder of month */
+            var extraLabels = [];
+            for(var d=lastDay+1; d<=daysInMonth; d++) extraLabels.push(String(d));
+
+            if(extraLabels.length>0){
+              cfg.data.labels = labels.concat(extraLabels);
+
+              /* find meta dataset (dataset at index 1, not on y2) */
+              var genDs = cfg.data.datasets[0];
+              var metaDs = null;
+              for(var i=1; i<cfg.data.datasets.length; i++){
+                if(cfg.data.datasets[i].yAxisID!=='y2'){ metaDs=cfg.data.datasets[i]; break; }
+              }
+              var lastMetaVal = (metaDs && metaDs.data && metaDs.data.length>0)
+                                ? (parseFloat(metaDs.data[metaDs.data.length-1])||0) : 0;
+
+              /* extend existing non-y2 datasets */
+              cfg.data.datasets.forEach(function(ds){
+                if(ds===metaDs){
+                  for(var i=0;i<extraLabels.length;i++) ds.data.push(lastMetaVal);
+                } else if(ds.yAxisID!=='y2'){
+                  for(var i=0;i<extraLabels.length;i++) ds.data.push(null);
+                }
+                /* y2 datasets (irradiance): V40 will use the extended labels automatically */
+              });
+
+              /* calculate required daily generation to reach monthly target */
+              var totalProd=0;
+              for(var i=0;i<existingCount;i++) totalProd+=(parseFloat(genDs.data[i])||0);
+              var totalMeta = lastMetaVal * daysInMonth;
+              var needed = Math.max(0, totalMeta - totalProd);
+              var nRem = extraLabels.length;
+              var neededDaily = nRem>0 ? +(needed/nRem).toFixed(3) : 0;
+
+              if(neededDaily>0){
+                var projData=[];
+                for(var i=0;i<existingCount;i++) projData.push(null);
+                for(var i=0;i<nRem;i++) projData.push(neededDaily);
+
+                cfg.data.datasets.push({
+                  type:'bar',
+                  label:'Projeção necessária',
+                  data:projData,
+                  backgroundColor:'rgba(251,146,60,.18)',
+                  borderColor:'rgba(251,146,60,.55)',
+                  borderWidth:1.5,
+                  borderRadius:3,
+                  maxBarThickness:40,
+                  yAxisID:'y',
+                  order:5
+                });
+
+                /* bump y suggestedMax if projection bars exceed it */
+                if(cfg.options && cfg.options.scales && cfg.options.scales.y){
+                  var curMax = cfg.options.scales.y.suggestedMax||0;
+                  if(neededDaily*1.25>curMax) cfg.options.scales.y.suggestedMax=neededDaily*1.25;
+                }
+              }
+            } /* extraLabels.length>0 */
+
+            /* ── Historical irradiance average (same month, years ≠ cy) ── */
+            var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
+            if(allPat.length>0){
+              var histByDay={};
+              for(var i=0;i<allPat.length;i++){
+                var rec=allPat[i]; if(!rec||!rec.data) continue;
+                var dr=(rec.data instanceof Date)?rec.data:new Date(rec.data);
+                if(isNaN(dr.getTime())) continue;
+                if(cy>0 && dr.getFullYear()===cy) continue; /* exclude current year */
+                if(dr.getMonth()!==cm) continue;            /* same calendar month only */
+                var dn=dr.getDate();
+                if(!histByDay[dn]) histByDay[dn]={sum:0,cnt:0};
+                histByDay[dn].sum+=(parseFloat(rec.irr_media)||0);
+                histByDay[dn].cnt++;
+              }
+              var finalLabels=cfg.data.labels;
+              var hasHist=false;
+              var histIrrData=finalLabels.map(function(lb){
+                var v=histByDay[parseInt(lb)];
+                var val=(v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(2):null;
+                if(val!==null) hasHist=true;
+                return val;
+              });
+              if(hasHist){
+                /* ensure y2 scale exists */
+                if(!cfg.options) cfg.options={};
+                if(!cfg.options.scales) cfg.options.scales={};
+                if(!cfg.options.scales.y2){
+                  cfg.options.scales.y2={
+                    type:'linear',position:'right',beginAtZero:true,
+                    title:{display:true,text:'kWh/m²',color:'#F5C842',font:{size:9}},
+                    ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(1);}},
+                    grid:{display:false},border:{display:false}
+                  };
+                }
+                cfg.data.datasets.push({
+                  type:'line',
+                  label:'Irrad. histórica',
+                  data:histIrrData,
+                  borderColor:'#FB923C',
+                  backgroundColor:'rgba(251,146,60,.05)',
+                  borderWidth:1.5,
+                  borderDash:[5,3],
+                  pointRadius:2,
+                  pointHoverRadius:4,
+                  pointBackgroundColor:'#FB923C',
+                  pointBorderColor:'#FB923C',
+                  fill:false,
+                  tension:0.3,
+                  yAxisID:'y2',
+                  spanGaps:true,
+                  order:3
+                });
+              }
+            }
+          }
+        }
+      }catch(e){ console.warn('V44 proj:',e); }
+    }
+
+    var _r = _origV44(id, cfg);
+
+    /* ── PROJ button injection after chart creation ── */
+    if(id==='cPPARank'){
+      requestAnimationFrame(function(){
+        try{
+          /* remove previous button */
+          var _old=document.getElementById('ppaRankProjWrapV44');
+          if(_old) _old.remove();
+
+          var _cv=document.getElementById('cPPARank');
+          var _cc=_cv?_cv.closest('.cc'):null;
+          var _head=_cc?_cc.querySelector('.cc-head'):null;
+          var _lc=_head?_head.querySelector('.ppa-local-controls'):null;
+          if(!_lc) return;
+
+          var _on=window._ppaProjV44===true;
+
+          var _wrap=document.createElement('div');
+          _wrap.id='ppaRankProjWrapV44';
+          _wrap.style.cssText='display:flex;align-items:center;border:1px solid rgba(251,146,60,'+(_on?'.65':'.30')+');border-radius:8px;padding:2px;background:var(--bg5,rgba(255,255,255,.04))';
+
+          var _btn=document.createElement('button');
+          _btn.textContent='PROJ';
+          _btn.title='Projeção de geração necessária para atingir a meta mensal + irradiância histórica de Mauriti CE';
+          _btn.style.cssText='padding:4px 12px;border-radius:6px;border:none;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.06em;transition:all .15s;font-family:inherit;'
+            +'background:'+(_on?'linear-gradient(135deg,rgba(251,146,60,.5),rgba(251,146,60,.3))':'transparent')+';'
+            +'color:'+(_on?'#FDBA74':'rgba(251,146,60,.45)')+';'
+            +'box-shadow:'+(_on?'0 1px 6px rgba(251,146,60,.25)':'none');
+
+          _btn.addEventListener('click',function(ev){
+            ev.stopPropagation();
+            window._ppaProjV44=!window._ppaProjV44;
+            if(typeof renderPagePPA==='function') renderPagePPA();
+          });
+
+          _wrap.appendChild(_btn);
+          _lc.appendChild(_wrap);
+        }catch(e){ console.warn('V44 btn:',e); }
+      });
+    }
+
+    return _r;
+  };
+})();
 </script></body>
 </html>
