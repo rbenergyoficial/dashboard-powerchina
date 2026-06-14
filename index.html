@@ -4270,8 +4270,9 @@ function renderPagePPA(type){
   // Helper: get first daily date for a PPA month (used for sorting and year detection)
   const _evDate=mm=>mm.daily&&mm.daily.length>0&&mm.daily[0]?.data instanceof Date?mm.daily[0].data:null;
   const _evYrD=mm=>{const d=_evDate(mm);return d?d.getFullYear():null;};
-  // Monthly unless a specific month is selected in the global filter
-  const evIsMonthly=(filters.mes==='todos');
+  // Monthly only when a year is filtered but no specific month (ex: filtrar 2026 → ver Jan-Jun)
+  // Daily: when a specific month is selected globally, OR when no year filter (default → show M.daily)
+  const evIsMonthly=(filters.mes==='todos' && filters.ano!=='todos');
   let evLabels,evData,evXTitle;
   if(evIsMonthly){
     const filtMonths=ppa.months.filter(mm=>{
