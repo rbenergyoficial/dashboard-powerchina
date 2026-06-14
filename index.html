@@ -4267,24 +4267,37 @@ function renderPagePPA(type){
   // ── Evolução PPA/ML: mensal ou diária conforme filtro principal ──
   const evScope=(chartSel==='todos'?chartParksBase:[chartSel]);
   const evType=getToggle('ppaevo')||'bar';
-  // Monthly when no specific month selected; daily when a month is picked in the main filter
+  // Helper: get first daily date for a PPA month (used for sorting and year detection)
+  const _evDate=mm=>mm.daily&&mm.daily.length>0&&mm.daily[0]?.data instanceof Date?mm.daily[0].data:null;
+  const _evYrD=mm=>{const d=_evDate(mm);return d?d.getFullYear():null;};
+  // Monthly unless a specific month is selected in the global filter
   const evIsMonthly=(filters.mes==='todos');
   let evLabels,evData,evXTitle;
   if(evIsMonthly){
-    const _evYr=mm=>mm.daily&&mm.daily.length>0?mm.daily[0]?.data?.getFullYear():null;
     const filtMonths=ppa.months.filter(mm=>{
-      if(filters.ano!=='todos'){const yr=_evYr(mm);return yr===+filters.ano;}
+      if(filters.ano!=='todos'){const yr=_evYrD(mm);return yr===+filters.ano;}
       return true;
-    }).sort((a,b)=>{const ay=_evYr(a)||9999,by=_evYr(b)||9999;return ay!==by?ay-by:(a.mesNum||0)-(b.mesNum||0);});
-    const evYears=[...new Set(filtMonths.map(mm=>_evYr(mm)||0).filter(y=>y>0))].sort((a,b)=>a-b);
-    evLabels=filtMonths.map(mm=>MNS[mm.mesNum]||mm.mes.slice(0,3));
+    }).sort((a,b)=>{
+      // Sort by actual first-day date (most reliable — avoids mesNum=0 bug)
+      const da=_evDate(a), db=_evDate(b);
+      if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;
+      return da-db;
+    });
+    // Month label derived from daily date (reliable even if mesNum=0)
+    evLabels=filtMonths.map(mm=>{
+      const d=_evDate(mm);
+      return d?MNS[d.getMonth()+1]:mm.mes.slice(0,3);
+    });
     evData=filtMonths.map(mm=>+evScope.reduce((s,p)=>s+num(mm.produzida[p]),0).toFixed(2));
+    const evYears=[...new Set(filtMonths.map(mm=>_evYrD(mm)||0).filter(y=>y>0))].sort((a,b)=>a-b);
     evXTitle=evYears.length>1?evYears.join(' / '):(evYears.length===1?String(evYears[0]):(filters.ano!=='todos'?String(filters.ano):''));
   }else{
-    // Find the PPA month that matches the selected month+year filter
+    // Daily view: find PPA month matching global filter month+year
     const tMes=parseInt(filters.mes),tAno=filters.ano!=='todos'?parseInt(filters.ano):null;
-    const _dYr=mm=>mm.daily&&mm.daily.length>0?mm.daily[0]?.data?.getFullYear():null;
-    const evM=ppa.months.find(mm=>mm.mesNum===tMes&&(tAno===null||_dYr(mm)===tAno))||M;
+    const evM=ppa.months.find(mm=>{
+      const d=_evDate(mm); if(!d) return false;
+      return (d.getMonth()+1)===tMes&&(tAno===null||d.getFullYear()===tAno);
+    })||M;
     const ev=evM.daily||[];
     evLabels=ev.map(r=>String(r.data.getDate()));
     evData=ev.map(r=>+evScope.reduce((s,p)=>s+num(r[p]),0).toFixed(2));
