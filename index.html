@@ -11956,13 +11956,15 @@ window._ppaChartGet=function(id){return charts[id];};
     try{
       var _old=document.getElementById('ppaRankProjWrapV44');
       if(_old) _old.remove();
-      /* Anchor on tg-ppamain which is always visible when chart is active */
-      var _tg=document.getElementById('tg-ppamain');
+      /* Anchor: the visible V23 actions container that holds the BAR/LINE toggle
+         (#tg-ppamain is inside hidden .ppa-local-controls — never use it as anchor) */
+      var _tg=document.querySelector('.ppa-chart-actions-v23[data-host="tg-ppamain-v23"]')
+              ||document.getElementById('tg-ppamain-v23');
       if(!_tg) return;
       var _on=window._ppaProjV44===true;
       var _wrap=document.createElement('div');
       _wrap.id='ppaRankProjWrapV44';
-      _wrap.style.cssText='display:inline-flex;align-items:center;margin-left:6px;border:1px solid rgba(251,146,60,'+(_on?'.70':'.32')+');border-radius:8px;padding:2px;background:var(--bg5,rgba(255,255,255,.04));vertical-align:middle';
+      _wrap.style.cssText='display:inline-flex;align-items:center;margin-left:6px;border:1px solid rgba(251,146,60,'+(_on?'.70':'.32')+');border-radius:8px;padding:2px;background:var(--bg5,rgba(255,255,255,.04))';
       var _btn=document.createElement('button');
       _btn.textContent='PROJ';
       _btn.title='Mostrar barras de projeção necessária + irradiância histórica de Mauriti CE';
@@ -11977,8 +11979,8 @@ window._ppaChartGet=function(id){return charts[id];};
         else if(typeof window.renderPagePPA==='function') window.renderPagePPA();
       });
       _wrap.appendChild(_btn);
-      /* Insert immediately AFTER the BAR/LINE toggle group */
-      _tg.insertAdjacentElement('afterend',_wrap);
+      /* Append inside the flex actions container — appears next to BAR/LINE */
+      _tg.appendChild(_wrap);
     }catch(e){ console.warn('V44 btn:',e); }
   }
 
