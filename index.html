@@ -12064,21 +12064,29 @@ window._ppaChartGet=function(id){return charts[id];};
               }
             }
 
-            /* ── Projected irradiance for future days: monthly mean of ALL available patamares ──
-               (no year filter — uses every record for this month across all years,
-               including current year; this gives us a reference even when only
-               the current year's data is loaded in dashData.patamares)            */
+            /* ── Projected irradiance for future days: day-of-month historical averages ──
+               Uses getUTCMonth/getUTCDate to avoid the UTC-3 timezone shift that
+               causes ISO date strings ("YYYY-MM-DD") to appear 1 day earlier in local
+               time. Includes ALL years (no year filter) to maximise available data.   */
             var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
-            var _irrSum=0,_irrCnt=0;
+            var histByDay={};
             for(var _pi=0;_pi<allPat.length;_pi++){
               var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
               var _dr=(_rec.data instanceof Date)?_rec.data:new Date(_rec.data);
               if(isNaN(_dr.getTime())) continue;
-              if(_dr.getMonth()!==cm) continue;   /* same calendar month only */
+              if(_dr.getUTCMonth()!==cm) continue;   /* UTC month — avoids tz shift */
+              var _dn=_dr.getUTCDate();               /* UTC day */
               var _iv=parseFloat(_rec.irr_media)||0;
-              if(_iv>0){ _irrSum+=_iv; _irrCnt++; }
+              if(_iv>0){
+                if(!histByDay[_dn]) histByDay[_dn]={sum:0,cnt:0};
+                histByDay[_dn].sum+=_iv;
+                histByDay[_dn].cnt++;
+              }
             }
-            var _irrMean=_irrCnt>0?(_irrSum/_irrCnt):0;
+            /* Monthly mean = fallback for any day without specific history */
+            var _hvals2=[];
+            for(var _hk in histByDay){ if(histByDay[_hk].cnt>0) _hvals2.push(histByDay[_hk].sum/histByDay[_hk].cnt); }
+            var _irrMean=_hvals2.length>0?(_hvals2.reduce(function(a,b){return a+b;},0)/_hvals2.length):0;
 
             if(_irrMean>0){
               if(!cfg.options) cfg.options={};
@@ -12091,17 +12099,21 @@ window._ppaChartGet=function(id){return charts[id];};
                   grid:{display:false},border:{display:false}
                 };
               }
-              /* future days only — V40 already draws the irradiance line for past days */
-              var _irrProjArr=cfg.data.labels.map(function(_,idx){
-                return idx>lastActiveIdx?+_irrMean.toFixed(2):null;
+              /* future days only — V40 already draws measured irradiance for past days */
+              var _irrProjArr=cfg.data.labels.map(function(lb,idx){
+                if(idx<=lastActiveIdx) return null;
+                var _hd=histByDay[parseInt(lb)];
+                /* prefer day-specific avg so future days show natural daily variation */
+                if(_hd&&_hd.cnt>0) return +(_hd.sum/_hd.cnt).toFixed(2);
+                return +_irrMean.toFixed(2); /* fallback: monthly mean */
               });
               cfg.data.datasets.push({
                 type:'line',label:'Irrad. média (ref.)',data:_irrProjArr,
-                borderColor:'rgba(245,200,66,0.60)',backgroundColor:'rgba(245,200,66,.05)',
+                borderColor:'rgba(245,200,66,0.65)',backgroundColor:'rgba(245,200,66,.05)',
                 borderWidth:1.5,borderDash:[4,3],
                 pointRadius:2,pointHoverRadius:4,
-                pointBackgroundColor:'rgba(245,200,66,0.60)',pointBorderColor:'rgba(245,200,66,0.60)',
-                fill:false,tension:0,yAxisID:'y2',spanGaps:false,order:3
+                pointBackgroundColor:'rgba(245,200,66,0.65)',pointBorderColor:'rgba(245,200,66,0.65)',
+                fill:false,tension:0.3,yAxisID:'y2',spanGaps:true,order:3
               });
             }
           }
