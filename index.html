@@ -12023,22 +12023,38 @@ window._ppaChartGet=function(id){return charts[id];};
             var lastMetaVal=(metaDs&&metaDs.data&&metaDs.data.length>0)
                              ?(parseFloat(metaDs.data[lastActiveIdx>=0?lastActiveIdx:0])||0):0;
 
+            /* ── Historical irradiance per day-of-month (all years except cy, built first) ── */
+            var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
+            var histByDay={};
+            for(var _pi=0;_pi<allPat.length;_pi++){
+              var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
+              var _dr=(_rec.data instanceof Date)?_rec.data:new Date(_rec.data);
+              if(isNaN(_dr.getTime())) continue;
+              if(cy>0&&_dr.getFullYear()===cy) continue;
+              if(_dr.getMonth()!==cm) continue;
+              var _dn=_dr.getDate();
+              if(!histByDay[_dn]) histByDay[_dn]={sum:0,cnt:0};
+              histByDay[_dn].sum+=(parseFloat(_rec.irr_media)||0);
+              histByDay[_dn].cnt++;
+            }
+            /* Monthly mean as fallback for future days with no specific day-of-month history */
+            var _hvals=[];
+            for(var _hk in histByDay){ if(histByDay[_hk].cnt>0) _hvals.push(histByDay[_hk].sum/histByDay[_hk].cnt); }
+            var histMean=_hvals.length>0?(_hvals.reduce(function(a,b){return a+b;},0)/_hvals.length):0;
+
             if(nRem>0 && nActive>0){
-              /* total production so far */
               var totalProd=0;
               for(var i=0;i<=lastActiveIdx;i++) totalProd+=(parseFloat(genData[i])||0);
               var totalMeta=lastMetaVal*daysInMonth;
               var needed=Math.max(0,totalMeta-totalProd);
-              var neededDaily=+(needed/nRem).toFixed(3);
 
-              if(neededDaily>0){
-                /* ── extend labels to full month if chart doesn't have all days ── */
+              if(needed>0){
+                /* extend labels to full month if chart doesn't have all days */
                 var lastDay=parseInt(String(labels[labels.length-1]))||labels.length;
                 if(lastDay<daysInMonth){
                   var extra=[];
                   for(var d=lastDay+1;d<=daysInMonth;d++) extra.push(String(d));
                   cfg.data.labels=labels.concat(extra);
-                  /* extend meta and other y-axis datasets */
                   cfg.data.datasets.forEach(function(ds){
                     if(ds===metaDs){
                       for(var j=0;j<extra.length;j++) ds.data.push(lastMetaVal);
@@ -12047,78 +12063,70 @@ window._ppaChartGet=function(id){return charts[id];};
                     }
                   });
                 }
-
-                /* null-out gen bars for future days (replace 0 with null) */
+                /* null-out gen bars for future days */
                 for(var i=lastActiveIdx+1;i<genDs.data.length;i++) genDs.data[i]=null;
 
-                /* projection dataset */
+                /* Irradiance weight per future day: day-of-month history or monthly mean */
+                var futureIrr=[];
+                var totalFutureIrr=0;
+                for(var i=nActive;i<daysInMonth;i++){
+                  var _hb=histByDay[i+1]; /* i+1 = 1-indexed day number */
+                  var _fi=(_hb&&_hb.cnt>0)?(_hb.sum/_hb.cnt):(histMean||1);
+                  futureIrr.push(_fi);
+                  totalFutureIrr+=_fi;
+                }
+                /* Distribute 'needed' proportionally to each future day's expected irradiance */
                 var projData=cfg.data.labels.map(function(_,i){
-                  return i>lastActiveIdx ? neededDaily : null;
+                  if(i<=lastActiveIdx) return null;
+                  var _fi2=i-nActive;
+                  if(_fi2<0||_fi2>=futureIrr.length||totalFutureIrr<=0) return null;
+                  return +(needed*futureIrr[_fi2]/totalFutureIrr).toFixed(3);
                 });
-                cfg.data.datasets.push({
-                  type:'bar',
-                  label:'Projeção necessária',
-                  data:projData,
-                  backgroundColor:'rgba(251,146,60,.18)',
-                  borderColor:'rgba(251,146,60,.55)',
-                  borderWidth:1.5,
-                  borderRadius:3,
-                  maxBarThickness:40,
-                  yAxisID:'y',
-                  order:5
-                });
-
-                /* bump y scale if needed */
-                if(cfg.options&&cfg.options.scales&&cfg.options.scales.y){
-                  var curMax=cfg.options.scales.y.suggestedMax||0;
-                  if(neededDaily*1.25>curMax) cfg.options.scales.y.suggestedMax=neededDaily*1.25;
+                if(projData.some(function(v){return v!==null;})){
+                  cfg.data.datasets.push({
+                    type:'bar',label:'Projeção necessária',data:projData,
+                    backgroundColor:'rgba(251,146,60,.18)',borderColor:'rgba(251,146,60,.55)',
+                    borderWidth:1.5,borderRadius:3,maxBarThickness:40,yAxisID:'y',order:5
+                  });
+                  var _maxP=Math.max.apply(null,projData.filter(function(v){return v!==null;}));
+                  if(cfg.options&&cfg.options.scales&&cfg.options.scales.y){
+                    var curMax=cfg.options.scales.y.suggestedMax||0;
+                    if(_maxP*1.25>curMax) cfg.options.scales.y.suggestedMax=_maxP*1.25;
+                  }
                 }
               }
             }
 
-            /* ── Historical irradiance avg (same month, years ≠ cy) ── */
-            var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
-            if(allPat.length>0){
-              var histByDay={};
-              for(var i=0;i<allPat.length;i++){
-                var rec=allPat[i]; if(!rec||!rec.data) continue;
-                var dr=(rec.data instanceof Date)?rec.data:new Date(rec.data);
-                if(isNaN(dr.getTime())) continue;
-                if(cy>0&&dr.getFullYear()===cy) continue;
-                if(dr.getMonth()!==cm) continue;
-                var dn=dr.getDate();
-                if(!histByDay[dn]) histByDay[dn]={sum:0,cnt:0};
-                histByDay[dn].sum+=(parseFloat(rec.irr_media)||0);
-                histByDay[dn].cnt++;
+            /* ── Irradiance line: real history for past days + mean estimate for future days ── */
+            var _finalLbls=cfg.data.labels;
+            var _hasHist=false;
+            var _histArr=_finalLbls.map(function(lb,idx){
+              var _dn2=parseInt(lb);
+              var _hd=histByDay[_dn2];
+              if(_hd&&_hd.cnt>0){ _hasHist=true; return +(_hd.sum/_hd.cnt).toFixed(2); }
+              /* Future day with no specific history: show monthly mean as irradiance estimate */
+              if(idx>lastActiveIdx&&histMean>0){ _hasHist=true; return +histMean.toFixed(2); }
+              return null;
+            });
+            if(_hasHist){
+              if(!cfg.options) cfg.options={};
+              if(!cfg.options.scales) cfg.options.scales={};
+              if(!cfg.options.scales.y2){
+                cfg.options.scales.y2={
+                  type:'linear',position:'right',beginAtZero:true,
+                  title:{display:true,text:'kWh/m²',color:'#F5C842',font:{size:9}},
+                  ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(1);}},
+                  grid:{display:false},border:{display:false}
+                };
               }
-              var finalLbls=cfg.data.labels;
-              var hasHist=false;
-              var histArr=finalLbls.map(function(lb){
-                var v=histByDay[parseInt(lb)];
-                var val=(v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(2):null;
-                if(val!==null) hasHist=true;
-                return val;
+              cfg.data.datasets.push({
+                type:'line',label:'Irrad. histórica Mauriti CE',data:_histArr,
+                borderColor:'#F5C842',backgroundColor:'rgba(245,200,66,.05)',
+                borderWidth:1.5,borderDash:[4,3],
+                pointRadius:2,pointHoverRadius:4,
+                pointBackgroundColor:'#F5C842',pointBorderColor:'#F5C842',
+                fill:false,tension:0.3,yAxisID:'y2',spanGaps:true,order:3
               });
-              if(hasHist){
-                if(!cfg.options) cfg.options={};
-                if(!cfg.options.scales) cfg.options.scales={};
-                if(!cfg.options.scales.y2){
-                  cfg.options.scales.y2={
-                    type:'linear',position:'right',beginAtZero:true,
-                    title:{display:true,text:'kWh/m²',color:'#F5C842',font:{size:9}},
-                    ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(1);}},
-                    grid:{display:false},border:{display:false}
-                  };
-                }
-                cfg.data.datasets.push({
-                  type:'line',label:'Irrad. histórica',data:histArr,
-                  borderColor:'#FB923C',backgroundColor:'rgba(251,146,60,.05)',
-                  borderWidth:1.5,borderDash:[5,3],
-                  pointRadius:2,pointHoverRadius:4,
-                  pointBackgroundColor:'#FB923C',pointBorderColor:'#FB923C',
-                  fill:false,tension:0.3,yAxisID:'y2',spanGaps:true,order:3
-                });
-              }
             }
           }
         }
