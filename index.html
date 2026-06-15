@@ -11951,6 +11951,9 @@ window._ppaChartGet=function(id){return charts[id];};
 
   window._ppaProjV44 = false; // toggle state
 
+  /* Module-level state shared between cfg phase and post-render RAF */
+  var _v44_hbd={}, _v44_hm=0, _v44_lai=-1;
+
   /* ── Button injection helper (called from RAF and setTimeout fallbacks) ── */
   function _v44Btn(){
     try{
@@ -11982,6 +11985,63 @@ window._ppaChartGet=function(id){return charts[id];};
       /* Append inside the flex actions container — appears next to BAR/LINE */
       _tg.appendChild(_wrap);
     }catch(e){ console.warn('V44 btn:',e); }
+  }
+
+  /* ── Post-render: extend V40's irradiance line to cover future days ──
+     Runs after the full mkChart chain (V41→V40→original) has finished,
+     so we can read V40's actual displayed values (correct unit/scale),
+     then fill null slots for future days using day-specific historical
+     averages (scaled to match the current month's measured level).       */
+  function _v44ExtendIrr(){
+    try{
+      if(_v44_lai<0) return;
+      var _cvs=document.getElementById('cPPARank');
+      if(!_cvs) return;
+      /* Locate Chart.js instance — supports v3 (getChart) and v2 (instances map) */
+      var _chart=null;
+      if(typeof Chart!=='undefined'){
+        if(typeof Chart.getChart==='function') _chart=Chart.getChart(_cvs);
+        if(!_chart&&Chart.instances){
+          for(var _ck in Chart.instances){
+            if(Chart.instances[_ck].canvas===_cvs){_chart=Chart.instances[_ck];break;}
+          }
+        }
+      }
+      if(!_chart) return;
+      /* Find V40's irradiance dataset: first y2 line that has values in the past-day range */
+      var _irrDs=null;
+      for(var _di=0;_di<_chart.data.datasets.length;_di++){
+        var _ds=_chart.data.datasets[_di];
+        if(_ds.yAxisID==='y2'&&_ds.type==='line'&&_ds.data){
+          for(var _ii=0;_ii<=_v44_lai&&_ii<_ds.data.length;_ii++){
+            if(_ds.data[_ii]!=null&&_ds.data[_ii]>0){_irrDs=_ds;break;}
+          }
+          if(_irrDs) break;
+        }
+      }
+      if(!_irrDs||!_irrDs.data) return;
+      /* Mean of observed irradiance (V40's scale = correct display units) */
+      var _cyS=0,_cyC=0;
+      for(var _ii=0;_ii<=_v44_lai&&_ii<_irrDs.data.length;_ii++){
+        var _v=_irrDs.data[_ii];
+        if(_v!=null&&!isNaN(_v)&&_v>0){_cyS+=_v;_cyC++;}
+      }
+      if(!_cyC) return;
+      var _cyMean=_cyS/_cyC;
+      /* Scale factor: map historical raw mean to V40's current-month scale */
+      var _sf=_v44_hm>0?_cyMean/_v44_hm:1;
+      /* Fill each future day: scaled day-specific historical average or fallback to cyMean */
+      var _lbls=_chart.data.labels;
+      var _chg=false;
+      for(var _di2=_v44_lai+1;_di2<_lbls.length;_di2++){
+        if(_irrDs.data[_di2]!=null&&_irrDs.data[_di2]>0) continue; /* already has data */
+        var _dn=parseInt(_lbls[_di2]);
+        var _hd=_v44_hbd[_dn];
+        _irrDs.data[_di2]=(_hd&&_hd.cnt>0)?+((_hd.sum/_hd.cnt)*_sf).toFixed(2):+_cyMean.toFixed(2);
+        _chg=true;
+      }
+      if(_chg) _chart.update('none');
+    }catch(e){console.warn('V44 irr ext:',e);}
   }
 
   var _origV44 = mkChart;
@@ -12064,58 +12124,28 @@ window._ppaChartGet=function(id){return charts[id];};
               }
             }
 
-            /* ── Projected irradiance for future days: day-of-month historical averages ──
-               Uses getUTCMonth/getUTCDate to avoid the UTC-3 timezone shift that
-               causes ISO date strings ("YYYY-MM-DD") to appear 1 day earlier in local
-               time. Includes ALL years (no year filter) to maximise available data.   */
+            /* ── Capture irradiance history so _v44ExtendIrr can use it post-render ──
+               UTC date methods avoid the UTC-3 timezone shift on ISO date strings.
+               No dataset is added to cfg here — _v44ExtendIrr modifies V40's
+               existing irradiance dataset after the full chart chain has run,
+               ensuring the extension uses V40's actual display scale.             */
             var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
-            var histByDay={};
+            _v44_hbd={}; var _irrS=0,_irrC=0;
             for(var _pi=0;_pi<allPat.length;_pi++){
               var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
               var _dr=(_rec.data instanceof Date)?_rec.data:new Date(_rec.data);
               if(isNaN(_dr.getTime())) continue;
-              if(_dr.getUTCMonth()!==cm) continue;   /* UTC month — avoids tz shift */
-              var _dn=_dr.getUTCDate();               /* UTC day */
+              if(_dr.getUTCMonth()!==cm) continue;
+              var _dn2=_dr.getUTCDate();
               var _iv=parseFloat(_rec.irr_media)||0;
               if(_iv>0){
-                if(!histByDay[_dn]) histByDay[_dn]={sum:0,cnt:0};
-                histByDay[_dn].sum+=_iv;
-                histByDay[_dn].cnt++;
+                if(!_v44_hbd[_dn2]) _v44_hbd[_dn2]={sum:0,cnt:0};
+                _v44_hbd[_dn2].sum+=_iv; _v44_hbd[_dn2].cnt++;
+                _irrS+=_iv; _irrC++;
               }
             }
-            /* Monthly mean = fallback for any day without specific history */
-            var _hvals2=[];
-            for(var _hk in histByDay){ if(histByDay[_hk].cnt>0) _hvals2.push(histByDay[_hk].sum/histByDay[_hk].cnt); }
-            var _irrMean=_hvals2.length>0?(_hvals2.reduce(function(a,b){return a+b;},0)/_hvals2.length):0;
-
-            if(_irrMean>0){
-              if(!cfg.options) cfg.options={};
-              if(!cfg.options.scales) cfg.options.scales={};
-              if(!cfg.options.scales.y2){
-                cfg.options.scales.y2={
-                  type:'linear',position:'right',beginAtZero:true,
-                  title:{display:true,text:'kWh/m²',color:'#F5C842',font:{size:9}},
-                  ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(1);}},
-                  grid:{display:false},border:{display:false}
-                };
-              }
-              /* future days only — V40 already draws measured irradiance for past days */
-              var _irrProjArr=cfg.data.labels.map(function(lb,idx){
-                if(idx<=lastActiveIdx) return null;
-                var _hd=histByDay[parseInt(lb)];
-                /* prefer day-specific avg so future days show natural daily variation */
-                if(_hd&&_hd.cnt>0) return +(_hd.sum/_hd.cnt).toFixed(2);
-                return +_irrMean.toFixed(2); /* fallback: monthly mean */
-              });
-              cfg.data.datasets.push({
-                type:'line',label:'Irrad. média (ref.)',data:_irrProjArr,
-                borderColor:'rgba(245,200,66,0.65)',backgroundColor:'rgba(245,200,66,.05)',
-                borderWidth:1.5,borderDash:[4,3],
-                pointRadius:2,pointHoverRadius:4,
-                pointBackgroundColor:'rgba(245,200,66,0.65)',pointBorderColor:'rgba(245,200,66,0.65)',
-                fill:false,tension:0.3,yAxisID:'y2',spanGaps:true,order:3
-              });
-            }
+            _v44_hm=_irrC>0?(_irrS/_irrC):0;
+            _v44_lai=lastActiveIdx;
           }
         }
       }catch(e){ console.warn('V44 proj:',e); }
@@ -12125,6 +12155,8 @@ window._ppaChartGet=function(id){return charts[id];};
 
     if(id==='cPPARank'){
       requestAnimationFrame(_v44Btn);
+      /* Extend V40's irradiance line to future days after full chain renders */
+      if(window._ppaProjV44) requestAnimationFrame(_v44ExtendIrr);
     }
 
     return _r;
