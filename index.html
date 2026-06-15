@@ -492,7 +492,116 @@ body.page-must-active #kpiGrid{display:none!important;}
   #page-must .must-rank-side{align-items:flex-start;text-align:left}
 }
 
+/* ══ LIGHT THEME ═══════════════════════════════════════════════════════════
+   Activated via  html[data-theme="light"]  (set by toggleTheme()).
+   Overrides CSS variables and hardcoded-color elements.                   */
+html[data-theme="light"]{
+  --bg:#f4f5fb;--bg2:#eceef8;--bg3:#e5e7f4;--bg4:#ffffff;--bg5:#f0f2fa;--bg6:#dde0ee;
+  --border:rgba(0,0,0,.07);--border2:rgba(0,0,0,.10);--border3:rgba(0,0,0,.16);--border4:rgba(0,0,0,.24);
+  --t1:#13121f;--t2:#3c3f57;--t3:#606480;--t4:#9498b2;
+  --shadow-card:0 2px 14px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.9) inset;
+  --shadow-hover:0 6px 28px rgba(0,0,0,.14),0 1px 0 rgba(255,255,255,1) inset;
+  color-scheme:light;
+}
+html[data-theme="light"] body{
+  background:var(--bg);
+  background-image:
+    radial-gradient(150% 120% at 82% -10%,#eceef8 0%,#f4f5fb 55%),
+    radial-gradient(ellipse 46% 38% at 92% 0%,rgba(168,85,247,.04),transparent 60%),
+    radial-gradient(ellipse 40% 34% at 8% 4%,rgba(45,212,191,.03),transparent 60%);
+}
+html[data-theme="light"] .hdr{
+  background:rgba(248,249,253,.97);
+  box-shadow:0 2px 16px rgba(0,0,0,.08);
+}
+html[data-theme="light"] .fbar{background:rgba(248,249,253,.97);}
+html[data-theme="light"] .dash-sidebar{
+  background:linear-gradient(180deg,rgba(248,249,253,.99),rgba(244,245,251,.97));
+}
+html[data-theme="light"] .side-nav .page-btn:hover,
+html[data-theme="light"] .side-link:hover{background:rgba(0,0,0,.04);}
+html[data-theme="light"] .dash-brand-title{color:#1a1b2e;}
+html[data-theme="light"] .side-subitem.is-active{
+  background:rgba(49,215,226,.09);border-color:rgba(79,212,255,.16);}
+html[data-theme="light"] .side-panel{
+  border-color:rgba(0,0,0,.06);
+  background:linear-gradient(180deg,rgba(0,0,0,.025),rgba(0,0,0,.012));}
+html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25);}
+/* Chart cards */
+html[data-theme="light"] .cc{
+  background:linear-gradient(160deg,#ffffff 0%,#f8f9ff 100%);
+  border-color:rgba(107,139,245,.18);
+  box-shadow:0 2px 18px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.9);}
+html[data-theme="light"] .cc:hover{
+  border-color:rgba(107,139,245,.32);
+  box-shadow:0 4px 28px rgba(0,0,0,.11),0 0 0 1px rgba(107,139,245,.12),inset 0 1px 0 #fff;}
+html[data-theme="light"] .cc-title{color:#1a1d2e;}
+html[data-theme="light"] .cc-sub{color:#5a6275;}
+/* KPI cards */
+html[data-theme="light"] .kpi-card{background:rgba(255,255,255,.75);}
+html[data-theme="light"] .kpi-icon-box{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.08);}
+html[data-theme="light"] .kpi-icon-box svg{stroke:#f4f5fb!important;}
+/* Pill & inputs */
+html[data-theme="light"] .sync-pill.sp-ready{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.09);color:#606480;}
+html[data-theme="light"] .sync-pill.sp-ready .sp-dot{background:#9498b2;}
+html[data-theme="light"] .fdate{color-scheme:light;}
+html[data-theme="light"] .fdate::-webkit-calendar-picker-indicator{filter:none;}
+/* Theme toggle button */
+.btn-theme{width:32px;height:32px;border-radius:8px;border:1px solid var(--border3);
+  background:var(--bg4);color:var(--t2);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;flex-shrink:0;padding:0;}
+.btn-theme:hover{border-color:var(--blue3);color:var(--t1);background:var(--bg5);}
+.btn-theme svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;}
+.btn-theme .icon-sun{display:none;}
+html[data-theme="light"] .btn-theme .icon-moon{display:none;}
+html[data-theme="light"] .btn-theme .icon-sun{display:block;}
+
 </style>
+<script>
+/* ── Theme: apply stored preference before first paint (avoids FOUC) ── */
+(function(){
+  if(localStorage.getItem('dashTheme')==='light')
+    document.documentElement.setAttribute('data-theme','light');
+})();
+
+window.toggleTheme=function(){
+  var h=document.documentElement;
+  var wasLight=h.getAttribute('data-theme')==='light';
+  if(wasLight){ h.removeAttribute('data-theme'); localStorage.setItem('dashTheme','dark'); }
+  else { h.setAttribute('data-theme','light'); localStorage.setItem('dashTheme','light'); }
+  _themeCharts(!wasLight);
+};
+
+/* Update all active Chart.js instances without full re-render */
+function _themeCharts(light){
+  try{
+    if(typeof Chart==='undefined') return;
+    var inst=Chart.instances||{};
+    Object.keys(inst).forEach(function(k){
+      var c=inst[k]; if(!c||!c.options) return;
+      var o=c.options;
+      if(o.scales) Object.keys(o.scales).forEach(function(sk){
+        var sc=o.scales[sk]; if(!sc) return;
+        if(sc.grid&&sk==='y') sc.grid.color=light?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)';
+        if(sc.ticks&&!sc.ticks._userSet) sc.ticks.color=light?'#606480':'#8E9AA5';
+      });
+      if(o.plugins){
+        if(o.plugins.legend&&o.plugins.legend.labels)
+          o.plugins.legend.labels.color=light?'#3c3f57':'#D8D9DA';
+        if(o.plugins.tooltip){
+          var tt=o.plugins.tooltip;
+          tt.backgroundColor=light?'rgba(255,255,255,.97)':'rgba(15,18,24,.95)';
+          tt.borderColor=light?'rgba(0,0,0,.12)':'rgba(255,255,255,.12)';
+          tt.titleColor=light?'#13121f':'#D8D9DA';
+          tt.bodyColor=light?'#606480':'#A0AEC0';
+        }
+      }
+      c.update('none');
+    });
+  }catch(e){ console.warn('theme charts:',e); }
+}
+</script>
 </head>
 <body>
 
@@ -542,6 +651,10 @@ body.page-must-active #kpiGrid{display:none!important;}
   </div>
   <div class="hdr-r">
     <div class="hdr-date" id="hdrDate">—</div>
+    <button class="btn-theme" id="btnTheme" onclick="toggleTheme()" title="Alternar tema claro / escuro" aria-label="Alternar tema">
+      <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+    </button>
     <div class="lang-switcher">
       <button class="lang-btn on" data-lang="pt-BR" type="button">PT</button>
       <button class="lang-btn" data-lang="en" type="button">EN</button>
