@@ -12146,6 +12146,9 @@ window._ppaChartGet=function(id){return charts[id];};
       /* ── full park name derived from code ─────────────────── */
       var fullName=/^M\d+$/.test(pk.name)?'UFV Mauriti '+pk.name.slice(1):pk.name;
 
+      /* ── badge fill color — use PPA_COL for solid gradient matching top-row cards ── */
+      var ppaC=(typeof PPA_COL!=='undefined'&&PPA_COL[pk.name])||cC;
+
       /* ── card ─────────────────────────────────────────────── */
       return {html:'<div class="ppag-card" draggable="true" data-park="'+pk.name+'" style="'
         +'background:linear-gradient(135deg,'+C1+' 0%,'+C2+' 100%);'
@@ -12154,15 +12157,15 @@ window._ppaChartGet=function(id){return charts[id];};
         +'border-radius:14px;'
         +'padding:14px 18px 14px;'
         +'box-sizing:border-box;'
-        +'box-shadow:0 4px 20px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.03)">'
+        +'box-shadow:0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)">'
 
         /* ── name row: chip + full name + status badge ───────── */
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-          /* colored chip badge — unique color per park */
+          /* colored chip badge — solid gradient fill matching top-row CARDS DOS PARQUES style */
           +'<div style="display:inline-flex;align-items:center;justify-content:center;'
             +'width:34px;height:34px;border-radius:9px;flex-shrink:0;'
-            +'background:'+cC+'1A;border:1px solid '+cC+'38">'
-            +'<span style="font-family:'+F+';font-size:10px;font-weight:900;color:'+cC+'">'+pk.name+'</span>'
+            +'background:linear-gradient(140deg,'+ppaC+','+ppaC+'aa);border:1px solid transparent">'
+            +'<span style="font-family:'+F+';font-size:10px;font-weight:900;color:#0a0a10">'+pk.name+'</span>'
           +'</div>'
           /* full name */
           +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;'
