@@ -1574,7 +1574,14 @@ Object.assign(LANG_PACKS['en'].text, {
   "Energia equivalente de referência · ML":"Equivalent reference energy · ML",
   "Energia equivalente de referência · PPA e ML":"Equivalent reference energy · PPA & ML",
   "Escopo PPA BRK":"Scope PPA BRK","Escopo ML":"Scope ML","Escopo PPA e ML":"Scope PPA & ML",
-  "Geração Mensal × Meta Mensal":"Monthly Generation × Monthly Target","Meta: 90%":"Target: 90%"
+  "Geração Mensal × Meta Mensal":"Monthly Generation × Monthly Target","Meta: 90%":"Target: 90%",
+  "Geração":"Generation","Geração mensal":"Monthly generation","Meta mensal":"Monthly target","Meta do período":"Period target",
+  "Visão mensal · parques PPA · filtro por mês e parque":"Monthly view · PPA plants · filter by month and plant",
+  "Visão mensal · parques ML · filtro por mês e parque":"Monthly view · ML plants · filter by month and plant",
+  "Visão mensal · PPA + ML · filtro por mês e parque":"Monthly view · PPA + ML · filter by month and plant",
+  "Visão diária · parques PPA · filtro por período, mês e parque":"Daily view · PPA plants · filter by period, month and plant",
+  "Visão diária · parques ML · filtro por período, mês e parque":"Daily view · ML plants · filter by period, month and plant",
+  "Visão diária · PPA + ML · filtro por período, mês e parque":"Daily view · PPA + ML · filter by period, month and plant"
 });
 Object.assign(LANG_PACKS['zh-CN'].text, {
   "Escopo":"范围","Parques":"电站",
@@ -1591,7 +1598,14 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   "Energia equivalente de referência · ML":"等效参考电量 · ML",
   "Energia equivalente de referência · PPA e ML":"等效参考电量 · PPA 和 ML",
   "Escopo PPA BRK":"范围 PPA BRK","Escopo ML":"范围 ML","Escopo PPA e ML":"范围 PPA 和 ML",
-  "Geração Mensal × Meta Mensal":"月发电量 × 月目标","Meta: 90%":"目标：90%"
+  "Geração Mensal × Meta Mensal":"月发电量 × 月目标","Meta: 90%":"目标：90%",
+  "Geração":"发电量","Geração mensal":"月发电量","Meta mensal":"月目标","Meta do período":"周期目标",
+  "Visão mensal · parques PPA · filtro por mês e parque":"月度视图 · PPA 电站 · 按月份和电站筛选",
+  "Visão mensal · parques ML · filtro por mês e parque":"月度视图 · ML 电站 · 按月份和电站筛选",
+  "Visão mensal · PPA + ML · filtro por mês e parque":"月度视图 · PPA + ML · 按月份和电站筛选",
+  "Visão diária · parques PPA · filtro por período, mês e parque":"日视图 · PPA 电站 · 按时段、月份和电站筛选",
+  "Visão diária · parques ML · filtro por período, mês e parque":"日视图 · ML 电站 · 按时段、月份和电站筛选",
+  "Visão diária · PPA + ML · filtro por período, mês e parque":"日视图 · PPA + ML · 按时段、月份和电站筛选"
 });
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
@@ -6049,13 +6063,13 @@ window._ppaChartGet=function(id){return charts[id];};
     }
     const genDataset = type==='line'
       ? {
-          type:'line', label: gran==='ano'?'Geração mensal':'Geração', data: mainProd,
+          type:'line', label: translateAnyText(gran==='ano'?'Geração mensal':'Geração'), data: mainProd,
           borderColor: seriesColor, backgroundColor: seriesColor+'22', borderWidth:3,
           pointRadius:2, pointHoverRadius:5, pointBackgroundColor:seriesColor,
           pointBorderColor:'#0b0f1a', pointBorderWidth:1, fill:false, tension:.28, yAxisID:'y', order:2
         }
       : {
-          type:'bar', label: gran==='ano'?'Geração mensal':'Geração', data: mainProd,
+          type:'bar', label: translateAnyText(gran==='ano'?'Geração mensal':'Geração'), data: mainProd,
           backgroundColor:(ctx)=>gradFrom(ctx,seriesColor), borderColor:seriesColor, borderWidth:1.4,
           borderRadius:10, maxBarThickness: gran==='ano'?120:24, barPercentage: gran==='ano'?0.82:0.9, order:2
         };
@@ -6064,7 +6078,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:type==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:gran==='ano'?'Meta mensal':'Meta do período',data:mainMeta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:5,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1.5,stepped:(gran!=='ano'),tension:0,yAxisID:'y',order:1}
+        {type:'line',label:translateAnyText(gran==='ano'?'Meta mensal':'Meta do período'),data:mainMeta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:5,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1.5,stepped:(gran!=='ano'),tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -6082,9 +6096,9 @@ window._ppaChartGet=function(id){return charts[id];};
                 const metaCur=mainMeta[idx]||0;
                 const pct=mainPct[idx]||0;
                 return [
-                  `⚡ Geração: ${_fmtMWh2(ger)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(metaCur)} MWh`,
-                  `📊 % da meta: ${pct.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(ger)} MWh`,
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(metaCur)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${pct.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -6135,8 +6149,8 @@ window._ppaChartGet=function(id){return charts[id];};
                 const idx=ctx.dataIndex;
                 return [
                   `⚡ Realizado: ${_fmtMWh2(progressProd[idx])} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(progressMeta[idx])} MWh`,
-                  `📊 % da meta: ${progressPct[idx].toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(progressMeta[idx])} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${progressPct[idx].toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
                 ];
               }
             }
@@ -6327,9 +6341,9 @@ window._ppaChartGet=function(id){return charts[id];};
                 const meta=hourlyMeta[idx]||0;
                 const pct=hourlyPct[idx]||0;
                 return [
-                  `⚡ Geração horária: ${_fmtMWh2(ger)} MWh`,
-                  `🎯 Meta horária: ${_fmtMWh2(meta)} MWh`,
-                  `📊 % da meta: ${pct.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração horária')}: ${_fmtMWh2(ger)} MWh`,
+                  `🎯 ${translateAnyText('Meta horária')}: ${_fmtMWh2(meta)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${pct.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -6605,9 +6619,9 @@ window._ppaChartGet=function(id){return charts[id];};
               label:(ctx)=>{
                 const idx=ctx.dataIndex;
                 return [
-                  `⚡ Geração horária: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta horária: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração horária')}: ${_fmtMWh2(prod[idx]||0)} MWh`,
+                  `🎯 ${translateAnyText('Meta horária')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -6887,9 +6901,9 @@ window._ppaChartGet=function(id){return charts[id];};
               label:(ctx)=>{
                 const idx=ctx.dataIndex;
                 return [
-                  `⚡ Geração diária: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta diária: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração diária')}: ${_fmtMWh2(prod[idx]||0)} MWh`,
+                  `🎯 ${translateAnyText('Meta diária')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -7318,8 +7332,8 @@ window._ppaChartGet=function(id){return charts[id];};
     const scopeColorMap={todos:'#8B5CF6', ppa:'#A855F7', ml:'#10B981'};
     const seriesColor=(primaryPark!=='todos' ? (PPA_COL[primaryPark]||'#A855F7') : (scopeColorMap[scope]||scopeColorMap.todos));
     const genDataset = chartType==='line'
-      ? {type:'line',label:gran==='ano'?'Geração mensal':'Geração',data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
-      : {type:'bar',label:gran==='ano'?'Geração mensal':'Geração',data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
+      ? {type:'line',label:translateAnyText(gran==='ano'?'Geração mensal':'Geração'),data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
+      : {type:'bar',label:translateAnyText(gran==='ano'?'Geração mensal':'Geração'),data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     if(titleEl) titleEl.textContent=title;
@@ -7330,7 +7344,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:gran==='ano'?'Meta mensal':'Meta',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:translateAnyText(gran==='ano'?'Meta mensal':'Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -7345,9 +7359,9 @@ window._ppaChartGet=function(id){return charts[id];};
               label:(ctx)=>{
                 const idx=ctx.dataIndex;
                 return [
-                  `⚡ Geração: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -7405,8 +7419,8 @@ window._ppaChartGet=function(id){return charts[id];};
                 const idx=ctx.dataIndex;
                 return [
                   `⚡ Realizado: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
                 ];
               }
             }
@@ -7723,8 +7737,8 @@ window._ppaChartGet=function(id){return charts[id];};
     const scopeColorMap={todos:'#8B5CF6', ppa:'#A855F7', ml:'#10B981'};
     const seriesColor=(primaryPark!=='todos' ? (PPA_COL[primaryPark]||'#A855F7') : (scopeColorMap[scope]||scopeColorMap.todos));
     const genDataset = chartType==='line'
-      ? {type:'line',label:gran==='ano'?'Geração mensal':'Geração',data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
-      : {type:'bar',label:gran==='ano'?'Geração mensal':'Geração',data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
+      ? {type:'line',label:translateAnyText(gran==='ano'?'Geração mensal':'Geração'),data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
+      : {type:'bar',label:translateAnyText(gran==='ano'?'Geração mensal':'Geração'),data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     if(titleEl) titleEl.textContent=title;
@@ -7735,7 +7749,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:gran==='ano'?'Meta mensal':'Meta',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:translateAnyText(gran==='ano'?'Meta mensal':'Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -7750,9 +7764,9 @@ window._ppaChartGet=function(id){return charts[id];};
               label:(ctx)=>{
                 const idx=ctx.dataIndex;
                 return [
-                  `⚡ Geração: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -7810,8 +7824,8 @@ window._ppaChartGet=function(id){return charts[id];};
                 const idx=ctx.dataIndex;
                 return [
                   `⚡ Realizado: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
                 ];
               }
             }
@@ -8200,9 +8214,9 @@ window._ppaChartGet=function(id){return charts[id];};
               label:(ctx)=>{
                 const idx=ctx.dataIndex;
                 return [
-                  `⚡ Geração: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
+                  `⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`
                 ];
               }
             }
@@ -8254,8 +8268,8 @@ window._ppaChartGet=function(id){return charts[id];};
                 const idx=ctx.dataIndex;
                 return [
                   `⚡ Realizado: ${_fmtMWh2(prod[idx]||0)} MWh`,
-                  `🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,
-                  `📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
+                  `🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,
+                  `📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`
                 ];
               }
             }
@@ -9071,7 +9085,7 @@ window._ppaChartGet=function(id){return charts[id];};
       options:{
         ...CHART_DEFAULTS,
         maintainAspectRatio:false,
-        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ Geração: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`];}}}},
+        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`];}}}},
         scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:gran==='ano'?11:9,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:yMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}}}
       }
     });
@@ -9092,7 +9106,7 @@ window._ppaChartGet=function(id){return charts[id];};
       options:{
         ...CHART_DEFAULTS,
         maintainAspectRatio:false,
-        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ Realizado: ${_fmtMWh2(prodP[idx]||0)} MWh`,`🎯 Meta: ${_fmtMWh2(metaP[idx]||0)} MWh`,`📊 % da meta: ${(pctP[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`];}}}},
+        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ Realizado: ${_fmtMWh2(prodP[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(metaP[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pctP[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`];}}}},
         scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:11,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:progressMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}}}
       }
     });
@@ -9529,7 +9543,7 @@ window._ppaChartGet=function(id){return charts[id];};
       options:{
         ...CHART_DEFAULTS,
         maintainAspectRatio:false,
-        plugins:{...CHART_DEFAULTS.plugins,legend:{...CHART_DEFAULTS.plugins.legend,display:true,position:'top',align:'start',labels:{...CHART_DEFAULTS.plugins.legend.labels,padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>`📅 ${items?.[0]?.label||''}`,label:(ctx)=>{const idx=ctx.dataIndex;if(ctx.dataset.yAxisID==='y2')return[`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];return [`⚡ Geração: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 Meta: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 % da meta: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`,`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];}}}},
+        plugins:{...CHART_DEFAULTS.plugins,legend:{...CHART_DEFAULTS.plugins.legend,display:true,position:'top',align:'start',labels:{...CHART_DEFAULTS.plugins.legend.labels,padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>`📅 ${items?.[0]?.label||''}`,label:(ctx)=>{const idx=ctx.dataIndex;if(ctx.dataset.yAxisID==='y2')return[`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];return [`⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`,`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];}}}},
         scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:gran==='ano'?13:(gran==='mes' && months.length>1)?10:11,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:yMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}},...(hasIrr?{y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'kWh/m²',color:'#b09040',font:{size:9}},grid:{display:false},ticks:{color:'#c0a050'}}}:{})}
       }
     });
@@ -9550,7 +9564,7 @@ window._ppaChartGet=function(id){return charts[id];};
       options:{
         ...CHART_DEFAULTS,
         maintainAspectRatio:false,
-        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ Realizado: ${_fmtMWh2(prodP[idx]||0)} MWh`,`🎯 Meta: ${_fmtMWh2(metaP[idx]||0)} MWh`,`📊 % da meta: ${(pctP[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`];}}}},
+        plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',align:'start',labels:{color:'#c8d4f0',boxWidth:14,usePointStyle:true,pointStyle:'rectRounded',padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>items?.[0]?.label||'',label:(ctx)=>{const idx=ctx.dataIndex;return [`⚡ Realizado: ${_fmtMWh2(prodP[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(metaP[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pctP[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1})}%`];}}}},
         scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:11,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:progressMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}}}
       }
     });
