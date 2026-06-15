@@ -594,6 +594,23 @@ html[data-theme="light"] #sec-ppa-gauges>div{
   border-bottom-color:rgba(0,0,0,.06)!important;}
 html[data-theme="light"] .ppag-card[draggable]:hover{
   box-shadow:-4px 8px 24px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.9)!important;}
+/* V42 PPA filter/calendar bar (JS-injected dark styling) */
+html[data-theme="light"] #ppaFiltV42{background:rgba(248,249,253,.97)!important;border-bottom-color:rgba(0,0,0,.07)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-bar{background:rgba(255,255,255,.94)!important;border-color:rgba(107,139,245,.22)!important;box-shadow:0 2px 14px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.9)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-cal-btn{background:rgba(107,139,245,.10)!important;border-color:rgba(107,139,245,.30)!important;color:#39456b!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-cal-btn:hover{background:rgba(107,139,245,.17)!important;color:#1e2a45!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-sep{background:rgba(0,0,0,.10)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-dd{border-color:rgba(0,0,0,.10)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-dd:hover{border-color:rgba(0,0,0,.20)!important;background:rgba(0,0,0,.03)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-ddlbl{color:#6a7a9a!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-ddval{color:#2a3a55!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-ddarr,html[data-theme="light"] #ppaFiltV42 .v42-carr,html[data-theme="light"] #ppaFiltV42 .v42-cico{color:#6a7a9a!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-panel{background:rgba(255,255,255,.99)!important;border-color:rgba(0,0,0,.10)!important;box-shadow:0 12px 40px rgba(0,0,0,.18)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-sec+.v42-sec{border-top-color:rgba(0,0,0,.07)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-sec-lbl,html[data-theme="light"] #ppaFiltV42 .v42-dlbl{color:#8a96b0!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-ychip,html[data-theme="light"] #ppaFiltV42 .v42-mchip,html[data-theme="light"] #ppaFiltV42 .v42-dchip{color:#3a4a60!important;border-color:rgba(0,0,0,.10)!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-li{color:#3a4a60!important;}
+html[data-theme="light"] #ppaFiltV42 .v42-allbtn{color:#3a6a52!important;border-color:rgba(0,0,0,.10)!important;background:rgba(0,0,0,.03)!important;}
 /* Login box */
 html[data-theme="light"] .login-box{background:var(--bg4);border-color:var(--border3);}
 html[data-theme="light"] .login-input{background:var(--bg5);border-color:var(--border3);color:var(--t1);}
@@ -1541,6 +1558,41 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   "Análise do Período":"周期分析",
   "Geração apurada vs meta · projeção e ritmo necessário":"已统计发电量 vs 目标 · 预测与所需速率"
 });
+/* ── PPA overview KPI cards + filter labels ── */
+Object.assign(LANG_PACKS['en'].text, {
+  "Escopo":"Scope","Parques":"Plants",
+  "META CONTRATUAL / ML":"CONTRACT TARGET / ML","META CONTRATUAL DO PPA BRK":"PPA BRK CONTRACT TARGET",
+  "META CONTRATUAL · PPA E ML":"CONTRACT TARGET · PPA & ML",
+  "Meta de produção contratual do parque":"Plant contractual production target",
+  "Meta contratual consolidada · Escopo ML":"Consolidated contract target · ML scope",
+  "Meta contratual consolidada · Escopo PPA BRK":"Consolidated contract target · PPA BRK scope",
+  "Meta contratual consolidada · PPA e ML":"Consolidated contract target · PPA & ML",
+  "PARQUE SELECIONADO":"SELECTED PLANT","PARQUES DO ML":"ML PLANTS",
+  "PARQUES NO PPA BRK":"PLANTS IN PPA BRK","PARQUES PPA E ML":"PPA & ML PLANTS",
+  "Base de energia equivalente proporcional ao período":"Equivalent energy base proportional to the period",
+  "Energia equivalente de referência · PPA BRK":"Equivalent reference energy · PPA BRK",
+  "Energia equivalente de referência · ML":"Equivalent reference energy · ML",
+  "Energia equivalente de referência · PPA e ML":"Equivalent reference energy · PPA & ML",
+  "Escopo PPA BRK":"Scope PPA BRK","Escopo ML":"Scope ML","Escopo PPA e ML":"Scope PPA & ML",
+  "Geração Mensal × Meta Mensal":"Monthly Generation × Monthly Target","Meta: 90%":"Target: 90%"
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  "Escopo":"范围","Parques":"电站",
+  "META CONTRATUAL / ML":"合同目标 / ML","META CONTRATUAL DO PPA BRK":"PPA BRK 合同目标",
+  "META CONTRATUAL · PPA E ML":"合同目标 · PPA 和 ML",
+  "Meta de produção contratual do parque":"电站合同发电目标",
+  "Meta contratual consolidada · Escopo ML":"合同目标汇总 · ML 范围",
+  "Meta contratual consolidada · Escopo PPA BRK":"合同目标汇总 · PPA BRK 范围",
+  "Meta contratual consolidada · PPA e ML":"合同目标汇总 · PPA 和 ML",
+  "PARQUE SELECIONADO":"选定电站","PARQUES DO ML":"ML 电站",
+  "PARQUES NO PPA BRK":"PPA BRK 电站","PARQUES PPA E ML":"PPA 和 ML 电站",
+  "Base de energia equivalente proporcional ao período":"按周期比例的等效电量基准",
+  "Energia equivalente de referência · PPA BRK":"等效参考电量 · PPA BRK",
+  "Energia equivalente de referência · ML":"等效参考电量 · ML",
+  "Energia equivalente de referência · PPA e ML":"等效参考电量 · PPA 和 ML",
+  "Escopo PPA BRK":"范围 PPA BRK","Escopo ML":"范围 ML","Escopo PPA e ML":"范围 PPA 和 ML",
+  "Geração Mensal × Meta Mensal":"月发电量 × 月目标","Meta: 90%":"目标：90%"
+});
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
 function rebuildI18nFallback(){ ['en','zh-CN'].forEach(lang=>{ I18N_FALLBACK[lang]={}; const txt=(LANG_PACKS[lang]&&LANG_PACKS[lang].text)||{}; Object.keys(txt).forEach(k=>{ I18N_FALLBACK[lang][_normI18nKey(k)] = txt[k]; }); }); }
@@ -1562,6 +1614,8 @@ function translatePatternText(value){
   if(typeof value!=='string' || currentLang==='pt-BR') return value;
   let s=value;
   const patterns = currentLang==='en' ? [
+    [/UFV Mauriti/g,'Mauriti PV Plant'],
+    [/\bFev\b/g,'Feb'],[/\bAbr\b/g,'Apr'],[/\bMai\b/g,'May'],[/\bAgo\b/g,'Aug'],[/\bSet\b/g,'Sep'],[/\bOut\b/g,'Oct'],[/\bDez\b/g,'Dec'],
     [/GWh gerados/g,'GWh generated'],
     [/Atualizado!/g,'Updated!'],
     [/Atualizado/g,'Updated'],
@@ -1601,6 +1655,8 @@ function translatePatternText(value){
     [/EFICIÊNCIA DE CONVERSÃO/g,'CONVERSION EFFICIENCY'],
     [/Demais parques/g,'Other plants']
   ] : [
+    [/UFV Mauriti/g,'Mauriti 光伏电站'],
+    [/\bJan\b/g,'1月'],[/\bFev\b/g,'2月'],[/\bMar\b/g,'3月'],[/\bAbr\b/g,'4月'],[/\bMai\b/g,'5月'],[/\bJun\b/g,'6月'],[/\bJul\b/g,'7月'],[/\bAgo\b/g,'8月'],[/\bSet\b/g,'9月'],[/\bOut\b/g,'10月'],[/\bNov\b/g,'11月'],[/\bDez\b/g,'12月'],
     [/GWh gerados/g,'GWh 已发电'],
     [/Atualizado!/g,'已更新！'],
     [/Atualizado/g,'已更新'],
@@ -4658,7 +4714,7 @@ function renderPagePPA(type){
       <div class="kpi-icon-wrap"><div class="kpi-icon-box" style="background:linear-gradient(140deg,${col},${col}aa);border-color:transparent"><span style="color:#0a0a10;font-weight:800;font-size:10px;font-family:var(--mono)">${p}</span></div>
         <span style="font-size:11px;font-weight:700;color:var(--t2)">UFV ${p.replace('M','Mauriti ')}</span></div>
       <div class="kpi-value" style="font-size:22px">${_fmtMWh(v)}<span class="kpi-unit">MWh</span></div>
-      <div class="kpi-sub" style="margin-top:4px">Meta: ${_fmtMWh2(m)} MWh</div>
+      <div class="kpi-sub" style="margin-top:4px">${translateAnyText('Meta:')} ${_fmtMWh2(m)} MWh</div>
       <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;margin:9px 0 5px">
         <span style="color:var(--t3)">% da meta</span><span style="font-weight:700;font-family:var(--mono);color:${ok?'var(--green)':'var(--yellow)'}">${tx.toLocaleString(getDateLocale(),{maximumFractionDigits:1})}%</span></div>
       <div style="background:var(--bg5);border-radius:99px;height:7px;overflow:hidden"><div style="height:100%;width:${w}%;border-radius:99px;background:linear-gradient(90deg,${ok?'#34E0A1aa':'#F5C84Baa'},${ok?'#34E0A1':'#F5C84B'})"></div></div>
@@ -11561,9 +11617,9 @@ window._ppaChartGet=function(id){return charts[id];};
     var ms=(filters.ppaSelectedMonths||[]).slice().sort(function(a,b){return a-b;});
     var yStr=ys.length===1?String(ys[0]):ys[0]+'-'+ys[ys.length-1];
     if(!ms.length) return yStr;
-    if(ms.length===1) return MF[ms[0]]+' '+ys[0];
+    if(ms.length===1) return translateAnyText(MF[ms[0]])+' '+ys[0];
     if(ms.length===12&&ys.length===1) return yStr;
-    return MO[ms[0]]+' – '+MO[ms[ms.length-1]]+' '+yStr;
+    return translateAnyText(MF[ms[0]])+' – '+translateAnyText(MF[ms[ms.length-1]])+' '+yStr;
   }
 
   var _calBtn=null,_calPanel=null,_scopeBtn=null,_scopePanel=null,_parkBtn=null,_parkPanel=null;
@@ -11721,7 +11777,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
     var sw=document.createElement('div');sw.className='v42-dw';
     var sb=document.createElement('button');sb.className='v42-dd';
-    sb.appendChild(Object.assign(document.createElement('span'),{className:'v42-ddlbl',textContent:'Escopo'}));
+    sb.appendChild(Object.assign(document.createElement('span'),{className:'v42-ddlbl',textContent:translateAnyText('Escopo')}));
     var sv=document.createElement('span');sv.className='v42-ddval';
     var sc=filters.ppaChartScope||'todos';sv.textContent=sc==='todos'?'Todos':sc.toUpperCase();
     sb.appendChild(sv);
@@ -11733,7 +11789,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
     var pw=document.createElement('div');pw.className='v42-dw';
     var pb=document.createElement('button');pb.className='v42-dd';
-    pb.appendChild(Object.assign(document.createElement('span'),{className:'v42-ddlbl',textContent:'Parques'}));
+    pb.appendChild(Object.assign(document.createElement('span'),{className:'v42-ddlbl',textContent:translateAnyText('Parques')}));
     var pv=document.createElement('span');pv.className='v42-ddval';
     var pk=filters.ppaPark||'todos';pv.textContent=pk==='todos'?'Todos':pk.toUpperCase();
     pb.appendChild(pv);
