@@ -1607,6 +1607,74 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   "Visão diária · parques ML · filtro por período, mês e parque":"日视图 · ML 电站 · 按时段、月份和电站筛选",
   "Visão diária · PPA + ML · filtro por período, mês e parque":"日视图 · PPA + ML · 按时段、月份和电站筛选"
 });
+/* ── Progress labels, dynamic titles, waterfall, MUST ── */
+Object.assign(LANG_PACKS['en'].text, {
+  'Realizado do mês':'Monthly actual','Realizado do dia':'Daily actual',
+  'Meta semanal':'Weekly target','Realizado da semana':'Weekly actual',
+  'Status da semana':'Week status','Realizado do período':'Period actual',
+  'Status do período':'Period status',
+  'Capacidade Bruta':'Gross Capacity','Indisponibilidade':'Unavailability',
+  'Geração horária do dia selecionado':'Hourly generation — selected day',
+  'Geração diária do mês selecionado':'Daily generation — selected month',
+  'Filtro diário ativo. O gráfico mostra as horas 1–24 do dia selecionado.':'Daily filter active. Chart shows hours 1–24 of the selected day.',
+  'Filtro diário ativo. O gráfico mostra as horas do dia selecionado.':'Daily filter active. Chart shows hours of the selected day.',
+  'Granularidade diária. O eixo X mostra os dias correspondentes ao mês selecionado.':'Daily granularity. X axis shows days of the selected month.',
+  'Geração por período':'Generation by period',
+  'Geração do dia selecionado':'Generation — selected day',
+  'Geração da semana selecionada':'Generation — selected week',
+  'Geração diária do período selecionado':'Daily generation — selected period',
+  'Filtro diário ativo. A base atual do PPA nesta versão não contém série horária; por isso o gráfico mostra o total consolidado do dia selecionado.':'Daily filter active. Current PPA database has no hourly series; chart shows consolidated total for selected day.',
+  'Filtro semanal ativo. O gráfico exibe cada dia da semana correspondente ao intervalo selecionado.':'Weekly filter active. Chart shows each day of the selected interval.',
+  'Filtro mensal/período ativo. O gráfico exibe todos os dias dentro do intervalo selecionado.':'Monthly/period filter active. Chart shows all days within the selected interval.',
+  'Filtro anual ativo. Uma barra por mês com o total de geração.':'Annual filter active. One bar per month with total generation.',
+  'Barras = realizado do mês · linha dourada = meta mensal por parque · tooltip com % e saldo':'Bars = monthly actual · gold line = monthly target per plant · tooltip with % and balance',
+  'Seleção de dia específico · barras = realizado do dia · linha dourada = meta diária por parque':'Specific day · bars = daily actual · gold line = daily target per plant',
+  'Semana fixa de até 7 dias a partir da data inicial · barras = realizado da semana · linha dourada = meta semanal':'Fixed week (up to 7 days from start) · bars = weekly actual · gold line = weekly target',
+  'Mês completo · barras = realizado do mês · linha dourada = meta mensal por parque':'Full month · bars = monthly actual · gold line = monthly target per plant',
+  'Período customizado':'Custom period',
+  'barras = realizado do período · linha dourada = meta proporcional por parque':'bars = period actual · gold line = proportional target per plant',
+  'Parque: Total':'Plant: Total',
+  'Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST':'Professional filter by year, month, specific day and interval based on the Date column in the MUST sheet',
+  'Demanda máxima pico por parque':'Peak maximum demand by plant',
+  'Ranking por % da demanda contratada e pico do período selecionado':'Ranking by % of contracted demand and peak of selected period',
+  'RANKING DE PICO POR PARQUE':'PEAK DEMAND RANKING BY PLANT',
+  'DADOS POR UFV (WAY2)':'DATA BY PV PLANT (WAY2)',
+  'ENERGIA PRODUZIDA & FRUSTRADA':'GENERATED & CURTAILED ENERGY'
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  'Realizado do mês':'当月实际','Realizado do dia':'当日实际',
+  'Meta semanal':'周目标','Realizado da semana':'本周实际',
+  'Status da semana':'本周状态','Realizado do período':'周期实际',
+  'Status do período':'周期状态',
+  'Capacidade Bruta':'总容量','Indisponibilidade':'不可用量',
+  'Geração horária do dia selecionado':'所选日小时发电量',
+  'Geração diária do mês selecionado':'所选月日发电量',
+  'Filtro diário ativo. O gráfico mostra as horas 1–24 do dia selecionado.':'日筛选有效。图表显示所选日 1–24 小时。',
+  'Filtro diário ativo. O gráfico mostra as horas do dia selecionado.':'日筛选有效。图表显示所选日各小时。',
+  'Granularidade diária. O eixo X mostra os dias correspondentes ao mês selecionado.':'日粒度。X 轴显示所选月各天。',
+  'Geração por período':'分时发电量',
+  'Geração do dia selecionado':'所选日发电量',
+  'Geração da semana selecionada':'所选周发电量',
+  'Geração diária do período selecionado':'所选时段日发电量',
+  'Filtro diário ativo. A base atual do PPA nesta versão não contém série horária; por isso o gráfico mostra o total consolidado do dia selecionado.':'日筛选有效。当前 PPA 数据库无小时序列；图表显示所选日汇总合计。',
+  'Filtro semanal ativo. O gráfico exibe cada dia da semana correspondente ao intervalo selecionado.':'周筛选有效。图表显示所选区间每一天。',
+  'Filtro mensal/período ativo. O gráfico exibe todos os dias dentro do intervalo selecionado.':'月/周期筛选有效。图表显示所选区间内所有日期。',
+  'Filtro anual ativo. Uma barra por mês com o total de geração.':'年筛选有效。每月一柱，显示发电量合计。',
+  'Barras = realizado do mês · linha dourada = meta mensal por parque · tooltip com % e saldo':'柱 = 当月实际 · 金线 = 各电站月目标 · 提示含百分比和差额',
+  'Seleção de dia específico · barras = realizado do dia · linha dourada = meta diária por parque':'特定日 · 柱 = 当日实际 · 金线 = 各电站日目标',
+  'Semana fixa de até 7 dias a partir da data inicial · barras = realizado da semana · linha dourada = meta semanal':'从起始日固定 7 天周 · 柱 = 本周实际 · 金线 = 周目标',
+  'Mês completo · barras = realizado do mês · linha dourada = meta mensal por parque':'完整月份 · 柱 = 当月实际 · 金线 = 各电站月目标',
+  'Período customizado':'自定义周期',
+  'barras = realizado do período · linha dourada = meta proporcional por parque':'柱 = 周期实际 · 金线 = 各电站比例目标',
+  'Parque: Total':'电站：全部',
+  'Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST':'专业筛选：年、月、特定日及区间，基于 MUST 工作表日期列',
+  'Demanda máxima pico por parque':'各电站最大峰值需量',
+  'Ranking por % da demanda contratada e pico do período selecionado':'按合同需量百分比及峰值排名',
+  'RANKING DE PICO POR PARQUE':'各电站峰值需量排名',
+  'DADOS POR UFV (WAY2)':'各光伏电站数据 (WAY2)',
+  'ENERGIA PRODUZIDA & FRUSTRADA':'已发电量与受限电量',
+  'PERFORMANCE RATIO (PR)':'性能比率 (PR)'
+});
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
 function rebuildI18nFallback(){ ['en','zh-CN'].forEach(lang=>{ I18N_FALLBACK[lang]={}; const txt=(LANG_PACKS[lang]&&LANG_PACKS[lang].text)||{}; Object.keys(txt).forEach(k=>{ I18N_FALLBACK[lang][_normI18nKey(k)] = txt[k]; }); }); }
@@ -4234,10 +4302,10 @@ function renderPagePPA(type){
   const chartSel=(sel!=='todos' && chartParksBase.includes(sel))?sel:'todos';
   const scopeParks=(chartSel==='todos'?chartParksBase:[chartSel]);
   const chartGran=filters.ppaChartGran||'dia';
-  const granTitle=chartGran==='mes'?'Geração Mensal × Meta Mensal':'Geração Diária × Meta Diária';
-  const granSub=chartGran==='mes'
+  const granTitle=_T(chartGran==='mes'?'Geração Mensal × Meta Mensal':'Geração Diária × Meta Diária');
+  const granSub=_T(chartGran==='mes'
     ? `Visão mensal · ${chartScope==='ppa'?'parques PPA':chartScope==='ml'?'parques ML':'PPA + ML'} · filtro por mês e parque`
-    : `Visão diária · ${chartScope==='ppa'?'parques PPA':chartScope==='ml'?'parques ML':'PPA + ML'} · filtro por período, mês e parque`;
+    : `Visão diária · ${chartScope==='ppa'?'parques PPA':chartScope==='ml'?'parques ML':'PPA + ML'} · filtro por período, mês e parque`);
   const titleEl=document.getElementById('ppaMainChartTitle'), subEl=document.getElementById('ppaMainChartSub');
   const axisMonthTag=document.getElementById('ppaXAxisMonthTag');
   if(titleEl) titleEl.textContent=granTitle;
@@ -4430,40 +4498,40 @@ function renderPagePPA(type){
   const monthDaysProg=refDateProg ? new Date(refDateProg.getFullYear(), refDateProg.getMonth()+1, 0).getDate() : Math.max(1, monthRows.length || 30);
   let progRows=[];
   let progressMetaDays=monthDaysProg;
-  let progressModeLabel='Meta mensal';
-  let progressRealLabel='Realizado do mês';
-  let progressStatusLabel='Status do mês';
-  let subtitle='Barras = realizado do mês · linha dourada = meta mensal por parque · tooltip com % e saldo';
+  let progressModeLabel=_T('Meta mensal');
+  let progressRealLabel=_T('Realizado do mês');
+  let progressStatusLabel=_T('Status do mês');
+  let subtitle=_T('Barras = realizado do mês · linha dourada = meta mensal por parque · tooltip com % e saldo');
   if(progressGran==='dia'){
     const chosenDay=(ppaIniDateProg||((monthRows[0]||{}).data)||null);
     progRows=chosenDay ? monthRows.filter(r=>r.data && r.data.toDateString()===chosenDay.toDateString()) : [];
     progressMetaDays=1;
-    progressModeLabel='Meta diária';
-    progressRealLabel='Realizado do dia';
-    progressStatusLabel='Status do dia';
-    subtitle='Seleção de dia específico · barras = realizado do dia · linha dourada = meta diária por parque';
+    progressModeLabel=_T('Meta diária');
+    progressRealLabel=_T('Realizado do dia');
+    progressStatusLabel=_T('Status do dia');
+    subtitle=_T('Seleção de dia específico · barras = realizado do dia · linha dourada = meta diária por parque');
   }else if(progressGran==='semana'){
     const weekRows=filteredProgRows.length?filteredProgRows:monthRows.slice(0,7);
     progRows=weekRows;
     progressMetaDays=Math.max(1, Math.min(7, progRows.length||7));
-    progressModeLabel='Meta semanal';
-    progressRealLabel='Realizado da semana';
-    progressStatusLabel='Status da semana';
-    subtitle='Semana fixa de até 7 dias a partir da data inicial · barras = realizado da semana · linha dourada = meta semanal';
+    progressModeLabel=_T('Meta semanal');
+    progressRealLabel=_T('Realizado da semana');
+    progressStatusLabel=_T('Status da semana');
+    subtitle=_T('Semana fixa de até 7 dias a partir da data inicial · barras = realizado da semana · linha dourada = meta semanal');
   }else if(progressGran==='periodo'){
     progRows=filteredProgRows;
     progressMetaDays=Math.max(1, progRows.length||1);
-    progressModeLabel=`Meta do período (${progressMetaDays} dias)`;
-    progressRealLabel='Realizado do período';
-    progressStatusLabel='Status do período';
-    subtitle=`Período customizado (${progressMetaDays} dias) · barras = realizado do período · linha dourada = meta proporcional por parque`;
+    progressModeLabel=`${_T('Meta do período')} (${progressMetaDays} ${_T('dias')})`;
+    progressRealLabel=_T('Realizado do período');
+    progressStatusLabel=_T('Status do período');
+    subtitle=`${_T('Período customizado')} (${progressMetaDays} ${_T('dias')}) · ${_T('barras = realizado do período · linha dourada = meta proporcional por parque')}`;
   }else{
     progRows=monthRows;
     progressMetaDays=monthDaysProg;
-    progressModeLabel='Meta mensal';
-    progressRealLabel='Realizado do mês';
-    progressStatusLabel='Status do mês';
-    subtitle='Mês completo · barras = realizado do mês · linha dourada = meta mensal por parque';
+    progressModeLabel=_T('Meta mensal');
+    progressRealLabel=_T('Realizado do mês');
+    progressStatusLabel=_T('Status do mês');
+    subtitle=_T('Mês completo · barras = realizado do mês · linha dourada = meta mensal por parque');
   }
   const progSub=document.getElementById('ppaProgSub');
   if(progSub) progSub.textContent=subtitle;
@@ -5118,7 +5186,7 @@ function renderPageMUST(type){
 
   const contrData=grouped.map(()=>+contr.toFixed(2));
   const ativaLabel=(sel==='total'?'Demanda Ativa Total':'Demanda Ativa '+sel)+' (MW)';
-  const mustScopeLabel = sel==='total' ? 'Parque: Total' : `Parque: ${sel}`;
+  const mustScopeLabel = sel==='total' ? _T('Parque: Total') : `${_T('Parque')}: ${sel}`;
   const activeColor=mustParkColor(sel==='total'?'total':sel);
   const ativaDs = type==='line'
     ? {label:ativaLabel,data:data,type:'line',borderColor:activeColor,pointRadius:0,borderWidth:2.5,tension:.3,fill:true,order:2,
@@ -5126,7 +5194,7 @@ function renderPageMUST(type){
     : {label:ativaLabel,data:data,type:'bar',backgroundColor:ctx=>gradFrom(ctx,activeColor),borderColor:activeColor,borderWidth:1,borderRadius:7,order:2,maxBarThickness:36};
 
   const denseIntraday=mode==='dia' && (gran==='15min' || gran==='30min' || gran==='hora');
-  const mustMainSub=document.getElementById('mustMainSub'); if(mustMainSub){ mustMainSub.textContent=`Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST · ${mustScopeLabel}`; }
+  const mustMainSub=document.getElementById('mustMainSub'); if(mustMainSub){ mustMainSub.textContent=`${_T('Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST')} · ${mustScopeLabel}`; }
 
   const xScale={
     ...xAxisWithTitle({title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:'#8ea0c9',font:{size:10,weight:'600'}}}),
@@ -6034,21 +6102,21 @@ window._ppaChartGet=function(id){return charts[id];};
     const seriesColor=(primaryPark!=='todos' ? (PPA_COL[primaryPark]||'#A855F7') : (scopeColorMap[scope]||scopeColorMap.todos));
     const buckets = buildMainBuckets(rows, activeParks, gran, start, end);
     const labels=buckets.labels, mainProd=buckets.prod, mainMeta=buckets.meta, mainPct=buckets.pct;
-    let granTitle='Geração por período';
+    let granTitle=_T('Geração por período');
     let granSub='';
     if(gran==='dia'){
-      granTitle='Geração do dia selecionado';
-      granSub='Filtro diário ativo. A base atual do PPA nesta versão não contém série horária; por isso o gráfico mostra o total consolidado do dia selecionado.';
+      granTitle=_T('Geração do dia selecionado');
+      granSub=_T('Filtro diário ativo. A base atual do PPA nesta versão não contém série horária; por isso o gráfico mostra o total consolidado do dia selecionado.');
     }else if(gran==='semana'){
-      granTitle='Geração da semana selecionada';
-      granSub='Filtro semanal ativo. O gráfico exibe cada dia da semana correspondente ao intervalo selecionado.';
+      granTitle=_T('Geração da semana selecionada');
+      granSub=_T('Filtro semanal ativo. O gráfico exibe cada dia da semana correspondente ao intervalo selecionado.');
     }else if(gran==='mes'){
-      granTitle='Geração diária do período selecionado';
-      granSub='Filtro mensal/período ativo. O gráfico exibe todos os dias dentro do intervalo selecionado.';
+      granTitle=_T('Geração diária do período selecionado');
+      granSub=_T('Filtro mensal/período ativo. O gráfico exibe todos os dias dentro do intervalo selecionado.');
     }else if(gran==='ano'){
       const _yrLabel = start ? start.getFullYear() : (filters.ppaCalYear||new Date().getFullYear());
-      granTitle=`Geração mensal · ${_yrLabel}`;
-      granSub='Filtro anual ativo. Uma barra por mês com o total de geração.';
+      granTitle=`${_T('Geração mensal')} · ${_yrLabel}`;
+      granSub=_T('Filtro anual ativo. Uma barra por mês com o total de geração.');
     }
     if(titleEl) titleEl.textContent = granTitle;
     if(subEl) subEl.textContent = granSub;
@@ -6300,10 +6368,10 @@ window._ppaChartGet=function(id){return charts[id];};
     const titleEl=document.getElementById('ppaMainChartTitle');
     const subEl=document.getElementById('ppaMainChartSub');
     const tagEl=document.getElementById('ppaXAxisMonthTag');
-    if(titleEl) titleEl.textContent = 'Geração horária do dia selecionado';
+    if(titleEl) titleEl.textContent = _T('Geração horária do dia selecionado');
     if(subEl){
       const partial = unsupportedParks.length ? ` Série intradiária indisponível para: ${unsupportedParks.join(', ')}.` : '';
-      subEl.textContent = `Filtro diário ativo. O gráfico mostra as horas do dia selecionado.${partial}`;
+      subEl.textContent = `${_T('Filtro diário ativo. O gráfico mostra as horas do dia selecionado.')}${partial}`;
     }
     if(tagEl){
       tagEl.textContent = `${fmtMonthYear(day)} · ${day.toLocaleDateString('pt-BR')}`;
@@ -6587,8 +6655,8 @@ window._ppaChartGet=function(id){return charts[id];};
     const titleEl=document.getElementById('ppaMainChartTitle');
     const subEl=document.getElementById('ppaMainChartSub');
     const tagEl=document.getElementById('ppaXAxisMonthTag');
-    if(titleEl) titleEl.textContent='Geração horária do dia selecionado';
-    if(subEl) subEl.textContent='Filtro diário ativo. O gráfico mostra as horas 1–24 do dia selecionado.';
+    if(titleEl) titleEl.textContent=_T('Geração horária do dia selecionado');
+    if(subEl) subEl.textContent=_T('Filtro diário ativo. O gráfico mostra as horas 1–24 do dia selecionado.');
     if(tagEl){ tagEl.textContent=monthText(day); tagEl.style.display='flex'; }
 
     const primaryPark = supportedParks.length===1 ? supportedParks[0] : 'todos';
@@ -6869,8 +6937,8 @@ window._ppaChartGet=function(id){return charts[id];};
     const titleEl=document.getElementById('ppaMainChartTitle');
     const subEl=document.getElementById('ppaMainChartSub');
     const tagEl=document.getElementById('ppaXAxisMonthTag');
-    if(titleEl) titleEl.textContent='Geração diária do mês selecionado';
-    if(subEl) subEl.textContent='Granularidade diária. O eixo X mostra os dias correspondentes ao mês selecionado.';
+    if(titleEl) titleEl.textContent=_T('Geração diária do mês selecionado');
+    if(subEl) subEl.textContent=_T('Granularidade diária. O eixo X mostra os dias correspondentes ao mês selecionado.');
     if(tagEl){ tagEl.textContent=`${PPA_MONTHS_V21[m]}/${y}`; tagEl.style.display='flex'; }
 
     const primaryPark=active.length===1?active[0]:'todos';
