@@ -1675,6 +1675,73 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   'ENERGIA PRODUZIDA & FRUSTRADA':'已发电量与受限电量',
   'PERFORMANCE RATIO (PR)':'性能比率 (PR)'
 });
+/* ── PPA multi-version titles, subs, BAR/LINE/PROJ buttons ── */
+Object.assign(LANG_PACKS['en'].text, {
+  'Geração mensal do ano selecionado':'Monthly generation — selected year',
+  'Geração diária dos meses selecionados':'Daily generation — selected months',
+  'meses filtrados do ano selecionado.':'filtered months of selected year.',
+  'dias dos meses selecionados.':'days of selected months.',
+  'dias do período semanal selecionado.':'days of selected weekly period.',
+  'dias do período filtrado.':'days of filtered period.',
+  'O gráfico exibe os dias da semana filtrada.':'Chart shows days of filtered week.',
+  'O eixo X exibe os meses do ano selecionado.':'X axis shows months of selected year.',
+  'O gráfico exibe todos os dias do mês selecionado.':'Chart shows all days of selected month.',
+  'O gráfico exibe apenas os dias filtrados do mês selecionado.':'Chart shows only filtered days of selected month.',
+  'O gráfico exibe somente os meses filtrados do ano selecionado.':'Chart shows only filtered months of selected year.',
+  'O gráfico exibe todos os meses do ano selecionado.':'Chart shows all months of selected year.',
+  'O eixo X exibe os dias do período semanal selecionado.':'X axis shows days of selected weekly period.',
+  'O gráfico exibe apenas os dias do período selecionado.':'Chart shows only days of selected period.',
+  'Geração mensal do período selecionado':'Monthly generation — selected period',
+  'Parque selecionado':'Selected plant',
+  'Parques selecionados':'Selected plants',
+  'meta acumulada do período selecionado.':'accumulated target for selected period.',
+  'Meta e realizado do parque':'Target and actual for plant',
+  'Meta e realizado dos parques selecionados':'Target and actual for selected plants',
+  'Meta acumulada por parque no período anual selecionado.':'Accumulated target per plant — selected annual period.',
+  'Meta acumulada por parque no período mensal selecionado.':'Accumulated target per plant — selected monthly period.',
+  'Meta acumulada por parque na semana selecionada.':'Accumulated target per plant — selected week.',
+  'Meta acumulada por parque no dia selecionado.':'Accumulated target per plant — selected day.',
+  'Meta acumulada por parque nos meses filtrados do ano selecionado.':'Accumulated target per plant — filtered months of selected year.',
+  'Meta acumulada por parque nos dias filtrados do mês selecionado.':'Accumulated target per plant — filtered days of selected month.',
+  'Meta acumulada por parque ao longo do ano selecionado.':'Accumulated target per plant — selected year.',
+  'Meta acumulada por parque no período semanal selecionado.':'Accumulated target per plant — selected weekly period.',
+  'Meta acumulada por parque no período selecionado do mês.':'Accumulated target per plant — selected period of month.'
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  'Geração mensal do ano selecionado':'所选年月发电量',
+  'Geração diária dos meses selecionados':'所选月日发电量（多月）',
+  'meses filtrados do ano selecionado.':'所选年筛选月份。',
+  'dias dos meses selecionados.':'所选月各天。',
+  'dias do período semanal selecionado.':'所选周期各天。',
+  'dias do período filtrado.':'筛选时段各天。',
+  'O gráfico exibe os dias da semana filtrada.':'图表显示筛选周各天。',
+  'O eixo X exibe os meses do ano selecionado.':'X 轴显示所选年各月。',
+  'O gráfico exibe todos os dias do mês selecionado.':'图表显示所选月所有天。',
+  'O gráfico exibe apenas os dias filtrados do mês selecionado.':'图表仅显示所选月筛选天。',
+  'O gráfico exibe somente os meses filtrados do ano selecionado.':'图表仅显示所选年筛选月份。',
+  'O gráfico exibe todos os meses do ano selecionado.':'图表显示所选年所有月份。',
+  'O eixo X exibe os dias do período semanal selecionado.':'X 轴显示所选周期各天。',
+  'O gráfico exibe apenas os dias do período selecionado.':'图表仅显示所选时段各天。',
+  'Geração mensal do período selecionado':'所选时段月发电量',
+  'Parque selecionado':'所选电站',
+  'Parques selecionados':'所选电站',
+  'meta acumulada do período selecionado.':'所选时段累计目标。',
+  'Meta e realizado do parque':'电站目标与实际',
+  'Meta e realizado dos parques selecionados':'所选电站目标与实际',
+  'Meta acumulada por parque no período anual selecionado.':'各电站累计目标 — 所选年度。',
+  'Meta acumulada por parque no período mensal selecionado.':'各电站累计目标 — 所选月份。',
+  'Meta acumulada por parque na semana selecionada.':'各电站累计目标 — 所选周。',
+  'Meta acumulada por parque no dia selecionado.':'各电站累计目标 — 所选日。',
+  'Meta acumulada por parque nos meses filtrados do ano selecionado.':'各电站累计目标 — 所选年筛选月份。',
+  'Meta acumulada por parque nos dias filtrados do mês selecionado.':'各电站累计目标 — 所选月筛选天。',
+  'Meta acumulada por parque ao longo do ano selecionado.':'各电站累计目标 — 所选全年。',
+  'Meta acumulada por parque no período semanal selecionado.':'各电站累计目标 — 所选周期。',
+  'Meta acumulada por parque no período selecionado do mês.':'各电站累计目标 — 所选月时段。',
+  'BAR':'柱状',
+  'LINE':'折线',
+  'PROJ':'预测'
+});
+rebuildI18nFallback();
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
 function rebuildI18nFallback(){ ['en','zh-CN'].forEach(lang=>{ I18N_FALLBACK[lang]={}; const txt=(LANG_PACKS[lang]&&LANG_PACKS[lang].text)||{}; Object.keys(txt).forEach(k=>{ I18N_FALLBACK[lang][_normI18nKey(k)] = txt[k]; }); }); }
@@ -6190,12 +6257,12 @@ window._ppaChartGet=function(id){return charts[id];};
     const progSub=document.getElementById('ppaProgSub');
     if(progSub){
       progSub.textContent = gran==='ano'
-        ? 'Meta acumulada por parque no período anual selecionado.'
+        ? _T('Meta acumulada por parque no período anual selecionado.')
         : gran==='mes'
-          ? 'Meta acumulada por parque no período mensal selecionado.'
+          ? _T('Meta acumulada por parque no período mensal selecionado.')
           : gran==='semana'
-            ? 'Meta acumulada por parque na semana selecionada.'
-            : 'Meta acumulada por parque no dia selecionado.';
+            ? _T('Meta acumulada por parque na semana selecionada.')
+            : _T('Meta acumulada por parque no dia selecionado.');
     }
     mkChart('cPPAprogressTop',{
       type:'bar',
@@ -6839,9 +6906,9 @@ window._ppaChartGet=function(id){return charts[id];};
     const daysInMonth=new Date(y,m+1,0).getDate();
     const dayOptions=Array.from({length:daysInMonth},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
     const yearOptions=years.map(v=>`<option value="${v}">${v}</option>`).join('');
-    const note = gran==='dia' ? `eixo X: <strong>dias do mês</strong> · referência <strong>${PPA_MONTHS_V21[m]}/${y}</strong>`
+    const note = gran==='dia' ? `eixo X: <strong>dias do mês</strong> · referência <strong>${(MNS&&MNS[m+1])||PPA_MONTHS_V21[m]}/${y}</strong>`
       : gran==='semana' ? `semana de referência a partir de <strong>${pad2(d)}/${pad2(m+1)}/${y}</strong>`
-      : gran==='mes' ? `mês selecionado: <strong>${PPA_MONTHS_V21[m]}/${y}</strong>`
+      : gran==='mes' ? `mês selecionado: <strong>${(MNS&&MNS[m+1])||PPA_MONTHS_V21[m]}/${y}</strong>`
       : `ano selecionado: <strong>${y}</strong>`;
 
     host.innerHTML = `
@@ -6849,7 +6916,7 @@ window._ppaChartGet=function(id){return charts[id];};
         <span class="fbar-label" style="margin:0">Ano</span>
         <select class="fselect year-select" id="ppaYearSelV21">${yearOptions}</select>
       </div>
-      <div class="ppa-cal-row months" id="ppaMonthChipsV21">${PPA_MONTHS_V21.map((lab,idx)=>`<button type="button" class="ppa-month-chip ${idx===m?'on':''}" data-m="${idx}">${lab}</button>`).join('')}</div>
+      <div class="ppa-cal-row months" id="ppaMonthChipsV21">${((MNS&&MNS.slice(1))||PPA_MONTHS_V21).map((lab,idx)=>`<button type="button" class="ppa-month-chip ${idx===m?'on':''}" data-m="${idx}">${lab}</button>`).join('')}</div>
       ${gran==='semana' ? `<div class="ppa-cal-row"><span class="fbar-label" style="margin:0">Dia</span><select class="fselect day-select" id="ppaDaySelV21">${dayOptions}</select></div>` : ''}
       <div class="ppa-cal-note">${note}</div>
     `;
@@ -6939,7 +7006,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const tagEl=document.getElementById('ppaXAxisMonthTag');
     if(titleEl) titleEl.textContent=_T('Geração diária do mês selecionado');
     if(subEl) subEl.textContent=_T('Granularidade diária. O eixo X mostra os dias correspondentes ao mês selecionado.');
-    if(tagEl){ tagEl.textContent=`${PPA_MONTHS_V21[m]}/${y}`; tagEl.style.display='flex'; }
+    if(tagEl){ tagEl.textContent=`${(MNS&&MNS[m+1])||PPA_MONTHS_V21[m]}/${y}`; tagEl.style.display='flex'; }
 
     const primaryPark=active.length===1?active[0]:'todos';
     const scopeColorMap={todos:'#8B5CF6', ppa:'#A855F7', ml:'#10B981'};
@@ -7002,7 +7069,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
   const __prevRenderPagePPA_v23 = window.renderPagePPA;
   const MONTHS_V23 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  const monthLabelV23 = m => MONTHS_V23[Number(m)] || '';
+  const monthLabelV23 = m => { const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V23[n]||''; };
   const pad2V23 = n => String(n).padStart(2,'0');
   const isoV23 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const dayStartV23 = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -7229,7 +7296,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const selectedDays=uniqSortNumsV23(filters.ppaSelectedDays || []).filter(v=>v>=1 && v<=dim);
     const selectedMonths=uniqSortNumsV23(filters.ppaSelectedMonths || []).filter(v=>v>=0 && v<12);
 
-    const monthsHtml = MONTHS_V23.map((label,idx)=>{
+    const monthsHtml = ((MNS&&MNS.slice(1))||MONTHS_V23).map((label,idx)=>{
       const active = gran==='ano' ? selectedMonths.includes(idx) : idx===m;
       return `<button type="button" class="ppa-chip-v23 ${active?'on':''}" data-month="${idx}">${label}</button>`;
     }).join('');
@@ -7371,8 +7438,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(day=>+(prodByDay[day]||0).toFixed(2));
       meta=days.map(day=>+(metaByDay[day]||0).toFixed(2));
       tag=`${monthLabelV23(m)}/${y}`;
-      title='Geração diária do mês selecionado';
-      sub=selectedDays.length ? 'O gráfico exibe apenas os dias filtrados do mês selecionado.' : 'O gráfico exibe todos os dias do mês selecionado.';
+      title=_T('Geração diária do mês selecionado');
+      sub=selectedDays.length ? _T('O gráfico exibe apenas os dias filtrados do mês selecionado.') : _T('O gráfico exibe todos os dias do mês selecionado.');
     } else if(gran==='ano'){
       const months = selectedMonths.length ? selectedMonths : Array.from({length:12},(_,i)=>i);
       const yearRows=rows.filter(r=>r.date.getFullYear()===y && months.includes(r.date.getMonth()));
@@ -7380,8 +7447,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=String(y);
-      title='Geração mensal do ano selecionado';
-      sub=months.length<12 ? 'O gráfico exibe somente os meses filtrados do ano selecionado.' : 'O gráfico exibe todos os meses do ano selecionado.';
+      title=_T('Geração mensal do ano selecionado');
+      sub=months.length<12 ? _T('O gráfico exibe somente os meses filtrados do ano selecionado.') : _T('O gráfico exibe todos os meses do ano selecionado.');
     } else {
       const start=parseDate(filters.ppaPerIni) || mondayV23(new Date(y,m,Number(filters.ppaCalWeekDay||1)));
       const weekDays=[];
@@ -7390,8 +7457,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=weekDays.map(d=>+rows.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=weekDays.map(d=>+rows.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=monthRangeLabelV23(weekDays[0].getMonth(), weekDays[weekDays.length-1].getMonth(), weekDays[0].getFullYear());
-      title='Geração da semana selecionada';
-      sub='O gráfico exibe os dias da semana filtrada.';
+      title=_T('Geração da semana selecionada');
+      sub=_T('O gráfico exibe os dias da semana filtrada.');
     }
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
@@ -7459,10 +7526,10 @@ window._ppaChartGet=function(id){return charts[id];};
     const gran=filters.ppaUnifiedGran||'mes';
     if(progSub){
       progSub.textContent = gran==='ano'
-        ? 'Meta acumulada por parque nos meses filtrados do ano selecionado.'
+        ? _T('Meta acumulada por parque nos meses filtrados do ano selecionado.')
         : gran==='semana'
-          ? 'Meta acumulada por parque na semana selecionada.'
-          : 'Meta acumulada por parque nos dias filtrados do mês selecionado.';
+          ? _T('Meta acumulada por parque na semana selecionada.')
+          : _T('Meta acumulada por parque nos dias filtrados do mês selecionado.');
     }
 
     mkChart('cPPAprogressTop',{
@@ -7523,7 +7590,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
   const __prevRenderPagePPA_v24 = window.renderPagePPA;
   const MONTHS_V24 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  const monthLabelV24 = m => MONTHS_V24[Number(m)] || '';
+  const monthLabelV24 = m => { const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V24[n]||''; };
   const isoV24 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const addDaysV24 = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
   const dayStartV24 = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -7702,7 +7769,7 @@ window._ppaChartGet=function(id){return charts[id];};
       </div>
       <div class="fgx">
         <span class="fbar-label">Mês</span>
-        <select class="fselect" id="ppaMonthSelV24">${MONTHS_V24.map((lab,idx)=>`<option value="${idx}">${lab}</option>`).join('')}</select>
+        <select class="fselect" id="ppaMonthSelV24">${((MNS&&MNS.slice(1))||MONTHS_V24).map((lab,idx)=>`<option value="${idx}">${lab}</option>`).join('')}</select>
       </div>
       <div class="fgx">
         <span class="fbar-label">Período</span>
@@ -7765,12 +7832,12 @@ window._ppaChartGet=function(id){return charts[id];};
 
     if(gran==='ano'){
       const yearRows=rows.filter(r=>r.date.getFullYear()===y);
-      labels=MONTHS_V24.slice();
+      labels=(MNS&&MNS.slice(1))||MONTHS_V24.slice();
       prod=labels.map((_,mi)=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=labels.map((_,mi)=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=String(y);
-      title='Geração mensal do ano selecionado';
-      sub='O eixo X exibe os meses do ano selecionado.';
+      title=_T('Geração mensal do ano selecionado');
+      sub=_T('O eixo X exibe os meses do ano selecionado.');
     } else if(gran==='mes'){
       const monthRows=rows.filter(r=>r.date.getFullYear()===y && r.date.getMonth()===m);
       const startDay = Math.max(1, ini.getDate());
@@ -7786,8 +7853,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(day=>+(prodByDay[day]||0).toFixed(2));
       meta=days.map(day=>+(metaByDay[day]||0).toFixed(2));
       tag=`${monthLabelV24(m)}/${y}`;
-      title='Geração diária do mês selecionado';
-      sub=days.length < new Date(y,m+1,0).getDate() ? 'O gráfico exibe apenas os dias do período selecionado.' : 'O gráfico exibe todos os dias do mês selecionado.';
+      title=_T('Geração diária do mês selecionado');
+      sub=days.length < new Date(y,m+1,0).getDate() ? _T('O gráfico exibe apenas os dias do período selecionado.') : _T('O gráfico exibe todos os dias do mês selecionado.');
     } else {
       const weekRows=rows.filter(r=>r.date>=ini && r.date<=fim);
       const days=[]; for(let d=new Date(ini); d<=fim; d=addDaysV24(d,1)) days.push(new Date(d));
@@ -7795,8 +7862,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(d=>+weekRows.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=days.map(d=>+weekRows.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=`${isoV24(ini)} → ${isoV24(fim)}`;
-      title='Geração da semana selecionada';
-      sub='O eixo X exibe os dias do período semanal selecionado.';
+      title=_T('Geração da semana selecionada');
+      sub=_T('O eixo X exibe os dias do período semanal selecionado.');
     }
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
@@ -7864,10 +7931,10 @@ window._ppaChartGet=function(id){return charts[id];};
     const gran=filters.ppaUnifiedGran||'mes';
     if(progSub){
       progSub.textContent = gran==='ano'
-        ? 'Meta acumulada por parque ao longo do ano selecionado.'
+        ? _T('Meta acumulada por parque ao longo do ano selecionado.')
         : gran==='semana'
-          ? 'Meta acumulada por parque no período semanal selecionado.'
-          : 'Meta acumulada por parque no período selecionado do mês.';
+          ? _T('Meta acumulada por parque no período semanal selecionado.')
+          : _T('Meta acumulada por parque no período selecionado do mês.');
     }
 
     mkChart('cPPAprogressTop',{
@@ -7927,7 +7994,7 @@ window._ppaChartGet=function(id){return charts[id];};
   const MONTHS_V25 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   const BLUE_V25 = '#0060AE';
   const BLUE_FILL_V25 = 'rgba(0,96,174,.88)';
-  const monthLabelV25 = m => MONTHS_V25[Number(m)] || '';
+  const monthLabelV25 = m => { const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V25[n]||''; };
   const isoV25 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const addDaysV25 = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
   const dayStartV25 = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -8124,7 +8191,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const y=Number(filters.ppaCalYear);
     const months=uniqNumsV25(filters.ppaSelectedMonths || [filters.ppaCalMonth]);
     const {ini,fim}=currentRangeV25();
-    const monthsHtml = MONTHS_V25.map((lab,idx)=>`<label><input type="checkbox" data-month-v25="${idx}" ${months.includes(idx)?'checked':''}> <span>${lab}</span></label>`).join('');
+    const monthsHtml = ((MNS&&MNS.slice(1))||MONTHS_V25).map((lab,idx)=>`<label><input type="checkbox" data-month-v25="${idx}" ${months.includes(idx)?'checked':''}> <span>${lab}</span></label>`).join('');
     const note = gran==='ano'
       ? `${y} · gráfico com meses do ano`
       : gran==='mes'
@@ -8232,16 +8299,16 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=`${y}`;
-      title='Geração mensal do ano selecionado';
-      sub=`${groupLabel} · meses filtrados do ano selecionado.`;
+      title=_T('Geração mensal do ano selecionado');
+      sub=`${groupLabel} · ${_T('meses filtrados do ano selecionado.')}`;
     } else if(gran==='mes'){
       const filtered=rows.filter(r=>r.date.getFullYear()===y && months.includes(r.date.getMonth()) && r.date>=ini && r.date<=fim);
       labels=filtered.map(r=>String(r.date.getDate()));
       prod=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.values?.[p]),0).toFixed(2));
       meta=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.metaDay?.[p]),0).toFixed(2));
       tag=months.map(m=>`${monthLabelV25(m)}/${y}`).join(' · ');
-      title='Geração diária dos meses selecionados';
-      sub=`${groupLabel} · dias do período filtrado.`;
+      title=_T('Geração diária dos meses selecionados');
+      sub=`${groupLabel} · ${_T('dias do período filtrado.')}`;
     } else {
       const filtered=rows.filter(r=>r.date>=ini && r.date<=fim);
       const days=[]; for(let d=new Date(ini); d<=fim; d=addDaysV25(d,1)) days.push(new Date(d));
@@ -8249,14 +8316,14 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=`${isoV25(ini)} → ${isoV25(fim)}`;
-      title='Geração da semana selecionada';
-      sub=`${groupLabel} · dias do período semanal selecionado.`;
+      title=_T('Geração da semana selecionada');
+      sub=`${groupLabel} · ${_T('dias do período semanal selecionado.')}`;
     }
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
     const genDataset = chartType==='line'
-      ? {type:'line',label:`Geração ${groupLabel}`,data:prod,borderColor:BLUE_V25,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_V25,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
-      : {type:'bar',label:`Geração ${groupLabel}`,data:prod,backgroundColor:BLUE_FILL_V25,borderColor:BLUE_V25,borderWidth:1.1,borderRadius:4,maxBarThickness:30,barThickness: labels.length<=12 ? 24 : undefined,order:2};
+      ? {type:'line',label:`${_T('Geração')} ${groupLabel}`,data:prod,borderColor:BLUE_V25,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_V25,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
+      : {type:'bar',label:`${_T('Geração')} ${groupLabel}`,data:prod,backgroundColor:BLUE_FILL_V25,borderColor:BLUE_V25,borderWidth:1.1,borderRadius:4,maxBarThickness:30,barThickness: labels.length<=12 ? 24 : undefined,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     if(titleEl) titleEl.textContent=title;
@@ -8312,7 +8379,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const chartType=filters.ppaProgressType==='line' ? 'line' : 'bar';
     const progressMax=Math.max(1,...prod,...meta)*1.18;
     const progSub=document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = `${groupLabel} · meta acumulada do período selecionado.`;
+    if(progSub) progSub.textContent = `${groupLabel} · ${_T('meta acumulada do período selecionado.')}`;
 
     mkChart('cPPAprogressTop',{
       type: chartType,
@@ -8451,7 +8518,7 @@ window._ppaChartGet=function(id){return charts[id];};
   const isoV27 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const uniqNumsV27 = arr => [...new Set((Array.isArray(arr)?arr:[]).map(v=>Number(v)).filter(v=>Number.isFinite(v) && v>=0 && v<12))].sort((a,b)=>a-b);
 
-  function monthLabelV27(m){ return MONTHS_V27[Number(m)] || ''; }
+  function monthLabelV27(m){ const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V27[n]||''; }
 
   function ensureCssV27(){
     if(document.getElementById('ppaMonthDropdownFixCssV27')) return;
@@ -8522,7 +8589,7 @@ window._ppaChartGet=function(id){return charts[id];};
         <span class="fbar-label">Meses</span>
         <div class="ppa-month-picker-v27 ${window.__ppaMonthMenuOpenV27__ ? 'open' : ''}" id="ppaMonthPickerV27">
           <button type="button" class="ppa-month-btn-v27" id="ppaMonthBtnV27"><span>${summaryMonthsV27(months)}</span><span class="caret">▾</span></button>
-          <div class="ppa-month-menu-v27" id="ppaMonthMenuV27">${MONTHS_V27.map((lab,idx)=>`<label class="ppa-month-item-v27"><input type="checkbox" data-month-v27="${idx}" ${months.includes(idx)?'checked':''}><span>${lab}</span></label>`).join('')}</div>
+          <div class="ppa-month-menu-v27" id="ppaMonthMenuV27">${((MNS&&MNS.slice(1))||MONTHS_V27).map((lab,idx)=>`<label class="ppa-month-item-v27"><input type="checkbox" data-month-v27="${idx}" ${months.includes(idx)?'checked':''}><span>${lab}</span></label>`).join('')}</div>
         </div>
       </div>
       <div class="fgx">
@@ -8622,7 +8689,7 @@ window._ppaChartGet=function(id){return charts[id];};
   const isoV28 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const uniqNumsV28 = arr => [...new Set((Array.isArray(arr)?arr:[]).map(v=>Number(v)).filter(v=>Number.isFinite(v) && v>=0 && v<12))].sort((a,b)=>a-b);
 
-  function monthLabelV28(m){ return MONTHS_V28[Number(m)] || ''; }
+  function monthLabelV28(m){ const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V28[n]||''; }
   function summaryMonthsV28(months){
     const list=uniqNumsV28(months);
     if(!list.length) return 'selecione';
@@ -8687,7 +8754,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const portal=ensurePortalV28();
     let months=uniqNumsV28(filters.ppaSelectedMonths && filters.ppaSelectedMonths.length ? filters.ppaSelectedMonths : [filters.ppaCalMonth||0]);
     if(!months.length) months=[filters.ppaCalMonth||0];
-    portal.innerHTML = MONTHS_V28.map((lab,idx)=>`<button type="button" class="item ${months.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('');
+    portal.innerHTML = ((MNS&&MNS.slice(1))||MONTHS_V28).map((lab,idx)=>`<button type="button" class="item ${months.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('');
     portal.querySelectorAll('[data-m]').forEach(btn=>btn.addEventListener('click',(ev)=>{
       ev.preventDefault();
       ev.stopPropagation();
@@ -8838,7 +8905,7 @@ window._ppaChartGet=function(id){return charts[id];};
   const isoV29 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const addDaysV29 = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
   const uniqNumsV29 = arr => [...new Set((Array.isArray(arr)?arr:[]).map(v=>Number(v)).filter(v=>Number.isFinite(v) && v>=0 && v<12))].sort((a,b)=>a-b);
-  const monthLabelV29 = m => MONTHS_V29[Number(m)] || '';
+  const monthLabelV29 = m => { const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V29[n]||''; };
 
   function ensureCssV29(){
     if(document.getElementById('ppaMonthApplyCssV29')) return;
@@ -8989,7 +9056,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const portal=ensurePortalV29();
     const months=uniqNumsV29(window.__ppaMonthDraftV29__ && window.__ppaMonthDraftV29__.length ? window.__ppaMonthDraftV29__ : (filters.ppaSelectedMonths||[filters.ppaCalMonth||0]));
     portal.innerHTML = `
-      ${MONTHS_V29.map((lab,idx)=>`<button type="button" class="item ${months.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('')}
+      ${((MNS&&MNS.slice(1))||MONTHS_V29).map((lab,idx)=>`<button type="button" class="item ${months.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('')}
       <div class="footer">
         <div class="hint">Selecione 1 ou mais meses</div>
         <div class="actions">
@@ -9114,16 +9181,16 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=String(y);
-      title='Geração mensal do ano selecionado';
-      sub=`${group} · meses filtrados do ano selecionado.`;
+      title=_T('Geração mensal do ano selecionado');
+      sub=`${group} · ${_T('meses filtrados do ano selecionado.')}`;
     }else if(gran==='mes'){
       const filtered=rows.filter(r=>r.date.getFullYear()===y && months.includes(r.date.getMonth()) && r.date>=ini && r.date<=fim);
       labels=filtered.map(r=>String(r.date.getDate()));
       prod=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.values?.[p]),0).toFixed(2));
       meta=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.metaDay?.[p]),0).toFixed(2));
       tag=months.map(m=>`${monthLabelV29(m)}/${y}`).join(' · ');
-      title='Geração diária dos meses selecionados';
-      sub=`${group} · dias do período filtrado.`;
+      title=_T('Geração diária dos meses selecionados');
+      sub=`${group} · ${_T('dias do período filtrado.')}`;
     }else{
       const filtered=rows.filter(r=>r.date>=ini && r.date<=fim);
       const days=[]; for(let d=new Date(ini); d<=fim; d=addDaysV29(d,1)) days.push(new Date(d));
@@ -9131,14 +9198,14 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=`${isoV29(ini)} → ${isoV29(fim)}`;
-      title='Geração da semana selecionada';
-      sub=`${group} · dias do período semanal selecionado.`;
+      title=_T('Geração da semana selecionada');
+      sub=`${group} · ${_T('dias do período semanal selecionado.')}`;
     }
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
     const genDataset = chartType==='line'
-      ? {type:'line',label:`Geração ${group}`,data:prod,borderColor:BLUE_V29,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_V29,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
-      : {type:'bar',label:`Geração ${group}`,data:prod,backgroundColor:BLUE_FILL_V29,borderColor:BLUE_V29,borderWidth:1.1,borderRadius:4,maxBarThickness:30,barThickness: labels.length<=12 ? 24 : undefined,order:2};
+      ? {type:'line',label:`${_T('Geração')} ${group}`,data:prod,borderColor:BLUE_V29,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_V29,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
+      : {type:'bar',label:`${_T('Geração')} ${group}`,data:prod,backgroundColor:BLUE_FILL_V29,borderColor:BLUE_V29,borderWidth:1.1,borderRadius:4,maxBarThickness:30,barThickness: labels.length<=12 ? 24 : undefined,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
     if(titleEl) titleEl.textContent=title;
     if(subEl) subEl.textContent=sub;
@@ -9164,7 +9231,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const pctP=parks.map((p,i)=>metaP[i]>0?+((prodP[i]/metaP[i])*100).toFixed(1):0);
     const progressMax=Math.max(1,...prodP,...metaP)*1.18;
     const progSub=document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = `${group} · meta acumulada do período selecionado.`;
+    if(progSub) progSub.textContent = `${group} · ${_T('meta acumulada do período selecionado.')}`;
     mkChart('cPPAprogressTop',{
       type: chartType,
       data:{labels:parks.map(p=>p==='todos'?'Todos':p),datasets:[
@@ -9226,7 +9293,7 @@ window._ppaChartGet=function(id){return charts[id];};
   const isoV30 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const addDaysV30 = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
   const uniqNumsV30 = arr => [...new Set((Array.isArray(arr)?arr:[]).map(v=>Number(v)).filter(v=>Number.isFinite(v) && v>=0 && v<12))].sort((a,b)=>a-b);
-  const monthLabelV30 = m => MONTHS_V30[Number(m)] || '';
+  const monthLabelV30 = m => { const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V30[n]||''; };
   const pad2V30 = n => String(n).padStart(2,'0');
 
   function ensureCssV30(){
@@ -9427,7 +9494,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const portal=ensurePortalV30();
     let draft=uniqNumsV30(window.__ppaMonthDraftV30__ && window.__ppaMonthDraftV30__.length ? window.__ppaMonthDraftV30__ : getMonthStateV30());
     portal.innerHTML = `
-      ${MONTHS_V30.map((lab,idx)=>`<button type="button" class="item ${draft.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('')}
+      ${((MNS&&MNS.slice(1))||MONTHS_V30).map((lab,idx)=>`<button type="button" class="item ${draft.includes(idx)?'on':''}" data-m="${idx}"><span class="box"></span><span>${lab}</span></button>`).join('')}
       <div class="footer">
         <div class="hint">Selecione 1 ou mais meses</div>
         <div class="actions">
@@ -9559,16 +9626,16 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=months.map(mi=>+yearRows.filter(r=>r.date.getMonth()===mi).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=String(y);
-      title='Geração mensal do ano selecionado';
-      sub=`${group} · meses filtrados do ano selecionado.`;
+      title=_T('Geração mensal do ano selecionado');
+      sub=`${group} · ${_T('meses filtrados do ano selecionado.')}`;
     }else if(gran==='mes'){
       const filtered=rows.filter(r=>r.date.getFullYear()===y && months.includes(r.date.getMonth()) && r.date>=ini && r.date<=fim);
       labels=filtered.map(r=>months.length>1 ? `${pad2V30(r.date.getDate())}/${monthLabelV30(r.date.getMonth())}` : String(r.date.getDate()));
       prod=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.values?.[p]),0).toFixed(2));
       meta=filtered.map(r=>+parks.reduce((s,p)=>s+num(r.metaDay?.[p]),0).toFixed(2));
       tag=months.map(m=>`${monthLabelV30(m)}/${y}`).join(' · ');
-      title=months.length>1 ? 'Geração diária dos meses selecionados' : 'Geração diária do mês selecionado';
-      sub=`${group} · dias dos meses selecionados.`;
+      title=months.length>1 ? _T('Geração diária dos meses selecionados') : _T('Geração diária do mês selecionado');
+      sub=`${group} · ${_T('dias dos meses selecionados.')}`;
     }else{
       const filtered=rows.filter(r=>r.date>=ini && r.date<=fim);
       const days=[]; for(let d=new Date(ini); d<=fim; d=addDaysV30(d,1)) days.push(new Date(d));
@@ -9576,8 +9643,8 @@ window._ppaChartGet=function(id){return charts[id];};
       prod=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.values?.[p]),0),0).toFixed(2));
       meta=days.map(d=>+filtered.filter(r=>r.date.getFullYear()===d.getFullYear() && r.date.getMonth()===d.getMonth() && r.date.getDate()===d.getDate()).reduce((s,r)=>s+parks.reduce((a,p)=>a+num(r.metaDay?.[p]),0),0).toFixed(2));
       tag=`${isoV30(ini)} → ${isoV30(fim)}`;
-      title='Geração da semana selecionada';
-      sub=`${group} · dias do período semanal selecionado.`;
+      title=_T('Geração da semana selecionada');
+      sub=`${group} · ${_T('dias do período semanal selecionado.')}`;
     }
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
@@ -9593,8 +9660,8 @@ window._ppaChartGet=function(id){return charts[id];};
     const hasIrr=gran==='ano' && irrData.some(v=>v!=null&&v>0);
 
     const genDataset = chartType==='line'
-      ? {type:'line',label:`Geração ${group}`,data:prod,borderColor:BLUE_LINE_V30,backgroundColor:'rgba(0,96,174,.16)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_LINE_V30,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
-      : {type:'bar',label:`Geração ${group}`,data:prod,backgroundColor:(ctx)=>barGradientV30(ctx),hoverBackgroundColor:(ctx)=>barGradientHoverV30(ctx),borderColor:'rgba(90,180,235,.55)',borderWidth:1.0,borderRadius:4,maxBarThickness: gran==='ano' ? 110 : (labels.length<=8 ? 80 : 30),barThickness:undefined,barPercentage: gran==='ano' ? 0.82 : (labels.length<=8 ? 0.85 : 0.9),order:2};
+      ? {type:'line',label:`${_T('Geração')} ${group}`,data:prod,borderColor:BLUE_LINE_V30,backgroundColor:'rgba(0,96,174,.16)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_LINE_V30,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
+      : {type:'bar',label:`${_T('Geração')} ${group}`,data:prod,backgroundColor:(ctx)=>barGradientV30(ctx),hoverBackgroundColor:(ctx)=>barGradientHoverV30(ctx),borderColor:'rgba(90,180,235,.55)',borderWidth:1.0,borderRadius:4,maxBarThickness: gran==='ano' ? 110 : (labels.length<=8 ? 80 : 30),barThickness:undefined,barPercentage: gran==='ano' ? 0.82 : (labels.length<=8 ? 0.85 : 0.9),order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     if(titleEl) titleEl.textContent=title;
@@ -9622,7 +9689,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const pctP=parks.map((p,i)=>metaP[i]>0?+((prodP[i]/metaP[i])*100).toFixed(1):0);
     const progressMax=Math.max(1,...prodP,...metaP)*1.18;
     const progSub=document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = `${group} · meta acumulada do período selecionado.`;
+    if(progSub) progSub.textContent = `${group} · ${_T('meta acumulada do período selecionado.')}`;
     mkChart('cPPAprogressTop',{
       type: chartType,
       data:{labels:parks.map(p=>p==='todos'?'Todos':p),datasets:[
@@ -9698,7 +9765,7 @@ window._ppaChartGet=function(id){return charts[id];};
   function parseDateV31(v){ try{ return v ? new Date(v) : null; }catch(e){ return null; } }
   function uniqV31(arr){ return [...new Set((Array.isArray(arr)?arr:[]).filter(Boolean))]; }
   function addDaysV31(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
-  function monthLabV31(m){ return MONTHS_V31[Number(m)] || ''; }
+  function monthLabV31(m){ const n=Number(m); return (MNS&&MNS[n+1])||MONTHS_V31[n]||''; }
   function scopedParksV31(){
     const ppa = window.dashData?.ppa;
     if(!ppa) return [];
@@ -10641,13 +10708,13 @@ window._ppaChartGet=function(id){return charts[id];};
     chart.data.labels = labels;
     if(chart.data.datasets?.[0]){
       chart.data.datasets[0].data = prod;
-      chart.data.datasets[0].label = active.length===1 ? `Geração ${active[0]}` : (active.length===parksByScopeV37().length ? 'Geração' : `Geração (${active.join(', ')})`);
+      chart.data.datasets[0].label = active.length===1 ? `${_T('Geração')} ${active[0]}` : (active.length===parksByScopeV37().length ? _T('Geração') : `${_T('Geração')} (${active.join(', ')})`);
     }
     if(chart.data.datasets?.[1]) chart.data.datasets[1].data = meta;
     const titleEl=document.getElementById('ppaMainChartTitle');
     const subEl=document.getElementById('ppaMainChartSub');
-    if(titleEl) titleEl.textContent = gran==='ano' ? 'Geração mensal do período selecionado' : 'Geração diária do período selecionado';
-    if(subEl) subEl.textContent = active.length===1 ? `Parque selecionado: ${active[0]}` : `Parques selecionados: ${active.join(', ')}`;
+    if(titleEl) titleEl.textContent = gran==='ano' ? _T('Geração mensal do período selecionado') : _T('Geração diária do período selecionado');
+    if(subEl) subEl.textContent = active.length===1 ? `${_T('Parque selecionado')}: ${active[0]}` : `${_T('Parques selecionados')}: ${active.join(', ')}`;
     const monthTag=document.getElementById('ppaXAxisMonthTag');
     if(monthTag) monthTag.textContent = '';
     chart.update('none');
@@ -10662,7 +10729,7 @@ window._ppaChartGet=function(id){return charts[id];};
     if(chart.data.datasets?.[0]) chart.data.datasets[0].data = progressProd;
     if(chart.data.datasets?.[1]) chart.data.datasets[1].data = progressMeta;
     const progSub=document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = active.length===1 ? `Meta e realizado do parque ${active[0]}.` : `Meta e realizado dos parques selecionados: ${active.join(', ')}.`;
+    if(progSub) progSub.textContent = active.length===1 ? `${_T('Meta e realizado do parque')} ${active[0]}.` : `${_T('Meta e realizado dos parques selecionados')}: ${active.join(', ')}.`;
     chart.update('none');
   }
   function patchChartsV37(){
@@ -10859,7 +10926,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const sub = document.getElementById('ppaMainChartSub');
     if(sub) sub.textContent = active.length===1 ? `Parque selecionado: ${active[0]}` : `Parques selecionados: ${active.join(', ')}`;
     const progSub = document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = active.length===1 ? `Meta e realizado do parque ${active[0]}.` : `Meta e realizado dos parques selecionados: ${active.join(', ')}.`;
+    if(progSub) progSub.textContent = active.length===1 ? `${_T('Meta e realizado do parque')} ${active[0]}.` : `${_T('Meta e realizado dos parques selecionados')}: ${active.join(', ')}.`;
   }
 
   window.renderPagePPA = function(type){
@@ -11045,7 +11112,7 @@ window._ppaChartGet=function(id){return charts[id];};
     const sub = document.getElementById('ppaMainChartSub');
     if(sub) sub.textContent = active.length===1 ? `Parque selecionado: ${active[0]}` : `Parques selecionados: ${active.join(', ')}`;
     const progSub = document.getElementById('ppaProgSub');
-    if(progSub) progSub.textContent = active.length===1 ? `Meta e realizado do parque ${active[0]}.` : `Meta e realizado dos parques selecionados: ${active.join(', ')}.`;
+    if(progSub) progSub.textContent = active.length===1 ? `${_T('Meta e realizado do parque')} ${active[0]}.` : `${_T('Meta e realizado dos parques selecionados')}: ${active.join(', ')}.`;
   }
   if(!window.__ppaTopParkOutsideCloseV39__){
     document.addEventListener('click', (ev)=>{
