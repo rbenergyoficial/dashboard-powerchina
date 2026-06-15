@@ -12157,7 +12157,7 @@ window._ppaChartGet=function(id){return charts[id];};
         +'border-radius:14px;'
         +'padding:14px 18px 14px;'
         +'box-sizing:border-box;'
-        +'box-shadow:0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)">'
+        +'box-shadow:0 4px 24px rgba(0,0,0,.70),6px 8px 20px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.08)">'
 
         /* ── name row: chip + full name + status badge ───────── */
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
@@ -12368,11 +12368,12 @@ window._ppaChartGet=function(id){return charts[id];};
 
     sec.innerHTML=
       '<style>'
-        +'.ppag-card[draggable]{transition:transform .18s ease,box-shadow .18s ease;cursor:grab}'
+        +'.ppag-card[draggable]{transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease;cursor:grab}'
         +'.ppag-card[draggable]:active{cursor:grabbing}'
         +'.ppag-card[draggable]:hover{'
-          +'transform:translate(3px,-5px)!important;'
-          +'box-shadow:-6px 10px 32px rgba(0,0,0,.72),inset 0 1px 0 rgba(255,255,255,.06)!important}'
+          +'transform:translateY(-4px)!important;'
+          +'border-color:rgba(107,139,245,.30)!important;'
+          +'box-shadow:0 14px 44px rgba(0,0,0,.88),0 0 0 1px rgba(107,139,245,.28),0 0 24px rgba(107,139,245,.14),inset 0 1px 0 rgba(255,255,255,.10)!important}'
         +'.ppag-card.ppag-drag-over{outline:1px dashed rgba(255,255,255,.22)!important;outline-offset:2px}'
         +'.ppag-card.ppag-dragging{opacity:.35!important;transform:none!important}'
       +'</style>'
