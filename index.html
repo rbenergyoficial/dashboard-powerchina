@@ -12589,9 +12589,6 @@ window._ppaChartGet=function(id){return charts[id];};
                              ?(parseFloat(metaDs.data[lastActiveIdx>=0?lastActiveIdx:0])||0):0;
 
             if(nRem>0 && nActive>0){
-              /* Use _ppaCurKpi (set before mkChart, same source as V40's stats panel)
-                 so neededDaily matches the RITMO NECESSÁRIO shown on the right panel.
-                 Falls back to chart-data sums when _ppaCurKpi is not available. */
               var _kpi=window._ppaCurKpi||{};
               var totalProd=(_kpi.ger>0)?parseFloat(_kpi.ger):0;
               if(!totalProd){ for(var i=0;i<=lastActiveIdx;i++) totalProd+=(parseFloat(genData[i])||0); }
@@ -12617,44 +12614,48 @@ window._ppaChartGet=function(id){return charts[id];};
                 /* null-out gen bars for future days */
                 for(var i=lastActiveIdx+1;i<genDs.data.length;i++) genDs.data[i]=null;
 
-                /* flat projection: same daily target for all remaining days */
+                /* ── Irradiance history (same month, all years) for weighted projection + line extension ── */
+                var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
+                _v44_hbd={}; var _irrS=0,_irrC=0;
+                for(var _pi=0;_pi<allPat.length;_pi++){
+                  var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
+                  var _dr=(_rec.data instanceof Date)?_rec.data:new Date(_rec.data);
+                  if(isNaN(_dr.getTime())) continue;
+                  if(_dr.getUTCMonth()!==cm) continue;
+                  var _dn2=_dr.getUTCDate();
+                  var _iv=parseFloat(_rec.irr_media)||0;
+                  if(_iv>0){
+                    if(!_v44_hbd[_dn2]) _v44_hbd[_dn2]={sum:0,cnt:0};
+                    _v44_hbd[_dn2].sum+=_iv; _v44_hbd[_dn2].cnt++;
+                    _irrS+=_iv; _irrC++;
+                  }
+                }
+                _v44_hm=_irrC>0?(_irrS/_irrC):0;
+                _v44_lai=lastActiveIdx;
+
+                /* ── Irradiance-weighted projection: each future day proportional to its expected irradiance ── */
+                var futureDays=[];
+                for(var i=lastActiveIdx+1;i<cfg.data.labels.length;i++) futureDays.push(parseInt(String(cfg.data.labels[i]))||0);
+                var futIrr=futureDays.map(function(dn){
+                  var hd=_v44_hbd[dn]; return (hd&&hd.cnt>0)?(hd.sum/hd.cnt):(_v44_hm||1);
+                });
+                var sumFutIrr=futIrr.reduce(function(s,v){return s+v;},0)||1;
                 var projData=cfg.data.labels.map(function(_,i){
-                  return i>lastActiveIdx ? neededDaily : null;
+                  if(i<=lastActiveIdx) return null;
+                  return +(needed*(futIrr[i-(lastActiveIdx+1)]/sumFutIrr)).toFixed(2);
                 });
                 cfg.data.datasets.push({
-                  type:'bar',label:'Projeção necessária',data:projData,
-                  backgroundColor:'rgba(251,146,60,.18)',borderColor:'rgba(251,146,60,.55)',
+                  type:'bar',label:translateAnyText('Projeção'),data:projData,
+                  backgroundColor:'rgba(251,146,60,.20)',borderColor:'rgba(251,146,60,.60)',
                   borderWidth:1.5,borderRadius:3,maxBarThickness:40,yAxisID:'y',order:5
                 });
                 if(cfg.options&&cfg.options.scales&&cfg.options.scales.y){
                   var curMax=cfg.options.scales.y.suggestedMax||0;
-                  if(neededDaily*1.25>curMax) cfg.options.scales.y.suggestedMax=neededDaily*1.25;
+                  var maxProj=projData.reduce(function(m,v){return v!=null&&v>m?v:m;},0);
+                  if(maxProj*1.18>curMax) cfg.options.scales.y.suggestedMax=maxProj*1.18;
                 }
               }
             }
-
-            /* ── Capture irradiance history so _v44ExtendIrr can use it post-render ──
-               UTC date methods avoid the UTC-3 timezone shift on ISO date strings.
-               No dataset is added to cfg here — _v44ExtendIrr modifies V40's
-               existing irradiance dataset after the full chart chain has run,
-               ensuring the extension uses V40's actual display scale.             */
-            var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
-            _v44_hbd={}; var _irrS=0,_irrC=0;
-            for(var _pi=0;_pi<allPat.length;_pi++){
-              var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
-              var _dr=(_rec.data instanceof Date)?_rec.data:new Date(_rec.data);
-              if(isNaN(_dr.getTime())) continue;
-              if(_dr.getUTCMonth()!==cm) continue;
-              var _dn2=_dr.getUTCDate();
-              var _iv=parseFloat(_rec.irr_media)||0;
-              if(_iv>0){
-                if(!_v44_hbd[_dn2]) _v44_hbd[_dn2]={sum:0,cnt:0};
-                _v44_hbd[_dn2].sum+=_iv; _v44_hbd[_dn2].cnt++;
-                _irrS+=_iv; _irrC++;
-              }
-            }
-            _v44_hm=_irrC>0?(_irrS/_irrC):0;
-            _v44_lai=lastActiveIdx;
           }
         }
       }catch(e){ console.warn('V44 proj:',e); }
