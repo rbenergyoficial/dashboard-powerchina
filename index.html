@@ -1866,6 +1866,7 @@ function translateChartConfigValue(value, seen){
     return value;
   }
   Object.keys(value).forEach(key=>{
+    if(key==='type') return;
     const v=value[key];
     if(typeof v==='string') value[key]=translateAnyText(v);
     else if(v && typeof v==='object') translateChartConfigValue(v, seen);
