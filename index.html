@@ -556,6 +556,14 @@ html[data-theme="light"] .fdate::-webkit-calendar-picker-indicator{filter:none;}
 .btn-theme .icon-sun{display:none;}
 html[data-theme="light"] .btn-theme .icon-moon{display:none;}
 html[data-theme="light"] .btn-theme .icon-sun{display:block;}
+/* MUST ranking — override hardcoded dark colors */
+html[data-theme="light"] #page-must .must-rank-name{color:var(--t1);}
+html[data-theme="light"] #page-must .must-rank-badge{background:color-mix(in srgb,var(--park-color,#6b8bf5) 18%,rgba(0,0,0,.04));border-color:color-mix(in srgb,var(--park-color,#6b8bf5) 40%,rgba(0,0,0,.08));color:var(--t2);}
+html[data-theme="light"] #page-must .must-rank-track{background:rgba(0,0,0,.07);box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);}
+html[data-theme="light"] #page-must .must-rank-foot{border-top-color:rgba(0,0,0,.08);}
+html[data-theme="light"] #page-must .must-rank-row.selected{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--park-color,#6b8bf5) 38%,rgba(0,0,0,.06));}
+/* Rank UFV period badge container */
+html[data-theme="light"] .rank-period-badge{background:rgba(0,0,0,.06)!important;border-color:rgba(0,0,0,.15)!important;}
 /* Sidebar active states */
 html[data-theme="light"] .side-nav .page-btn.on,
 html[data-theme="light"] .side-panel-btn.is-active,
@@ -633,6 +641,8 @@ function _themeCharts(light){
       c.update('none');
     });
   }catch(e){ console.warn('theme charts:',e); }
+  try{ if(typeof renderRankUFV==='function') renderRankUFV(); }catch(e){}
+  try{ if(typeof renderHeatmapUFV==='function') renderHeatmapUFV(); }catch(e){}
 }
 </script>
 </head>
@@ -3306,6 +3316,7 @@ function getRankPeriodLabel(){
 }
 
 function renderRankUFV(){
+  const _lt=document.documentElement.getAttribute('data-theme')==='light';
   const way=applyFilters(dashData.way2,'data');
   const ufvs=['m1','m2','m3','m4','m5','m6','m7','m8','m9'];
   const totals=ufvs.map((c,i)=>({name:`M${i+1}`,val:way.reduce((s,r)=>s+num(r[c]),0)}));
@@ -3331,7 +3342,7 @@ function renderRankUFV(){
       if(head) head.insertAdjacentElement('afterend',badge);
     }
     const periodLabel=getRankPeriodLabel();
-    badge.innerHTML='<span style="color:#7080a8;font-size:9px">📅 '+translateAnyText('PERÍODO')+'</span><span style="color:#f0f4ff">'+periodLabel+'</span>';
+    badge.innerHTML=`<span style="color:${_lt?'#606480':'#7080a8'};font-size:9px">📅 ${translateAnyText('PERÍODO')}</span><span style="color:${_lt?'#13121f':'#f0f4ff'}">${periodLabel}</span>`;
   }
 
   el.innerHTML=totals.map((t,i)=>{
@@ -3340,22 +3351,25 @@ function renderRankUFV(){
     const diff=share-expectedShare;
     const shareCol=diff>=-0.5?'#34e0a1':diff>=-2?'#f5c84b':'#f0598c';
     const pct=t.val/max*100;
+    const barBg=_lt?`linear-gradient(90deg,${col}bb,${col}dd)`:`linear-gradient(90deg,${col}44,${col}88)`;
+    const diffColor=_lt?shareCol:(shareCol+'88');
     return `<div style="display:flex;align-items:center;gap:10px;padding:3px 0;">
       <span style="font-size:12px;font-weight:800;min-width:26px;text-align:right;color:${col};font-family:var(--mono)">${t.name}</span>
       <div style="flex:1;background:var(--bg5);border-radius:99px;height:26px;overflow:hidden;position:relative;">
-        <div style="width:${pct}%;height:100%;border-radius:99px;background:linear-gradient(90deg,${col}44,${col}88);display:flex;align-items:center;padding:0 12px;min-width:80px;transition:width .9s cubic-bezier(.4,0,.2,1);">
-          <span style="font-size:11px;color:#f0f4ff;font-weight:700;white-space:nowrap">${(t.val/1000).toFixed(2)} GWh</span>
+        <div style="width:${pct}%;height:100%;border-radius:99px;background:${barBg};display:flex;align-items:center;padding:0 12px;min-width:80px;transition:width .9s cubic-bezier(.4,0,.2,1);">
+          <span style="font-size:11px;color:#fff;font-weight:700;white-space:nowrap;text-shadow:0 1px 6px rgba(0,0,0,.5)">${(t.val/1000).toFixed(2)} GWh</span>
         </div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;min-width:68px;gap:1px">
         <span style="font-size:13px;color:${shareCol};font-weight:800;line-height:1">${share.toFixed(1)}%</span>
-        <span style="font-size:9px;font-weight:600;color:${shareCol}88">${diff>=0?'+':''}${diff.toFixed(1)}pp</span>
+        <span style="font-size:9px;font-weight:600;color:${diffColor}">${diff>=0?'+':''}${diff.toFixed(1)}pp</span>
       </div>
     </div>`;
   }).join('');
 }
 
 function renderHeatmapUFV(){
+  const _lt=document.documentElement.getAttribute('data-theme')==='light';
   // Usa filtros ativos (ano, mes, ufv)
   const way=applyFilters(dashData.way2,'data');
   const el=document.getElementById('hmUFV');
@@ -3393,7 +3407,7 @@ function renderHeatmapUFV(){
       html+=`<th>${MNS[parseInt(mo)]}/${y.slice(2)}</th>`;
     }
   });
-  html+='<th style="color:var(--t2);border-left:1px solid rgba(255,255,255,.08)">Total</th></tr>';
+  html+=`<th style="color:var(--t2);border-left:1px solid ${_lt?'rgba(0,0,0,.1)':'rgba(255,255,255,.08)'}">Total</th></tr>`;
 
   // Linhas por UFV com gradiente de cor + total por linha
   ufvs.forEach((c,i)=>{
@@ -3403,13 +3417,19 @@ function renderHeatmapUFV(){
     periods.forEach((p,pi)=>{
       const v=rowVals[pi];
       const a=v/maxV;
-      const bg=a>0.7?UFV_COLORS[i]+'88':a>0.4?UFV_COLORS[i]+'55':a>0.1?UFV_COLORS[i]+'28':'rgba(255,255,255,.03)';
-      const tc=a>0.5?'#f0f4ff':'#9ba8c4';
+      const bg=_lt
+        ?(a>0.7?UFV_COLORS[i]+'cc':a>0.4?UFV_COLORS[i]+'99':a>0.1?UFV_COLORS[i]+'55':'rgba(0,0,0,.04)')
+        :(a>0.7?UFV_COLORS[i]+'88':a>0.4?UFV_COLORS[i]+'55':a>0.1?UFV_COLORS[i]+'28':'rgba(255,255,255,.03)');
+      const tc=_lt
+        ?(a>0.5?'#13121f':'#374151')
+        :(a>0.5?'#f0f4ff':'#9ba8c4');
       html+=`<td style="background:${bg};color:${tc};cursor:default;font-weight:${a>0.4?'600':'400'}" title="M${i+1} · ${p}: ${v.toFixed(0)} MWh (${(v/maxV*100).toFixed(0)}% do máximo)">${v>0?(v>=1000?(v/1000).toFixed(2)+' GWh':(v).toFixed(1)+' MWh'):'—'}</td>`;
     });
     // Coluna de total — somatório da linha com cor da UFV
     const totalFmt=rowTotal>=1000?(rowTotal/1000).toFixed(2)+' GWh':rowTotal.toFixed(0)+' MWh';
-    html+=`<td style="background:${UFV_COLORS[i]}22;color:${UFV_COLORS[i]};font-weight:700;border-left:1px solid rgba(255,255,255,.08);white-space:nowrap">${totalFmt}</td>`;
+    const totBorder=_lt?'rgba(0,0,0,.1)':'rgba(255,255,255,.08)';
+    const totBg=_lt?UFV_COLORS[i]+'44':UFV_COLORS[i]+'22';
+    html+=`<td style="background:${totBg};color:${UFV_COLORS[i]};font-weight:700;border-left:1px solid ${totBorder};white-space:nowrap">${totalFmt}</td>`;
     html+='</tr>';
   });
 
@@ -3417,12 +3437,16 @@ function renderHeatmapUFV(){
   html+='<tr><th style="color:var(--t2);font-weight:700">Total</th>';
   periods.forEach(p=>{
     const colTotal=ufvs.reduce((s,c)=>s+(map[p]?.[c]||0),0);
-    html+=`<td style="background:rgba(255,255,255,.07);color:#c8d4f0;font-weight:700">${colTotal>=1000?(colTotal/1000).toFixed(2)+' GWh':colTotal.toFixed(0)+' MWh'}</td>`;
+    const colBg=_lt?'rgba(0,0,0,.06)':'rgba(255,255,255,.07)';
+    const colTc=_lt?'#1a1d2e':'#c8d4f0';
+    html+=`<td style="background:${colBg};color:${colTc};font-weight:700">${colTotal>=1000?(colTotal/1000).toFixed(2)+' GWh':colTotal.toFixed(0)+' MWh'}</td>`;
   });
   // Somatório geral
   const grandTotal=ufvs.reduce((s,c)=>s+periods.reduce((ss,p)=>ss+(map[p]?.[c]||0),0),0);
   const grandFmt=grandTotal>=1000?(grandTotal/1000).toFixed(2)+' GWh':grandTotal.toFixed(0)+' MWh';
-  html+=`<td style="background:rgba(255,255,255,.1);color:#f0f4ff;font-weight:800;white-space:nowrap">${grandFmt}</td>`;
+  const grandBg=_lt?'rgba(0,0,0,.09)':'rgba(255,255,255,.1)';
+  const grandTc=_lt?'#13121f':'#f0f4ff';
+  html+=`<td style="background:${grandBg};color:${grandTc};font-weight:800;white-space:nowrap">${grandFmt}</td>`;
   html+='</tr>';
 
   html+='</table>';
