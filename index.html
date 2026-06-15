@@ -12067,12 +12067,13 @@ window._ppaChartGet=function(id){return charts[id];};
             var genDs=cfg.data.datasets[0];
             var genData=genDs.data;
 
-            /* find last day with positive production */
+            /* find last day with positive production; count all positive days separately
+               so gaps in data don't inflate nRem (matches V40's filter approach) */
             var lastActiveIdx=-1;
+            var nActive=0;
             for(var i=0;i<genData.length;i++){
-              if((parseFloat(genData[i])||0)>0) lastActiveIdx=i;
+              if((parseFloat(genData[i])||0)>0){ lastActiveIdx=i; nActive++; }
             }
-            var nActive=lastActiveIdx+1;  /* count of days with data */
             var nRem=daysInMonth-nActive; /* remaining days */
 
             /* find meta dataset (first non-y2 dataset after genDs) */
@@ -12084,9 +12085,13 @@ window._ppaChartGet=function(id){return charts[id];};
                              ?(parseFloat(metaDs.data[lastActiveIdx>=0?lastActiveIdx:0])||0):0;
 
             if(nRem>0 && nActive>0){
-              var totalProd=0;
-              for(var i=0;i<=lastActiveIdx;i++) totalProd+=(parseFloat(genData[i])||0);
-              var totalMeta=lastMetaVal*daysInMonth;
+              /* Use _ppaCurKpi (set before mkChart, same source as V40's stats panel)
+                 so neededDaily matches the RITMO NECESSÁRIO shown on the right panel.
+                 Falls back to chart-data sums when _ppaCurKpi is not available. */
+              var _kpi=window._ppaCurKpi||{};
+              var totalProd=(_kpi.ger>0)?parseFloat(_kpi.ger):0;
+              if(!totalProd){ for(var i=0;i<=lastActiveIdx;i++) totalProd+=(parseFloat(genData[i])||0); }
+              var totalMeta=(_kpi.meta>0)?parseFloat(_kpi.meta):(lastMetaVal*daysInMonth);
               var needed=Math.max(0,totalMeta-totalProd);
               var neededDaily=+(needed/nRem).toFixed(3);
 
