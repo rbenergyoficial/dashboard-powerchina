@@ -12161,11 +12161,9 @@ window._ppaChartGet=function(id){return charts[id];};
 
         /* ── name row: chip + full name + status badge ───────── */
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-          /* colored chip badge — solid gradient fill matching top-row CARDS DOS PARQUES style */
-          +'<div style="display:inline-flex;align-items:center;justify-content:center;'
-            +'width:34px;height:34px;border-radius:9px;flex-shrink:0;'
-            +'background:linear-gradient(140deg,'+ppaC+','+ppaC+'aa);border:1px solid transparent">'
-            +'<span style="font-family:'+F+';font-size:10px;font-weight:900;color:#0a0a10">'+pk.name+'</span>'
+          /* colored chip badge — uses same kpi-icon-box class as top-row CARDS DOS PARQUES */
+          +'<div class="kpi-icon-box" style="background:linear-gradient(140deg,'+ppaC+','+ppaC+'aa);border-color:transparent;flex-shrink:0">'
+            +'<span style="color:#0a0a10;font-weight:800;font-size:10px;font-family:var(--mono)">'+pk.name+'</span>'
           +'</div>'
           /* full name */
           +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;'
@@ -12285,8 +12283,8 @@ window._ppaChartGet=function(id){return charts[id];};
       +'box-shadow:0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)">'
       /* name row */
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-        +'<div style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;flex-shrink:0;background:linear-gradient(140deg,'+totC+','+totC+'aa);border:1px solid transparent">'
-          +'<span style="font-family:'+F+';font-size:14px;font-weight:900;color:#0a0a10">Σ</span>'
+        +'<div class="kpi-icon-box" style="background:linear-gradient(140deg,#6b8bf5,#6b8bf5aa);border-color:transparent;flex-shrink:0">'
+          +'<span style="color:#0a0a10;font-weight:800;font-size:11px;font-family:var(--mono)">Σ</span>'
         +'</div>'
         +'<div style="flex:1;min-width:0">'
           +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;line-height:1;margin-bottom:2px">'+translateAnyText('CONSOLIDADO')+'</div>'
