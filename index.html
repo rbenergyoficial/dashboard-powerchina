@@ -739,17 +739,11 @@ function _themeCharts(light){
       <button class="lang-btn" data-lang="en" type="button">EN</button>
       <button class="lang-btn" data-lang="zh-CN" type="button">简中</button>
     </div>
-    <label class="btn-upload" title="Carregar planilha manualmente">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Carregar
-      <input type="file" accept=".xlsx" style="display:none" onchange="onUpload(this)">
-    </label>
     <button class="btn-refresh" id="refreshBtn" onclick="onRefreshClick()" title="Atualizar dados via OneDrive">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
         <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
       </svg>
-      Atualizar Dados
     </button>
     <div id="syncPill" class="sync-pill sp-ready" title="Status da última atualização">
       <span class="sp-dot"></span><span class="sp-label">Aguardando</span>
