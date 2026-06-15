@@ -1675,6 +1675,17 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   'ENERGIA PRODUZIDA & FRUSTRADA':'已发电量与受限电量',
   'PERFORMANCE RATIO (PR)':'性能比率 (PR)'
 });
+/* ── Section headers and panel titles missing from original packs ── */
+Object.assign(LANG_PACKS['en'].text, {
+  'IRRADIÂNCIA × GERAÇÃO':'IRRADIANCE × GENERATION',
+  'Análise Complementar de Perdas':'Complementary Loss Analysis',
+  'PERFORMANCE RATIO':'PERFORMANCE RATIO'
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  'IRRADIÂNCIA × GERAÇÃO':'辐照度 × 发电量',
+  'Análise Complementar de Perdas':'补充损耗分析',
+  'PERFORMANCE RATIO':'性能比率'
+});
 /* ── PPA multi-version titles, subs, BAR/LINE/PROJ buttons ── */
 Object.assign(LANG_PACKS['en'].text, {
   'Geração mensal do ano selecionado':'Monthly generation — selected year',
@@ -1795,6 +1806,7 @@ function translatePatternText(value){
     [/do total/g,'of total'],
     [/Clique para filtrar/g,'Click to filter'],
     [/Controle de frequ[êe]ncia do SIN\.?/gi,'SIN frequency control.'],
+    [/Controle de inequa[a-zçãõéêíóúàâôü\-\s]*:/gi,'Inequality constraint:'],
     [/Controle de inje[a-zçãõéêíóúàâôü\-\s]*:/gi,'Injection control:'],
     [/CONTROLE DE CARREGAMENTO DA TRANSFORM[a-zA-Z0-9\-\s]*/g,'TRANSFORMER LOADING CONTROL'],
     [/CONTROLE DE CARREGAMENTO DA LT\s*230\s*KV[a-zA-Z0-9\-\s]*/g,'230 kV TRANSMISSION LINE LOADING CONTROL'],
@@ -1836,6 +1848,7 @@ function translatePatternText(value){
     [/do total/g,'占总量'],
     [/Clique para filtrar/g,'点击筛选'],
     [/Controle de frequ[êe]ncia do SIN\.?/gi,'SIN 频率控制。'],
+    [/Controle de inequa[a-zçãõéêíóúàâôü\-\s]*:/gi,'不等式约束：'],
     [/Controle de inje[a-zçãõéêíóúàâôü\-\s]*:/gi,'注入控制：'],
     [/CONTROLE DE CARREGAMENTO DA TRANSFORM[a-zA-Z0-9\-\s]*/g,'变压器负载控制'],
     [/CONTROLE DE CARREGAMENTO DA LT\s*230\s*KV[a-zA-Z0-9\-\s]*/g,'230 kV 线路负载控制'],
@@ -3664,7 +3677,7 @@ function renderHeatmapUFV(){
   const maxV=Math.max(...allVals)||1;
 
   // Cabeçalho das colunas
-  let html='<table class="heatmap-table"><tr><th style="color:var(--t2)">UFV \ Período</th>';
+  let html=`<table class="heatmap-table"><tr><th style="color:var(--t2)">${_T('UFV')} × ${_T('Período')}</th>`;
   periods.forEach(p=>{
     if(useDia){
       const mes=MNS[parseInt(filters.mes)]||'';
