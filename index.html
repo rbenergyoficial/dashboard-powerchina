@@ -612,6 +612,14 @@ window.toggleTheme=function(){
   if(wasLight){ h.removeAttribute('data-theme'); localStorage.setItem('dashTheme','dark'); }
   else { h.setAttribute('data-theme','light'); localStorage.setItem('dashTheme','light'); }
   _themeCharts(!wasLight);
+  /* Full re-render of the active page so inline-styled overlays that aren't
+     individually re-callable (V40 stats panel, gauge cards) pick up the theme.
+     Falls back to the in-place chart update alone when no data is loaded. */
+  try{
+    if(typeof renderAll==='function' && window.dashData && Array.isArray(dashData.patamares) && dashData.patamares.length){
+      renderAll();
+    }
+  }catch(e){}
 };
 
 /* Update all active Chart.js instances without full re-render */
@@ -644,6 +652,7 @@ function _themeCharts(light){
   }catch(e){ console.warn('theme charts:',e); }
   try{ if(typeof renderRankUFV==='function') renderRankUFV(); }catch(e){}
   try{ if(typeof renderHeatmapUFV==='function') renderHeatmapUFV(); }catch(e){}
+  try{ if(typeof window._ppaBuildGauges==='function') window._ppaBuildGauges(); }catch(e){}
 }
 </script>
 </head>
@@ -1489,6 +1498,49 @@ Object.assign(LANG_PACKS['en'].text, {"Barras de energia gerada + linha de meta 
 Object.assign(LANG_PACKS['zh-CN'].text, {"Barras de energia gerada + linha de meta por parque": "各电站发电量柱状图 + 目标线"});
 Object.assign(LANG_PACKS['en'].text,  {'Realizado':'Actual','Meta':'Target','Geração horária':'Hourly generation','Meta horária':'Hourly target','PR (%)':'PR (%)','Geração produzida':'Generated production'});
 Object.assign(LANG_PACKS['zh-CN'].text,{'Realizado':'已完成','Meta':'目标','Geração horária':'小时发电量','Meta horária':'小时目标','PR (%)':'PR (%)','Geração produzida':'已发电量'});
+/* ── Sidebar / brand / static UI + park-gauge cards (V43) ── */
+Object.assign(LANG_PACKS['en'].text, {
+  "Painéis":"Panels","Ações":"Actions","Painel de Controle":"Control Panel","Curtailment":"Curtailment",
+  "Sazonalidade":"Seasonality","Limpar filtros":"Clear filters","Imprimir painel":"Print panel",
+  "Painéis de Dashboard":"Dashboard Panels","Navegação de dashboards":"Dashboard navigation",
+  "Complexo Mauriti":"Mauriti Complex","Operacional":"Operational",
+  "INDICADORES POR PARQUE · AVANÇO PARA META":"INDICATORS BY PLANT · PROGRESS TO TARGET",
+  "CONSOLIDADO":"CONSOLIDATED","Todos os Parques":"All Plants",
+  "Falta p/ meta":"Remaining to target","Ritmo p/ atingir a meta":"Pace to reach target","Ritmo p/ atingir":"Pace to reach",
+  "Meta atingida":"Target reached","Meta será atingida":"Target will be reached",
+  "Meta não atingida":"Target not reached","Meta não será atingida":"Target won't be reached",
+  "Em risco · tend. positiva":"At risk · positive trend","Meta em risco":"Target at risk",
+  "não atingirá":"won't reach target","em risco":"at risk","em risco · tend. positiva":"at risk · positive trend",
+  "dias":"days","MWh/dia":"MWh/day","Meta:":"Target:","Atual:":"Current:","META":"TARGET",
+  "DIAS APURADOS":"DAYS COUNTED","PERÍODOS":"PERIODS","GERAÇÃO APURADA":"MEASURED GENERATION",
+  "META MENSAL":"MONTHLY TARGET","META / DIA":"TARGET / DAY","MÉDIA REAL":"ACTUAL AVERAGE",
+  "DESVIO DIÁRIO":"DAILY DEVIATION","PROJEÇÃO FIM DO MÊS":"END-OF-MONTH PROJECTION",
+  "DIAS RESTANTES":"DAYS REMAINING","concluído":"completed","Ritmo necessário":"Required pace",
+  "Meta em risco · tendência positiva":"Target at risk · positive trend",
+  "Análise do Período":"Period Analysis",
+  "Geração apurada vs meta · projeção e ritmo necessário":"Measured generation vs target · projection and required pace"
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  "Painéis":"面板","Ações":"操作","Painel de Controle":"控制面板","Curtailment":"限电",
+  "Sazonalidade":"季节性","Limpar filtros":"清除筛选","Imprimir painel":"打印面板",
+  "Painéis de Dashboard":"仪表板面板","Navegação de dashboards":"仪表板导航",
+  "Complexo Mauriti":"Mauriti 园区","Operacional":"运行中",
+  "INDICADORES POR PARQUE · AVANÇO PARA META":"各电站指标 · 目标进度",
+  "CONSOLIDADO":"汇总","Todos os Parques":"全部电站",
+  "Falta p/ meta":"距目标差额","Ritmo p/ atingir a meta":"达标所需速率","Ritmo p/ atingir":"达标所需速率",
+  "Meta atingida":"已达标","Meta será atingida":"将达标",
+  "Meta não atingida":"未达标","Meta não será atingida":"将无法达标",
+  "Em risco · tend. positiva":"有风险 · 趋势向好","Meta em risco":"目标有风险",
+  "não atingirá":"将无法达标","em risco":"有风险","em risco · tend. positiva":"有风险 · 趋势向好",
+  "dias":"天","MWh/dia":"MWh/天","Meta:":"目标：","Atual:":"当前：","META":"目标",
+  "DIAS APURADOS":"已统计天数","PERÍODOS":"周期数","GERAÇÃO APURADA":"已统计发电量",
+  "META MENSAL":"月度目标","META / DIA":"目标 / 天","MÉDIA REAL":"实际平均",
+  "DESVIO DIÁRIO":"日偏差","PROJEÇÃO FIM DO MÊS":"月末预测",
+  "DIAS RESTANTES":"剩余天数","concluído":"已完成","Ritmo necessário":"所需速率",
+  "Meta em risco · tendência positiva":"目标有风险 · 趋势向好",
+  "Análise do Período":"周期分析",
+  "Geração apurada vs meta · projeção e ritmo necessário":"已统计发电量 vs 目标 · 预测与所需速率"
+});
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
 function rebuildI18nFallback(){ ['en','zh-CN'].forEach(lang=>{ I18N_FALLBACK[lang]={}; const txt=(LANG_PACKS[lang]&&LANG_PACKS[lang].text)||{}; Object.keys(txt).forEach(k=>{ I18N_FALLBACK[lang][_normI18nKey(k)] = txt[k]; }); }); }
@@ -1510,6 +1562,9 @@ function translatePatternText(value){
   if(typeof value!=='string' || currentLang==='pt-BR') return value;
   let s=value;
   const patterns = currentLang==='en' ? [
+    [/GWh gerados/g,'GWh generated'],
+    [/Atualizado!/g,'Updated!'],
+    [/Atualizado/g,'Updated'],
     [/W\/m² médio/g,'average W/m²'],
     [/Sem dados para /g,'No data for '],
     [/Aguardando dados/g,'Waiting for data'],
@@ -1546,6 +1601,9 @@ function translatePatternText(value){
     [/EFICIÊNCIA DE CONVERSÃO/g,'CONVERSION EFFICIENCY'],
     [/Demais parques/g,'Other plants']
   ] : [
+    [/GWh gerados/g,'GWh 已发电'],
+    [/Atualizado!/g,'已更新！'],
+    [/Atualizado/g,'已更新'],
     [/W\/m² médio/g,'平均 W/m²'],
     [/Sem dados para /g,'无对应数据：'],
     [/Aguardando dados/g,'等待数据'],
@@ -11083,12 +11141,12 @@ window._ppaChartGet=function(id){return charts[id];};
             var _projWarn=!_projOk&&!_trendOk&&_rem2>0&&_dailyAvg>=_dailyMeta;
             var _projColor=_projOk?'#73BF69':(_trendOk||_projWarn)?'#F5C842':'#F2495C';
             var _projStatus=_projOk
-              ?(_rem2===0?'✓ Meta atingida':'✓ Meta será atingida')
+              ?(_rem2===0?'✓ '+translateAnyText('Meta atingida'):'✓ '+translateAnyText('Meta será atingida'))
               :_trendOk
-                ?'⚠ Meta em risco · tendência positiva'
+                ?'⚠ '+translateAnyText('Meta em risco · tendência positiva')
                 :_projWarn
-                  ?'⚠ Meta em risco'
-                  :(_rem2===0?'✗ Meta não atingida':'✗ Meta não será atingida');
+                  ?'⚠ '+translateAnyText('Meta em risco')
+                  :(_rem2===0?'✗ '+translateAnyText('Meta não atingida'):'✗ '+translateAnyText('Meta não será atingida'));
             var _gapOk=_gap>=0;
             var _gapColor=_gapOk?'#73BF69':'#F2495C';
             var _lbl='color:#4A5A6A;font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px';
@@ -11096,16 +11154,16 @@ window._ppaChartGet=function(id){return charts[id];};
             /* ── HEADER: period + % badge ── */
             _html+='<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:0">';
             _html+=_hasDayData
-              ?'<span style="'+_lbl+'margin-bottom:0">'+_snapStats.nActive+' / '+_dim2+' DIAS APURADOS</span>'
-              :'<span style="'+_lbl+'margin-bottom:0">'+_snapStats.nActive+' PERÍODOS</span>';
+              ?'<span style="'+_lbl+'margin-bottom:0">'+_snapStats.nActive+' / '+_dim2+' '+translateAnyText('DIAS APURADOS')+'</span>'
+              :'<span style="'+_lbl+'margin-bottom:0">'+_snapStats.nActive+' '+translateAnyText('PERÍODOS')+'</span>';
             _html+='<span style="display:inline-flex;align-items:center;gap:3px;background:'+_pc2c+'20;border:1px solid '+_pc2c+'50;border-radius:5px;padding:4px 9px;color:'+_pc2c+';font-size:11px;font-weight:800">'+(_pct2>=100?'▲':'▼')+' '+_fv1(_pct2)+'%</span>';
             _html+='</div>';
             /* ── SECTION 1: Geração apurada ── */
             _html+='<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 0 8px;border-bottom:1px solid rgba(255,255,255,.06)">';
-            _html+='<div style="'+_lbl+'">GERAÇÃO APURADA</div>';
+            _html+='<div style="'+_lbl+'">'+translateAnyText('GERAÇÃO APURADA')+'</div>';
             _html+='<div style="font-weight:800;font-size:16px;color:#fff;letter-spacing:-.03em;line-height:1;margin-bottom:2px">'+_fv(_snapStats.prod)+'<span style="font-size:10px;color:#5A6A7A;font-weight:500;margin-left:5px">MWh</span></div>';
             _html+='<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(87,148,242,.09);border:1px solid rgba(87,148,242,.22);border-radius:6px;padding:5px 9px;margin-bottom:7px">';
-            _html+='<span style="font-size:9px;font-weight:700;color:#5794F2;letter-spacing:.08em;text-transform:uppercase">META MENSAL</span>';
+            _html+='<span style="font-size:9px;font-weight:700;color:#5794F2;letter-spacing:.08em;text-transform:uppercase">'+translateAnyText('META MENSAL')+'</span>';
             _html+='<span style="font-size:13px;font-weight:800;color:#A8C4E8;letter-spacing:-.01em">'+_fv(_snapStats.meta)+'<span style="font-size:10px;color:#4A6A8A;font-weight:500;margin-left:4px">MWh</span></span>';
             _html+='</div>';
             _html+='<div style="display:flex;align-items:center;gap:8px">';
@@ -11117,28 +11175,28 @@ window._ppaChartGet=function(id){return charts[id];};
               /* ── SECTION 2: Meta/dia vs Média real ── */
               _html+='<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:10px 0 8px;border-bottom:1px solid rgba(255,255,255,.06)">';
               _html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
-              _html+='<div><div style="'+_lbl+'">META / DIA</div>';
+              _html+='<div><div style="'+_lbl+'">'+translateAnyText('META / DIA')+'</div>';
               _html+='<div style="color:#C8D8EE;font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.1">'+_fv(_dailyMeta)+'<span style="font-size:10px;color:#4A5A6A;font-weight:500;margin-left:3px">MWh</span></div></div>';
-              _html+='<div style="text-align:right"><div style="'+_lbl+'">MÉDIA REAL</div>';
+              _html+='<div style="text-align:right"><div style="'+_lbl+'">'+translateAnyText('MÉDIA REAL')+'</div>';
               _html+='<div style="color:#C8D8EE;font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.1">'+_fv(_dailyAvg)+'<span style="font-size:10px;color:#4A5A6A;font-weight:500;margin-left:3px">MWh</span></div></div>';
               _html+='</div>';
               _html+='<div style="display:flex;align-items:center;justify-content:space-between;background:'+_gapColor+'12;border:1px solid '+_gapColor+'30;border-radius:7px;padding:5px 10px">';
-              _html+='<span style="color:#5A6A7A;font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase">DESVIO DIÁRIO</span>';
+              _html+='<span style="color:#5A6A7A;font-size:9px;font-weight:700;letter-spacing:.09em;text-transform:uppercase">'+translateAnyText('DESVIO DIÁRIO')+'</span>';
               _html+='<span style="color:'+_gapColor+';font-size:11px;font-weight:800">'+(_gapOk?'+':'')+_fv(_gap)+'<span style="font-size:9px;opacity:.75;margin-left:4px">('+(_gapOk?'+':'')+_fv1(_gapPct)+'%)</span></span>';
               _html+='</div>';
               _html+='</div>';
               /* ── SECTION 3: Projeção ── */
               _html+='<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:10px">';
-              _html+='<div style="'+_lbl+'">'+'PROJEÇÃO FIM DO MÊS'+(_rem2>0?' · '+_rem2+' DIAS RESTANTES':'')+'</div>';
+              _html+='<div style="'+_lbl+'">'+translateAnyText('PROJEÇÃO FIM DO MÊS')+(_rem2>0?' · '+_rem2+' '+translateAnyText('DIAS RESTANTES'):'')+'</div>';
               _html+='<div style="font-weight:800;font-size:16px;color:#D8E8F8;letter-spacing:-.02em;line-height:1;margin-bottom:3px">'+_fv(_proj2)+'<span style="font-size:10px;color:#4A5A6A;font-weight:500;margin-left:5px">MWh</span></div>';
               _html+='<div style="display:flex;align-items:center;margin-bottom:5px">';
-              _html+='<span style="color:'+_pc2c+';font-size:12px;font-weight:800;letter-spacing:-.01em">'+_fv1(_projPct2)+'% <span style="font-size:9px;font-weight:600;opacity:.8">concluído</span></span>';
+              _html+='<span style="color:'+_pc2c+';font-size:12px;font-weight:800;letter-spacing:-.01em">'+_fv1(_projPct2)+'% <span style="font-size:9px;font-weight:600;opacity:.8">'+translateAnyText('concluído')+'</span></span>';
               _html+='</div>';
               _html+='<div style="background:rgba(255,255,255,.07);border-radius:99px;height:6px;overflow:hidden;margin-bottom:7px"><div style="height:100%;width:'+Math.min(100,_projPct2)+'%;background:'+_pc2c+';border-radius:99px;box-shadow:0 0 8px '+_pc2c+'50"></div></div>';
               _html+=(_rem2>0&&_neededDaily>0
                 ?'<div style="display:flex;align-items:center;justify-content:space-between;background:'+_projColor+'12;border:1px solid '+_projColor+'35;border-radius:6px;padding:5px 9px;margin-bottom:7px">'
-                +'<span style="font-size:8px;font-weight:700;color:#4A5A6A;letter-spacing:.08em;text-transform:uppercase">Ritmo necessário</span>'
-                +'<span style="font-size:15px;font-weight:800;color:'+_projColor+';letter-spacing:-.02em">'+_fv(_neededDaily)+'<span style="font-size:9px;color:#4A6A7A;font-weight:500;margin-left:3px">MWh/dia</span></span>'
+                +'<span style="font-size:8px;font-weight:700;color:#4A5A6A;letter-spacing:.08em;text-transform:uppercase">'+translateAnyText('Ritmo necessário')+'</span>'
+                +'<span style="font-size:15px;font-weight:800;color:'+_projColor+';letter-spacing:-.02em">'+_fv(_neededDaily)+'<span style="font-size:9px;color:#4A6A7A;font-weight:500;margin-left:3px">'+translateAnyText('MWh/dia')+'</span></span>'
                 +'</div>'
                 :'');
               _html+='<div style="display:flex;align-items:center;gap:6px">';
@@ -11147,6 +11205,18 @@ window._ppaChartGet=function(id){return charts[id];};
               _html+='</div>';
               _html+='</div>';
             }
+            /* ── adapt hardcoded dark inline colors to light theme ── */
+            var _v40lt=document.documentElement.getAttribute('data-theme')==='light';
+            if(_v40lt){
+              _html=_html
+                .replace(/color:#fff;/g,'color:#13121f;')
+                .replace(/#C8D8EE/g,'#1e293b')
+                .replace(/#D8E8F8/g,'#1e293b')
+                .replace(/#A8C4E8/g,'#334155')
+                .replace(/rgba\(255,255,255,\.08\)/g,'rgba(0,0,0,.10)')
+                .replace(/rgba\(255,255,255,\.07\)/g,'rgba(0,0,0,.08)')
+                .replace(/rgba\(255,255,255,\.06\)/g,'rgba(0,0,0,.08)');
+            }
             var _ov2=document.createElement('div');
             _ov2.id='ppaRankStatsV40';
             _ov2.className='cc';
@@ -11154,10 +11224,10 @@ window._ppaChartGet=function(id){return charts[id];};
             var _sHead=document.createElement('div');
             _sHead.className='cc-head';
             _sHead.style.cssText='margin-bottom:10px';
-            _sHead.innerHTML='<div><div class="cc-title">Análise do Período</div><div class="cc-sub">Geração apurada vs meta · projeção e ritmo necessário</div></div>';
+            _sHead.innerHTML='<div><div class="cc-title">'+translateAnyText('Análise do Período')+'</div><div class="cc-sub">'+translateAnyText('Geração apurada vs meta · projeção e ritmo necessário')+'</div></div>';
             var _sBody=document.createElement('div');
             _sBody.className='cc-body';
-            _sBody.style.cssText='height:360px;overflow-y:auto;box-sizing:border-box;display:flex;flex-direction:column;color:#D8D9DA';
+            _sBody.style.cssText='height:360px;overflow-y:auto;box-sizing:border-box;display:flex;flex-direction:column;color:'+(_v40lt?'#334155':'#D8D9DA');
             _sBody.innerHTML='<div style="display:flex;flex-direction:column;height:100%">'+_html+'</div>';
             _ov2.appendChild(_sHead);
             _ov2.appendChild(_sBody);
@@ -11799,10 +11869,10 @@ window._ppaChartGet=function(id){return charts[id];};
       var aC=sColor(pctC);
       var sC=projOk?GRN:(trendOk||warnOk)?YEL:RED;
       var cC=(typeof MUST_PARK_COLORS!=='undefined'&&MUST_PARK_COLORS[pk.name])||_chipPalette[idx%_chipPalette.length];
-      var sT=projOk?(rem===0?'✓ Meta atingida':'✓ Meta será atingida')
-            :trendOk?'⚠ Em risco · tend. positiva'
-            :warnOk?'⚠ Meta em risco'
-            :(rem===0?'✗ Meta não atingida':'✗ Meta não será atingida');
+      var sT=projOk?(rem===0?'✓ '+translateAnyText('Meta atingida'):'✓ '+translateAnyText('Meta será atingida'))
+            :trendOk?'⚠ '+translateAnyText('Em risco · tend. positiva')
+            :warnOk?'⚠ '+translateAnyText('Meta em risco')
+            :(rem===0?'✗ '+translateAnyText('Meta não atingida'):'✗ '+translateAnyText('Meta não será atingida'));
 
       /* value bar width capped at MAX */
       var bW=(Math.min(MAX,Math.max(0,pct))/MAX*100).toFixed(3)+'%';
@@ -11824,7 +11894,7 @@ window._ppaChartGet=function(id){return charts[id];};
         +'<div style="position:relative;height:15px;font-family:'+F+';font-size:8px;color:#7d94a8;margin-top:1px">'
           +'<span style="position:absolute;left:'+(80/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">80%</span>'
           +'<span style="position:absolute;left:'+(95/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">95%</span>'
-          +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">META</span>'
+          +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">'+translateAnyText('META')+'</span>'
         +'</div>';
 
       /* ── mini ring — thin SVG circle as accent ───────────── */
@@ -11882,9 +11952,9 @@ window._ppaChartGet=function(id){return charts[id];};
             +'</div>'
             /* meta line */
             +'<div style="font-family:'+F+';font-size:11px;color:#6b7280">'
-              +'Meta: <span style="color:'+PUR+';font-weight:700">'+fv(meta)+'</span>'
+              +translateAnyText('Meta:')+' <span style="color:'+PUR+';font-weight:700">'+fv(meta)+'</span>'
               +'<span style="color:#60a5fa;font-size:9px;margin-left:3px">MWh</span>'
-              +(hasDayData&&dim2>0?'<span style="color:#4b5563;margin-left:8px">'+nAct+'/'+dim2+' dias</span>':'')
+              +(hasDayData&&dim2>0?'<span style="color:#4b5563;margin-left:8px">'+nAct+'/'+dim2+' '+translateAnyText('dias')+'</span>':'')
             +'</div>'
           +'</div>'
         +'</div>'
@@ -11901,7 +11971,7 @@ window._ppaChartGet=function(id){return charts[id];};
               var leftBlock= needed>0
                 ?('<div style="min-width:0">'
                     +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;'
-                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">Falta p/ meta</div>'
+                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div>'
                     +'<div style="line-height:1">'
                       +'<span style="font-family:'+F+';font-size:16px;font-weight:900;color:#e2e8f0;letter-spacing:-.03em">'+fv(needed)+'</span>'
                       +'<span style="font-family:'+F+';font-size:9px;color:'+BLUE+';font-weight:700;margin-left:3px">MWh</span>'
@@ -11909,18 +11979,18 @@ window._ppaChartGet=function(id){return charts[id];};
                   +'</div>')
                 :('<div style="display:flex;align-items:center;gap:5px">'
                     +'<span style="font-size:13px">✓</span>'
-                    +'<span style="font-family:'+F+';font-size:12px;font-weight:800;color:'+GRN+'">Meta atingida</span>'
+                    +'<span style="font-family:'+F+';font-size:12px;font-weight:800;color:'+GRN+'">'+translateAnyText('Meta atingida')+'</span>'
                   +'</div>');
               var rightBlock= neededD>0
                 ?('<div style="text-align:right;min-width:0">'
                     +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;'
-                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">Ritmo p/ atingir a meta</div>'
+                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir a meta')+'</div>'
                     +'<div style="line-height:1;margin-bottom:2px">'
                       +'<span style="font-family:'+F+';font-size:16px;font-weight:900;color:'+sC+';letter-spacing:-.03em">'+fv(neededD)+'</span>'
-                      +'<span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:3px">MWh/dia</span>'
+                      +'<span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:3px">'+translateAnyText('MWh/dia')+'</span>'
                     +'</div>'
                     +'<div style="font-family:'+F+';font-size:9px;color:'+rC2+'">'
-                      +(rOk?'↑':'↓')+' Atual: '+fv(dAvg)+' MWh/dia'
+                      +(rOk?'↑':'↓')+' '+translateAnyText('Atual:')+' '+fv(dAvg)+' '+translateAnyText('MWh/dia')
                     +'</div>'
                   +'</div>')
                 :'';
@@ -11968,7 +12038,7 @@ window._ppaChartGet=function(id){return charts[id];};
       +'<div style="position:relative;height:12px;font-family:'+F+';font-size:8px;color:#7d94a8;margin-top:1px">'
         +'<span style="position:absolute;left:'+(80/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">80%</span>'
         +'<span style="position:absolute;left:'+(95/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">95%</span>'
-        +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">META</span>'
+        +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">'+translateAnyText('META')+'</span>'
       +'</div>'
     +'</div>';
     var summaryCard='<div class="ppag-card" draggable="true" data-park="consolidado" style="'
@@ -11982,13 +12052,13 @@ window._ppaChartGet=function(id){return charts[id];};
           +'<span style="font-family:'+F+';font-size:14px;font-weight:900;color:'+totC+'">Σ</span>'
         +'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;line-height:1;margin-bottom:2px">CONSOLIDADO</div>'
-          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;letter-spacing:-.01em">Todos os Parques</span>'
+          +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;line-height:1;margin-bottom:2px">'+translateAnyText('CONSOLIDADO')+'</div>'
+          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;letter-spacing:-.01em">'+translateAnyText('Todos os Parques')+'</span>'
         +'</div>'
         +'<div style="margin-left:auto;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
-          +(nBad>0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+RED+'12;border:1px solid '+RED+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+RED+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+RED+'">✗ '+nBad+(isPast?' Meta não atingida':' não atingirá')+'</span></div>':'')
-          +(nWarn>0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+YEL+'12;border:1px solid '+YEL+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+YEL+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+YEL+'">⚠ '+nWarn+(isPast?' em risco':' em risco · tend. positiva')+'</span></div>':'')
-          +(nBad===0&&nWarn===0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+GRN+'12;border:1px solid '+GRN+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+GRN+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+GRN+'">✓ Meta atingida</span></div>':'')
+          +(nBad>0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+RED+'12;border:1px solid '+RED+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+RED+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+RED+'">✗ '+nBad+' '+translateAnyText(isPast?'Meta não atingida':'não atingirá')+'</span></div>':'')
+          +(nWarn>0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+YEL+'12;border:1px solid '+YEL+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+YEL+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+YEL+'">⚠ '+nWarn+' '+translateAnyText(isPast?'em risco':'em risco · tend. positiva')+'</span></div>':'')
+          +(nBad===0&&nWarn===0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+GRN+'12;border:1px solid '+GRN+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+GRN+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+GRN+'">✓ '+translateAnyText('Meta atingida')+'</span></div>':'')
         +'</div>'
       +'</div>'
       /* main row: ring + totals */
@@ -12000,7 +12070,7 @@ window._ppaChartGet=function(id){return charts[id];};
             +'<span style="font-family:'+F+';font-size:11px;color:'+BLUE+';font-weight:700;margin-left:5px">MWh</span>'
           +'</div>'
           +'<div style="font-family:'+F+';font-size:11px;color:#6b7280">'
-            +'Meta: <span style="color:'+PUR+';font-weight:700">'+fv(totMeta)+'</span>'
+            +translateAnyText('Meta:')+' <span style="color:'+PUR+';font-weight:700">'+fv(totMeta)+'</span>'
             +'<span style="color:#60a5fa;font-size:9px;margin-left:3px">MWh</span>'
           +'</div>'
         +'</div>'
@@ -12010,8 +12080,8 @@ window._ppaChartGet=function(id){return charts[id];};
       /* bottom: falta p/ meta + ritmo */
       +(totNeeded>0||totNeededD>0
         ?'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,255,255,.05)">'
-          +(totNeeded>0?'<div style="min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">Falta p/ meta</div><div style="line-height:1"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:#e2e8f0;letter-spacing:-.03em">'+fv(totNeeded)+'</span><span style="font-family:'+F+';font-size:10px;color:'+BLUE+';font-weight:700;margin-left:4px">MWh</span></div></div>':'')
-          +(totNeededD>0?'<div style="text-align:right;min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">Ritmo p/ atingir</div><div style="line-height:1;margin-bottom:3px"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:'+totC+';letter-spacing:-.03em">'+fv(totNeededD)+'</span><span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:4px">MWh/dia</span></div><div style="font-family:'+F+';font-size:9px;color:'+(totRateOk?GRN:RED)+'">'+(totRateOk?'↑':'↓')+' Atual: '+fv(totDAvg)+' MWh/dia</div></div>':'')
+          +(totNeeded>0?'<div style="min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div><div style="line-height:1"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:#e2e8f0;letter-spacing:-.03em">'+fv(totNeeded)+'</span><span style="font-family:'+F+';font-size:10px;color:'+BLUE+';font-weight:700;margin-left:4px">MWh</span></div></div>':'')
+          +(totNeededD>0?'<div style="text-align:right;min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir')+'</div><div style="line-height:1;margin-bottom:3px"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:'+totC+';letter-spacing:-.03em">'+fv(totNeededD)+'</span><span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:4px">'+translateAnyText('MWh/dia')+'</span></div><div style="font-family:'+F+';font-size:9px;color:'+(totRateOk?GRN:RED)+'">'+(totRateOk?'↑':'↓')+' '+translateAnyText('Atual:')+' '+fv(totDAvg)+' '+translateAnyText('MWh/dia')+'</div></div>':'')
         +'</div>'
         :'')
       +'</div>';
@@ -12076,7 +12146,7 @@ window._ppaChartGet=function(id){return charts[id];};
           +'<rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/>'
           +'<rect x="17" y="3" width="4" height="18"/>'
         +'</svg>'
-        +'INDICADORES POR PARQUE · AVANÇO PARA META'
+        +translateAnyText('INDICADORES POR PARQUE · AVANÇO PARA META')
       +'</div>'
       +'<div data-ppag-grid style="display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px">'
       +cardsHtml
@@ -12138,6 +12208,7 @@ window._ppaChartGet=function(id){return charts[id];};
       return r;
     };
   }
+  window._ppaBuildGauges=buildGauges; // expose for theme toggle re-render
   try{buildGauges();}catch(e){}
   setTimeout(function(){try{buildGauges();}catch(e){}},500);
   setTimeout(function(){try{buildGauges();}catch(e){}},1500);
