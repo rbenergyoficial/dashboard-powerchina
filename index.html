@@ -323,8 +323,11 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .no-data-msg{background:transparent;}
 
 /* MODALS */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;backdrop-filter:blur(8px);align-items:center;justify-content:center;}
-.modal-bg.open{display:flex;}
+.modal-bg{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(9,9,14,.90) 0%,rgba(13,12,26,.94) 100%);
+  backdrop-filter:blur(14px) saturate(1.5);}
+.modal-bg.open{display:flex;animation:modalBgIn .2s ease both;}
+@keyframes modalBgIn{from{opacity:0}to{opacity:1}}
 .modal{background:var(--bg3);border:1px solid var(--border3);border-radius:18px;padding:30px;max-width:460px;width:90%;box-shadow:0 32px 100px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.05);}
 .modal h3{font-size:15px;font-weight:700;margin-bottom:8px;}
 .modal p{font-size:11px;color:var(--t2);margin-bottom:14px;line-height:1.6;}
@@ -339,13 +342,55 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .modal-step-t{font-size:11px;color:var(--t2);line-height:1.5;}
 .modal-step-t strong{color:var(--t1);}
 .modal-saved{font-size:11px;color:var(--green);display:none;margin-top:6px;}
-.prog-modal{background:var(--bg3);border:1px solid var(--border3);border-radius:18px;padding:28px;max-width:400px;width:90%;box-shadow:0 24px 80px rgba(0,0,0,.7);}
-.prog-title{font-size:15px;font-weight:700;margin-bottom:6px;}
-.prog-msg{font-size:12px;color:var(--t2);margin-bottom:14px;}
-.prog-bar-wrap{background:var(--bg5);border-radius:99px;height:4px;overflow:hidden;margin-bottom:8px;}
-.prog-bar{height:100%;background:linear-gradient(90deg,var(--blue2),var(--blue),var(--cyan));border-radius:99px;transition:width .4s ease;}
-.prog-detail{font-size:10px;color:var(--t3);font-family:var(--mono);}
-.prog-close{display:none;width:100%;margin-top:14px;padding:9px;border-radius:9px;background:var(--bg5);border:1px solid var(--border2);color:var(--t2);font-size:12px;cursor:pointer;font-family:var(--font);}
+/* ── Professional loading modal ── */
+.prog-modal{
+  background:linear-gradient(160deg,rgba(18,19,34,.97) 0%,rgba(11,12,22,.99) 100%);
+  border:1px solid rgba(107,139,245,.22);border-radius:22px;
+  padding:36px 32px 28px;max-width:380px;width:90%;
+  box-shadow:0 40px 90px rgba(0,0,0,.75),0 0 0 1px rgba(107,139,245,.08),0 0 60px rgba(107,139,245,.06);
+  animation:progCardIn .28s cubic-bezier(.22,.61,.36,1) both;
+  position:relative;overflow:hidden;text-align:center;}
+@keyframes progCardIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
+.prog-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,rgba(107,139,245,.70) 30%,rgba(45,212,191,.50) 70%,transparent);}
+/* spinner */
+.prog-spinner-wrap{display:flex;align-items:center;justify-content:center;margin-bottom:22px;height:60px;}
+.prog-spinner{width:56px;height:56px;border-radius:50%;position:relative;flex-shrink:0;}
+.prog-spinner::before,.prog-spinner::after{content:'';position:absolute;border-radius:50%;}
+.prog-spinner::before{inset:0;border:3px solid rgba(107,139,245,.12);
+  border-top-color:#6b8bf5;border-right-color:#2dd4bf;
+  animation:spinO .75s linear infinite;}
+.prog-spinner::after{inset:9px;border:2.5px solid rgba(52,224,161,.10);
+  border-bottom-color:#34e0a1;border-left-color:#6b8bf580;
+  animation:spinO .5s linear infinite reverse;}
+@keyframes spinO{to{transform:rotate(360deg)}}
+/* done icon */
+.prog-done-ring{display:none;width:56px;height:56px;}
+/* dots */
+.prog-dots{display:inline-flex;gap:4px;vertical-align:middle;margin-left:5px;}
+.prog-dots i{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--blue);
+  animation:dotBounce 1.2s ease-in-out infinite;}
+.prog-dots i:nth-child(2){animation-delay:.18s;background:var(--cyan);}
+.prog-dots i:nth-child(3){animation-delay:.36s;background:#34d399;}
+@keyframes dotBounce{0%,80%,100%{transform:scale(.65);opacity:.45}40%{transform:scale(1.1);opacity:1}}
+/* title / msg */
+.prog-title{font-size:16px;font-weight:700;margin-bottom:8px;color:var(--t1);}
+.prog-msg{font-size:12px;color:var(--t2);margin-bottom:18px;min-height:18px;line-height:1.5;}
+/* bar */
+.prog-bar-wrap{background:rgba(255,255,255,.05);border-radius:99px;height:5px;overflow:hidden;margin-bottom:10px;}
+.prog-bar{height:100%;width:0%;border-radius:99px;transition:width .45s ease;
+  background:linear-gradient(90deg,#6b8bf5,#2dd4bf,#34e0a1);position:relative;overflow:hidden;}
+.prog-bar::after{content:'';position:absolute;top:0;left:-150%;width:80%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
+  animation:barShimmer 1.6s ease-in-out infinite;}
+@keyframes barShimmer{to{left:200%}}
+.prog-detail{font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:4px;}
+.prog-close{display:none;width:100%;margin-top:18px;padding:11px;border-radius:11px;
+  background:linear-gradient(135deg,rgba(107,139,245,.14),rgba(45,212,191,.09));
+  border:1px solid rgba(107,139,245,.28);color:var(--t1);font-size:12px;font-weight:600;
+  cursor:pointer;font-family:var(--font);letter-spacing:.03em;transition:all .2s;}
+.prog-close:hover{background:linear-gradient(135deg,rgba(107,139,245,.24),rgba(45,212,191,.16));
+  border-color:rgba(107,139,245,.48);}
 
 /* LOGIN */
 .login-overlay{position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;
@@ -1352,9 +1397,28 @@ function _themeCharts(light){
 <!-- MODAL PROGRESSO -->
 <div class="modal-bg" id="progModal">
   <div class="prog-modal">
-    <div class="prog-title" id="progTitle">🔄 Autenticando…</div>
+    <div class="prog-spinner-wrap">
+      <div class="prog-spinner" id="progSpinner"></div>
+      <svg class="prog-done-ring" id="progDoneRing" viewBox="0 0 56 56" fill="none" style="display:none">
+        <circle cx="28" cy="28" r="25" stroke="rgba(52,224,161,.18)" stroke-width="3"/>
+        <circle id="progDoneCircle" cx="28" cy="28" r="25" stroke="#34e0a1" stroke-width="3"
+          stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"
+          transform="rotate(-90 28 28)" style="transition:stroke-dashoffset .6s ease"/>
+        <polyline id="progDoneCheck" points="16,29 24,37 40,20"
+          stroke="#34e0a1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+          fill="none" opacity="0" style="transition:opacity .25s ease .5s"/>
+        <circle id="progErrCircle" cx="28" cy="28" r="25" stroke="#f87171" stroke-width="3"
+          stroke-linecap="round" stroke-dasharray="157" stroke-dashoffset="157"
+          transform="rotate(-90 28 28)" style="transition:stroke-dashoffset .6s ease;display:none"/>
+        <line id="progErrX1" x1="18" y1="18" x2="38" y2="38" stroke="#f87171" stroke-width="3"
+          stroke-linecap="round" opacity="0" style="transition:opacity .25s ease .5s;display:none"/>
+        <line id="progErrX2" x1="38" y1="18" x2="18" y2="38" stroke="#f87171" stroke-width="3"
+          stroke-linecap="round" opacity="0" style="transition:opacity .25s ease .6s;display:none"/>
+      </svg>
+    </div>
+    <div class="prog-title" id="progTitle">Sincronizando<span class="prog-dots" id="progDots"><i></i><i></i><i></i></span></div>
     <div class="prog-msg" id="progMsg">Validando sessão Microsoft…</div>
-    <div class="prog-bar-wrap"><div class="prog-bar" id="progBar"></div></div>
+    <div class="prog-bar-wrap"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
     <div class="prog-detail" id="progDetail"></div>
     <button class="prog-close" id="progClose" onclick="closeProgModal()">Fechar</button>
   </div>
@@ -5621,19 +5685,76 @@ async function checkNewData(){
 setInterval(checkNewData,5*60*1000);
 
 function progDone(ok,msg){
-  document.getElementById('progTitle').innerHTML=ok
-    ?'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0fca8a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><polyline points="20 6 9 17 4 12"/></svg>Atualizado!'
-    :'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f05252" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Erro';
+  /* swap spinner → animated ring icon */
+  const spinner=document.getElementById('progSpinner');
+  const ring=document.getElementById('progDoneRing');
+  const dots=document.getElementById('progDots');
+  if(spinner) spinner.style.display='none';
+  if(dots) dots.style.display='none';
+  if(ring){ ring.style.display='block'; }
+
+  if(ok){
+    /* animate green circle fill then show checkmark */
+    const circ=document.getElementById('progDoneCircle');
+    const chk=document.getElementById('progDoneCheck');
+    if(circ) requestAnimationFrame(()=>{ circ.style.strokeDashoffset='0'; });
+    if(chk) requestAnimationFrame(()=>{ chk.style.opacity='1'; });
+    document.getElementById('progTitle').textContent='Atualizado!';
+    document.getElementById('progTitle').style.color='#34e0a1';
+  } else {
+    /* animate red circle fill then show X */
+    const ec=document.getElementById('progErrCircle');
+    const x1=document.getElementById('progErrX1');
+    const x2=document.getElementById('progErrX2');
+    if(ec){ ec.style.display=''; requestAnimationFrame(()=>{ ec.style.strokeDashoffset='0'; }); }
+    if(x1){ x1.style.display=''; requestAnimationFrame(()=>{ x1.style.opacity='1'; }); }
+    if(x2){ x2.style.display=''; requestAnimationFrame(()=>{ x2.style.opacity='1'; }); }
+    document.getElementById('progTitle').textContent='Erro';
+    document.getElementById('progTitle').style.color='#f87171';
+  }
+
+  /* bar fills to 100% with correct color */
+  const bar=document.getElementById('progBar');
+  bar.style.width='100%';
+  bar.style.background=ok?'#34e0a1':'#f0598c';
+  bar.style.setProperty('--shimmer','none');
+
   document.getElementById('progMsg').textContent=msg;
-  document.getElementById('progBar').style.width='100%';
-  document.getElementById('progBar').style.background=ok?'#34E0A1':'#f0598c';
   document.getElementById('progClose').style.display='block';
   document.getElementById('refreshBtn').classList.remove('spinning');
   document.getElementById('refreshBtn').disabled=false;
   if(ok){const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setSyncStatus('ok','Atualizado · '+t);_syncLastLoad=Date.now();}
   else{setSyncStatus('error','Falha na atualização');}
 }
-function closeProgModal(){document.getElementById('progModal').classList.remove('open');}
+function closeProgModal(){
+  const m=document.getElementById('progModal');
+  m.classList.remove('open');
+  /* reset for next use */
+  setTimeout(()=>{
+    const spinner=document.getElementById('progSpinner');
+    const ring=document.getElementById('progDoneRing');
+    const dots=document.getElementById('progDots');
+    const circ=document.getElementById('progDoneCircle');
+    const chk=document.getElementById('progDoneCheck');
+    const ec=document.getElementById('progErrCircle');
+    const x1=document.getElementById('progErrX1');
+    const x2=document.getElementById('progErrX2');
+    if(spinner) spinner.style.display='';
+    if(ring) ring.style.display='none';
+    if(dots) dots.style.display='';
+    if(circ){ circ.style.strokeDashoffset='157'; }
+    if(chk) chk.style.opacity='0';
+    if(ec){ ec.style.strokeDashoffset='157'; ec.style.display='none'; }
+    if(x1){ x1.style.opacity='0'; x1.style.display='none'; }
+    if(x2){ x2.style.opacity='0'; x2.style.display='none'; }
+    document.getElementById('progTitle').textContent='Sincronizando';
+    document.getElementById('progTitle').style.color='';
+    document.getElementById('progMsg').textContent='';
+    document.getElementById('progBar').style.width='0%';
+    document.getElementById('progBar').style.background='';
+    document.getElementById('progClose').style.display='none';
+  },300);
+}
 
 function setBusy(on){
   const btn=document.getElementById('refreshBtn');
