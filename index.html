@@ -1679,12 +1679,20 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
 Object.assign(LANG_PACKS['en'].text, {
   'IRRADIÂNCIA × GERAÇÃO':'IRRADIANCE × GENERATION',
   'Análise Complementar de Perdas':'Complementary Loss Analysis',
-  'PERFORMANCE RATIO':'PERFORMANCE RATIO'
+  'PERFORMANCE RATIO':'PERFORMANCE RATIO',
+  'Evolução da Geração PPA/ML':'PPA/ML Generation Evolution',
+  'Energia dos parques PPA e ML · visão complementar por mês vigente':'PPA and ML plant energy · complementary view by current month',
+  'EVENTOS':'EVENTS',
+  'GWh TOTAL':'GWh TOTAL'
 });
 Object.assign(LANG_PACKS['zh-CN'].text, {
   'IRRADIÂNCIA × GERAÇÃO':'辐照度 × 发电量',
   'Análise Complementar de Perdas':'补充损耗分析',
-  'PERFORMANCE RATIO':'性能比率'
+  'PERFORMANCE RATIO':'性能比率',
+  'Evolução da Geração PPA/ML':'PPA/ML 发电量趋势',
+  'Energia dos parques PPA e ML · visão complementar por mês vigente':'PPA 与 ML 电站电量 · 当月补充视图',
+  'EVENTOS':'事件',
+  'GWh TOTAL':'GWh 总量'
 });
 /* ── PPA multi-version titles, subs, BAR/LINE/PROJ buttons ── */
 Object.assign(LANG_PACKS['en'].text, {
@@ -1805,6 +1813,8 @@ function translatePatternText(value){
     [/GWh verificados/g,'GWh verified'],
     [/do total/g,'of total'],
     [/Clique para filtrar/g,'Click to filter'],
+    [/Horários do dia /g,'Day hours: '],
+    [/no período selecionado/g,'in selected period'],
     [/Controle de frequ[êe]ncia do SIN\.?/gi,'SIN frequency control.'],
     [/Controle de inequa[a-zçãõéêíóúàâôü\-\s]*:/gi,'Inequality constraint:'],
     [/Controle de inje[a-zçãõéêíóúàâôü\-\s]*:/gi,'Injection control:'],
@@ -1847,6 +1857,8 @@ function translatePatternText(value){
     [/GWh verificados/g,'GWh 已核验'],
     [/do total/g,'占总量'],
     [/Clique para filtrar/g,'点击筛选'],
+    [/Horários do dia /g,'当日时段 '],
+    [/no período selecionado/g,'在所选周期'],
     [/Controle de frequ[êe]ncia do SIN\.?/gi,'SIN 频率控制。'],
     [/Controle de inequa[a-zçãõéêíóúàâôü\-\s]*:/gi,'不等式约束：'],
     [/Controle de inje[a-zçãõéêíóúàâôü\-\s]*:/gi,'注入控制：'],
@@ -3442,7 +3454,7 @@ function renderRest2(){
         ctx.fillText(total.toLocaleString(getDateLocale()),cx,cy-9);
         ctx.fillStyle='#7080a8';
         ctx.font='600 9px Inter,system-ui';
-        ctx.fillText('EVENTOS',cx,cy+11);
+        ctx.fillText(translateAnyText('EVENTOS'),cx,cy+11);
         ctx.restore();
       }
     }]
