@@ -278,13 +278,14 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 
 /* CHART CARDS — Grafana premium dark */
 .cc{background:linear-gradient(160deg,#13161f 0%,#0f1118 100%);
-  border:1px solid rgba(107,139,245,.13);border-radius:14px;
+  border:1px solid rgba(107,139,245,.16);border-radius:14px;
   padding:18px;display:flex;flex-direction:column;gap:12px;
-  transition:border-color .25s,box-shadow .25s;position:relative;overflow:hidden;
-  box-shadow:0 2px 24px rgba(0,0,0,.55),0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.04);}
+  transition:border-color .3s,box-shadow .35s,transform .3s;position:relative;overflow:hidden;
+  box-shadow:0 4px 32px rgba(0,0,0,.62),0 1px 4px rgba(0,0,0,.45),0 0 28px rgba(107,139,245,.07),inset 0 1px 0 rgba(255,255,255,.05);}
 .cc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.35) 30%,rgba(45,212,191,.22) 70%,transparent 100%);}
-.cc:hover{border-color:rgba(107,139,245,.26);box-shadow:0 4px 32px rgba(0,0,0,.7),0 0 0 1px rgba(107,139,245,.08),inset 0 1px 0 rgba(255,255,255,.06);}
+  background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.42) 30%,rgba(45,212,191,.28) 70%,transparent 100%);}
+.cc:hover{border-color:rgba(107,139,245,.34);transform:translateY(-3px);
+  box-shadow:0 10px 52px rgba(0,0,0,.72),0 2px 8px rgba(0,0,0,.5),0 0 40px rgba(107,139,245,.13),0 0 0 1px rgba(107,139,245,.10),inset 0 1px 0 rgba(255,255,255,.08);}
 .cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
 .cc-title{font-size:13px;font-weight:700;color:#e4eaf8;letter-spacing:-.1px;font-family:var(--display);}
 .cc-sub{font-size:10px;color:#6a778e;margin-top:2px;letter-spacing:.01em;}
