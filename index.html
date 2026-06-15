@@ -12164,8 +12164,10 @@ window._ppaChartGet=function(id){return charts[id];};
 
         /* ── name row: chip + full name + status badge ───────── */
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-          /* colored chip badge — uses same kpi-icon-box class as top-row CARDS DOS PARQUES */
-          +'<div class="kpi-icon-box" style="background:linear-gradient(140deg,'+ppaC+','+ppaC+'aa);border-color:transparent;flex-shrink:0">'
+          /* colored chip badge — standalone inline styles, no class dependency */
+          +'<div style="display:inline-flex;align-items:center;justify-content:center;'
+            +'width:28px;height:28px;border-radius:8px;flex-shrink:0;'
+            +'background:linear-gradient(140deg,'+ppaC+','+ppaC+'aa);border:none">'
             +'<span style="color:#0a0a10;font-weight:800;font-size:10px;font-family:var(--mono)">'+pk.name+'</span>'
           +'</div>'
           /* full name */
@@ -12286,7 +12288,9 @@ window._ppaChartGet=function(id){return charts[id];};
       +'box-shadow:0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)">'
       /* name row */
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
-        +'<div class="kpi-icon-box" style="background:linear-gradient(140deg,#6b8bf5,#6b8bf5aa);border-color:transparent;flex-shrink:0">'
+        +'<div style="display:inline-flex;align-items:center;justify-content:center;'
+          +'width:28px;height:28px;border-radius:8px;flex-shrink:0;'
+          +'background:linear-gradient(140deg,#6b8bf5,#6b8bf5aa);border:none">'
           +'<span style="color:#0a0a10;font-weight:800;font-size:11px;font-family:var(--mono)">Σ</span>'
         +'</div>'
         +'<div style="flex:1;min-width:0">'
