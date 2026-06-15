@@ -564,7 +564,7 @@ html[data-theme="light"] #page-must .must-rank-foot{border-top-color:rgba(0,0,0,
 html[data-theme="light"] #page-must .must-rank-row.selected{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--park-color,#6b8bf5) 38%,rgba(0,0,0,.06));}
 /* Rank UFV period badge container */
 html[data-theme="light"] .rank-period-badge{background:rgba(0,0,0,.06)!important;border-color:rgba(0,0,0,.15)!important;}
-/* Sidebar active states */
+/* Sidebar active states: cyan text stays readable but make it a bit darker */
 html[data-theme="light"] .side-nav .page-btn.on,
 html[data-theme="light"] .side-panel-btn.is-active,
 html[data-theme="light"] .side-shortcut.is-active{color:#0e7490;}
@@ -624,8 +624,9 @@ function _themeCharts(light){
       var o=c.options;
       if(o.scales) Object.keys(o.scales).forEach(function(sk){
         var sc=o.scales[sk]; if(!sc) return;
-        if(sc.grid&&sk==='y') sc.grid.color=light?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)';
+        if(sc.grid) sc.grid.color=light?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)';
         if(sc.ticks&&!sc.ticks._userSet) sc.ticks.color=light?'#606480':'#8E9AA5';
+        if(sc.title&&sc.title.display) sc.title.color=light?'#606480':'#8090b8';
       });
       if(o.plugins){
         if(o.plugins.legend&&o.plugins.legend.labels)
@@ -1486,6 +1487,8 @@ Object.assign(LANG_PACKS['en'].text, {"Meta 90%": "Target 90%", "PR Mensal × Me
 Object.assign(LANG_PACKS['zh-CN'].text, {"Meta 90%": "90% 目标", "PR Mensal × Meta 90%": "月度 PR × 90% 目标", "Evolução do PR vs meta por mês": "各月 PR 相对目标变化", "PPA BRK vs demais parques": "PPA BRK 对比其他电站", "Participação no Complexo": "园区占比"});
 Object.assign(LANG_PACKS['en'].text, {"Barras de energia gerada + linha de meta por parque": "Generated energy bars + target line by plant"});
 Object.assign(LANG_PACKS['zh-CN'].text, {"Barras de energia gerada + linha de meta por parque": "各电站发电量柱状图 + 目标线"});
+Object.assign(LANG_PACKS['en'].text,  {'Realizado':'Actual','Meta':'Target','Geração horária':'Hourly generation','Meta horária':'Hourly target','PR (%)':'PR (%)','Geração produzida':'Generated production'});
+Object.assign(LANG_PACKS['zh-CN'].text,{'Realizado':'已完成','Meta':'目标','Geração horária':'小时发电量','Meta horária':'小时目标','PR (%)':'PR (%)','Geração produzida':'已发电量'});
 let currentLang = localStorage.getItem('mrd_lang') || 'pt-BR';
 function getDateLocale(){ return (LANG_PACKS[currentLang]||LANG_PACKS['pt-BR']).locale; }
 function rebuildI18nFallback(){ ['en','zh-CN'].forEach(lang=>{ I18N_FALLBACK[lang]={}; const txt=(LANG_PACKS[lang]&&LANG_PACKS[lang].text)||{}; Object.keys(txt).forEach(k=>{ I18N_FALLBACK[lang][_normI18nKey(k)] = txt[k]; }); }); }
@@ -2284,7 +2287,7 @@ function switchPage(page){
 }
 
 // ── Plugin inline: linha de meta horizontal com rótulo (substitui datasets fantasma)
-// Uso: options.plugins.metaLine = {value:90, label:'Meta 90%', color:'#f0598c'}
+// Uso: options.plugins.metaLine = {value:90, label:_T('Meta 90%'), color:'#f0598c'}
 const metaLinePlugin={
   id:'metaLine',
   afterDatasetsDraw(chart,args,opts){
@@ -2378,6 +2381,7 @@ function gradFromH(context,color){
   return g;
 }
 
+const _T=translateAnyText; // shorthand for chart label i18n
 const CHART_DEFAULTS={
   responsive:true,maintainAspectRatio:false,
   animation:{duration:0},
@@ -2406,7 +2410,7 @@ const CHART_DEFAULTS={
               lineWidth:visible?0:1.5,
               pointStyle:'rectRounded',
               // Cor do texto: brilhante se ativo, apagado se oculto
-              fontColor:visible?'#f0f4ff':'#3a4a68',
+              fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return visible?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#3a4a68');})(),
               hidden:false, // nunca riscar — controlamos visualmente
               lineDash:[],
               lineWidth:visible?0:1.5
@@ -2598,19 +2602,19 @@ function renderGer1(type='bar'){
   mkChart('cGer1',{
     type: type==='line'?'line':'bar',
     data:{labels,datasets:[
-      {label:'Energia Produzida (GWh)',data:gvData,
+      {label:_T('Energia Produzida (GWh)'),data:gvData,
         backgroundColor:type==='bar'?(ctx=>barGrad(ctx,'#3b0d6e','#A855F7')):'#A855F788',borderColor:'#A855F7',
         borderWidth:type==='bar'?0:2,
         grouped:type==='bar'?false:undefined,barPercentage:0.7,categoryPercentage:0.86,
         fill:type==='line'?'origin':false,tension:0,order:2,type:type==='line'?'line':'bar',
         pointRadius:type==='line'?3:0,pointBackgroundColor:'#A855F7'},
-      {label:'Energia de Referência (GWh)',data:grefData,
+      {label:_T('Energia de Referência (GWh)'),data:grefData,
         backgroundColor:type==='bar'?'rgba(52,224,161,0.34)':'#1fb58544',borderColor:'#34e0a1',
         borderWidth:type==='bar'?1.2:2,
         grouped:type==='bar'?false:undefined,barPercentage:0.7,categoryPercentage:0.86,
         fill:type==='line'?'origin':false,tension:0,order:3,spanGaps:true,type:type==='line'?'line':'bar',
         pointRadius:type==='line'?3:0,pointBackgroundColor:'#34e0a1'},
-      {label:'Irradiância (kWh/m²)',data:irrData,
+      {label:_T('Irradiância (kWh/m²)'),data:irrData,
         borderColor:'rgba(245,200,75,0.7)',backgroundColor:'transparent',
         type:'line',fill:false,tension:0,pointRadius:2.5,pointBackgroundColor:'rgba(245,200,75,0.7)',
         borderWidth:2,yAxisID:'y2',order:0}
@@ -2680,13 +2684,13 @@ function renderGer2(type='bar'){
   if(type==='line'){
     // Modo linha: sem barra de média, só séries temporais
     mkChart('cGer2',{type:'line',data:{labels,datasets:[
-      {label:'Energia Produzida (GWh)',data:gvData,borderColor:'#A855F7',backgroundColor:'#A855F722',
+      {label:_T('Energia Produzida (GWh)'),data:gvData,borderColor:'#A855F7',backgroundColor:'#A855F722',
         fill:true,tension:0,pointRadius:3,pointBackgroundColor:'#A855F7',borderWidth:2.5},
-      {label:'Energia Frustrada (GWh)',data:gfData,borderColor:'#F5A623',backgroundColor:'#F5A62322',
+      {label:_T('Energia Frustrada (GWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:'#F5A62322',
         fill:true,tension:0,pointRadius:3,pointBackgroundColor:'#F5A623',borderWidth:2.5},
-      {label:'Méd. GV',data:gvData.map(()=>avgGV),borderColor:'#c084fc88',borderDash:[6,3],
+      {label:_T('Méd. GV'),data:gvData.map(()=>avgGV),borderColor:'#c084fc88',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false},
-      {label:'Méd. GF',data:gfData.map(()=>avgGF),borderColor:'#F5A62344',borderDash:[6,3],
+      {label:_T('Méd. GF'),data:gfData.map(()=>avgGF),borderColor:'#F5A62344',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false}
     ]},options:{...CHART_DEFAULTS,
       scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,
@@ -2708,11 +2712,11 @@ function renderGer2(type='bar'){
   mkChart('cGer2',{
     type:'bar',
     data:{labels:labelsExt,datasets:[
-      {label:'Energia Produzida (GWh)',data:gvExt,
+      {label:_T('Energia Produzida (GWh)'),data:gvExt,
         backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#1e6f5c','#2DD4BF'):barGrad(ctx,'#3b0d6e','#A855F7'),
         borderColor:gvBorder,borderWidth:0,
         stack:'s1',borderRadius:0,borderSkipped:false},
-      {label:'Energia Frustrada (GWh)',data:gfExt,
+      {label:_T('Energia Frustrada (GWh)'),data:gfExt,
         backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#a21caf','#e879f9'):barGrad(ctx,'#7c5012','#F5A623'),
         borderColor:gfBorder,borderWidth:0,
         stack:'s1',borderRadius:{topLeft:7,topRight:7,bottomLeft:0,bottomRight:0},borderSkipped:false}
@@ -2760,9 +2764,9 @@ function renderGer3(type='bar'){
   const ociData=g.map((r,i)=>Math.max(0,+(r.disp_mwh/1000).toFixed(3)-gvData[i]-gfData[i]));
 
   mkChart('cGer3',{type:type==='line'?'line':'bar',data:{labels,datasets:[
-    {label:'Energia Produzida (GWh)',data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):'#A855F744',borderColor:'#A855F7',fill:true,tension:0},
-    {label:'Energia Frustrada (GWh)',data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A62350',borderColor:'#F5A623',fill:true,tension:0},
-    {label:'Ociosa (GWh)',data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):'#6b7a9a28',borderColor:'#6b7a9a',fill:true,tension:0}
+    {label:_T('Energia Produzida (GWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):'#A855F744',borderColor:'#A855F7',fill:true,tension:0},
+    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A62350',borderColor:'#F5A623',fill:true,tension:0},
+    {label:_T('Ociosa (GWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):'#6b7a9a28',borderColor:'#6b7a9a',fill:true,tension:0}
   ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:true},y:{...CHART_DEFAULTS.scales.y,stacked:true}}}});
 }
 
@@ -2787,9 +2791,9 @@ function renderPR1(type='line'){
   const colors=prData.map(v=>v===null?'#6b7a9a':v>=90?'#34E0A1':v>=80?'#f5c84b':'#f0598c');
 
   mkChart('cPR1',{type,data:{labels,datasets:[
-    {label:'PR (%)',data:prData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,colors[ctx.dataIndex])):'#A855F766',borderColor:type==='line'?colors:'#A855F7',borderWidth:2,fill:false,tension:0,pointBackgroundColor:colors,pointRadius:3}
+    {label:_T('PR (%)'),data:prData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,colors[ctx.dataIndex])):'#A855F766',borderColor:type==='line'?colors:'#A855F7',borderWidth:2,fill:false,tension:0,pointBackgroundColor:colors,pointRadius:3}
   ]},options:{...CHART_DEFAULTS,
-    plugins:{...CHART_DEFAULTS.plugins,metaLine:{value:90,label:'Meta 90%'}},
+    plugins:{...CHART_DEFAULTS.plugins,metaLine:{value:90,label:_T('Meta 90%')}},
     scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,min:0,max:105,title:{display:true,text:'PR (%)',color:'#6b7a9a',font:{size:10}}}}}});
 }
 
@@ -2811,12 +2815,12 @@ function renderPR2(type='bar'){
   const colors=prData.map(v=>v===null?'#6b7a9a88':v>=90?'#34E0A155':v>=75?'#f5c84b55':'#f0598c55');
   const borderColors=prData.map(v=>v===null?'#6b7a9a':v>=90?'#34E0A1':v>=75?'#f5c84b':'#f0598c');
   mkChart('cPR2',{type,data:{labels,datasets:[
-    {label:'PR (%)',data:prData,
+    {label:_T('PR (%)'),data:prData,
       backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,borderColors[ctx.dataIndex])):'transparent',
       borderColor:type==='bar'?borderColors:borderColors,
       fill:false,tension:0,pointBackgroundColor:borderColors,pointRadius:3,borderWidth:2}
   ]},options:{...CHART_DEFAULTS,
-    plugins:{...CHART_DEFAULTS.plugins,metaLine:{value:90,label:'Meta 90%'}},
+    plugins:{...CHART_DEFAULTS.plugins,metaLine:{value:90,label:_T('Meta 90%')}},
     scales:{x:xAxisWithTitle(),
       y:{...CHART_DEFAULTS.scales.y,min:0,max:160,
         title:{display:true,text:'PR (%)',color:'#6b7a9a',font:{size:9}}}}}});
@@ -2838,7 +2842,7 @@ function renderPR3(){
   for(let v=50;v<=105;v+=step) bins.push(v);
   const counts=bins.map(b=>vals.filter(v=>v>=b&&v<b+step).length);
   mkChart('cPR3',{type:'bar',data:{labels:bins.map(b=>`${b}-${b+step}%`),datasets:[
-    {label:'Dias',data:counts,backgroundColor:(ctx=>{const b=bins[ctx.dataIndex];return gradFrom(ctx,b>=90?'#34E0A1':b>=80?'#f5c84b':'#f0598c');}),borderColor:bins.map(b=>b>=90?'#34E0A1':b>=80?'#f5c84b':'#f0598c'),borderWidth:1}
+    {label:_T('Dias'),data:counts,backgroundColor:(ctx=>{const b=bins[ctx.dataIndex];return gradFrom(ctx,b>=90?'#34E0A1':b>=80?'#f5c84b':'#f0598c');}),borderColor:bins.map(b=>b>=90?'#34E0A1':b>=80?'#f5c84b':'#f0598c'),borderWidth:1}
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}}}});
 }
 
@@ -2893,8 +2897,8 @@ function renderIrr1(type='line'){
   if(!hasIrr&&!hasGV){showNoData('cIrr1');return;}
 
   mkChart('cIrr1',{type,data:{labels,datasets:[
-    {label:'Irradiância (W/m²)',data:irrData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#f5c84b')):'#f5c84b66',borderColor:'#f5c84b',fill:false,tension:0,yAxisID:'y'},
-    {label:'Energia Produzida / 100k (GWh)',data:gvNorm,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):'#A855F744',borderColor:'#A855F7',fill:false,tension:0,yAxisID:'y2'}
+    {label:_T('Irradiância (W/m²)'),data:irrData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#f5c84b')):'#f5c84b66',borderColor:'#f5c84b',fill:false,tension:0,yAxisID:'y'},
+    {label:_T('Energia Produzida / 100k (GWh)'),data:gvNorm,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):'#A855F744',borderColor:'#A855F7',fill:false,tension:0,yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,scales:{
     x:xAxisWithTitle(),
     y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'W/m²',color:'#6b7a9a',font:{size:9}}},
@@ -2921,8 +2925,8 @@ function renderIrr2(){
   const minX=Math.min(...pts.map(p=>p.x)), maxX=Math.max(...pts.map(p=>p.x));
 
   mkChart('cIrr2',{type:'scatter',data:{datasets:[
-    {label:'Dias',data:pts,backgroundColor:pts.map(p=>UFV_COLORS[p.m%9]+'aa'),pointRadius:4},
-    {label:'Tendência',data:[{x:minX,y:a+b*minX},{x:maxX,y:a+b*maxX}],type:'line',borderColor:'#ffffff60',borderWidth:1.5,borderDash:[4,3],pointRadius:0,showLine:true}
+    {label:_T('Dias'),data:pts,backgroundColor:pts.map(p=>UFV_COLORS[p.m%9]+'aa'),pointRadius:4},
+    {label:_T('Tendência'),data:[{x:minX,y:a+b*minX},{x:maxX,y:a+b*maxX}],type:'line',borderColor:'#ffffff60',borderWidth:1.5,borderDash:[4,3],pointRadius:0,showLine:true}
   ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Irradiância (W/m²)',color:'#6b7a9a',font:{size:9}}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Energia Produzida (GWh)',color:'#6b7a9a',font:{size:9}}}},plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}}}});
 }
 
@@ -2995,7 +2999,7 @@ function renderRest1(){
                   fillStyle:active?colors[i]:colors[i]+'44',
                   strokeStyle:'transparent',
                   lineWidth:0,pointStyle:'rectRounded',index:i,
-                  fontColor:active?'#f0f4ff':'#6e80a8'};
+                  fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#6e80a8');})()};
               });
             }
           }
@@ -3068,10 +3072,10 @@ function renderRest2(){
     data:{
       labels:[...razLabels,...oriLabels],
       datasets:[
-        {label:'Razão',data:[...razVals,...oriVals.map(()=>0)],
+        {label:_T('Razão'),data:[...razVals,...oriVals.map(()=>0)],
           backgroundColor:[...razColors.map(c=>c+'cc'),...oriColors.map(()=>'transparent')],
           borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:12},
-        {label:'Origem',data:[...razVals.map(()=>0),...oriVals],
+        {label:_T('Origem'),data:[...razVals.map(()=>0),...oriVals],
           backgroundColor:[...razColors.map(()=>'transparent'),...oriColors.map(c=>c+'cc')],
           borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:12}
       ]
@@ -3116,14 +3120,14 @@ function renderRest2(){
                 const active=filters.razao===l||filters.razao==='todas';
                 items.push({text:l+'   '+pct+'%',fillStyle:active?razColors[i]:razColors[i]+'33',
                   strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',
-                  index:i,datasetIndex:0,fontColor:active?'#f0f4ff':'#4a5a7a'});
+                  index:i,datasetIndex:0,fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#4a5a7a');})()});
               });
               oriLabels.forEach(function(l,i){
                 const pct=(oriVals[i]/total*100).toFixed(1);
                 const active=filters.origem===l||filters.origem==='todas';
                 items.push({text:l+'   '+pct+'%',fillStyle:active?oriColors[i]:oriColors[i]+'33',
                   strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',
-                  index:i+razLabels.length,datasetIndex:1,fontColor:active?'#f0f4ff':'#4a5a7a'});
+                  index:i+razLabels.length,datasetIndex:1,fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#4a5a7a');})()});
               });
               return items;
             }
@@ -3206,8 +3210,8 @@ function renderRest3(type='bar'){
   const keys=Object.keys(map).sort();
   const labels=keys.map(k=>fmtDate(map[k]._date,gran));
   mkChart('cRest3',{type,data:{labels,datasets:[
-    {label:'Horas Restrição',data:keys.map(k=>+map[k].dur.toFixed(1)),backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623aa',borderColor:'#F5A623',fill:false,tension:0,yAxisID:'y'},
-    {label:'Limitação Média (MW)',data:keys.map(k=>map[k].cnt?+(map[k].lim/map[k].cnt).toFixed(1):0),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
+    {label:_T('Horas Restrição'),data:keys.map(k=>+map[k].dur.toFixed(1)),backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623aa',borderColor:'#F5A623',fill:false,tension:0,yAxisID:'y'},
+    {label:_T('Limitação Média (MW)'),data:keys.map(k=>map[k].cnt?+(map[k].lim/map[k].cnt).toFixed(1):0),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
   ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}}},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
 }
 
@@ -3250,7 +3254,7 @@ function renderUFV1(type='bar'){
   const labels=getLabels(g);
   mkChart('cUFV1',{type,data:{labels,datasets:[
     ...ufvs.map((c,i)=>({label:`M${i+1}`,data:g.map(r=>+num(r[c]).toFixed(2)),backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,UFV_COLORS[i])):UFV_COLORS[i]+'44',borderColor:UFV_COLORS[i],fill:false,tension:0,borderWidth:1.5})),
-    {label:'Total',data:g.map(r=>+num(r.total).toFixed(2)),backgroundColor:'#ffffff22',borderColor:'#ffffff88',type:'line',borderDash:[4,2],pointRadius:0}
+    {label:_T('Total'),data:g.map(r=>+num(r.total).toFixed(2)),backgroundColor:'#ffffff22',borderColor:'#ffffff88',type:'line',borderDash:[4,2],pointRadius:0}
   ]},options:{...CHART_DEFAULTS,
     scales:{x:{...xAxisWithTitle(),stacked:type==='bar'},
       y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',title:{display:true,text:'MWh',color:'#8090b8',font:{size:10}}}},
@@ -3477,9 +3481,9 @@ function renderAdv1(canvasId='cAdv1'){
   const minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x));
 
   mkChart(canvasId,{type:'scatter',data:{datasets:[
-    {label:'PR vs Irradiância',data:pts,backgroundColor:pts.map(p=>p.y>=100?'#00e5aa66':p.y>=80?'#ffc10766':'#ff8c4266'),pointRadius:4,pointHoverRadius:7},
-    {label:'Tendência',data:[{x:minX,y:a+b*minX},{x:maxX,y:a+b*maxX}],type:'line',borderColor:'#ffffff60',borderWidth:1.5,borderDash:[4,3],pointRadius:0,showLine:true},
-    {label:'Meta 90%',data:[{x:minX,y:90},{x:maxX,y:90}],type:'line',borderColor:'#f0598c60',borderWidth:1,borderDash:[6,4],pointRadius:0,showLine:true}
+    {label:_T('PR vs Irradiância'),data:pts,backgroundColor:pts.map(p=>p.y>=100?'#00e5aa66':p.y>=80?'#ffc10766':'#ff8c4266'),pointRadius:4,pointHoverRadius:7},
+    {label:_T('Tendência'),data:[{x:minX,y:a+b*minX},{x:maxX,y:a+b*maxX}],type:'line',borderColor:'#ffffff60',borderWidth:1.5,borderDash:[4,3],pointRadius:0,showLine:true},
+    {label:_T('Meta 90%'),data:[{x:minX,y:90},{x:maxX,y:90}],type:'line',borderColor:'#f0598c60',borderWidth:1,borderDash:[6,4],pointRadius:0,showLine:true}
   ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Irradiância (W/m²)',color:'#6b7a9a',font:{size:9}}},y:{...CHART_DEFAULTS.scales.y,min:0,max:105,title:{display:true,text:'PR (%)',color:'#6b7a9a',font:{size:9}}}}}});
 }
 
@@ -3540,8 +3544,8 @@ function renderGF1(type='bar'){
   const gfData=g.map(r=>+(r.gf/1000).toFixed(3));
   const avgGF=gfData.reduce((s,v)=>s+v,0)/(gfData.length||1);
   mkChart('cGF1',{type,data:{labels,datasets:[
-    {label:'Energia Frustrada (GWh)',data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623',borderColor:'#F5A623',fill:false,tension:0,borderWidth:2},
-    {label:'Méd. GF',data:gfData.map(()=>+avgGF.toFixed(3)),borderColor:'#8d6e6380',borderDash:[5,3],borderWidth:1,pointRadius:0,type:'line'}
+    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623',borderColor:'#F5A623',fill:false,tension:0,borderWidth:2},
+    {label:_T('Méd. GF'),data:gfData.map(()=>+avgGF.toFixed(3)),borderColor:'#8d6e6380',borderDash:[5,3],borderWidth:1,pointRadius:0,type:'line'}
   ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:10}}}}}});
 }
 
@@ -3642,8 +3646,8 @@ function renderUFVliq(type='bar'){
   const bruta=gg.map(r=>+(r.bruta/1000).toFixed(3));
   const liq=gg.map(r=>+(r.liquida/1000).toFixed(3));
   mkChart('cUFVliq',{type:type==='line'?'line':'bar',data:{labels,datasets:[
-    {label:'Energia Bruta (GWh)',data:bruta,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:type==='line',tension:.3,borderWidth:2,pointRadius:0,borderRadius:5},
-    {label:'Energia Líquida (GWh)',data:liq,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:type==='line',tension:.3,borderWidth:2,pointRadius:0,borderRadius:5}
+    {label:_T('Energia Bruta (GWh)'),data:bruta,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:type==='line',tension:.3,borderWidth:2,pointRadius:0,borderRadius:5},
+    {label:_T('Energia Líquida (GWh)'),data:liq,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:type==='line',tension:.3,borderWidth:2,pointRadius:0,borderRadius:5}
   ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}}}});
 }
 function renderUFVperdas(){
@@ -4488,8 +4492,8 @@ function renderPagePPA(type){
 
   // ── Meta vs Produzido ──
   mkChart('cPPAmeta',{type:'bar',data:{labels:allParks,datasets:[
-    {label:'Meta (garantido)',data:allParks.map(metap),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5},
-    {label:'Produzido',data:allParks.map(prod),backgroundColor:allParks.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5}
+    {label:_T('Meta (garantido)'),data:allParks.map(metap),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5},
+    {label:_T('Produzido'),data:allParks.map(prod),backgroundColor:allParks.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5}
   ]},options:{...CHART_DEFAULTS,scales:{x:CHART_DEFAULTS.scales.x,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Participação (donut) ──
@@ -4580,7 +4584,7 @@ function renderPagePPA(type){
     ]},
     options:{
       ...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},metaLine:{value:100,label:'Meta 100%',color:'#f0598c'}},
+      plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},metaLine:{value:100,label:_T('Meta 100%'),color:'#f0598c'}},
       scales:{
         x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:11,weight:'700'}}},
         y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'%',color:'#8090b8',font:{size:9}}}
@@ -5012,7 +5016,7 @@ function renderPageMUST(type){
     type:'bar',
     data:{labels,datasets:[
       ativaDs,
-      {label:'Demanda Contratada (MW)',data:contrData,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',borderWidth:2.5,borderDash:[6,4],pointRadius:0,fill:false,tension:0,order:1}
+      {label:_T('Demanda Contratada (MW)'),data:contrData,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',borderWidth:2.5,borderDash:[6,4],pointRadius:0,fill:false,tension:0,order:1}
     ]},
     options:{
       ...CHART_DEFAULTS,
@@ -5041,6 +5045,8 @@ function renderAll(){
     const page=(active&&active.id)?active.id.replace('page-',''):'pat';
     renderDashboardPage(page);
     requestAnimationFrame(applyTranslations);
+    if(document.documentElement.getAttribute('data-theme')==='light')
+      requestAnimationFrame(function(){_themeCharts(true);});
   },60); // debounce curto para manter resposta imediata aos filtros
 }
 
@@ -5998,8 +6004,8 @@ window._ppaChartGet=function(id){return charts[id];};
     mkChart('cPPAprogressTop',{
       type:'bar',
       data:{labels:progressParks,datasets:[
-        {type:'bar',label:'Realizado',data:progressProd,backgroundColor:progressParks.map(p=>parkFillColor(p)),hoverBackgroundColor:progressParks.map(p=>parkHoverColor(p)),borderColor:progressParks.map(p=>parkBorderColor(p)),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
-        {type:'line',label:'Meta',data:progressMeta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:0.15,yAxisID:'y',order:1}
+        {type:'bar',label:_T('Realizado'),data:progressProd,backgroundColor:progressParks.map(p=>parkFillColor(p)),hoverBackgroundColor:progressParks.map(p=>parkHoverColor(p)),borderColor:progressParks.map(p=>parkBorderColor(p)),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
+        {type:'line',label:_T('Meta'),data:progressMeta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:0.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -6178,8 +6184,8 @@ window._ppaChartGet=function(id){return charts[id];};
 
     const chartType=(type==='line'||type==='bar')?type:(getToggle('ppamain')||'bar');
     const genDataset = chartType==='line'
-      ? {type:'line',label:'Geração horária',data:hourlyProd,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
-      : {type:'bar',label:'Geração horária',data:hourlyProd,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
+      ? {type:'line',label:_T('Geração horária'),data:hourlyProd,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
+      : {type:'bar',label:_T('Geração horária'),data:hourlyProd,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
     const yMax=Math.max(1,...hourlyProd,...hourlyMeta)*1.18;
 
     mkChart('cPPARank', {
@@ -6188,7 +6194,7 @@ window._ppaChartGet=function(id){return charts[id];};
         labels,
         datasets: [
           genDataset,
-          {type:'line',label:'Meta horária',data:hourlyMeta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+          {type:'line',label:_T('Meta horária'),data:hourlyMeta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
         ]
       },
       options: {
@@ -6462,15 +6468,15 @@ window._ppaChartGet=function(id){return charts[id];};
     const seriesColor=(primaryPark!=='todos' ? (PPA_COL[primaryPark]||'#A855F7') : (scopeColorMap[scope]||scopeColorMap.todos));
     const chartType=(type==='line'||type==='bar')?type:(getToggle('ppamain')||'bar');
     const genDataset = chartType==='line'
-      ? {type:'line',label:'Geração horária',data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
-      : {type:'bar',label:'Geração horária',data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
+      ? {type:'line',label:_T('Geração horária'),data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
+      : {type:'bar',label:_T('Geração horária'),data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     mkChart('cPPARank',{
       type: chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:'Meta horária',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta horária'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -6744,15 +6750,15 @@ window._ppaChartGet=function(id){return charts[id];};
     const seriesColor=(primaryPark!=='todos' ? (PPA_COL[primaryPark]||'#A855F7') : (scopeColorMap[scope]||scopeColorMap.todos));
     const chartType=(type==='line'||type==='bar')?type:(getToggle('ppamain')||'bar');
     const genDataset = chartType==='line'
-      ? {type:'line',label:'Geração diária',data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
-      : {type:'bar',label:'Geração diária',data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
+      ? {type:'line',label:_T('Geração diária'),data:prod,borderColor:seriesColor,backgroundColor:seriesColor+'22',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:seriesColor,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.25,yAxisID:'y',order:2}
+      : {type:'bar',label:_T('Geração diária'),data:prod,backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),borderColor:seriesColor,borderWidth:1.4,borderRadius:8,maxBarThickness:18,order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     mkChart('cPPARank',{
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:'Meta diária',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta diária'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -7267,9 +7273,9 @@ window._ppaChartGet=function(id){return charts[id];};
       type: chartType,
       data:{labels:parks.map(parkLabelV23),datasets:[
         chartType==='line'
-          ? {type:'line',label:'Realizado',data:prod,borderColor:'#A855F7',backgroundColor:'#A855F722',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2}
-          : {type:'bar',label:'Realizado',data:prod,backgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'66'),hoverBackgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'99'),borderColor:parks.map(p=>(PPA_COL[p]||'#A855F7')),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
-        {type:'line',label:'Meta',data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
+          ? {type:'line',label:_T('Realizado'),data:prod,borderColor:'#A855F7',backgroundColor:'#A855F722',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2}
+          : {type:'bar',label:_T('Realizado'),data:prod,backgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'66'),hoverBackgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'99'),borderColor:parks.map(p=>(PPA_COL[p]||'#A855F7')),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -7672,9 +7678,9 @@ window._ppaChartGet=function(id){return charts[id];};
       type: chartType,
       data:{labels:parks.map(p=>p==='todos'?'Todos':p),datasets:[
         chartType==='line'
-          ? {type:'line',label:'Realizado',data:prod,borderColor:'#A855F7',backgroundColor:'#A855F722',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2}
-          : {type:'bar',label:'Realizado',data:prod,backgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'66'),hoverBackgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'99'),borderColor:parks.map(p=>(PPA_COL[p]||'#A855F7')),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
-        {type:'line',label:'Meta',data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
+          ? {type:'line',label:_T('Realizado'),data:prod,borderColor:'#A855F7',backgroundColor:'#A855F722',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2}
+          : {type:'bar',label:_T('Realizado'),data:prod,backgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'66'),hoverBackgroundColor:parks.map(p=>(PPA_COL[p]||'#A855F7')+'99'),borderColor:parks.map(p=>(PPA_COL[p]||'#A855F7')),borderWidth:1.6,borderRadius:10,maxBarThickness:56,order:2},
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -8065,7 +8071,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:'Meta',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -8118,7 +8124,7 @@ window._ppaChartGet=function(id){return charts[id];};
         chartType==='line'
           ? {type:'line',label:`Realizado ${groupLabel}`,data:prod,borderColor:BLUE_V25,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2}
           : {type:'bar',label:`Realizado ${groupLabel}`,data:prod,backgroundColor:parks.map(()=>BLUE_FILL_V25),hoverBackgroundColor:parks.map(()=>BLUE_V25),borderColor:parks.map(()=>BLUE_V25),borderWidth:1.2,borderRadius:4,maxBarThickness:62,order:2},
-        {type:'line',label:'Meta',data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -8946,7 +8952,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:'Meta',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -8967,7 +8973,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type: chartType,
       data:{labels:parks.map(p=>p==='todos'?'Todos':p),datasets:[
         chartType==='line' ? {type:'line',label:`Realizado ${group}`,data:prodP,borderColor:BLUE_V29,backgroundColor:'rgba(0,96,174,.18)',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2} : {type:'bar',label:`Realizado ${group}`,data:prodP,backgroundColor:parks.map(()=>BLUE_FILL_V29),hoverBackgroundColor:parks.map(()=>BLUE_V29),borderColor:parks.map(()=>BLUE_V29),borderWidth:1.2,borderRadius:4,maxBarThickness:62,order:2},
-        {type:'line',label:'Meta',data:metaP,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta'),data:metaP,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -9403,8 +9409,8 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:'Meta',data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1},
-        ...(hasIrr?[{type:'line',label:'Irradiância (kWh/m²)',data:irrData,borderColor:'rgba(245,200,75,0.85)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(245,200,75,0.85)',fill:false,tension:0.18,yAxisID:'y2',order:0,spanGaps:true}]:[])
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1},
+        ...(hasIrr?[{type:'line',label:_T('Irradiância (kWh/m²)'),data:irrData,borderColor:'rgba(245,200,75,0.85)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(245,200,75,0.85)',fill:false,tension:0.18,yAxisID:'y2',order:0,spanGaps:true}]:[])
       ]},
       options:{
         ...CHART_DEFAULTS,
@@ -9425,7 +9431,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type: chartType,
       data:{labels:parks.map(p=>p==='todos'?'Todos':p),datasets:[
         chartType==='line' ? {type:'line',label:`Realizado ${group}`,data:prodP,borderColor:BLUE_LINE_V30,backgroundColor:'rgba(0,96,174,.16)',borderWidth:3,pointRadius:4,pointHoverRadius:6,fill:false,tension:.2,yAxisID:'y',order:2} : {type:'bar',label:`Realizado ${group}`,data:prodP,backgroundColor:(ctx)=>barGradientV30(ctx),hoverBackgroundColor:'rgba(0,96,174,.72)',borderColor:'rgba(90,180,235,.55)',borderWidth:1.0,borderRadius:4,maxBarThickness:62,order:2},
-        {type:'line',label:'Meta',data:metaP,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
+        {type:'line',label:_T('Meta'),data:metaP,borderColor:'#F5C84B',backgroundColor:'#F5C84B',borderWidth:3.2,borderDash:[9,4],pointRadius:4,pointHoverRadius:6,pointBackgroundColor:'#F5C84B',pointBorderColor:'#120f1f',pointBorderWidth:1.5,tension:.15,yAxisID:'y',order:1}
       ]},
       options:{
         ...CHART_DEFAULTS,
