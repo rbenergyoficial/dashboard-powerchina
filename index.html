@@ -556,6 +556,39 @@ html[data-theme="light"] .fdate::-webkit-calendar-picker-indicator{filter:none;}
 .btn-theme .icon-sun{display:none;}
 html[data-theme="light"] .btn-theme .icon-moon{display:none;}
 html[data-theme="light"] .btn-theme .icon-sun{display:block;}
+/* Sidebar active states */
+html[data-theme="light"] .side-nav .page-btn.on,
+html[data-theme="light"] .side-panel-btn.is-active,
+html[data-theme="light"] .side-shortcut.is-active{color:#0e7490;}
+html[data-theme="light"] .side-nav .page-btn.on svg,
+html[data-theme="light"] .side-panel-btn.is-active svg{color:#0e7490;}
+html[data-theme="light"] .side-subitem.is-active{color:#0e7490;}
+html[data-theme="light"] .side-panel-chip{
+  background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.09);color:var(--t3);}
+html[data-theme="light"] .side-nav .page-btn:hover,
+html[data-theme="light"] .side-link:hover{color:var(--t1);}
+/* PPA month-axis inline white text */
+html[data-theme="light"] #ppaXAxisMonthTag{color:var(--t2)!important;}
+/* V31 park dropdown (JS-injected dark bg/text) */
+html[data-theme="light"] .ppa-park-trigger-v31{
+  background:var(--bg4)!important;color:var(--t1)!important;
+  border-color:var(--border3)!important;}
+html[data-theme="light"] #ppaParkPortalV31{
+  background:var(--bg4)!important;border-color:var(--border3)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.12)!important;}
+/* V35 park chips (JS-injected colors) */
+html[data-theme="light"] .ppa-park-chip-v35{
+  background:var(--bg5)!important;border-color:var(--border3)!important;
+  color:var(--t2)!important;}
+/* V43 gauges section wrapper and card hover */
+html[data-theme="light"] #sec-ppa-gauges>div{
+  border-top-color:rgba(0,0,0,.06)!important;
+  border-bottom-color:rgba(0,0,0,.06)!important;}
+html[data-theme="light"] .ppag-card[draggable]:hover{
+  box-shadow:-4px 8px 24px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.9)!important;}
+/* Login box */
+html[data-theme="light"] .login-box{background:var(--bg4);border-color:var(--border3);}
+html[data-theme="light"] .login-input{background:var(--bg5);border-color:var(--border3);color:var(--t1);}
 
 </style>
 <script>
@@ -11126,6 +11159,7 @@ window._ppaChartGet=function(id){return charts[id];};
     if(!cfg) return;
     if(!cfg.options) cfg.options={};
     var o=cfg.options;
+    var _lt=document.documentElement.getAttribute('data-theme')==='light';
 
     /* ── Scales ─────────────────────────────────────────────── */
     if(o.scales){
@@ -11135,13 +11169,13 @@ window._ppaChartGet=function(id){return charts[id];};
         if(k==='x'){
           s.grid.display=false;
         } else if(k==='y'){
-          s.grid.color='rgba(255,255,255,0.07)';
+          s.grid.color=_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,0.07)';
           s.grid.lineWidth=1;
           s.grid.drawTicks=false;
         }
         if(!s.border) s.border={};
         if(k!=='y2') s.border.display=false;
-        if(s.ticks && !s.ticks.color) s.ticks.color='#8E9AA5';
+        if(s.ticks && !s.ticks.color) s.ticks.color=_lt?'#606480':'#8E9AA5';
       });
     }
 
@@ -11152,7 +11186,7 @@ window._ppaChartGet=function(id){return charts[id];};
     if(lg && lg.display!==false){
       if(!lg.labels) lg.labels={};
       var ll=lg.labels;
-      ll.color='#D8D9DA';
+      ll.color=_lt?'#3c3f57':'#D8D9DA';
       ll.boxWidth=14; ll.boxHeight=4;
       ll.padding=14;
       ll.usePointStyle=false;
@@ -11188,11 +11222,11 @@ window._ppaChartGet=function(id){return charts[id];};
     /* ── Tooltip ─────────────────────────────────────────────── */
     if(!o.plugins.tooltip) o.plugins.tooltip={};
     var tt=o.plugins.tooltip;
-    tt.backgroundColor='rgba(15,18,24,0.95)';
-    tt.borderColor='rgba(255,255,255,0.12)';
+    tt.backgroundColor=_lt?'rgba(255,255,255,.97)':'rgba(15,18,24,0.95)';
+    tt.borderColor=_lt?'rgba(0,0,0,.12)':'rgba(255,255,255,0.12)';
     tt.borderWidth=1;
-    tt.titleColor='#D8D9DA';
-    tt.bodyColor='#A0AEC0';
+    tt.titleColor=_lt?'#13121f':'#D8D9DA';
+    tt.bodyColor=_lt?'#606480':'#A0AEC0';
     tt.padding=10;
     tt.cornerRadius=4;
     tt.displayColors=false;
@@ -11699,6 +11733,9 @@ window._ppaChartGet=function(id){return charts[id];};
   function fv1(v){return v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});}
 
   function buildGauges(){
+    /* ── re-evaluate theme tokens on every render ── */
+    var _lt=document.documentElement.getAttribute('data-theme')==='light';
+    BG=_lt?'#f4f5fb':'#09090e'; C1=_lt?'#ffffff':'#0f0f17'; C2=_lt?'#f8f9ff':'#0c0c14';
     var pp=document.getElementById('page-ppa');
     if(!pp||pp.hidden)return;
     var perf=document.getElementById('sec-ppa-performance');
@@ -11962,6 +11999,27 @@ window._ppaChartGet=function(id){return charts[id];};
       orderedCards.unshift(_consObj);
     }
     var cardsHtml=orderedCards.map(function(c){return c.html;}).join('');
+
+    /* ── adapt hardcoded dark inline colors to current theme ── */
+    if(_lt){
+      var _rp=function(s){
+        return s
+          .replace(/color:#e2e8f0/g,'color:#13121f')
+          .replace(/fill="#e2e8f0"/g,'fill="#13121f"')
+          .replace(/color:#cbd5e1/g,'color:#1e293b')
+          .replace(/color:#6b7280/g,'color:#374151')
+          .replace(/color:#4b5563/g,'color:#6b7280')
+          .replace(/color:#7d94a8/g,'color:#606480')
+          .replace(/rgba\(255,255,255,\.06\)/g,'rgba(0,0,0,.1)')
+          .replace(/rgba\(255,255,255,\.05\)/g,'rgba(0,0,0,.08)')
+          .replace(/rgba\(255,255,255,\.04\)/g,'rgba(0,0,0,.05)')
+          .replace(/rgba\(255,255,255,\.03\)/g,'rgba(0,0,0,.03)')
+          .replace(/background:#0a0a12/g,'background:#e5e7eb')
+          .replace(/0 4px 20px rgba\(0,0,0,\.5\),inset 0 1px 0 rgba\(255,255,255,\.03\)/g,
+                   '0 2px 14px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.9)');
+      };
+      cardsHtml=_rp(cardsHtml);
+    }
 
     /* ── section — insert right after V42 filter bar (or before chart) ── */
     var sec=document.getElementById('sec-ppa-gauges');
