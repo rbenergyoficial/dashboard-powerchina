@@ -483,6 +483,12 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-day-nav:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.38)}
 #page-must .must-day-nav:disabled{opacity:.35;cursor:not-allowed}
 #page-must .must-range-sep{color:var(--t3);font-size:11px}
+#page-must .must-cal-fw{position:relative!important}
+#page-must .must-cal-trigger{height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(107,139,245,.40);background:rgba(107,139,245,.12);color:#fff;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:border-color .15s,background .15s}
+#page-must .must-cal-trigger:hover,#page-must .must-cal-trigger.open{border-color:rgba(107,139,245,.65);background:rgba(107,139,245,.24)}
+#page-must .must-cal-popup{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9999;background:#0d1126;border:1px solid rgba(107,139,245,.28);border-radius:16px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.55)}
+#page-must .must-cal-popup.open{display:block}
+#page-must .must-cal-popup .must-cal-pro{flex-wrap:wrap;gap:10px 8px}
 
 #page-must .must-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width: 1280px){
@@ -1337,7 +1343,7 @@ function _themeCharts(light){
         MUST · DEMANDA DE TRANSMISSÃO
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
-          <div class="fg"><span class="fbar-label">Calendário</span><div class="must-cal-pro"><select class="fsel" id="mustYearSelect" title="Selecionar ano"></select><span class="must-month-quick" id="mustMonthQuick"></span><span class="must-day-sub" id="mustDaySection"><button class="must-day-nav" id="mustPrevDay" title="Dia anterior">◀</button><select class="fsel" id="mustDaySelect" title="Selecionar dia disponível"></select><button class="must-day-nav" id="mustNextDay" title="Próximo dia">▶</button></span><span class="must-day-sub" id="mustRangeSection" style="display:none"><input type="date" class="fdate" id="mustPerIni" title="Data inicial do período MUST"><span class="must-range-sep">→</span><input type="date" class="fdate" id="mustPerFim" title="Data final do período MUST"></span><input type="hidden" id="mustDay"></div></div>
+          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="must-cal-pro"><select class="fsel" id="mustYearSelect" title="Selecionar ano"></select><span class="must-month-quick" id="mustMonthQuick"></span><span class="must-day-sub" id="mustDaySection"><button class="must-day-nav" id="mustPrevDay" title="Dia anterior">◀</button><select class="fsel" id="mustDaySelect" title="Selecionar dia disponível"></select><button class="must-day-nav" id="mustNextDay" title="Próximo dia">▶</button></span><span class="must-day-sub" id="mustRangeSection" style="display:none"><input type="date" class="fdate" id="mustPerIni" title="Data inicial do período MUST"><span class="must-range-sep">→</span><input type="date" class="fdate" id="mustPerFim" title="Data final do período MUST"></span><input type="hidden" id="mustDay"></div></div></div>
           <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
         </div>
       </div>
@@ -5102,6 +5108,7 @@ function mustSyncFilterVisibility(){
   const rangeSection=document.getElementById('mustRangeSection');
   if(daySection) daySection.style.display=needsDay?'flex':'none';
   if(rangeSection) rangeSection.style.display=needsDay?'none':'flex';
+  if(typeof _mustUpdateCalTrigger==='function') _mustUpdateCalTrigger();
 }
 function mustInitFilter(){
   const must=dashData.must; if(!must||!must.ativa||!must.ativa.length) return;
@@ -5338,12 +5345,12 @@ function renderPageMUST(type){
   const peak=data.length?Math.max(...data):0;
   const util=contr>0?peak/contr*100:0, margem=contr-peak;
   const f1=v=>v.toLocaleString(getDateLocale(),{maximumFractionDigits:1});
-  const mode=filters.mustMode||'dia';
+  const _mustNeedsDay=['15min','30min','hora'].includes(filters.mustGran||'15min');
   const diaTxt=filters.mustDay||'';
   const iniTxt=filters.mustPerIni||'';
   const fimTxt=filters.mustPerFim||'';
   const diaLabel=diaTxt?parseDate(diaTxt)?.toLocaleDateString('pt-BR')||diaTxt:'Dia específico';
-  const periodoTxt=mode==='dia'
+  const periodoTxt=_mustNeedsDay
     ? `Dia ${diaLabel}`
     : ((iniTxt&&fimTxt&&iniTxt!==fimTxt)?`${iniTxt} → ${fimTxt}`:(iniTxt||fimTxt||'Período completo'));
 
@@ -5395,6 +5402,41 @@ function renderPageMUST(type){
   renderMustPeakRanking(rows);
 }
 
+function _mustUpdateCalTrigger(){
+  var label=document.getElementById('mustCalLabel');
+  if(!label) return;
+  var gran=filters.mustGran||'15min';
+  var needsDay=['15min','30min','hora'].includes(gran);
+  var S=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  var txt;
+  if(needsDay&&filters.mustDay){
+    var d=parseDate(filters.mustDay);
+    if(d) txt=d.getDate()+' '+S[d.getMonth()]+' '+d.getFullYear();
+    else txt=filters.mustDay;
+  } else if(filters.mustMonth&&filters.mustYear){
+    txt=S[parseInt(filters.mustMonth,10)-1]+' '+filters.mustYear;
+  } else {
+    txt='— —';
+  }
+  label.textContent=txt;
+}
+(function(){
+  document.addEventListener('click',function(e){
+    var trigger=document.getElementById('mustCalTrigger');
+    var popup=document.getElementById('mustCalPopup');
+    if(!popup||!trigger) return;
+    if(trigger===e.target||trigger.contains(e.target)){
+      var open=popup.classList.contains('open');
+      popup.classList.toggle('open',!open);
+      trigger.classList.toggle('open',!open);
+      return;
+    }
+    if(popup.classList.contains('open')&&!popup.contains(e.target)){
+      popup.classList.remove('open');
+      trigger.classList.remove('open');
+    }
+  });
+})();
 
 function renderAll(){
   if(_renderTimer) clearTimeout(_renderTimer);
