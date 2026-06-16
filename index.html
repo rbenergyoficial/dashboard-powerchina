@@ -5965,22 +5965,34 @@ async function onRefreshClick(){
   try{
     const tok=await getAccessToken(cid);
     progUpdate('🔄 Buscando arquivo…','Localizando '+ONEDRIVE_FILE+' no OneDrive…',35);
-    // Tenta pelo caminho direto primeiro
-    let fileUrl = 'https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content';
-    let dlResp = await fetch(fileUrl, {headers:{Authorization:'Bearer '+tok}});
-    // Se não encontrar pelo caminho, faz busca
-    if(!dlResp.ok){
+    // Busca metadata primeiro — @microsoft.graph.downloadUrl é gerado fresh a cada chamada,
+    // evitando que o CDN da Microsoft sirva versão em cache após uma modificação recente.
+    const metaUrl='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl';
+    const metaResp=await fetch(metaUrl,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+    let dlResp;
+    if(metaResp.ok){
+      const meta=await metaResp.json();
+      const directUrl=meta['@microsoft.graph.downloadUrl'];
+      const modTime=meta.lastModifiedDateTime;
+      const modLabel=modTime?'Arquivo modificado: '+new Date(modTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60,modLabel);
+      if(directUrl){
+        // URL direta já autenticada — sempre aponta para versão atual (sem CDN cache)
+        dlResp=await fetch(directUrl,{cache:'no-store'});
+      } else {
+        dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+      }
+    } else {
+      // Fallback: busca por nome
       progUpdate('🔄 Buscando arquivo…','Procurando '+ONEDRIVE_FILE+' por nome…',45);
       const searchResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(ONEDRIVE_FILE)+'\')',{headers:{Authorization:'Bearer '+tok}});
       const searchData=await searchResp.json();
       const fileItem=(searchData.value||[]).find(f=>f.name===ONEDRIVE_FILE);
       if(!fileItem) throw new Error('Arquivo "'+ONEDRIVE_FILE+'" não encontrado no OneDrive. Verifique o nome ou use o botão Carregar.');
       progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60,'ID: '+fileItem.id.slice(0,20)+'…');
-      dlResp = await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileItem.id+'/content',{headers:{Authorization:'Bearer '+tok}});
-    } else {
-      progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60);
+      dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileItem.id+'/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
     }
-    if(!dlResp.ok) throw new Error('Download falhou: '+dlResp.status);
+    if(!dlResp||!dlResp.ok) throw new Error('Download falhou: '+(dlResp?dlResp.status:'sem resposta'));
     const buf=await dlResp.arrayBuffer();
     progUpdate('🔄 Processando…','Lendo planilha e calculando KPIs…',85);
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
