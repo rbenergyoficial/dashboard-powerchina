@@ -2686,6 +2686,9 @@ function applyPageChrome(page){
   if(isPpa) movePpaCardsSection();
 }
 function switchPage(page){
+  var _mp=document.getElementById('mustCalPopup'),_mt=document.getElementById('mustCalTrigger');
+  if(_mp){_mp.classList.remove('open');_mp.style.display='';}
+  if(_mt) _mt.classList.remove('open');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const nextPage=document.getElementById('page-'+page);
   if(nextPage) nextPage.classList.add('active');
