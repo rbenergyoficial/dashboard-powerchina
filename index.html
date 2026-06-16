@@ -189,12 +189,18 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .side-nav .page-btn.on{background:linear-gradient(180deg,rgba(111,232,245,.13),rgba(141,117,255,.10));border-color:rgba(79,212,255,.25);color:#7ae7f2;box-shadow:inset 3px 0 0 #31d7e2, 0 8px 22px rgba(0,0,0,.22);}
 .side-nav .page-btn.on svg{color:#7ae7f2;}
 .side-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.side-footer{margin-top:auto;display:flex;flex-direction:column;gap:12px;padding-top:10px;border-top:1px solid var(--border2);}
-.sidebar-lang{align-self:flex-start;padding:4px;background:var(--bg4);border:1px solid var(--border3);border-radius:999px;}
-.side-user{display:flex;align-items:center;gap:10px;padding:10px 8px 4px;}
-.side-user-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#6b8bf5,#8b5cf6);color:#fff;font-weight:800;box-shadow:0 6px 18px rgba(107,139,245,.25);}
-.side-user-name{font-size:12px;font-weight:700;color:var(--t1);}
-.side-user-role{font-size:10px;color:var(--t3);margin-top:2px;}
+.side-footer{margin-top:auto;display:flex;flex-direction:column;gap:8px;padding:12px 4px 4px;border-top:1px solid var(--border2);}
+.sidebar-lang-wrap{display:flex;flex-direction:column;gap:5px;align-self:stretch;}
+.sidebar-lang-label{font-size:8.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--t3);text-align:center;}
+.sidebar-lang{align-self:stretch;padding:3px;gap:2px;
+  background:rgba(255,255,255,.03);border:1px solid rgba(107,139,245,.15);border-radius:12px;}
+.sidebar-lang .lang-btn{flex:1;padding:7px 2px;border-radius:9px;font-size:10px;font-weight:700;letter-spacing:.05em;}
+.sidebar-lang .lang-btn.on{
+  background:linear-gradient(135deg,rgba(107,139,245,.28),rgba(45,212,191,.16));
+  color:#a5b4fc;box-shadow:0 1px 8px rgba(107,139,245,.20),inset 0 1px 0 rgba(107,139,245,.12);
+  border:1px solid rgba(107,139,245,.32);}
+.sidebar-lang .lang-btn:not(.on):hover{background:rgba(107,139,245,.08);color:var(--t2);}
+.side-user{display:none;}
 .dash-sidebar.is-collapsed .dash-brand{padding-left:4px;padding-right:4px;justify-content:center;}
 .dash-sidebar.is-collapsed .dash-brand-text,.dash-sidebar.is-collapsed .side-group-title,.dash-sidebar.is-collapsed .side-label,.dash-sidebar.is-collapsed .sidebar-lang,.dash-sidebar.is-collapsed .side-user{display:none;}
 .dash-sidebar.is-collapsed .side-nav .page-btn,.dash-sidebar.is-collapsed .side-link{justify-content:center;padding:12px 0;gap:0;border-radius:12px;}
@@ -833,16 +839,12 @@ function _themeCharts(light){
     </div>
 
     <div class="side-footer">
-      <div class="lang-switcher sidebar-lang">
-        <button class="lang-btn on" data-lang="pt-BR" type="button">PT</button>
-        <button class="lang-btn" data-lang="en" type="button">EN</button>
-        <button class="lang-btn" data-lang="zh-CN" type="button">简中</button>
-      </div>
-      <div class="side-user">
-        <div class="side-user-avatar">D</div>
-        <div>
-          <div class="side-user-name">Complexo Mauriti</div>
-          <div class="side-user-role">Navegação de dashboards</div>
+      <div class="sidebar-lang-wrap">
+        <div class="sidebar-lang-label">Idioma</div>
+        <div class="lang-switcher sidebar-lang">
+          <button class="lang-btn on" data-lang="pt-BR" type="button">PT</button>
+          <button class="lang-btn" data-lang="en" type="button">EN</button>
+          <button class="lang-btn" data-lang="zh-CN" type="button">简中</button>
         </div>
       </div>
     </div>
