@@ -295,6 +295,10 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.52) 30%,rgba(45,212,191,.34) 70%,transparent 100%);}
 .cc:hover{border-color:rgba(107,139,245,.42);transform:translateY(-6px);
   box-shadow:0 16px 60px rgba(0,0,0,.82),0 4px 12px rgba(0,0,0,.55),0 0 48px rgba(107,139,245,.22),0 0 0 1px rgba(107,139,245,.22),0 0 22px rgba(45,212,191,.10),inset 0 1px 0 rgba(255,255,255,.12);}
+.cc[draggable]{cursor:grab;}
+.cc[draggable]:active{cursor:grabbing;}
+.cc.cc-dragging{opacity:.32!important;transform:none!important;box-shadow:none!important;transition:none!important;}
+.cc.cc-drag-over{outline:2px dashed rgba(107,139,245,.50)!important;outline-offset:3px;}
 .cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
 .cc-title{font-size:13px;font-weight:700;color:#e4eaf8;letter-spacing:-.1px;font-family:var(--display);}
 .cc-sub{font-size:10px;color:#6a778e;margin-top:2px;letter-spacing:.01em;}
@@ -12834,6 +12838,87 @@ window._ppaChartGet=function(id){return charts[id];};
   requestAnimationFrame(_v44Btn);
   setTimeout(_v44Btn, 400);
   setTimeout(_v44Btn, 1500);
+})();
+</script>
+<script>
+/* V45 — drag-and-drop reorder for .cc chart cards within each .chart-row */
+(function(){
+  if(window.__ccDragV45__) return;
+  window.__ccDragV45__=true;
+
+  var drag=null;
+
+  function getCC(row){ return [].slice.call(row.querySelectorAll(':scope > .cc')); }
+
+  function clearStyles(){
+    document.querySelectorAll('.cc.cc-dragging,.cc.cc-drag-over').forEach(function(c){
+      c.classList.remove('cc-dragging','cc-drag-over');
+    });
+  }
+
+  function resizeCharts(card){
+    if(typeof Chart==='undefined') return;
+    card.querySelectorAll('canvas').forEach(function(cv){
+      var ch=Chart.getChart?Chart.getChart(cv):null;
+      if(ch) setTimeout(function(){ try{ ch.resize(); }catch(e){} },60);
+    });
+  }
+
+  function setupRow(row){
+    getCC(row).forEach(function(c){ c.setAttribute('draggable','true'); });
+
+    row.addEventListener('dragstart',function(e){
+      var c=e.target.closest&&e.target.closest('.cc');
+      if(!c||!row.contains(c)) return;
+      drag=c;
+      setTimeout(function(){ c.classList.add('cc-dragging'); },0);
+      e.dataTransfer.effectAllowed='move';
+    });
+
+    row.addEventListener('dragend',function(){
+      clearStyles();
+      drag=null;
+    });
+
+    row.addEventListener('dragover',function(e){
+      e.preventDefault();
+      var c=e.target.closest&&e.target.closest('.cc');
+      if(!c||!row.contains(c)||c===drag) return;
+      getCC(row).forEach(function(x){ x.classList.remove('cc-drag-over'); });
+      c.classList.add('cc-drag-over');
+    });
+
+    row.addEventListener('dragleave',function(e){
+      var c=e.target.closest&&e.target.closest('.cc');
+      if(c) c.classList.remove('cc-drag-over');
+    });
+
+    row.addEventListener('drop',function(e){
+      e.preventDefault();
+      var c=e.target.closest&&e.target.closest('.cc');
+      if(!c||!row.contains(c)||!drag||c===drag) return;
+      var rect=c.getBoundingClientRect();
+      if(e.clientX<rect.left+rect.width/2) row.insertBefore(drag,c);
+      else{ var nx=c.nextSibling; if(nx) row.insertBefore(drag,nx); else row.appendChild(drag); }
+      clearStyles();
+      resizeCharts(drag);
+    });
+  }
+
+  function init(){
+    document.querySelectorAll('.chart-row').forEach(function(row){
+      if(!row.dataset.ccDragV45){
+        row.dataset.ccDragV45='1';
+        setupRow(row);
+      }
+    });
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+  /* re-scan after PPA panels render dynamically */
+  setTimeout(init,1500);
+  setTimeout(init,3000);
 })();
 </script></body>
 </html>
