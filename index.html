@@ -488,7 +488,10 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-cal-trigger:hover,#page-must .must-cal-trigger.open{border-color:rgba(107,139,245,.65);background:rgba(107,139,245,.24)}
 #page-must .must-cal-popup{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9999;background:#0d1126;border:1px solid rgba(107,139,245,.28);border-radius:16px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.55)}
 #page-must .must-cal-popup.open{display:block}
-#page-must .must-cal-popup .must-cal-pro{flex-wrap:wrap;gap:10px 8px}
+#page-must .must-chip-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+#page-must .must-chip-row:empty{display:none}
+#page-must .must-day-chips .must-month-chip{min-width:34px;padding:0 8px}
+#page-must .must-cal-popup .must-day-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-top:4px}
 
 #page-must .must-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width: 1280px){
@@ -1343,7 +1346,7 @@ function _themeCharts(light){
         MUST · DEMANDA DE TRANSMISSÃO
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
-          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="must-cal-pro"><select class="fsel" id="mustYearSelect" title="Selecionar ano"></select><span class="must-month-quick" id="mustMonthQuick"></span><span class="must-day-sub" id="mustDaySection"><button class="must-day-nav" id="mustPrevDay" title="Dia anterior">◀</button><select class="fsel" id="mustDaySelect" title="Selecionar dia disponível"></select><button class="must-day-nav" id="mustNextDay" title="Próximo dia">▶</button></span><span class="must-day-sub" id="mustRangeSection" style="display:none"><input type="date" class="fdate" id="mustPerIni" title="Data inicial do período MUST"><span class="must-range-sep">→</span><input type="date" class="fdate" id="mustPerFim" title="Data final do período MUST"></span><input type="hidden" id="mustDay"></div></div></div>
+          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="must-chip-row" id="mustPopupYears"></div><div class="must-chip-row must-month-quick" id="mustMonthQuick"></div><div class="must-chip-row must-day-chips" id="mustDaySection"></div><div class="must-day-sub" id="mustRangeSection" style="display:none"><input type="date" class="fdate" id="mustPerIni" title="Data inicial do período MUST"><span class="must-range-sep">→</span><input type="date" class="fdate" id="mustPerFim" title="Data final do período MUST"></div><input type="hidden" id="mustDay"></div></div>
           <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
         </div>
       </div>
@@ -5049,10 +5052,6 @@ function _mustApplyDayValue(dayValue){
   filters.mustMonth=parts.month;
   const dayEl=document.getElementById('mustDay');
   if(dayEl) dayEl.value=dayValue;
-  const yearSel=document.getElementById('mustYearSelect');
-  if(yearSel) yearSel.value=parts.year;
-  const daySel=document.getElementById('mustDaySelect');
-  if(daySel) daySel.value=dayValue;
   mustSyncFilterVisibility();
   renderPageMUST();
 }
@@ -5154,24 +5153,24 @@ function mustInitFilter(){
     }));
   }
 
-  const yearSel=document.getElementById('mustYearSelect');
-  if(yearSel){
-    yearSel.innerHTML=years.map(v=>`<option value="${v}">${v}</option>`).join('');
-    yearSel.value=filters.mustYear||years[years.length-1]||'';
-    yearSel.onchange=()=>{
-      filters.mustYear=yearSel.value||'';
-      const months2=_mustAvailableMonths(availableDays, filters.mustYear);
+  const yearChips=document.getElementById('mustPopupYears');
+  if(yearChips){
+    yearChips.innerHTML=years.map(v=>`<button class="must-month-chip ${v===filters.mustYear?'on':''}" data-myr="${v}">${v}</button>`).join('');
+    yearChips.querySelectorAll('[data-myr]').forEach(b=>b.addEventListener('click',()=>{
+      filters.mustYear=b.dataset.myr||'';
+      yearChips.querySelectorAll('[data-myr]').forEach(x=>x.classList.toggle('on',x.dataset.myr===filters.mustYear));
+      const months2=_mustAvailableMonths(availableDays,filters.mustYear);
       filters.mustMonth=months2[months2.length-1]||'';
-      const days2=_mustAvailableDaysForMonth(availableDays, filters.mustYear, filters.mustMonth);
+      const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
       if(['15min','30min','hora'].includes(filters.mustGran)){
         _mustApplyDayValue(days2[days2.length-1]||filters.mustDay||'');
       } else {
-        if(days2.length){ filters.mustPerIni=days2[0]; filters.mustPerFim=days2[days2.length-1]; }
+        if(days2.length){filters.mustPerIni=days2[0];filters.mustPerFim=days2[days2.length-1];}
         const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
         if(ie) ie.value=filters.mustPerIni||''; if(fe) fe.value=filters.mustPerFim||'';
         renderPageMUST();
       }
-    };
+    }));
   }
 
   months=_mustAvailableMonths(availableDays, filters.mustYear);
@@ -5196,25 +5195,20 @@ function mustInitFilter(){
   }
 
   scopedDays=_mustAvailableDaysForMonth(availableDays, filters.mustYear, filters.mustMonth);
-  const daySel=document.getElementById('mustDaySelect');
-  if(daySel){
-    daySel.innerHTML=scopedDays.map(v=>`<option value="${v}">${_mustDayShortLabel(v)}</option>`).join('');
-    daySel.value=filters.mustDay||scopedDays[scopedDays.length-1]||'';
-    daySel.onchange=()=>_mustApplyDayValue(daySel.value||'');
+  const dayChips=document.getElementById('mustDaySection');
+  if(dayChips){
+    dayChips.innerHTML=scopedDays.map(v=>{
+      const d=parseDate(v); const dn=d?d.getDate():parseInt(v.slice(8),10);
+      return `<button class="must-month-chip${v===filters.mustDay?' on':''}" data-mday="${v}">${dn}</button>`;
+    }).join('');
+    dayChips.querySelectorAll('[data-mday]').forEach(b=>b.addEventListener('click',()=>{
+      _mustApplyDayValue(b.dataset.mday||'');
+      const popup=document.getElementById('mustCalPopup'),trigger=document.getElementById('mustCalTrigger');
+      if(popup) popup.classList.remove('open'); if(trigger) trigger.classList.remove('open');
+    }));
   }
   const dayEl=document.getElementById('mustDay');
   if(dayEl) dayEl.value=filters.mustDay||'';
-
-  const prevBtn=document.getElementById('mustPrevDay');
-  if(prevBtn){
-    prevBtn.disabled=!scopedDays.length || filters.mustDay===scopedDays[0];
-    prevBtn.onclick=()=>_mustStepDay(-1);
-  }
-  const nextBtn=document.getElementById('mustNextDay');
-  if(nextBtn){
-    nextBtn.disabled=!scopedDays.length || filters.mustDay===scopedDays[scopedDays.length-1];
-    nextBtn.onclick=()=>_mustStepDay(1);
-  }
 
   const iniEl=document.getElementById('mustPerIni'), fimEl=document.getElementById('mustPerFim');
   if(iniEl){
@@ -5395,7 +5389,7 @@ function renderPageMUST(type){
       ...CHART_DEFAULTS,
       scales:{
         x:xScale,
-        y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,grace:'10%',title:{display:true,text:'MW',color:'#8090b8',font:{size:9}}}
+        y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,grace:'10%',suggestedMax:contr>0?contr*1.15:undefined,title:{display:true,text:'MW',color:'#8090b8',font:{size:9}}}
       }
     }
   });
