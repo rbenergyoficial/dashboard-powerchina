@@ -5502,14 +5502,15 @@ function renderPageMUST(type){
   const mustMainSub=document.getElementById('mustMainSub'); if(mustMainSub){ mustMainSub.textContent=`${_T('Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST')} · ${mustScopeLabel}`; }
 
   const xScale={
-    ...xAxisWithTitle({title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:'#8ea0c9',font:{size:10,weight:'600'}}}),
+    ...xAxisWithTitle({title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:'#c8d6f8',font:{size:13,weight:'700'}}}),
     ticks:{
       ...(CHART_DEFAULTS.scales.x?.ticks||{}),
+      color:'#c4d0ea',
       autoSkip:denseIntraday?false:true,
       maxTicksLimit:denseIntraday?96:18,
       maxRotation:denseIntraday?90:0,
       minRotation:denseIntraday?90:0,
-      font:{size:denseIntraday?8:10}
+      font:{size:denseIntraday?10:12,weight:'600'}
     }
   };
 
