@@ -9893,11 +9893,8 @@ window._ppaChartGet=function(id){return charts[id];};
     filters.ppaSelectedMonths = monthsSnapshot;
     filters.ppaCalMonth = monthsSnapshot[0];
     if((filters.ppaUnifiedGran||'mes')==='mes'){
-      const _v30HasDaySel=(filters.ppaSelectedDays||[]).filter(v=>v>=1).length>0;
-      if(!_v30HasDaySel){
-        filters.ppaUiIniV25 = isoV30(new Date(Number(filters.ppaCalYear), monthsSnapshot[0], 1));
-        filters.ppaUiFimV25 = isoV30(new Date(Number(filters.ppaCalYear), monthsSnapshot[monthsSnapshot.length-1]+1, 0));
-      }
+      filters.ppaUiIniV25 = isoV30(new Date(Number(filters.ppaCalYear), monthsSnapshot[0], 1));
+      filters.ppaUiFimV25 = isoV30(new Date(Number(filters.ppaCalYear), monthsSnapshot[monthsSnapshot.length-1]+1, 0));
     }
     rewriteHostV30();
     rerenderChartsV30();
