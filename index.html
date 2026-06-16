@@ -554,8 +554,8 @@ html[data-theme="light"]{
   --bg:#f4f5fb;--bg2:#eceef8;--bg3:#e5e7f4;--bg4:#ffffff;--bg5:#f0f2fa;--bg6:#dde0ee;
   --border:rgba(0,0,0,.07);--border2:rgba(0,0,0,.10);--border3:rgba(0,0,0,.16);--border4:rgba(0,0,0,.24);
   --t1:#13121f;--t2:#3c3f57;--t3:#606480;--t4:#9498b2;
-  --shadow-card:0 2px 14px rgba(0,0,0,.08),0 1px 0 rgba(255,255,255,.9) inset;
-  --shadow-hover:0 6px 28px rgba(0,0,0,.14),0 1px 0 rgba(255,255,255,1) inset;
+  --shadow-card:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.05),inset 0 1px 0 rgba(255,255,255,.90);
+  --shadow-hover:0 4px 20px rgba(0,0,0,.12),0 8px 32px rgba(0,0,0,.08),0 0 0 1px rgba(107,139,245,.22),0 0 16px rgba(107,139,245,.09),inset 0 1px 0 rgba(255,255,255,1);
   color-scheme:light;
 }
 html[data-theme="light"] body{
@@ -584,18 +584,19 @@ html[data-theme="light"] .side-panel{
 html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25);}
 /* Chart cards */
 html[data-theme="light"] .cc{
-  background:linear-gradient(160deg,#ffffff 0%,#f8f9ff 100%);
-  border-color:rgba(107,139,245,.18);
-  box-shadow:0 2px 18px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.9);}
+  background:#ffffff;
+  border-color:rgba(0,0,0,.09);
+  box-shadow:0 1px 4px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04),inset 0 1px 0 rgba(255,255,255,.9);}
+html[data-theme="light"] .cc::before{
+  background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.18) 30%,rgba(45,212,191,.11) 70%,transparent 100%);}
 html[data-theme="light"] .cc:hover{
-  border-color:rgba(107,139,245,.32);
-  box-shadow:0 4px 28px rgba(0,0,0,.11),0 0 0 1px rgba(107,139,245,.12),inset 0 1px 0 #fff;}
+  border-color:rgba(107,139,245,.28);
+  box-shadow:0 4px 20px rgba(0,0,0,.10),0 8px 32px rgba(0,0,0,.07),0 0 0 1px rgba(107,139,245,.18),0 0 16px rgba(107,139,245,.07),inset 0 1px 0 #fff;}
 html[data-theme="light"] .cc-title{color:#1a1d2e;}
 html[data-theme="light"] .cc-sub{color:#5a6275;}
 /* KPI cards */
-html[data-theme="light"] .kpi-card{background:rgba(255,255,255,.75);}
-html[data-theme="light"] .kpi-icon-box{background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.08);}
-html[data-theme="light"] .kpi-icon-box svg{stroke:#f4f5fb!important;}
+html[data-theme="light"] .kpi-card{background:#ffffff;border-color:rgba(0,0,0,.08);}
+html[data-theme="light"] .kpi-icon-box svg{stroke:#0a0a10!important;}
 /* Pill & inputs */
 html[data-theme="light"] .sync-pill.sp-ready{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.09);color:#606480;}
 html[data-theme="light"] .sync-pill.sp-ready .sp-dot{background:#9498b2;}
@@ -652,8 +653,14 @@ html[data-theme="light"] .ppa-park-chip-v35{
 html[data-theme="light"] #sec-ppa-gauges>div{
   border-top-color:rgba(0,0,0,.06)!important;
   border-bottom-color:rgba(0,0,0,.06)!important;}
+html[data-theme="light"] .ppag-card{
+  box-shadow:0 2px 14px rgba(0,0,0,.08),0 1px 4px rgba(0,0,0,.05),inset 0 1px 0 rgba(255,255,255,.92)!important;
+  border-top-color:rgba(0,0,0,.09)!important;
+  border-right-color:rgba(0,0,0,.09)!important;
+  border-bottom-color:rgba(0,0,0,.09)!important;}
 html[data-theme="light"] .ppag-card[draggable]:hover{
-  box-shadow:-4px 8px 24px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.9)!important;}
+  box-shadow:0 4px 20px rgba(0,0,0,.11),0 8px 32px rgba(0,0,0,.08),0 0 0 1px rgba(107,139,245,.18),0 0 14px rgba(107,139,245,.07),inset 0 1px 0 rgba(255,255,255,.95)!important;
+  border-color:rgba(107,139,245,.22)!important;}
 /* V42 PPA filter/calendar bar (JS-injected dark styling) */
 html[data-theme="light"] #ppaFiltV42{background:rgba(248,249,253,.97)!important;border-bottom-color:rgba(0,0,0,.07)!important;}
 html[data-theme="light"] #ppaFiltV42 .v42-bar{background:rgba(255,255,255,.94)!important;border-color:rgba(107,139,245,.22)!important;box-shadow:0 2px 14px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.9)!important;}
@@ -12195,6 +12202,24 @@ window._ppaChartGet=function(id){return charts[id];};
     /* ── re-evaluate theme tokens on every render ── */
     var _lt=document.documentElement.getAttribute('data-theme')==='light';
     BG=_lt?'#f4f5fb':'#09090e'; C1=_lt?'#ffffff':'#0f0f17'; C2=_lt?'#f8f9ff':'#0c0c14';
+    /* theme-aware tokens for inline card HTML */
+    var _TXTC =_lt?'#13121f':'#e2e8f0';
+    var _SUBC =_lt?'#606480':'#6b7280';
+    var _LBLC =_lt?'#8090aa':'#4b5563';
+    var _TKMC =_lt?'rgba(0,0,0,.45)':'rgba(255,255,255,.5)';
+    var _TKLN =_lt?'rgba(0,0,0,.25)':'rgba(255,255,255,.3)';
+    var _DIVL =_lt?'rgba(0,0,0,.07)':'rgba(255,255,255,.05)';
+    var _BARBG=_lt?'#eceef8':'#0a0a12';
+    var _SEPC =_lt?'rgba(0,0,0,.06)':'rgba(255,255,255,.03)';
+    var _RTRK =_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.06)';
+    var _SVGT =_lt?'#13121f':'#e2e8f0';
+    var _CBDR =_lt?'1px solid rgba(0,0,0,.09)':'1px solid rgba(255,255,255,.06)';
+    var _CSHD =_lt
+      ?'0 2px 14px rgba(0,0,0,.08),0 1px 4px rgba(0,0,0,.05),inset 0 1px 0 rgba(255,255,255,.92)'
+      :'0 4px 24px rgba(0,0,0,.70),6px 8px 20px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.08)';
+    var _CSHDS=_lt
+      ?'0 2px 14px rgba(0,0,0,.08),0 1px 4px rgba(0,0,0,.05),inset 0 1px 0 rgba(255,255,255,.92)'
+      :'0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)';
     var pp=document.getElementById('page-ppa');
     if(!pp||pp.hidden)return;
     var perf=document.getElementById('sec-ppa-performance');
@@ -12238,32 +12263,32 @@ window._ppaChartGet=function(id){return charts[id];};
 
       /* ── horizontal bar (CSS zones + fill) ──────────────── */
       var bar=
-        '<div style="position:relative;height:18px;border-radius:6px;overflow:hidden;display:flex;background:#0a0a12">'
+        '<div style="position:relative;height:18px;border-radius:6px;overflow:hidden;display:flex;background:'+_BARBG+'">'
           +'<div style="flex:0 0 '+RW+';background:'+RED+'09"></div>'
-          +'<div style="flex:0 0 '+YW+';background:'+YEL+'09;border-left:1px solid rgba(255,255,255,.03)"></div>'
-          +'<div style="flex:0 0 '+GW+';background:'+GRN+'09;border-left:1px solid rgba(255,255,255,.03)"></div>'
+          +'<div style="flex:0 0 '+YW+';background:'+YEL+'09;border-left:1px solid '+_SEPC+'"></div>'
+          +'<div style="flex:0 0 '+GW+';background:'+GRN+'09;border-left:1px solid '+_SEPC+'"></div>'
           +(pct>0
             ?'<div style="position:absolute;left:0;top:3px;bottom:3px;width:'+bW+';'
               +'background:'+sC+';border-radius:4px;opacity:.92;transition:width .4s ease"></div>'
             :'')
           +'<div style="position:absolute;left:'+TK+';top:0;bottom:0;width:1px;'
-            +'background:rgba(255,255,255,.3)"></div>'
+            +'background:'+_TKLN+'"></div>'
         +'</div>'
         /* zone tick labels */
         +'<div style="position:relative;height:15px;font-family:'+F+';font-size:8px;color:#7d94a8;margin-top:1px">'
           +'<span style="position:absolute;left:'+(80/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">80%</span>'
           +'<span style="position:absolute;left:'+(95/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">95%</span>'
-          +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">'+translateAnyText('META')+'</span>'
+          +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:'+_TKMC+';font-weight:700">'+translateAnyText('META')+'</span>'
         +'</div>';
 
       /* ── mini ring — thin SVG circle as accent ───────────── */
       var ringPct=Math.min(100,pctC);
       var rC=2*Math.PI*28, rFill=+(rC*ringPct/100).toFixed(2), rGap=+(rC-rFill).toFixed(2);
       var ring='<svg viewBox="0 0 72 72" style="width:72px;height:72px;flex-shrink:0">'
-        +'<circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="5"/>'
+        +'<circle cx="36" cy="36" r="28" fill="none" stroke="'+_RTRK+'" stroke-width="5"/>'
         +(rFill>0?'<circle cx="36" cy="36" r="28" fill="none" stroke="'+aC+'" stroke-width="5"'
           +' stroke-linecap="round" stroke-dasharray="'+rFill+' '+rGap+'" transform="rotate(-90 36 36)"/>':'')
-        +'<text x="36" y="34" text-anchor="middle" font-family="'+F+'" font-size="14" font-weight="900" fill="#e2e8f0"'
+        +'<text x="36" y="34" text-anchor="middle" font-family="'+F+'" font-size="14" font-weight="900" fill="'+_SVGT+'"'
           +' style="letter-spacing:-.04em">'+fv1(pct)+'</text>'
         +'<text x="36" y="47" text-anchor="middle" font-family="'+F+'" font-size="10" font-weight="700" fill="'+aC+'" opacity=".85">%</text>'
         +'</svg>';
@@ -12277,12 +12302,12 @@ window._ppaChartGet=function(id){return charts[id];};
       /* ── card ─────────────────────────────────────────────── */
       return {html:'<div class="ppag-card" draggable="true" data-park="'+pk.name+'" style="'
         +'background:linear-gradient(135deg,'+C1+' 0%,'+C2+' 100%);'
-        +'border:1px solid rgba(255,255,255,.06);'
+        +_CBDR+';'
         +'border-left:1px solid '+cC+'55;'
         +'border-radius:14px;'
         +'padding:14px 18px 14px;'
         +'box-sizing:border-box;'
-        +'box-shadow:0 4px 24px rgba(0,0,0,.70),6px 8px 20px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.08)">'
+        +'box-shadow:'+_CSHD+'">'
 
         /* ── name row: chip + full name + status badge ───────── */
         +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
@@ -12291,7 +12316,7 @@ window._ppaChartGet=function(id){return charts[id];};
             +'<span>'+pk.name+'</span>'
           +'</div>'
           /* full name */
-          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;'
+          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:'+_TXTC+';'
             +'letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+fullName+'</span>'
           /* status badge */
           +'<div style="margin-left:auto;flex-shrink:0;display:flex;align-items:center;gap:5px;padding:4px 9px;'
@@ -12307,14 +12332,14 @@ window._ppaChartGet=function(id){return charts[id];};
           +'<div style="flex:1;min-width:0">'
             /* large generation */
             +'<div style="line-height:1;margin-bottom:5px">'
-              +'<span style="font-family:'+F+';font-size:24px;font-weight:800;color:#e2e8f0;letter-spacing:-.04em">'+fv(ger)+'</span>'
+              +'<span style="font-family:'+F+';font-size:24px;font-weight:800;color:'+_TXTC+';letter-spacing:-.04em">'+fv(ger)+'</span>'
               +'<span style="font-family:'+F+';font-size:11px;color:'+BLUE+';font-weight:700;margin-left:5px">MWh</span>'
             +'</div>'
             /* meta line */
-            +'<div style="font-family:'+F+';font-size:11px;color:#6b7280">'
+            +'<div style="font-family:'+F+';font-size:11px;color:'+_SUBC+'">'
               +translateAnyText('Meta:')+' <span style="color:'+PUR+';font-weight:700">'+fv(meta)+'</span>'
               +'<span style="color:#60a5fa;font-size:9px;margin-left:3px">MWh</span>'
-              +(hasDayData&&dim2>0?'<span style="color:#4b5563;margin-left:8px">'+nAct+'/'+dim2+' '+translateAnyText('dias')+'</span>':'')
+              +(hasDayData&&dim2>0?'<span style="color:'+_LBLC+';margin-left:8px">'+nAct+'/'+dim2+' '+translateAnyText('dias')+'</span>':'')
             +'</div>'
           +'</div>'
         +'</div>'
@@ -12331,9 +12356,9 @@ window._ppaChartGet=function(id){return charts[id];};
               var leftBlock= needed>0
                 ?('<div style="min-width:0">'
                     +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;'
-                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div>'
+                      +'color:'+_LBLC+';text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div>'
                     +'<div style="line-height:1">'
-                      +'<span style="font-family:'+F+';font-size:16px;font-weight:900;color:#e2e8f0;letter-spacing:-.03em">'+fv(needed)+'</span>'
+                      +'<span style="font-family:'+F+';font-size:16px;font-weight:900;color:'+_TXTC+';letter-spacing:-.03em">'+fv(needed)+'</span>'
                       +'<span style="font-family:'+F+';font-size:9px;color:'+BLUE+';font-weight:700;margin-left:3px">MWh</span>'
                     +'</div>'
                   +'</div>')
@@ -12344,10 +12369,10 @@ window._ppaChartGet=function(id){return charts[id];};
               var rightBlock= neededD>0
                 ?('<div style="text-align:right;min-width:0">'
                     +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;'
-                      +'color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir a meta')+'</div>'
+                      +'color:'+_LBLC+';text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir a meta')+'</div>'
                     +'<div style="line-height:1;margin-bottom:2px">'
                       +'<span style="font-family:'+F+';font-size:16px;font-weight:900;color:'+sC+';letter-spacing:-.03em">'+fv(neededD)+'</span>'
-                      +'<span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:3px">'+translateAnyText('MWh/dia')+'</span>'
+                      +'<span style="font-family:'+F+';font-size:9px;color:'+_SUBC+';margin-left:3px">'+translateAnyText('MWh/dia')+'</span>'
                     +'</div>'
                     +'<div style="font-family:'+F+';font-size:9px;color:'+rC2+'">'
                       +(rOk?'↑':'↓')+' '+translateAnyText('Atual:')+' '+fv(dAvg)+' '+translateAnyText('MWh/dia')
@@ -12355,7 +12380,7 @@ window._ppaChartGet=function(id){return charts[id];};
                   +'</div>')
                 :'';
               return '<div style="display:flex;align-items:flex-start;justify-content:space-between;'
-                +'gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.05)">'
+                +'gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid '+_DIVL+'">'
                 +leftBlock+rightBlock
               +'</div>';
             })()
@@ -12381,39 +12406,39 @@ window._ppaChartGet=function(id){return charts[id];};
     /* ── consolidated card — same compact style as park cards ─────── */
     var _totRS=2*Math.PI*28,_totF72=+(_totRS*Math.min(100,totPct)/100).toFixed(2),_totG72=+(_totRS-_totF72).toFixed(2);
     var _totRingSvg='<svg viewBox="0 0 72 72" style="width:72px;height:72px;flex-shrink:0">'
-      +'<circle cx="36" cy="36" r="28" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="5"/>'
+      +'<circle cx="36" cy="36" r="28" fill="none" stroke="'+_RTRK+'" stroke-width="5"/>'
       +(_totF72>0?'<circle cx="36" cy="36" r="28" fill="none" stroke="'+totC+'" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+_totF72+' '+_totG72+'" transform="rotate(-90 36 36)"/>':'')
-      +'<text x="36" y="34" text-anchor="middle" font-family="'+F+'" font-size="14" font-weight="900" fill="#e2e8f0" style="letter-spacing:-.04em">'+fv1(totPct)+'</text>'
+      +'<text x="36" y="34" text-anchor="middle" font-family="'+F+'" font-size="14" font-weight="900" fill="'+_SVGT+'" style="letter-spacing:-.04em">'+fv1(totPct)+'</text>'
       +'<text x="36" y="47" text-anchor="middle" font-family="'+F+'" font-size="10" font-weight="700" fill="'+totC+'" opacity=".85">%</text>'
       +'</svg>';
     var _totST=nBad>0?'✗ '+nBad+' não atingirá':nWarn>0?'⚠ '+nWarn+' em risco':'✓ Meta atingida';
     var _totBarHtml='<div style="margin-bottom:10px">'
-      +'<div style="position:relative;height:16px;border-radius:6px;overflow:hidden;display:flex;background:#0a0a12">'
+      +'<div style="position:relative;height:16px;border-radius:6px;overflow:hidden;display:flex;background:'+_BARBG+'">'
         +'<div style="flex:0 0 '+RW+';background:'+RED+'09"></div>'
-        +'<div style="flex:0 0 '+YW+';background:'+YEL+'09;border-left:1px solid rgba(255,255,255,.03)"></div>'
-        +'<div style="flex:0 0 '+GW+';background:'+GRN+'09;border-left:1px solid rgba(255,255,255,.03)"></div>'
+        +'<div style="flex:0 0 '+YW+';background:'+YEL+'09;border-left:1px solid '+_SEPC+'"></div>'
+        +'<div style="flex:0 0 '+GW+';background:'+GRN+'09;border-left:1px solid '+_SEPC+'"></div>'
         +(totPct>0?'<div style="position:absolute;left:0;top:2px;bottom:2px;width:'+totBW+';background:'+totC+';border-radius:4px;opacity:.95"></div>':'')
-        +'<div style="position:absolute;left:'+TK+';top:0;bottom:0;width:1px;background:rgba(255,255,255,.3)"></div>'
+        +'<div style="position:absolute;left:'+TK+';top:0;bottom:0;width:1px;background:'+_TKLN+'"></div>'
       +'</div>'
       +'<div style="position:relative;height:12px;font-family:'+F+';font-size:8px;color:#7d94a8;margin-top:1px">'
         +'<span style="position:absolute;left:'+(80/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">80%</span>'
         +'<span style="position:absolute;left:'+(95/MAX*100).toFixed(1)+'%;transform:translateX(-50%)">95%</span>'
-        +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:rgba(255,255,255,.5);font-weight:700">'+translateAnyText('META')+'</span>'
+        +'<span style="position:absolute;left:'+TK+';transform:translateX(-50%);color:'+_TKMC+';font-weight:700">'+translateAnyText('META')+'</span>'
       +'</div>'
     +'</div>';
     var summaryCard='<div class="ppag-card" draggable="true" data-park="consolidado" style="'
       +'background:linear-gradient(135deg,'+C1+' 0%,'+C2+' 100%);'
-      +'border:1px solid rgba(255,255,255,.06);border-left:1px solid '+totC+'38;'
+      +_CBDR+';border-left:1px solid '+totC+'38;'
       +'border-radius:14px;padding:14px 18px 14px;box-sizing:border-box;'
-      +'box-shadow:0 4px 20px rgba(0,0,0,.5),6px 8px 24px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03)">'
+      +'box-shadow:'+_CSHDS+'">'
       /* name row */
       +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">'
         +'<div class="ppag-park-badge" style="--park-bg:linear-gradient(140deg,#6b8bf5,#6b8bf5aa)">'
           +'<span style="font-size:11px">Σ</span>'
         +'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;line-height:1;margin-bottom:2px">'+translateAnyText('CONSOLIDADO')+'</div>'
-          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:#cbd5e1;letter-spacing:-.01em">'+translateAnyText('Todos os Parques')+'</span>'
+          +'<div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:'+_LBLC+';text-transform:uppercase;line-height:1;margin-bottom:2px">'+translateAnyText('CONSOLIDADO')+'</div>'
+          +'<span style="font-family:'+F+';font-size:13px;font-weight:700;color:'+_TXTC+';letter-spacing:-.01em">'+translateAnyText('Todos os Parques')+'</span>'
         +'</div>'
         +'<div style="margin-left:auto;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
           +(nBad>0?'<div style="display:flex;align-items:center;gap:5px;padding:3px 8px;background:'+RED+'12;border:1px solid '+RED+'30;border-radius:6px;white-space:nowrap"><span style="width:5px;height:5px;border-radius:50%;background:'+RED+'"></span><span style="font-family:'+F+';font-size:9px;font-weight:700;color:'+RED+'">✗ '+nBad+' '+translateAnyText(isPast?'Meta não atingida':'não atingirá')+'</span></div>':'')
@@ -12426,10 +12451,10 @@ window._ppaChartGet=function(id){return charts[id];};
         +_totRingSvg
         +'<div style="flex:1;min-width:0">'
           +'<div style="line-height:1;margin-bottom:5px">'
-            +'<span style="font-family:'+F+';font-size:24px;font-weight:800;color:#e2e8f0;letter-spacing:-.04em">'+fv(totGer)+'</span>'
+            +'<span style="font-family:'+F+';font-size:24px;font-weight:800;color:'+_TXTC+';letter-spacing:-.04em">'+fv(totGer)+'</span>'
             +'<span style="font-family:'+F+';font-size:11px;color:'+BLUE+';font-weight:700;margin-left:5px">MWh</span>'
           +'</div>'
-          +'<div style="font-family:'+F+';font-size:11px;color:#6b7280">'
+          +'<div style="font-family:'+F+';font-size:11px;color:'+_SUBC+'">'
             +translateAnyText('Meta:')+' <span style="color:'+PUR+';font-weight:700">'+fv(totMeta)+'</span>'
             +'<span style="color:#60a5fa;font-size:9px;margin-left:3px">MWh</span>'
           +'</div>'
@@ -12439,9 +12464,9 @@ window._ppaChartGet=function(id){return charts[id];};
       +_totBarHtml
       /* bottom: falta p/ meta + ritmo */
       +(totNeeded>0||totNeededD>0
-        ?'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,255,255,.05)">'
-          +(totNeeded>0?'<div style="min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div><div style="line-height:1"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:#e2e8f0;letter-spacing:-.03em">'+fv(totNeeded)+'</span><span style="font-family:'+F+';font-size:10px;color:'+BLUE+';font-weight:700;margin-left:4px">MWh</span></div></div>':'')
-          +(totNeededD>0?'<div style="text-align:right;min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:#4b5563;text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir')+'</div><div style="line-height:1;margin-bottom:3px"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:'+totC+';letter-spacing:-.03em">'+fv(totNeededD)+'</span><span style="font-family:'+F+';font-size:9px;color:#6b7280;margin-left:4px">'+translateAnyText('MWh/dia')+'</span></div><div style="font-family:'+F+';font-size:9px;color:'+(totRateOk?GRN:RED)+'">'+(totRateOk?'↑':'↓')+' '+translateAnyText('Atual:')+' '+fv(totDAvg)+' '+translateAnyText('MWh/dia')+'</div></div>':'')
+        ?'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid '+_DIVL+'">'
+          +(totNeeded>0?'<div style="min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:'+_LBLC+';text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Falta p/ meta')+'</div><div style="line-height:1"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:'+_TXTC+';letter-spacing:-.03em">'+fv(totNeeded)+'</span><span style="font-family:'+F+';font-size:10px;color:'+BLUE+';font-weight:700;margin-left:4px">MWh</span></div></div>':'')
+          +(totNeededD>0?'<div style="text-align:right;min-width:0"><div style="font-family:'+F+';font-size:8px;font-weight:700;letter-spacing:.1em;color:'+_LBLC+';text-transform:uppercase;margin-bottom:2px">'+translateAnyText('Ritmo p/ atingir')+'</div><div style="line-height:1;margin-bottom:3px"><span style="font-family:'+F+';font-size:20px;font-weight:900;color:'+totC+';letter-spacing:-.03em">'+fv(totNeededD)+'</span><span style="font-family:'+F+';font-size:9px;color:'+_SUBC+';margin-left:4px">'+translateAnyText('MWh/dia')+'</span></div><div style="font-family:'+F+';font-size:9px;color:'+(totRateOk?GRN:RED)+'">'+(totRateOk?'↑':'↓')+' '+translateAnyText('Atual:')+' '+fv(totDAvg)+' '+translateAnyText('MWh/dia')+'</div></div>':'')
         +'</div>'
         :'')
       +'</div>';
