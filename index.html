@@ -1371,7 +1371,7 @@ function _themeCharts(light){
         MUST · DEMANDA DE TRANSMISSÃO
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
-          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="mc-sec"><div class="mc-lbl">ANO</div><div class="mc-ygrid" id="mustPopupYears"></div></div><div class="mc-sec"><div class="mc-lbl">M&#202;S</div><div id="mustMesExtra"></div><div class="mc-mgrid" id="mustMonthQuick"></div></div><div class="mc-sec" id="mustDaySection" style="display:none"><div class="mc-lbl" id="mustDayLabel">DIA</div><div class="mc-dgrid" id="mustDayGrid"></div></div><div class="mc-sec" id="mustRangeSection" style="display:none"><div class="mc-range"><input type="date" class="fdate" id="mustPerIni" title="Data inicial"><span class="must-range-sep">&#8594;</span><input type="date" class="fdate" id="mustPerFim" title="Data final"></div></div><input type="hidden" id="mustDay"><div class="mc-footer"><button type="button" class="mc-apply" id="mustApplyBtn">APLICAR</button></div></div></div>
+          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button" onclick="_toggleMustCal(event)"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="mc-sec"><div class="mc-lbl">ANO</div><div class="mc-ygrid" id="mustPopupYears"></div></div><div class="mc-sec"><div class="mc-lbl">M&#202;S</div><div id="mustMesExtra"></div><div class="mc-mgrid" id="mustMonthQuick"></div></div><div class="mc-sec" id="mustDaySection" style="display:none"><div class="mc-lbl" id="mustDayLabel">DIA</div><div class="mc-dgrid" id="mustDayGrid"></div></div><div class="mc-sec" id="mustRangeSection" style="display:none"><div class="mc-range"><input type="date" class="fdate" id="mustPerIni" title="Data inicial"><span class="must-range-sep">&#8594;</span><input type="date" class="fdate" id="mustPerFim" title="Data final"></div></div><input type="hidden" id="mustDay"><div class="mc-footer"><button type="button" class="mc-apply" id="mustApplyBtn">APLICAR</button></div></div></div>
           <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
         </div>
       </div>
@@ -5552,31 +5552,33 @@ function _mustUpdateCalTrigger(){
   }
   label.textContent=txt;
 }
-(function(){
+function _toggleMustCal(e){
+  if(e){e.stopPropagation();}
   var popup=document.getElementById('mustCalPopup');
-  if(popup) popup.addEventListener('click',function(e){e.stopPropagation();});
-  function positionMustPopup(){
-    var trigger=document.getElementById('mustCalTrigger');
-    if(!popup||!trigger) return;
+  var trigger=document.getElementById('mustCalTrigger');
+  if(!popup||!trigger) return;
+  var open=popup.classList.contains('open');
+  if(!open){
     var r=trigger.getBoundingClientRect();
     popup.style.top=(r.bottom+6)+'px';
     popup.style.right=Math.max(0,window.innerWidth-r.right)+'px';
     popup.style.left='auto';
     popup.style.bottom='auto';
   }
+  popup.classList.toggle('open',!open);
+  trigger.classList.toggle('open',!open);
+}
+(function(){
+  var popup=document.getElementById('mustCalPopup');
+  if(popup) popup.addEventListener('click',function(e){e.stopPropagation();});
   document.addEventListener('click',function(e){
-    var trigger=document.getElementById('mustCalTrigger');
-    if(!popup||!trigger) return;
-    if(trigger===e.target||trigger.contains(e.target)){
-      var open=popup.classList.contains('open');
-      if(!open) positionMustPopup();
-      popup.classList.toggle('open',!open);
-      trigger.classList.toggle('open',!open);
-      return;
-    }
-    if(popup.classList.contains('open')&&!popup.contains(e.target)){
-      popup.classList.remove('open');
-      trigger.classList.remove('open');
+    var p=document.getElementById('mustCalPopup');
+    var t=document.getElementById('mustCalTrigger');
+    if(!p||!p.classList.contains('open')) return;
+    if(t&&t.contains(e.target)) return;
+    if(!p.contains(e.target)){
+      p.classList.remove('open');
+      if(t) t.classList.remove('open');
     }
   });
 })();
