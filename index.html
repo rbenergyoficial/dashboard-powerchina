@@ -486,12 +486,36 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-cal-fw{position:relative!important}
 #page-must .must-cal-trigger{height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(107,139,245,.40);background:rgba(107,139,245,.12);color:#fff;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:border-color .15s,background .15s}
 #page-must .must-cal-trigger:hover,#page-must .must-cal-trigger.open{border-color:rgba(107,139,245,.65);background:rgba(107,139,245,.24)}
-#page-must .must-cal-popup{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9999;background:#0d1126;border:1px solid rgba(107,139,245,.28);border-radius:16px;padding:14px 16px;box-shadow:0 8px 32px rgba(0,0,0,.55)}
+#page-must .must-cal-popup{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9999;background:rgba(8,11,20,.97);border:1px solid rgba(107,139,245,.22);border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.80),0 0 0 1px rgba(107,139,245,.05);backdrop-filter:blur(24px);overflow:hidden;min-width:300px;animation:mustCalIn .13s ease}
+@keyframes mustCalIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
 #page-must .must-cal-popup.open{display:block}
-#page-must .must-chip-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-#page-must .must-chip-row:empty{display:none}
-#page-must .must-day-chips .must-month-chip{min-width:34px;padding:0 8px}
-#page-must .must-cal-popup .must-day-sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-top:4px}
+#page-must .must-cal-popup .mc-sec{padding:10px 14px}
+#page-must .must-cal-popup .mc-sec+.mc-sec{border-top:1px solid rgba(255,255,255,.045)}
+#page-must .must-cal-popup .mc-lbl{font-size:8px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#2e4558;margin-bottom:7px}
+#page-must .must-cal-popup .mc-ygrid{display:flex;gap:5px;flex-wrap:wrap}
+#page-must .must-cal-popup .mc-ychip{padding:4px 16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:20px;color:#507090;font-size:12px;font-weight:700;cursor:pointer;transition:all .13s}
+#page-must .must-cal-popup .mc-ychip:hover{border-color:rgba(107,139,245,.34);color:#90acc8;background:rgba(107,139,245,.07)}
+#page-must .must-cal-popup .mc-ychip.on{background:rgba(107,139,245,.22);border-color:rgba(107,139,245,.56);color:#c8d8ff;box-shadow:0 0 8px rgba(107,139,245,.16)}
+#page-must .must-cal-popup .mc-mgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-top:7px}
+#page-must .must-cal-popup .mc-mchip{height:30px;border-radius:7px;border:1px solid rgba(255,255,255,.06);background:transparent;color:#466070;font-size:10px;font-weight:700;cursor:pointer;transition:all .12s;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+#page-must .must-cal-popup .mc-mchip:hover{border-color:rgba(107,139,245,.34);background:rgba(107,139,245,.08);color:#90acc8}
+#page-must .must-cal-popup .mc-mchip.on{background:rgba(107,139,245,.22);border-color:rgba(107,139,245,.56);color:#c8d8ff;box-shadow:0 0 7px rgba(107,139,245,.14)}
+#page-must .must-cal-popup .mc-mchip.now{border-color:rgba(245,200,66,.4)!important;background:rgba(245,200,66,.06)!important}
+#page-must .must-cal-popup .mc-mchip.now.on{background:rgba(107,139,245,.22)!important;border-color:rgba(245,200,66,.65)!important}
+#page-must .must-cal-popup .mc-allbtn{height:22px;padding:0 9px;border-radius:5px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:#567080;font-size:9px;font-weight:800;cursor:pointer;transition:all .10s;letter-spacing:.05em;text-transform:uppercase;display:inline-block;margin-bottom:6px}
+#page-must .must-cal-popup .mc-allbtn:hover{background:rgba(73,190,134,.09);border-color:rgba(73,190,134,.28);color:#78cca0}
+#page-must .must-cal-popup .mc-allbtn.on{background:rgba(73,190,134,.15);border-color:rgba(73,190,134,.44);color:#86d8a8}
+#page-must .must-cal-popup .mc-dgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:6px}
+#page-must .must-cal-popup .mc-dchip{height:26px;border-radius:4px;border:1px solid rgba(255,255,255,.05);background:transparent;color:#344e5e;font-size:9px;font-weight:700;cursor:pointer;transition:all .09s;display:flex;align-items:center;justify-content:center}
+#page-must .must-cal-popup .mc-dchip:hover{background:rgba(107,139,245,.08);color:#88a0bc;border-color:rgba(107,139,245,.24)}
+#page-must .must-cal-popup .mc-dchip.on{background:rgba(107,139,245,.21);border-color:rgba(107,139,245,.50);color:#b0c8ff}
+#page-must .must-cal-popup .mc-dchip.disabled{opacity:.18;cursor:default;pointer-events:none}
+#page-must .must-cal-popup .mc-dchip.now{border-color:rgba(245,200,66,.45)!important;background:rgba(245,200,66,.06)!important}
+#page-must .must-cal-popup .mc-dchip.now.on{background:rgba(107,139,245,.21)!important;border-color:rgba(245,200,66,.7)!important}
+#page-must .must-cal-popup .mc-footer{border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:flex-end;padding:9px 14px}
+#page-must .must-cal-popup .mc-apply{height:30px;padding:0 22px;border-radius:7px;border:none;background:rgba(107,139,245,.65);color:#fff;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.07em;transition:background .13s}
+#page-must .must-cal-popup .mc-apply:hover{background:rgba(107,139,245,.85)}
+#page-must .must-cal-popup .mc-range{display:flex;align-items:center;gap:6px}
 
 #page-must .must-kpi-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width: 1280px){
@@ -1346,7 +1370,7 @@ function _themeCharts(light){
         MUST · DEMANDA DE TRANSMISSÃO
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
-          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="must-chip-row" id="mustPopupYears"></div><div class="must-chip-row must-month-quick" id="mustMonthQuick"></div><div class="must-chip-row must-day-chips" id="mustDaySection"></div><div class="must-day-sub" id="mustRangeSection" style="display:none"><input type="date" class="fdate" id="mustPerIni" title="Data inicial do período MUST"><span class="must-range-sep">→</span><input type="date" class="fdate" id="mustPerFim" title="Data final do período MUST"></div><input type="hidden" id="mustDay"></div></div>
+          <div class="fg must-cal-fw"><button class="must-cal-trigger" id="mustCalTrigger" type="button"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" style="flex-shrink:0"><rect x="1" y="2" width="12" height="10" rx="1.5"/><path d="M4 1v2M10 1v2M1 5h12"/></svg><span id="mustCalLabel">— —</span> &#9662;</button><div class="must-cal-popup" id="mustCalPopup"><div class="mc-sec"><div class="mc-lbl">ANO</div><div class="mc-ygrid" id="mustPopupYears"></div></div><div class="mc-sec"><div class="mc-lbl">M&#202;S</div><div id="mustMesExtra"></div><div class="mc-mgrid" id="mustMonthQuick"></div></div><div class="mc-sec" id="mustDaySection" style="display:none"><div class="mc-lbl" id="mustDayLabel">DIA</div><div class="mc-dgrid" id="mustDayGrid"></div></div><div class="mc-sec" id="mustRangeSection" style="display:none"><div class="mc-range"><input type="date" class="fdate" id="mustPerIni" title="Data inicial"><span class="must-range-sep">&#8594;</span><input type="date" class="fdate" id="mustPerFim" title="Data final"></div></div><input type="hidden" id="mustDay"><div class="mc-footer"><button type="button" class="mc-apply" id="mustApplyBtn">APLICAR</button></div></div></div>
           <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
         </div>
       </div>
@@ -2343,13 +2367,18 @@ function processWb(wb){
       const row=mr[i]; const d=parseDate(row[0]); if(!d||isNaN(d)) continue;
       const rec={data:d, total:num(row[10])};            // K = Demanda Ativa Total (MW)
       MP.forEach((p,j)=>rec[p]=num(row[1+j]));            // B–J = Ativa por parque (MW)
+      if(!rec.total) rec.total=MP.reduce((s,p)=>s+rec[p],0); // fallback: soma parques se col K vazia
       ativa.push(rec);
       if(!got && num(row[12])>0){                         // M–V = Contratada (kW) → /1000 = MW
         MP.forEach((p,j)=>contrat[p]=num(row[12+j])/1000);
         contrat.total=num(row[21])/1000; got=true;
       }
     }
-    if(ativa.length) must={parks:MP, ativa, contrat};
+    if(ativa.length){
+      must={parks:MP, ativa, contrat};
+      const s=ativa[0];
+      console.log('[MUST diagnóstico] Linha 1 →', 'data:', s.data.toLocaleString('pt-BR'), '| total(col K):', s.total, '| M1(col B):', s.M1, '| M2(col C):', s.M2, '| contrat.total:', contrat.total, 'MW | linhas:', ativa.length);
+    }
   }
 
   // ── CONSOLIDAÇÃO: Energia Produzida = Energia Líquida (UFV_Parques) ──
@@ -5105,9 +5134,39 @@ function mustSyncFilterVisibility(){
   const needsDay=['15min','30min','hora'].includes(gran);
   const daySection=document.getElementById('mustDaySection');
   const rangeSection=document.getElementById('mustRangeSection');
-  if(daySection) daySection.style.display=needsDay?'flex':'none';
-  if(rangeSection) rangeSection.style.display=needsDay?'none':'flex';
+  if(daySection) daySection.style.display=needsDay?'block':'none';
+  if(rangeSection) rangeSection.style.display=needsDay?'none':'block';
   if(typeof _mustUpdateCalTrigger==='function') _mustUpdateCalTrigger();
+}
+function _applyMustCal(){
+  const gran=filters.mustGran||'15min';
+  const needsDay=['15min','30min','hora'].includes(gran);
+  const must=dashData&&dashData.must;
+  const avDays=must&&must.ativa?_mustAvailableDays(must.ativa):[];
+  if(needsDay){
+    if(filters.mustDay){
+      const parts=_mustDayParts(filters.mustDay);
+      filters.mustYear=parts.year; filters.mustMonth=parts.month;
+      const dayEl=document.getElementById('mustDay');
+      if(dayEl) dayEl.value=filters.mustDay;
+    }
+  } else {
+    if(filters.mustMonth){
+      const mDays=_mustAvailableDaysForMonth(avDays,filters.mustYear,filters.mustMonth);
+      const mi=parseInt(filters.mustMonth,10)-1;
+      const dim=new Date(parseInt(filters.mustYear,10),mi+1,0).getDate();
+      filters.mustPerIni=mDays.length?mDays[0]:(filters.mustYear+'-'+filters.mustMonth+'-01');
+      filters.mustPerFim=mDays.length?mDays[mDays.length-1]:(filters.mustYear+'-'+filters.mustMonth+'-'+String(dim).padStart(2,'0'));
+    } else if(filters.mustYear){
+      const yDays=_mustAvailableDaysForMonth(avDays,filters.mustYear,'');
+      filters.mustPerIni=yDays.length?yDays[0]:(filters.mustYear+'-01-01');
+      filters.mustPerFim=yDays.length?yDays[yDays.length-1]:(filters.mustYear+'-12-31');
+    }
+    const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
+    if(ie) ie.value=filters.mustPerIni||''; if(fe) fe.value=filters.mustPerFim||'';
+  }
+  _mustUpdateCalTrigger();
+  renderPageMUST();
 }
 function mustInitFilter(){
   const must=dashData.must; if(!must||!must.ativa||!must.ativa.length) return;
@@ -5153,14 +5212,15 @@ function mustInitFilter(){
     }));
   }
 
+  const nowDate=new Date();
   const yearChips=document.getElementById('mustPopupYears');
   if(yearChips){
-    yearChips.innerHTML=years.map(v=>`<button class="must-month-chip ${v===filters.mustYear?'on':''}" data-myr="${v}">${v}</button>`).join('');
+    yearChips.innerHTML=years.map(v=>`<button type="button" class="mc-ychip ${v===filters.mustYear?'on':''}" data-myr="${v}">${v}</button>`).join('');
     yearChips.querySelectorAll('[data-myr]').forEach(b=>b.addEventListener('click',()=>{
       filters.mustYear=b.dataset.myr||'';
       yearChips.querySelectorAll('[data-myr]').forEach(x=>x.classList.toggle('on',x.dataset.myr===filters.mustYear));
       const months2=_mustAvailableMonths(availableDays,filters.mustYear);
-      filters.mustMonth=months2[months2.length-1]||'';
+      filters.mustMonth=months2.includes(filters.mustMonth)?filters.mustMonth:(months2[months2.length-1]||'');
       const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
       if(['15min','30min','hora'].includes(filters.mustGran)){
         _mustApplyDayValue(days2[days2.length-1]||filters.mustDay||'');
@@ -5174,13 +5234,41 @@ function mustInitFilter(){
   }
 
   months=_mustAvailableMonths(availableDays, filters.mustYear);
+  /* "Ver por ano" / "Todos os dias" button */
+  const mesExtra=document.getElementById('mustMesExtra');
+  if(mesExtra){
+    const nd=['15min','30min','hora'].includes(filters.mustGran||'15min');
+    if(!nd){
+      mesExtra.innerHTML=`<button type="button" class="mc-allbtn${!filters.mustMonth?' on':''}" id="mustVerAno">Ver por ano</button>`;
+      const vaBtn=document.getElementById('mustVerAno');
+      if(vaBtn) vaBtn.onclick=()=>{
+        filters.mustMonth='';filters.mustDay='';
+        const avdAll=_mustAvailableDaysForMonth(availableDays,filters.mustYear,'');
+        if(avdAll.length){filters.mustPerIni=avdAll[0];filters.mustPerFim=avdAll[avdAll.length-1];}
+        const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
+        if(ie) ie.value=filters.mustPerIni||''; if(fe) fe.value=filters.mustPerFim||'';
+        renderPageMUST();
+      };
+    } else {
+      mesExtra.innerHTML='';
+    }
+  }
   const monthQuick=document.getElementById('mustMonthQuick');
   if(monthQuick){
-    monthQuick.innerHTML=months.map(v=>`<button class="must-month-chip ${v===filters.mustMonth?'on':''}" data-mmquick="${v}">${_mustMonthShort(v)}</button>`).join('');
+    const MNS2=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+    monthQuick.innerHTML=MNS2.map((s,i)=>{
+      const mk=String(i+1).padStart(2,'0');
+      const avail=months.includes(mk);
+      const isOn=filters.mustMonth===mk;
+      const isNow=i===nowDate.getMonth()&&filters.mustYear===String(nowDate.getFullYear());
+      return `<button type="button" class="mc-mchip${isOn?' on':''}${isNow?' now':''}" style="${avail?'':'opacity:.22;cursor:default'}" data-mmquick="${mk}">${s}</button>`;
+    }).join('');
     monthQuick.querySelectorAll('[data-mmquick]').forEach(b=>b.addEventListener('click',()=>{
-      filters.mustMonth=b.dataset.mmquick||'';
+      const mk=b.dataset.mmquick;
+      if(!months.includes(mk)) return;
+      filters.mustMonth=mk;
       monthQuick.querySelectorAll('[data-mmquick]').forEach(x=>x.classList.toggle('on',x.dataset.mmquick===filters.mustMonth));
-      const days2=_mustAvailableDaysForMonth(availableDays, filters.mustYear, filters.mustMonth);
+      const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
       if(['15min','30min','hora'].includes(filters.mustGran)){
         _mustApplyDayValue(days2[days2.length-1]||filters.mustDay||'');
       } else {
@@ -5195,20 +5283,44 @@ function mustInitFilter(){
   }
 
   scopedDays=_mustAvailableDaysForMonth(availableDays, filters.mustYear, filters.mustMonth);
-  const dayChips=document.getElementById('mustDaySection');
-  if(dayChips){
-    dayChips.innerHTML=scopedDays.map(v=>{
-      const d=parseDate(v); const dn=d?d.getDate():parseInt(v.slice(8),10);
-      return `<button class="must-month-chip${v===filters.mustDay?' on':''}" data-mday="${v}">${dn}</button>`;
-    }).join('');
-    dayChips.querySelectorAll('[data-mday]').forEach(b=>b.addEventListener('click',()=>{
-      _mustApplyDayValue(b.dataset.mday||'');
-      const popup=document.getElementById('mustCalPopup'),trigger=document.getElementById('mustCalTrigger');
-      if(popup) popup.classList.remove('open'); if(trigger) trigger.classList.remove('open');
+  /* Day chips — show all days of month, mark available vs unavailable */
+  const dayGrid=document.getElementById('mustDayGrid');
+  const dayLbl=document.getElementById('mustDayLabel');
+  if(dayGrid && filters.mustMonth){
+    const MFL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const mi=parseInt(filters.mustMonth,10)-1;
+    const dim=new Date(parseInt(filters.mustYear,10),mi+1,0).getDate();
+    let dhtml='';
+    for(let dd=1;dd<=dim;dd++){
+      const dk=filters.mustYear+'-'+filters.mustMonth+'-'+String(dd).padStart(2,'0');
+      const avail=scopedDays.includes(dk);
+      const isOn=dk===filters.mustDay;
+      const isNow=dd===nowDate.getDate()&&mi===nowDate.getMonth()&&filters.mustYear===String(nowDate.getFullYear());
+      dhtml+=`<button type="button" class="mc-dchip${isOn?' on':''}${isNow?' now':''}${!avail?' disabled':''}" ${avail?`data-mday="${dk}"`:'disabled'}>${String(dd).padStart(2,'0')}</button>`;
+    }
+    dayGrid.innerHTML=dhtml;
+    if(dayLbl) dayLbl.textContent='DIA \xB7 '+MFL[mi].toUpperCase();
+    dayGrid.querySelectorAll('[data-mday]').forEach(b=>b.addEventListener('click',()=>{
+      filters.mustDay=b.dataset.mday||'';
+      dayGrid.querySelectorAll('[data-mday]').forEach(x=>x.classList.toggle('on',x.dataset.mday===filters.mustDay));
+      _mustUpdateCalTrigger();
     }));
+  } else if(dayGrid){
+    dayGrid.innerHTML='';
   }
   const dayEl=document.getElementById('mustDay');
   if(dayEl) dayEl.value=filters.mustDay||'';
+
+  /* APLICAR button */
+  const applyBtn=document.getElementById('mustApplyBtn');
+  if(applyBtn && !applyBtn._mcBound){
+    applyBtn._mcBound=true;
+    applyBtn.onclick=()=>{
+      _applyMustCal();
+      const popup=document.getElementById('mustCalPopup'),trigger=document.getElementById('mustCalTrigger');
+      if(popup) popup.classList.remove('open'); if(trigger) trigger.classList.remove('open');
+    };
+  }
 
   const iniEl=document.getElementById('mustPerIni'), fimEl=document.getElementById('mustPerFim');
   if(iniEl){
@@ -5340,6 +5452,7 @@ function renderPageMUST(type){
   const util=contr>0?peak/contr*100:0, margem=contr-peak;
   const f1=v=>v.toLocaleString(getDateLocale(),{maximumFractionDigits:1});
   const _mustNeedsDay=['15min','30min','hora'].includes(filters.mustGran||'15min');
+  const mode=_mustNeedsDay?'dia':'intervalo';
   const diaTxt=filters.mustDay||'';
   const iniTxt=filters.mustPerIni||'';
   const fimTxt=filters.mustPerFim||'';
