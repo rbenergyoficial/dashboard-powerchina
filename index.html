@@ -5984,21 +5984,19 @@ async function onRefreshClick(){
     // evitando que o CDN da Microsoft sirva versão em cache após uma modificação recente.
     const metaUrl='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl';
     const metaResp=await fetch(metaUrl,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
-    let dlResp;
+    let dlResp; let _initModTime=null;
     if(metaResp.ok){
       const meta=await metaResp.json();
       const directUrl=meta['@microsoft.graph.downloadUrl'];
-      const modTime=meta.lastModifiedDateTime;
-      const modLabel=modTime?'Arquivo modificado: '+new Date(modTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      _initModTime=meta.lastModifiedDateTime||null;
+      const modLabel=_initModTime?'Arquivo modificado: '+new Date(_initModTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
       progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60,modLabel);
       if(directUrl){
-        // URL direta já autenticada — sempre aponta para versão atual (sem CDN cache)
         dlResp=await fetch(directUrl,{cache:'no-store'});
       } else {
         dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
       }
     } else {
-      // Fallback: busca por nome
       progUpdate('🔄 Buscando arquivo…','Procurando '+ONEDRIVE_FILE+' por nome…',45);
       const searchResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(ONEDRIVE_FILE)+'\')',{headers:{Authorization:'Bearer '+tok}});
       const searchData=await searchResp.json();
@@ -6012,9 +6010,11 @@ async function onRefreshClick(){
     progUpdate('🔄 Processando…','Lendo planilha e calculando KPIs…',85);
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     processWb(wb);
-    // Auto-retry: se dado mais recente ≥2 dias antes de hoje e mesmo mês,
-    // o CDN ou OneDrive ainda não propagou a versão nova.
-    // Tenta até 3x com 8s de intervalo usando /content (endpoint direto, sem CDN).
+    // Auto-retry inteligente: monitora lastModifiedDateTime para detectar quando o
+    // OneDrive terminou de sincronizar a nova versão do arquivo.
+    // Polling a cada 5s por até 60s; baixa assim que o timestamp mudar.
+    // Se o timestamp não mudar em 60s mas dados ainda estiverem defasados,
+    // faz um download final via /content para garantir.
     {
       const _td=new Date(); _td.setHours(0,0,0,0);
       let _ltd=_latestPPADataDate();
@@ -6024,21 +6024,40 @@ async function onRefreshClick(){
         return _d>=2&&_td.getDate()>=3&&_ltd.getMonth()===_td.getMonth()&&_ltd.getFullYear()===_td.getFullYear();
       };
       if(_isStale()){
+        const _metaOnly='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=lastModifiedDateTime';
         const _apiContent='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content';
-        for(let _at=1;_at<=3;_at++){
+        let _knownMod=_initModTime; let _downloaded=false;
+        for(let _p=1;_p<=12;_p++){
           const _lbl=_ltd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-          progUpdate('🔄 Verificando…','Dados até '+_lbl+'. Aguardando OneDrive… (tentativa '+_at+'/3)',88+_at);
-          await new Promise(r=>setTimeout(r,8000));
+          progUpdate('🔄 Aguardando OneDrive…','Dados até '+_lbl+'. Sincronizando… '+(_p*5)+'s',88+Math.min(_p,5));
+          await new Promise(r=>setTimeout(r,5000));
+          try{
+            // Verificar se timestamp mudou
+            const _mr=await fetch(_metaOnly,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+            if(_mr.ok){
+              const _mm=await _mr.json();
+              const _newMod=_mm.lastModifiedDateTime||null;
+              if(_newMod&&_newMod!==_knownMod){
+                // Nova versão disponível no OneDrive → baixar agora
+                _knownMod=_newMod;
+                const _dr=await fetch(_apiContent,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+                if(_dr&&_dr.ok){
+                  const _b=await _dr.arrayBuffer();
+                  processWb(XLSX.read(_b,{type:'array',cellDates:true}));
+                  const _nl=_latestPPADataDate();
+                  if(_nl&&(!_ltd||_nl>_ltd)){_ltd=_nl; _downloaded=true;}
+                }
+                if(!_isStale()) break;
+              }
+            }
+          }catch(_re){console.warn('[poll '+_p+'] falhou:',_re);}
+        }
+        // Se após 60s o timestamp nunca mudou mas dados ainda defasados: tenta /content direto
+        if(_isStale()&&!_downloaded){
           try{
             const _dr=await fetch(_apiContent,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
-            if(_dr&&_dr.ok){
-              const _b=await _dr.arrayBuffer();
-              processWb(XLSX.read(_b,{type:'array',cellDates:true}));
-              const _nl=_latestPPADataDate();
-              if(_nl&&(!_ltd||_nl>_ltd)) _ltd=_nl;
-            }
-          }catch(_re){console.warn('[retry '+_at+'] falhou:',_re);}
-          if(!_isStale()) break;
+            if(_dr&&_dr.ok){processWb(XLSX.read(await _dr.arrayBuffer(),{type:'array',cellDates:true}));}
+          }catch(_re){console.warn('[retry fallback] falhou:',_re);}
         }
       }
     }
