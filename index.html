@@ -55,7 +55,7 @@ body{background:var(--bg);color:var(--t1);font-family:var(--font);font-size:13px
   background-attachment:fixed;}
 
 /* MICROANIMAÇÕES — entrada escalonada ao revelar o dashboard */
-@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1}}
 body.revealed .kpi-grid .kpi-card{animation:fadeUp .55s cubic-bezier(.22,.61,.36,1) both;}
 body.revealed .kpi-grid .kpi-card:nth-child(1){animation-delay:.04s}
 body.revealed .kpi-grid .kpi-card:nth-child(2){animation-delay:.09s}
