@@ -487,7 +487,7 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-cal-fw{position:relative!important}
 #page-must .must-cal-trigger{height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(107,139,245,.40);background:rgba(107,139,245,.12);color:#fff;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:border-color .15s,background .15s}
 #page-must .must-cal-trigger:hover,#page-must .must-cal-trigger.open{border-color:rgba(107,139,245,.65);background:rgba(107,139,245,.24)}
-#page-must .must-cal-popup{display:none;position:absolute;top:calc(100% + 8px);right:0;z-index:9999;background:rgba(8,11,20,.97);border:1px solid rgba(107,139,245,.22);border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.80),0 0 0 1px rgba(107,139,245,.05);backdrop-filter:blur(24px);overflow:hidden;min-width:300px;animation:mustCalIn .13s ease}
+#page-must .must-cal-popup{display:none;position:fixed;top:auto;right:auto;z-index:99999;background:rgba(8,11,20,.97);border:1px solid rgba(107,139,245,.22);border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.80),0 0 0 1px rgba(107,139,245,.05);backdrop-filter:blur(24px);overflow:hidden;min-width:300px;animation:mustCalIn .13s ease}
 @keyframes mustCalIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
 #page-must .must-cal-popup.open{display:block}
 #page-must .must-cal-popup .mc-sec{padding:10px 14px}
@@ -5133,9 +5133,10 @@ function mustFilterRows(rows){
 function mustSyncFilterVisibility(){
   const gran=filters.mustGran||'15min';
   const needsDay=['15min','30min','hora'].includes(gran);
+  const selM=filters.mustSelectedMonths||[];
   const daySection=document.getElementById('mustDaySection');
   const rangeSection=document.getElementById('mustRangeSection');
-  if(daySection) daySection.style.display=needsDay?'block':'none';
+  if(daySection) daySection.style.display=(needsDay&&selM.length===1)?'block':'none';
   if(rangeSection) rangeSection.style.display=needsDay?'none':'block';
   if(typeof _mustUpdateCalTrigger==='function') _mustUpdateCalTrigger();
 }
@@ -5152,12 +5153,13 @@ function _applyMustCal(){
       if(dayEl) dayEl.value=filters.mustDay;
     }
   } else {
-    if(filters.mustMonth){
-      const mDays=_mustAvailableDaysForMonth(avDays,filters.mustYear,filters.mustMonth);
-      const mi=parseInt(filters.mustMonth,10)-1;
-      const dim=new Date(parseInt(filters.mustYear,10),mi+1,0).getDate();
-      filters.mustPerIni=mDays.length?mDays[0]:(filters.mustYear+'-'+filters.mustMonth+'-01');
-      filters.mustPerFim=mDays.length?mDays[mDays.length-1]:(filters.mustYear+'-'+filters.mustMonth+'-'+String(dim).padStart(2,'0'));
+    const selM=filters.mustSelectedMonths||[];
+    if(selM.length>0){
+      const allDays=selM.reduce((a,m)=>a.concat(_mustAvailableDaysForMonth(avDays,filters.mustYear,m)),[]).sort();
+      if(allDays.length){
+        filters.mustPerIni=allDays[0];
+        filters.mustPerFim=allDays[allDays.length-1];
+      }
     } else if(filters.mustYear){
       const yDays=_mustAvailableDaysForMonth(avDays,filters.mustYear,'');
       filters.mustPerIni=yDays.length?yDays[0]:(filters.mustYear+'-01-01');
@@ -5185,6 +5187,9 @@ function mustInitFilter(){
   if(!filters.mustYear || !years.includes(filters.mustYear)) filters.mustYear=currentParts.year||years[years.length-1]||'';
   let months=_mustAvailableMonths(availableDays, filters.mustYear);
   if(!filters.mustMonth || !months.includes(filters.mustMonth)) filters.mustMonth=(months.includes(currentParts.month)?currentParts.month:(months[months.length-1]||''));
+  filters.mustSelectedMonths=(filters.mustSelectedMonths||[]).filter(m=>months.includes(m));
+  if(!filters.mustSelectedMonths.length) filters.mustSelectedMonths=filters.mustMonth?[filters.mustMonth]:[];
+  filters.mustMonth=filters.mustSelectedMonths[0]||filters.mustMonth;
   let scopedDays=_mustAvailableDaysForMonth(availableDays, filters.mustYear, filters.mustMonth);
   if(!scopedDays.includes(filters.mustDay)) filters.mustDay=scopedDays[scopedDays.length-1]||filters.mustDay;
 
@@ -5221,12 +5226,15 @@ function mustInitFilter(){
       filters.mustYear=b.dataset.myr||'';
       yearChips.querySelectorAll('[data-myr]').forEach(x=>x.classList.toggle('on',x.dataset.myr===filters.mustYear));
       const months2=_mustAvailableMonths(availableDays,filters.mustYear);
-      filters.mustMonth=months2.includes(filters.mustMonth)?filters.mustMonth:(months2[months2.length-1]||'');
-      const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
+      const kept=(filters.mustSelectedMonths||[]).filter(m=>months2.includes(m));
+      filters.mustSelectedMonths=kept.length?kept:[months2[months2.length-1]||''].filter(Boolean);
+      filters.mustMonth=filters.mustSelectedMonths[0]||'';
+      const allDays2=filters.mustSelectedMonths.reduce((a,m)=>a.concat(_mustAvailableDaysForMonth(availableDays,filters.mustYear,m)),[]).sort();
       if(['15min','30min','hora'].includes(filters.mustGran)){
+        const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
         _mustApplyDayValue(days2[days2.length-1]||filters.mustDay||'');
       } else {
-        if(days2.length){filters.mustPerIni=days2[0];filters.mustPerFim=days2[days2.length-1];}
+        if(allDays2.length){filters.mustPerIni=allDays2[0];filters.mustPerFim=allDays2[allDays2.length-1];}
         const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
         if(ie) ie.value=filters.mustPerIni||''; if(fe) fe.value=filters.mustPerFim||'';
         renderPageMUST();
@@ -5243,7 +5251,7 @@ function mustInitFilter(){
       mesExtra.innerHTML=`<button type="button" class="mc-allbtn${!filters.mustMonth?' on':''}" id="mustVerAno">Ver por ano</button>`;
       const vaBtn=document.getElementById('mustVerAno');
       if(vaBtn) vaBtn.onclick=()=>{
-        filters.mustMonth='';filters.mustDay='';
+        filters.mustMonth='';filters.mustSelectedMonths=[];filters.mustDay='';
         const avdAll=_mustAvailableDaysForMonth(availableDays,filters.mustYear,'');
         if(avdAll.length){filters.mustPerIni=avdAll[0];filters.mustPerFim=avdAll[avdAll.length-1];}
         const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
@@ -5260,24 +5268,32 @@ function mustInitFilter(){
     monthQuick.innerHTML=MNS2.map((s,i)=>{
       const mk=String(i+1).padStart(2,'0');
       const avail=months.includes(mk);
-      const isOn=filters.mustMonth===mk;
+      const isOn=(filters.mustSelectedMonths||[]).includes(mk);
       const isNow=i===nowDate.getMonth()&&filters.mustYear===String(nowDate.getFullYear());
       return `<button type="button" class="mc-mchip${isOn?' on':''}${isNow?' now':''}" style="${avail?'':'opacity:.22;cursor:default'}" data-mmquick="${mk}">${s}</button>`;
     }).join('');
     monthQuick.querySelectorAll('[data-mmquick]').forEach(b=>b.addEventListener('click',()=>{
       const mk=b.dataset.mmquick;
       if(!months.includes(mk)) return;
-      filters.mustMonth=mk;
-      monthQuick.querySelectorAll('[data-mmquick]').forEach(x=>x.classList.toggle('on',x.dataset.mmquick===filters.mustMonth));
-      const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,filters.mustMonth);
-      if(['15min','30min','hora'].includes(filters.mustGran)){
+      const sel=(filters.mustSelectedMonths||[]).slice();
+      const ix=sel.indexOf(mk);
+      if(ix>=0){ if(sel.length>1) sel.splice(ix,1); }
+      else { sel.push(mk); }
+      filters.mustSelectedMonths=sel.sort();
+      filters.mustMonth=sel[0]||'';
+      monthQuick.querySelectorAll('[data-mmquick]').forEach(x=>x.classList.toggle('on',sel.includes(x.dataset.mmquick)));
+      const needsDayX=['15min','30min','hora'].includes(filters.mustGran);
+      if(needsDayX&&sel.length===1){
+        const days2=_mustAvailableDaysForMonth(availableDays,filters.mustYear,sel[0]);
         _mustApplyDayValue(days2[days2.length-1]||filters.mustDay||'');
       } else {
-        if(days2.length){
-          filters.mustPerIni=days2[0]; filters.mustPerFim=days2[days2.length-1];
+        const allDays=sel.reduce((a,m)=>a.concat(_mustAvailableDaysForMonth(availableDays,filters.mustYear,m)),[]).sort();
+        if(allDays.length){
+          filters.mustPerIni=allDays[0]; filters.mustPerFim=allDays[allDays.length-1];
           const ie=document.getElementById('mustPerIni'),fe=document.getElementById('mustPerFim');
           if(ie) ie.value=filters.mustPerIni; if(fe) fe.value=filters.mustPerFim;
         }
+        mustSyncFilterVisibility();
         renderPageMUST();
       }
     }));
@@ -5521,20 +5537,36 @@ function _mustUpdateCalTrigger(){
     var d=parseDate(filters.mustDay);
     if(d) txt=d.getDate()+' '+S[d.getMonth()]+' '+d.getFullYear();
     else txt=filters.mustDay;
-  } else if(filters.mustMonth&&filters.mustYear){
-    txt=S[parseInt(filters.mustMonth,10)-1]+' '+filters.mustYear;
+  } else if((filters.mustSelectedMonths||[]).length>1&&filters.mustYear){
+    var sorted=(filters.mustSelectedMonths||[]).slice().sort();
+    txt=S[parseInt(sorted[0],10)-1]+'–'+S[parseInt(sorted[sorted.length-1],10)-1]+' '+filters.mustYear;
+  } else if((filters.mustSelectedMonths||[]).length===1&&filters.mustYear){
+    txt=S[parseInt(filters.mustSelectedMonths[0],10)-1]+' '+filters.mustYear;
+  } else if(filters.mustYear){
+    txt=filters.mustYear;
   } else {
     txt='— —';
   }
   label.textContent=txt;
 }
 (function(){
+  var popup=document.getElementById('mustCalPopup');
+  if(popup) popup.addEventListener('click',function(e){e.stopPropagation();});
+  function positionMustPopup(){
+    var trigger=document.getElementById('mustCalTrigger');
+    if(!popup||!trigger) return;
+    var r=trigger.getBoundingClientRect();
+    popup.style.top=(r.bottom+6)+'px';
+    popup.style.right=Math.max(0,window.innerWidth-r.right)+'px';
+    popup.style.left='auto';
+    popup.style.bottom='auto';
+  }
   document.addEventListener('click',function(e){
     var trigger=document.getElementById('mustCalTrigger');
-    var popup=document.getElementById('mustCalPopup');
     if(!popup||!trigger) return;
     if(trigger===e.target||trigger.contains(e.target)){
       var open=popup.classList.contains('open');
+      if(!open) positionMustPopup();
       popup.classList.toggle('open',!open);
       trigger.classList.toggle('open',!open);
       return;
