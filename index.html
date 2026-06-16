@@ -485,6 +485,7 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-day-nav:disabled{opacity:.35;cursor:not-allowed}
 #page-must .must-range-sep{color:var(--t3);font-size:11px}
 #page-must .must-cal-fw{position:relative!important}
+#page-must .must-cal-fw.fg{backdrop-filter:none!important}
 #page-must .must-cal-trigger{height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(107,139,245,.40);background:rgba(107,139,245,.12);color:#fff;font-size:12px;font-weight:700;letter-spacing:.04em;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:border-color .15s,background .15s}
 #page-must .must-cal-trigger:hover,#page-must .must-cal-trigger.open{border-color:rgba(107,139,245,.65);background:rgba(107,139,245,.24)}
 #page-must .must-cal-popup{display:none;position:fixed;top:auto;right:auto;z-index:99999;background:rgba(8,11,20,.97);border:1px solid rgba(107,139,245,.22);border-radius:12px;box-shadow:0 12px 48px rgba(0,0,0,.80),0 0 0 1px rgba(107,139,245,.05);backdrop-filter:blur(24px);overflow:hidden;min-width:300px;animation:mustCalIn .13s ease}
@@ -2603,8 +2604,8 @@ function doLogin(){
     sessionStorage.setItem('mrd_auth','1');
     err.style.display='none';
     requestAnimationFrame(()=>document.body.classList.add('revealed'));
-    // Carrega dados automaticamente: prioriza URL pública (externos), depois OneDrive (internos)
-    if(DATA_URL){ autoLoadFromUrl(); } else if(localStorage.getItem('mrd_refresh_token')){ onRefreshClick(); }
+    // Carrega dados automaticamente: prioriza OneDrive (autenticados, dados sempre frescos), depois URL pública
+    if(localStorage.getItem('mrd_refresh_token')){ onRefreshClick(); } else if(DATA_URL){ autoLoadFromUrl(); }
   } else {
     err.style.display='block';
     document.getElementById('loginPass').value='';
@@ -2615,8 +2616,8 @@ function doLogin(){
 if(sessionStorage.getItem('mrd_auth')==='1'){
   document.getElementById('loginOverlay').style.display='none';
   requestAnimationFrame(()=>document.body.classList.add('revealed'));
-  // Carrega dados automaticamente: prioriza URL pública (externos), depois OneDrive (internos)
-  if(DATA_URL){ setTimeout(()=>{try{autoLoadFromUrl();}catch(e){}},400); } else if(localStorage.getItem('mrd_refresh_token')){ setTimeout(()=>{try{onRefreshClick();}catch(e){}},400); }
+  // Carrega dados automaticamente: prioriza OneDrive (autenticados, dados sempre frescos), depois URL pública
+  if(localStorage.getItem('mrd_refresh_token')){ setTimeout(()=>{try{onRefreshClick();}catch(e){}},400); } else if(DATA_URL){ setTimeout(()=>{try{autoLoadFromUrl();}catch(e){}},400); }
 }
 
 // ═══ PAGE NAVIGATION ═══════════════════════════════════════════
@@ -2687,7 +2688,7 @@ function applyPageChrome(page){
 }
 function switchPage(page){
   var _mp=document.getElementById('mustCalPopup'),_mt=document.getElementById('mustCalTrigger');
-  if(_mp){_mp.classList.remove('open');_mp.style.display='';}
+  if(_mp){_mp.classList.remove('open');_mp.style.display='none';}
   if(_mt) _mt.classList.remove('open');
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const nextPage=document.getElementById('page-'+page);
@@ -5338,7 +5339,7 @@ function mustInitFilter(){
     applyBtn.onclick=()=>{
       _applyMustCal();
       const popup=document.getElementById('mustCalPopup'),trigger=document.getElementById('mustCalTrigger');
-      if(popup) popup.classList.remove('open'); if(trigger) trigger.classList.remove('open');
+      if(popup){popup.classList.remove('open');popup.style.display='none';} if(trigger) trigger.classList.remove('open');
     };
   }
 
@@ -5557,16 +5558,19 @@ function _toggleMustCal(e){
   var popup=document.getElementById('mustCalPopup');
   var trigger=document.getElementById('mustCalTrigger');
   if(!popup||!trigger) return;
-  var open=popup.classList.contains('open');
-  if(!open){
+  var isOpen=popup.style.display==='block';
+  if(!isOpen){
     var r=trigger.getBoundingClientRect();
     popup.style.top=(r.bottom+6)+'px';
     popup.style.right=Math.max(0,window.innerWidth-r.right)+'px';
     popup.style.left='auto';
     popup.style.bottom='auto';
+    popup.style.display='block';
+    trigger.classList.add('open');
+  } else {
+    popup.style.display='none';
+    trigger.classList.remove('open');
   }
-  popup.classList.toggle('open',!open);
-  trigger.classList.toggle('open',!open);
 }
 (function(){
   var popup=document.getElementById('mustCalPopup');
@@ -5574,10 +5578,10 @@ function _toggleMustCal(e){
   document.addEventListener('click',function(e){
     var p=document.getElementById('mustCalPopup');
     var t=document.getElementById('mustCalTrigger');
-    if(!p||!p.classList.contains('open')) return;
+    if(!p||p.style.display!=='block') return;
     if(t&&t.contains(e.target)) return;
     if(!p.contains(e.target)){
-      p.classList.remove('open');
+      p.style.display='none';
       if(t) t.classList.remove('open');
     }
   });
