@@ -6010,26 +6010,34 @@ async function onRefreshClick(){
     progUpdate('🔄 Processando…','Lendo planilha e calculando KPIs…',85);
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     processWb(wb);
-    // Auto-retry: se o dado mais recente com produção é ≥2 dias antes de hoje e ainda
-    // estamos no mesmo mês, o OneDrive provavelmente ainda está sincronizando.
-    // Aguarda 3s e re-baixa uma vez — resolve o "1ª atualização pega versão antiga".
+    // Auto-retry: se dado mais recente ≥2 dias antes de hoje e mesmo mês,
+    // o CDN ou OneDrive ainda não propagou a versão nova.
+    // Tenta até 3x com 8s de intervalo usando /content (endpoint direto, sem CDN).
     {
       const _td=new Date(); _td.setHours(0,0,0,0);
-      const _ltd=_latestPPADataDate();
-      const _isThisMonth=_ltd&&_ltd.getMonth()===_td.getMonth()&&_ltd.getFullYear()===_td.getFullYear();
-      const _dbh=_ltd?Math.floor((_td-_ltd)/86400000):-1;
-      if(_dbh>=2&&_td.getDate()>=3&&_isThisMonth){
-        const _lbl=_ltd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
-        progUpdate('🔄 Verificando…','Dados mais recentes: '+_lbl+'. OneDrive pode estar sincronizando. Aguardando…',90);
-        await new Promise(r=>setTimeout(r,3000));
-        try{
-          const _mu2='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl';
-          const _mr2=await fetch(_mu2,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
-          let _dr2;
-          if(_mr2.ok){const _m2=await _mr2.json();const _du2=_m2['@microsoft.graph.downloadUrl'];if(_du2)_dr2=await fetch(_du2,{cache:'no-store'});}
-          if(!_dr2||!_dr2.ok) _dr2=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
-          if(_dr2&&_dr2.ok){const _b2=await _dr2.arrayBuffer();processWb(XLSX.read(_b2,{type:'array',cellDates:true}));}
-        }catch(_re){console.warn('[retry] falhou:',_re);}
+      let _ltd=_latestPPADataDate();
+      const _isStale=()=>{
+        if(!_ltd) return false;
+        const _d=Math.floor((_td-_ltd)/86400000);
+        return _d>=2&&_td.getDate()>=3&&_ltd.getMonth()===_td.getMonth()&&_ltd.getFullYear()===_td.getFullYear();
+      };
+      if(_isStale()){
+        const _apiContent='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content';
+        for(let _at=1;_at<=3;_at++){
+          const _lbl=_ltd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'});
+          progUpdate('🔄 Verificando…','Dados até '+_lbl+'. Aguardando OneDrive… (tentativa '+_at+'/3)',88+_at);
+          await new Promise(r=>setTimeout(r,8000));
+          try{
+            const _dr=await fetch(_apiContent,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+            if(_dr&&_dr.ok){
+              const _b=await _dr.arrayBuffer();
+              processWb(XLSX.read(_b,{type:'array',cellDates:true}));
+              const _nl=_latestPPADataDate();
+              if(_nl&&(!_ltd||_nl>_ltd)) _ltd=_nl;
+            }
+          }catch(_re){console.warn('[retry '+_at+'] falhou:',_re);}
+          if(!_isStale()) break;
+        }
       }
     }
     progDone(true,'Dashboard atualizado com sucesso! '+dashData.patamares.length.toLocaleString()+' patamares carregados.');
