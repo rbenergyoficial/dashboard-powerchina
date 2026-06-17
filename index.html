@@ -4470,11 +4470,15 @@ function renderPagePPA(type){
   })();
   // naoPpaTotal: aggregate ML/non-PPA across all selected months
   const naoPpaTotal=(_v42MatchMs||[M]).reduce((s,mm)=>s+(mm.daily||[]).reduce((s2,r)=>s2+num(r.naoppa),0),0);
+  // Multi-month aggregators for scope+period aware charts
+  const prodAgg=p=>+(_v42MatchMs||[M]).reduce((s,mm)=>s+calcMonth(mm).prod(p),0).toFixed(2);
+  const metaAgg=p=>+(_v42MatchMs||[M]).reduce((s,mm)=>s+calcMonth(mm).metap(p),0).toFixed(2);
+  const pctpAgg=p=>{const m=metaAgg(p);return m>0?prodAgg(p)/m*100:0;};
 
   // ── KPIs ──
   const kpiParks=(sel==='todos'?chartParksBase:[sel]);
-  const ger=+kpiParks.reduce((s,p)=>s+prod(p),0).toFixed(2);
-  const meta=+kpiParks.reduce((s,p)=>s+metap(p),0).toFixed(2);
+  const ger=+kpiParks.reduce((s,p)=>s+prodAgg(p),0).toFixed(2);
+  const meta=+kpiParks.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
   window._ppaCurKpi={ger,meta};
   const kpiIniDate=filters.ppaPerIni?parseDate(filters.ppaPerIni):null;
   const kpiFimDate=filters.ppaPerFim?parseDate(filters.ppaPerFim):null;
@@ -4967,9 +4971,9 @@ function renderPagePPA(type){
     scales:{x:evXAxis,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Meta vs Produzido ──
-  mkChart('cPPAmeta',{type:'bar',data:{labels:allParks,datasets:[
-    {label:_T('Meta (garantido)'),data:allParks.map(metap),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5},
-    {label:_T('Produzido'),data:allParks.map(prod),backgroundColor:allParks.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5}
+  mkChart('cPPAmeta',{type:'bar',data:{labels:chartParksBase,datasets:[
+    {label:_T('Meta (garantido)'),data:chartParksBase.map(metaAgg),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5},
+    {label:_T('Produzido'),data:chartParksBase.map(prodAgg),backgroundColor:chartParksBase.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5}
   ]},options:{...CHART_DEFAULTS,scales:{x:CHART_DEFAULTS.scales.x,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Participação (donut) ──
@@ -5097,19 +5101,19 @@ function renderPagePPA(type){
   // ── % da Meta Atingida por parque ──
   mkChart('cPPAcomp',{
     type:'bar',
-    data:{labels:allParks,datasets:[
+    data:{labels:chartParksBase,datasets:[
       {
         label:'% da meta',
-        data:allParks.map(p=>+pctp(p).toFixed(1)),
+        data:chartParksBase.map(p=>+pctpAgg(p).toFixed(1)),
         backgroundColor:(ctx)=>{
-          const park=allParks[ctx.dataIndex];
-          const pct=+pctp(park).toFixed(1);
+          const park=chartParksBase[ctx.dataIndex];
+          const pct=+pctpAgg(park).toFixed(1);
           const base=pct>=100?(PPA_COL[park]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');
           return gradFrom(ctx,base);
         },
         borderColor:(ctx)=>{
-          const park=allParks[ctx.dataIndex];
-          const pct=+pctp(park).toFixed(1);
+          const park=chartParksBase[ctx.dataIndex];
+          const pct=+pctpAgg(park).toFixed(1);
           return pct>=100?(PPA_COL[park]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');
         },
         borderWidth:1.6,
@@ -5131,7 +5135,7 @@ function renderPagePPA(type){
   // ── Cards dos parques ──
   const showParks=sel==='todos'?chartParksBase:[sel];
   document.getElementById('ppaCards').innerHTML=showParks.map(p=>{
-    const v=prod(p), m=metap(p), tx=pctp(p), ok=tx>=100, col=PPA_COL[p], w=Math.min(100,tx);
+    const v=prodAgg(p), m=metaAgg(p), tx=pctpAgg(p), ok=tx>=100, col=PPA_COL[p], w=Math.min(100,tx);
     return `<div class="kpi-card" style="border-color:${col}44">
       <div class="kpi-icon-wrap"><div class="kpi-icon-box" style="background:linear-gradient(140deg,${col},${col}aa);border-color:transparent"><span style="color:#0a0a10;font-weight:800;font-size:10px;font-family:var(--mono)">${p}</span></div>
         <span style="font-size:11px;font-weight:700;color:var(--t2)">UFV ${p.replace('M','Mauriti ')}</span></div>
