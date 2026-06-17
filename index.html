@@ -4973,23 +4973,24 @@ function renderPagePPA(type){
     const _pp=_tot>0?(gerTotal/_tot*100).toFixed(1):'0.0';
     const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
     const _cs=filters.ppaChartScope||'todos';
+    const _splt_lt=document.documentElement.getAttribute('data-theme')==='light';
     const _lbl='font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase';
     const _card=(scope,cor,bgAtivo,bgInativo,nome,val,pct)=>{
       const ativo=_cs===scope;
       return `<div data-scope="${scope}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;border:1.5px solid ${cor}${ativo?'cc':'40'};background:${ativo?bgAtivo:bgInativo};cursor:pointer;margin-bottom:9px;transition:border-color .15s,background .15s">
         <div>
           <div style="${_lbl};color:${cor};margin-bottom:4px">● ${nome}</div>
-          <div style="font-size:17px;font-weight:800;color:#e8e0ff;letter-spacing:-.03em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:3px">MWh</span></div>
+          <div style="font-size:17px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.03em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:3px">MWh</span></div>
         </div>
         <div style="background:${cor}33;border-radius:8px;padding:6px 12px;font-size:16px;font-weight:800;color:${cor};letter-spacing:-.02em">${pct}%</div>
       </div>`;
     };
     _si.innerHTML=
       `<div style="${_lbl};color:#4a5a6a;margin-bottom:4px">TOTAL DO PERÍODO</div>`+
-      `<div style="font-size:20px;font-weight:800;color:#fff;letter-spacing:-.04em;margin-bottom:16px">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:5px">MWh</span></div>`+
+      `<div style="font-size:20px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em;margin-bottom:16px">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:5px">MWh</span></div>`+
       _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',gerTotal,_pp)+
       _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm)+
-      `<div data-scope="todos" style="text-align:center;padding:7px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6a7a9a;background:rgba(255,255,255,.03)">↺ Todos os escopos</div>`;
+      `<div data-scope="todos" style="text-align:center;padding:7px 12px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ Todos os escopos</div>`;
     _si.querySelectorAll('[data-scope]').forEach(el=>{
       el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
     });
@@ -11750,6 +11751,7 @@ window._ppaChartGet=function(id){return charts[id];};
       var _snapCfg=cfg, _snapStats=_stats;
       requestAnimationFrame(function(){
         try{
+          var _v40lt=document.documentElement.getAttribute('data-theme')==='light';
           /* clean up previous injections */
           var _le=document.getElementById('ppaRankLegendV40'); if(_le) _le.remove();
           var _oe=document.getElementById('ppaRankStatsV40');  if(_oe) _oe.remove();
@@ -11777,7 +11779,7 @@ window._ppaChartGet=function(id){return charts[id];};
               }
               var _item=document.createElement('span');
               _item.style.cssText='display:inline-flex;align-items:center;gap:4px;white-space:nowrap;cursor:pointer;opacity:1;transition:opacity .2s;user-select:none';
-              _item.innerHTML=_sw+'<span style="font-size:10px;color:#C0CDE0;line-height:1">'+ds.label+'</span>';
+              _item.innerHTML=_sw+'<span style="font-size:10px;color:'+(_v40lt?'#3c4e64':'#C0CDE0')+';line-height:1">'+ds.label+'</span>';
               (function(idx,el){
                 el.addEventListener('click',function(){
                   var ch=(typeof charts!=='undefined')&&charts['cPPARank'];
@@ -11885,7 +11887,6 @@ window._ppaChartGet=function(id){return charts[id];};
               _html+='</div>';
             }
             /* ── adapt hardcoded dark inline colors to light theme ── */
-            var _v40lt=document.documentElement.getAttribute('data-theme')==='light';
             if(_v40lt){
               _html=_html
                 .replace(/color:#fff;/g,'color:#13121f;')
@@ -11954,7 +11955,13 @@ window._ppaChartGet=function(id){return charts[id];};
         }
         if(!s.border) s.border={};
         if(k!=='y2') s.border.display=false;
-        if(s.ticks && !s.ticks.color) s.ticks.color=_lt?'#606480':'#8E9AA5';
+        if(_lt){
+          if(!s.ticks) s.ticks={};
+          s.ticks.color='#5a6070';
+          if(s.title&&s.title.display) s.title.color='#3c4e64';
+        } else if(s.ticks&&!s.ticks.color){
+          s.ticks.color='#8E9AA5';
+        }
       });
     }
 
@@ -11990,7 +11997,7 @@ window._ppaChartGet=function(id){return charts[id];};
             return p.length===2?[p[0],p[1]]:lb;
           };
           _xt.font={size:8,weight:'700'};
-          _xt.color='#7B8FA8';
+          _xt.color=_lt?'#3c4e64':'#7B8FA8';
         }
         o.layout.padding={top:4,bottom:16,left:0,right:8};
       } else {
@@ -12053,7 +12060,8 @@ window._ppaChartGet=function(id){return charts[id];};
             var xMid  = (xPrev + xCurr) / 2;
             ctx.save();
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+            var _sp_lt=document.documentElement.getAttribute('data-theme')==='light';
+            ctx.strokeStyle = _sp_lt?'rgba(0,0,0,0.15)':'rgba(255,255,255,0.18)';
             ctx.lineWidth   = 1;
             ctx.setLineDash([3,3]);
             ctx.moveTo(xMid, ca.top);
@@ -12139,7 +12147,37 @@ window._ppaChartGet=function(id){return charts[id];};
       '#ppaFiltV42 .v42-li.on .v42-ldot{opacity:1}'+
       '#ppaFiltV42 .v42-footer{border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:flex-end;padding:9px 14px}'+
       '#ppaFiltV42 .v42-apply{height:30px;padding:0 22px;border-radius:7px;border:none;background:rgba(107,139,245,.65);color:#fff;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.07em;transition:background .13s}'+
-      '#ppaFiltV42 .v42-apply:hover{background:rgba(107,139,245,.85)}';
+      '#ppaFiltV42 .v42-apply:hover{background:rgba(107,139,245,.85)}'+
+      'html[data-theme="light"] #ppaFiltV42{background:rgba(244,245,251,.97);border-bottom-color:rgba(0,0,0,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-bar{background:rgba(255,255,255,.90);border-color:rgba(107,139,245,.22);box-shadow:0 2px 12px rgba(0,0,0,.10),inset 0 1px 0 rgba(255,255,255,.80)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-cal-btn{color:#3c4e64;border-color:rgba(107,139,245,.34);background:rgba(107,139,245,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-cal-btn:hover{background:rgba(107,139,245,.15);border-color:rgba(107,139,245,.50);color:#1e293b}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-cal-btn.active{background:rgba(107,139,245,.20);border-color:rgba(107,139,245,.55)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-sep{background:rgba(0,0,0,.10)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dd{border-color:rgba(0,0,0,.10)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dd:hover{border-color:rgba(0,0,0,.20);background:rgba(0,0,0,.04)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dd.active{border-color:rgba(107,139,245,.42);background:rgba(107,139,245,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ddlbl{color:#6070a0}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ddval{color:#2c3e6a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ddarr{color:#6070a0}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-panel{background:rgba(248,249,254,.99);border-color:rgba(107,139,245,.20);box-shadow:0 12px 40px rgba(0,0,0,.16),0 0 0 1px rgba(107,139,245,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-sec-lbl{color:#8090b8}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-sec+.v42-sec{border-top-color:rgba(0,0,0,.06)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ychip{color:#3c5070;border-color:rgba(0,0,0,.10);background:rgba(0,0,0,.02)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ychip:hover{color:#1e3a5c;border-color:rgba(107,139,245,.40);background:rgba(107,139,245,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-ychip.on{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.52);color:#1e2e5a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-mchip{color:#3c5070;border-color:rgba(0,0,0,.10)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-mchip:hover{color:#1e3a5c;border-color:rgba(107,139,245,.40);background:rgba(107,139,245,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-mchip.on{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.52);color:#1e2e5a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dlbl{color:#8090b8}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-allbtn{color:#3c5070;border-color:rgba(0,0,0,.10);background:rgba(0,0,0,.02)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dchip{color:#3c5070;border-color:rgba(0,0,0,.08)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dchip:hover{background:rgba(107,139,245,.08);color:#1e3a5c;border-color:rgba(107,139,245,.28)}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-dchip.on{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.46);color:#1e2e5a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-li{color:#3c5070}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-li:hover{background:rgba(107,139,245,.10);color:#1e2e5a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-li.on{background:rgba(107,139,245,.16);color:#1e2e5a}'+
+      'html[data-theme="light"] #ppaFiltV42 .v42-footer{border-top-color:rgba(0,0,0,.08)}';
     s.textContent=_v42css;
     document.head.appendChild(s);
   })();
