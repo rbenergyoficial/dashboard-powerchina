@@ -443,9 +443,12 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa .ppa-top-controls .fbar-label{margin:0;font-size:10px;letter-spacing:.08em}
 #page-ppa .ppa-compact-select{min-width:118px}
 #page-ppa .ppa-local-controls{display:none!important}
-#page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:300px;width:100%;padding:8px 6px 4px;gap:20px}
+#page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:300px;width:100%;padding:8px 6px 4px;gap:20px;overflow:hidden}
 #page-ppa .ppa-donut-shell canvas{flex:0 0 48%;height:100%!important;cursor:pointer}
-#page-ppa .ppa-split-info{flex:1;display:flex;flex-direction:column;justify-content:center;min-width:0}
+#page-ppa .ppa-split-info{flex:1;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;overflow-y:auto;max-height:284px;padding-right:2px}
+#page-ppa .ppa-split-info::-webkit-scrollbar{width:3px}
+#page-ppa .ppa-split-info::-webkit-scrollbar-track{background:transparent}
+#page-ppa .ppa-split-info::-webkit-scrollbar-thumb{background:rgba(107,139,245,.30);border-radius:99px}
 #page-ppa #sec-ppa-analysis .cc-body{height:300px!important;max-height:300px!important;overflow:hidden}
 #page-ppa #sec-ppa-analysis .cc-body.ppa-comp-body{height:300px!important;max-height:300px!important;overflow:hidden}
 #page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:300px!important}
@@ -1377,7 +1380,7 @@ function _themeCharts(light){
       </div>
       <div class="chart-row cols-2">
         <div class="cc">
-          <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub">PPA BRK vs demais parques</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub" id="ppaSplitSubtitle">PPA BRK vs demais parques</div></div></div>
           <div class="ppa-donut-shell"><canvas id="cPPAsplit"></canvas><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
         </div>
         <div class="cc">
@@ -4990,6 +4993,12 @@ function renderPagePPA(type){
   const ppaBrkProd=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num(mm.produzida&&mm.produzida[p]),0),0).toFixed(2);
   const ppaBrkMeta=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0),0).toFixed(2);
   const mlMeta=+_splitMths.reduce((s,mm)=>s+(num(mm.meta&&mm.meta._ml)||mlParks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0)),0).toFixed(2);
+  // Update donut subtitle based on scope
+  const _splitSubEl=document.getElementById('ppaSplitSubtitle');
+  if(_splitSubEl) _splitSubEl.textContent=_T(
+    chartScope==='ppa'?'Parques PPA BRK · distribuição por parque':
+    chartScope==='ml' ?'Parques ML · distribuição por parque':
+    'PPA BRK vs demais parques');
   // Donut data: per-park breakdown when scope is ppa/ml, PPA vs ML when todos
   const _donutByPark=chartScope!=='todos';
   let _donutLabels,_donutData,_donutBgCol,_donutBdCol;
