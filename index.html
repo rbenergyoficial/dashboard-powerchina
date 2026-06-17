@@ -1375,7 +1375,7 @@ function _themeCharts(light){
           <div class="cc-body" style="height:300px"><canvas id="cPPAevo"></canvas></div>
         </div>
         <div class="cc">
-          <div class="cc-head"><div><div class="cc-title">Meta vs Realizado por Parque</div><div class="cc-sub">Valor garantido × energia gerada (MWh)</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Meta vs Realizado por Parque</div><div class="cc-sub">Valor garantido × energia gerada (MWh)</div></div><div class="toggle-grp" id="tg-ppameta"><button class="toggle-btn on" data-chart="ppameta" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ppameta" data-t="line">LINE</button></div></div>
           <div class="cc-body" style="height:300px"><canvas id="cPPAmeta"></canvas></div>
         </div>
       </div>
@@ -1385,7 +1385,7 @@ function _themeCharts(light){
           <div class="ppa-donut-shell"><div class="ppa-donut-wrap"><canvas id="cPPAsplit"></canvas></div><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
         </div>
         <div class="cc">
-          <div class="cc-head"><div><div class="cc-title">Taxa de Conclusão por Parque</div><div class="cc-sub">% atingido da meta contratada</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Taxa de Conclusão por Parque</div><div class="cc-sub">% atingido da meta contratada</div></div><div class="toggle-grp" id="tg-ppacomp"><button class="toggle-btn on" data-chart="ppacomp" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ppacomp" data-t="line">LINE</button></div></div>
           <div class="cc-body ppa-comp-body" style="height:300px"><canvas id="cPPAcomp"></canvas></div>
         </div>
       </div>
@@ -4975,10 +4975,14 @@ function renderPagePPA(type){
     scales:{x:evXAxis,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Meta vs Produzido ──
-  mkChart('cPPAmeta',{type:'bar',data:{labels:chartParksBase,datasets:[
-    {label:_T('Meta (garantido)'),data:chartParksBase.map(metaAgg),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5},
-    {label:_T('Produzido'),data:chartParksBase.map(prodAgg),backgroundColor:chartParksBase.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5}
-  ]},options:{...CHART_DEFAULTS,scales:{x:CHART_DEFAULTS.scales.x,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
+  const _metaType=getToggle('ppameta');
+  const _metaDs1=_metaType==='line'
+    ?{label:_T('Meta (garantido)'),data:chartParksBase.map(metaAgg),borderColor:'#6b8bf5',backgroundColor:'rgba(107,139,245,.08)',borderDash:[6,3],borderWidth:2,fill:false,tension:.3,pointRadius:4,pointBackgroundColor:'#6b8bf5',pointBorderColor:'#fff',pointBorderWidth:1.5}
+    :{label:_T('Meta (garantido)'),data:chartParksBase.map(metaAgg),backgroundColor:'rgba(107,139,245,.32)',borderColor:'#6b8bf5',borderWidth:1,borderRadius:5};
+  const _metaDs2=_metaType==='line'
+    ?{label:_T('Produzido'),data:chartParksBase.map(prodAgg),borderColor:'#A855F7',backgroundColor:'rgba(168,85,247,.10)',fill:true,tension:.3,borderWidth:2.5,pointRadius:5,pointBackgroundColor:chartParksBase.map(p=>PPA_COL[p]||'#A855F7'),pointBorderColor:'#fff',pointBorderWidth:1.5,pointHoverRadius:7}
+    :{label:_T('Produzido'),data:chartParksBase.map(prodAgg),backgroundColor:chartParksBase.map(p=>PPA_COL[p]||'#A855F7'),borderRadius:5};
+  mkChart('cPPAmeta',{type:_metaType,data:{labels:chartParksBase,datasets:[_metaDs1,_metaDs2]},options:{...CHART_DEFAULTS,scales:{x:CHART_DEFAULTS.scales.x,y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}}}}});
 
   // ── Participação (donut) ──
   if(charts['cPPAsplit']){try{charts['cPPAsplit'].destroy();}catch(e){}delete charts['cPPAsplit'];}
@@ -5173,29 +5177,24 @@ function renderPagePPA(type){
   }
 
   // ── % da Meta Atingida por parque ──
+  const _compType=getToggle('ppacomp');
+  const _compPcts=chartParksBase.map(p=>+pctpAgg(p).toFixed(1));
+  const _compColors=chartParksBase.map(p=>{const pct=+pctpAgg(p).toFixed(1);return pct>=100?(PPA_COL[p]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');});
+  const _compDs=_compType==='line'
+    ?{label:'% da meta',data:_compPcts,
+        borderColor:(ctx)=>_compColors[ctx.dataIndex]||'#F5C84B',
+        backgroundColor:'rgba(245,200,75,.08)',
+        fill:true,tension:.3,borderWidth:2.5,
+        pointRadius:6,
+        pointBackgroundColor:_compColors,
+        pointBorderColor:'#fff',pointBorderWidth:1.5,pointHoverRadius:8}
+    :{label:'% da meta',data:_compPcts,
+        backgroundColor:(ctx)=>{const base=_compColors[ctx.dataIndex]||'#F5C84B';return gradFrom(ctx,base);},
+        borderColor:(ctx)=>_compColors[ctx.dataIndex]||'#F5C84B',
+        borderWidth:1.6,borderRadius:10,maxBarThickness:54,hoverBorderWidth:2.2};
   mkChart('cPPAcomp',{
-    type:'bar',
-    data:{labels:chartParksBase,datasets:[
-      {
-        label:'% da meta',
-        data:chartParksBase.map(p=>+pctpAgg(p).toFixed(1)),
-        backgroundColor:(ctx)=>{
-          const park=chartParksBase[ctx.dataIndex];
-          const pct=+pctpAgg(park).toFixed(1);
-          const base=pct>=100?(PPA_COL[park]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');
-          return gradFrom(ctx,base);
-        },
-        borderColor:(ctx)=>{
-          const park=chartParksBase[ctx.dataIndex];
-          const pct=+pctpAgg(park).toFixed(1);
-          return pct>=100?(PPA_COL[park]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');
-        },
-        borderWidth:1.6,
-        borderRadius:10,
-        maxBarThickness:54,
-        hoverBorderWidth:2.2
-      }
-    ]},
+    type:_compType,
+    data:{labels:chartParksBase,datasets:[_compDs]},
     options:{
       ...CHART_DEFAULTS,
       plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},metaLine:{value:100,label:_T('Meta 100%'),color:'#f0598c'}},
@@ -5964,6 +5963,8 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
     else if(chartId==='must') renderPageMUST(t);
     else if(chartId==='ppamain') renderPagePPA(t);
     else if(chartId==='ppaevo') renderPagePPA();
+    else if(chartId==='ppameta') renderPagePPA();
+    else if(chartId==='ppacomp') renderPagePPA();
     else if(chartId==='ufvliq') renderUFVliq(t);
     else if(chartId==='ufv2') renderUFV2(t);
     else if(chartId==='adv4') renderAdv4(t);
