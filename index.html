@@ -5089,72 +5089,82 @@ function renderPagePPA(type){
   const _si=document.getElementById('ppaSplitInfo');
   if(_si){
     const _tot=_splitTotal;
-    const _pp=_tot>0?(ppaBrkProd/_tot*100).toFixed(1):'0.0';
-    const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
     const _cs=filters.ppaChartScope||'todos';
     const _splt_lt=document.documentElement.getAttribute('data-theme')==='light';
-    const _lbl='font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase';
-    const _mbar=(val,meta,cor)=>{
-      const w=meta>0?Math.min(100,(val/meta*100)):0;
-      return `<div style="background:${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)'};border-radius:99px;height:4px;overflow:hidden;margin:5px 0 4px"><div style="height:100%;width:${w.toFixed(1)}%;background:${cor};border-radius:99px;transition:width .45s"></div></div>`;
-    };
-    const _card=(scope,cor,bgAtivo,bgInativo,nome,val,pct,meta)=>{
-      const ativo=_cs===scope;
+    // Card backgrounds adapt to theme so they're always clearly visible
+    const _cardBg=(col,ativo)=>_splt_lt
+      ?(ativo?`rgba(255,255,255,1) border-box`:`rgba(255,255,255,.95)`)
+      :(ativo?col+'28':col+'12');
+    const _txtMain=_splt_lt?'#0f172a':'#eef2ff';
+    const _txtSub=_splt_lt?'#475569':'#8898b8';
+    const _barBg=_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.10)';
+    const _btnBg=_splt_lt?'rgba(0,0,0,.05)':'rgba(255,255,255,.05)';
+    const _btnBd=_splt_lt?'rgba(0,0,0,.12)':'rgba(255,255,255,.12)';
+    const _btnTx=_splt_lt?'#475569':'#7a8899';
+    // Colored dot icon
+    const _dot=(col,size=10)=>`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${col};flex-shrink:0;box-shadow:0 0 6px ${col}88"></div>`;
+    // Achievement color
+    const _ac=(v,m,col)=>m>0?(v>=m?'#22c55e':v/m>=0.8?'#f5c842':'#f2495c'):col;
+    // Progress bar
+    const _pbar=(v,m,col)=>{const w=m>0?+Math.min(100,v/m*100).toFixed(1):0;return `<div style="background:${_barBg};border-radius:99px;height:4px;overflow:hidden;margin:5px 0 3px"><div style="height:100%;width:${w}%;background:${col};border-radius:99px;transition:width .5s"></div></div>`;};
+    // Generic park/scope card
+    const _mkCard=(dataScope,col,nome,val,meta,subLabel,clickable)=>{
+      const ac=_ac(val,meta,col);
       const achiev=meta>0?(val/meta*100).toFixed(1):'—';
-      const ac=meta>0?(val>=meta?'#22c55e':val/meta>=0.8?'#f5c842':'#f2495c'):cor;
-      return `<div data-scope="${scope}" style="display:flex;flex-direction:column;padding:10px 12px;border-radius:10px;border:1.5px solid ${cor}${ativo?'cc':'40'};background:${ativo?bgAtivo:bgInativo};cursor:pointer;margin-bottom:8px;transition:border-color .15s,background .15s">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-          <span style="${_lbl};color:${cor}">● ${nome}</span>
-          <span style="font-size:10px;font-weight:800;color:${ac};background:${ac}18;border:1px solid ${ac}44;border-radius:5px;padding:1px 6px">${achiev}%</span>
-        </div>
-        ${_mbar(val,meta,cor)}
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <span style="font-size:16px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.02em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:2px">MWh</span></span>
-          <span style="font-size:9px;color:#6a7a9a;text-align:right">META <strong style="color:${cor}">${_fmtMWh(meta)}</strong> MWh</span>
-        </div>
-        <div style="font-size:9px;color:#6a7a9a;margin-top:3px">${pct}% do total do complexo</div>
-      </div>`;
+      const ativo=dataScope&&_cs===dataScope;
+      const bg=_splt_lt?(ativo?'rgba(255,255,255,1)':'rgba(248,249,252,.95)'):(ativo?col+'28':col+'12');
+      const bd=ativo?col+'dd':(_splt_lt?col+'66':col+'40');
+      const sh=_splt_lt?(ativo?`0 2px 10px ${col}30,0 1px 3px rgba(0,0,0,.08)`:'0 1px 4px rgba(0,0,0,.06)'):'none';
+      return `<div ${dataScope?`data-scope="${dataScope}"`:''}  style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1.5px solid ${bd};background:${bg};box-shadow:${sh};${clickable?'cursor:pointer;':''}margin-bottom:7px;transition:border-color .2s,background .2s">`+
+        _dot(col,11)+
+        `<div style="flex:1;min-width:0">`+
+          `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px">`+
+            `<span style="font-size:10px;font-weight:700;color:${_splt_lt?'#2c3a5a':col};letter-spacing:.01em">${nome}</span>`+
+            `<span style="font-size:10px;font-weight:800;color:${ac};background:${ac}22;border:1px solid ${ac}55;border-radius:5px;padding:1px 6px">${achiev}%</span>`+
+          `</div>`+
+          `<div style="font-size:15px;font-weight:800;color:${_txtMain};letter-spacing:-.03em;line-height:1.1">${_fmtMWh(val)}<span style="font-size:9px;font-weight:400;color:${_txtSub};margin-left:3px">MWh</span></div>`+
+          _pbar(val,meta,col)+
+          `<div style="font-size:9px;color:${_txtSub}">${subLabel} · META <strong style="color:${col}">${_fmtMWh(meta)}</strong></div>`+
+        `</div>`+
+      `</div>`;
     };
-    const tMeta=ppaBrkMeta+mlMeta;
-    const tAchiev=tMeta>0?(_tot/tMeta*100).toFixed(1):'—';
-    const tAchC=tMeta>0?(_tot>=tMeta?'#22c55e':_tot/tMeta>=0.8?'#f5c842':'#f2495c'):'#6a7a9a';
+    // Back to all button
+    const _btnTodos=`<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_btnBd};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_btnTx};background:${_btnBg}">↺ TODOS OS ESCOPOS</div>`;
+    // Header total
+    const _hdrTotal=(cor,label,achiev,achC)=>
+      `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.08)'}">`+
+      _dot(cor,8)+
+      `<div><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${_txtSub}">${label}</div>`+
+      `<div style="font-size:17px;font-weight:800;color:${_txtMain};letter-spacing:-.04em;line-height:1">${_fmtMWh(_tot)}<span style="font-size:10px;color:${_txtSub};font-weight:400;margin-left:4px">MWh</span></div>`+
+      `<div style="font-size:9px;font-weight:700;color:${achC};margin-top:1px">${achiev}% atingido da meta</div>`+
+      `</div></div>`;
+
     if(_donutByPark){
       const _scopeColor=chartScope==='ppa'?'#A855F7':'#2DD4BF';
       const _scopeName=chartScope==='ppa'?'PPA BRK':'ML / Demais';
       const _scopeMeta=+chartParksBase.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
       const _scopeAchiev=_scopeMeta>0?(_tot/_scopeMeta*100).toFixed(1):'—';
-      const _scopeAchC=_scopeMeta>0?(_tot>=_scopeMeta?'#22c55e':_tot/_scopeMeta>=0.8?'#f5c842':'#f2495c'):_scopeColor;
-      const _pkCard=p=>{
-        const v=prodAgg(p), m=metaAgg(p);
-        const pct=_tot>0?(v/_tot*100).toFixed(1):'0.0';
-        const ac=m>0?(v>=m?'#22c55e':v/m>=0.8?'#f5c842':'#f2495c'):_scopeColor;
-        const achiev=m>0?(v/m*100).toFixed(1):'—';
-        const col=PPA_COL[p]||_scopeColor;
-        const w=m>0?Math.min(100,v/m*100):0;
-        return `<div style="display:flex;flex-direction:column;padding:8px 10px;border-radius:8px;border:1px solid ${col}44;background:${col}0a;margin-bottom:5px">`+
-          `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">`+
-          `<span style="${_lbl};color:${col}">● ${p}</span>`+
-          `<span style="font-size:10px;font-weight:800;color:${ac};background:${ac}18;border:1px solid ${ac}44;border-radius:5px;padding:1px 5px">${achiev}%</span></div>`+
-          `<div style="background:${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)'};border-radius:99px;height:3px;overflow:hidden;margin:4px 0 3px"><div style="height:100%;width:${w.toFixed(1)}%;background:${col};border-radius:99px;transition:width .45s"></div></div>`+
-          `<div style="display:flex;justify-content:space-between;align-items:baseline">`+
-          `<span style="font-size:13px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.02em">${_fmtMWh(v)}<span style="font-size:8px;color:#6a7a9a;font-weight:400;margin-left:2px">MWh</span></span>`+
-          `<span style="font-size:8px;color:#6a7a9a">META <strong style="color:${col}">${_fmtMWh(m)}</strong></span></div>`+
-          `<div style="font-size:8px;color:#6a7a9a;margin-top:2px">${pct}% do escopo</div></div>`;
-      };
+      const _scopeAchC=_ac(_tot,_scopeMeta,_scopeColor);
       _si.innerHTML=
-        `<div style="${_lbl};color:${_scopeColor};margin-bottom:2px">● ${_scopeName}</div>`+
-        `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
-        `<div style="font-size:10px;font-weight:700;color:${_scopeAchC};margin-bottom:10px">META ${_fmtMWh(_scopeMeta)} MWh · ${_scopeAchiev}% atingido</div>`+
-        chartParksBase.map(_pkCard).join('')+
-        `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
+        _hdrTotal(_scopeColor,_scopeName,_scopeAchiev,_scopeAchC)+
+        chartParksBase.map(p=>{
+          const v=prodAgg(p), m=metaAgg(p);
+          const pct=_tot>0?(v/_tot*100).toFixed(1):'0.0';
+          const col=PPA_COL[p]||_scopeColor;
+          return _mkCard(null,col,p,v,m,`${pct}% do escopo`,false);
+        }).join('')+
+        _btnTodos;
     } else {
+      const tMeta=ppaBrkMeta+mlMeta;
+      const tAchiev=tMeta>0?(_tot/tMeta*100).toFixed(1):'—';
+      const tAchC=_ac(_tot,tMeta,'#6b8bf5');
+      const _pp=_tot>0?(ppaBrkProd/_tot*100).toFixed(1):'0.0';
+      const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
       _si.innerHTML=
-        `<div style="${_lbl};color:#4a5a6a;margin-bottom:2px">TOTAL DO PERÍODO</div>`+
-        `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
-        `<div style="font-size:10px;font-weight:700;color:${tAchC};margin-bottom:10px">META ${_fmtMWh(tMeta)} MWh · ${tAchiev}% atingido</div>`+
-        _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',ppaBrkProd,_pp,ppaBrkMeta)+
-        _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm,mlMeta)+
-        `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
+        _hdrTotal('#6b8bf5','TOTAL DO PERÍODO',tAchiev,tAchC)+
+        _mkCard('ppa','#A855F7','PPA BRK',ppaBrkProd,ppaBrkMeta,`${_pp}% do total`,true)+
+        _mkCard('ml','#2DD4BF','ML / Demais',naoPpaTotal,mlMeta,`${_pm}% do total`,true)+
+        _btnTodos;
     }
     _si.querySelectorAll('[data-scope]').forEach(el=>{
       el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
