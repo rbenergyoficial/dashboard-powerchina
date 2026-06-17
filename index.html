@@ -549,7 +549,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-park{display:flex;align-items:center;gap:8px;min-width:0}
 #page-must .must-rank-dot{width:10px;height:10px;border-radius:999px;background:var(--park-color,#6b8bf5);box-shadow:0 0 0 3px color-mix(in srgb,var(--park-color,#6b8bf5) 24%, transparent)}
 #page-must .must-rank-name{font-size:12px;font-weight:800;color:#f3f6ff;font-family:var(--mono);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#page-must .must-rank-badge{display:inline-flex;align-items:center;justify-content:center;padding:2px 6px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.55px;background:color-mix(in srgb,var(--park-color,#6b8bf5) 18%, rgba(255,255,255,.04));color:#fff;border:1px solid color-mix(in srgb,var(--park-color,#6b8bf5) 40%, rgba(255,255,255,.06))}
+#page-must .must-rank-em-analise{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--park-color,#6b8bf5);margin-top:3px;opacity:.9}
 #page-must .must-rank-track{position:relative;height:22px;border-radius:999px;background:rgba(255,255,255,.05);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 #page-must .must-rank-fill{height:100%;border-radius:999px;display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:120px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 24px color-mix(in srgb,var(--park-color,#6b8bf5) 22%, transparent)}
 #page-must .must-rank-fill-text{font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.32);letter-spacing:.12px}
@@ -5407,6 +5407,18 @@ function renderMustPeakRanking(rows){
     host.innerHTML='<div class="no-data" style="height:140px"><span>—</span><span>Sem dados no período selecionado</span></div>';
     return;
   }
+  // Período em análise a partir dos filtros ativos
+  const _rGran=filters.mustGran||'15min';
+  const _rNeedsDay=['15min','30min','hora'].includes(_rGran);
+  const _rS=['','JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  let _rPeriodo='Período completo';
+  if(_rNeedsDay&&filters.mustDay){const _d=parseDate(filters.mustDay);_rPeriodo=_d?_d.toLocaleDateString('pt-BR'):filters.mustDay;}
+  else if(filters.mustPerIni&&filters.mustPerFim&&filters.mustPerIni!==filters.mustPerFim){_rPeriodo=`${filters.mustPerIni} → ${filters.mustPerFim}`;}
+  else if(filters.mustPerIni){_rPeriodo=`A partir de ${filters.mustPerIni}`;}
+  else if((filters.mustSelectedMonths||[]).length&&filters.mustYear){const _ms=(filters.mustSelectedMonths||[]).slice().sort();_rPeriodo=_ms.length>1?`${_rS[parseInt(_ms[0])]}–${_rS[parseInt(_ms[_ms.length-1])]} ${filters.mustYear}`:`${_rS[parseInt(_ms[0])]} ${filters.mustYear}`;}
+  else if(filters.mustYear){_rPeriodo=String(filters.mustYear);}
+  const _subEl=host.closest('.cc')?.querySelector('.cc-sub');
+  if(_subEl) _subEl.textContent=`Período em análise: ${_rPeriodo}`;
   const maxPeak=Math.max(...rank.map(r=>r.peak),0)||1;
   const loc=getDateLocale();
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -5420,7 +5432,6 @@ function renderMustPeakRanking(rows){
       <div class="must-rank-park">
         <span class="must-rank-dot"></span>
         <span class="must-rank-name">${r.park}</span>
-        ${r.selected?`<span class="must-rank-badge">${r.park} selecionado</span>`:''}
       </div>
       <div class="must-rank-track" title="${r.park} · Pico ${fmt1(r.peak)} MW · Contratada ${fmt1(r.contrat)} MW · ${fmt1(r.pct)}% · ${meta}">
         <div class="must-rank-fill" style="width:${width.toFixed(2)}%;background:${grad}">
@@ -5431,6 +5442,7 @@ function renderMustPeakRanking(rows){
         <div class="must-rank-pct">${fmt1(r.pct)}%</div>
         <div class="must-rank-side-sub">da contratada</div>
         <div class="must-rank-side-meta">${fmt1(r.contrat)} MW</div>
+        ${r.selected?'<div class="must-rank-em-analise">▶ em análise</div>':''}
       </div>
     </div>`;
   }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRank?`<span><strong>Destaque:</strong> ${activeRank.park} · ${fmt1(activeRank.peak)} MW · ${fmt1(activeRank.pct)}%</span>`:''}</div>`;
