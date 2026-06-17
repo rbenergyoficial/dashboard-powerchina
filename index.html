@@ -6221,6 +6221,9 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
   // Cópia do dayMap antes do loop way2 deletar entradas — usada no patch PPA
   const dayMapPPA={};
   for(const [k,v] of Object.entries(dayMap)) dayMapPPA[k]=Object.assign({},v);
+  const _juneKeys=Object.keys(dayMapPPA).filter(d=>d.startsWith('2026-06'));
+  console.log('🔵 Way2 dayMapPPA junho-2026:',_juneKeys.length,'dias →',_juneKeys.slice(0,3).join(', '),'...');
+  if(dayMapPPA['2026-06-01']) console.log('🔵 Blob dia-1 M2=',dayMapPPA['2026-06-01'].M2,'M10=',dayMapPPA['2026-06-01'].M10,'total=',Object.values(dayMapPPA['2026-06-01']).reduce((a,b)=>a+b,0).toFixed(3));
 
   // Patch dashData.way2
   if(dashData&&Array.isArray(dashData.way2)){
@@ -6287,6 +6290,13 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
       if(tot>0)rec.total=+tot.toFixed(2);
     }
     for(const mo of Object.values(moIdx)){if(mo.daily)mo.daily.sort((a,b)=>a.data-b.data);}
+    const _mo6=moIdx['2026-06'];
+    if(_mo6){
+      const _r1=(_mo6.daily||[]).find(r=>{const _d=r.data instanceof Date?r.data:new Date(r.data);return _d.getUTCMonth()===5&&_d.getUTCDate()===1;});
+      console.log('🟢 PPA patch dia-1 após injeção: M2=',_r1?.M2,'M10=',_r1?.M10,'total=',_r1?.total,'data=',_r1?.data);
+    } else {
+      console.warn('🔴 moIdx NÃO tem "2026-06"! Chaves disponíveis:',Object.keys(moIdx));
+    }
   }
 
   // Patch dashData.must.ativa
