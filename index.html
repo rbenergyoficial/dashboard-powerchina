@@ -396,7 +396,8 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
   animation:barShimmer 1.6s ease-in-out infinite;}
 @keyframes barShimmer{to{left:200%}}
-.prog-detail{font-size:10px;color:var(--t3);font-family:var(--mono);margin-top:4px;}
+.prog-detail{font-size:11px;color:var(--t2);font-family:var(--mono);margin-top:8px;margin-bottom:4px;line-height:1.5;text-align:left;padding:8px 10px;background:rgba(248,113,113,.08);border-left:3px solid rgba(248,113,113,.5);border-radius:0 6px 6px 0;display:none;}
+.prog-detail:not(:empty){display:block;}
 .prog-close{display:none;width:100%;margin-top:18px;padding:11px;border-radius:11px;
   background:linear-gradient(135deg,rgba(107,139,245,.14),rgba(45,212,191,.09));
   border:1px solid rgba(107,139,245,.28);color:var(--t1);font-size:12px;font-weight:600;
@@ -1503,7 +1504,10 @@ function _themeCharts(light){
     <div class="prog-msg" id="progMsg">Validando sessão Microsoft…</div>
     <div class="prog-bar-wrap"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
     <div class="prog-detail" id="progDetail"></div>
-    <button class="prog-close" id="progClose" onclick="closeProgModal()">Fechar</button>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:4px">
+      <button class="prog-close" id="progClose" onclick="closeProgModal()">Fechar</button>
+      <button class="prog-close" id="progRetry" onclick="closeProgModal();setTimeout(autoLoadFromUrl,250)" style="display:none;background:linear-gradient(135deg,#1565c0,#6b8bf5);border-color:#6b8bf5">↺ Tentar Novamente</button>
+    </div>
   </div>
 </div>
 
@@ -6075,6 +6079,13 @@ function onUpload(input){
 async function autoLoadFromUrl(){
   if(!DATA_URL) return false;
   if(typeof XLSX==='undefined'){console.warn('SheetJS não carregou.');return false;}
+  if(!navigator.onLine){
+    document.getElementById('progModal').classList.add('open');
+    document.getElementById('progClose').style.display='none';
+    setBusy(false);
+    progDone(false,'Sem conexão com a internet. Verifique sua rede e tente novamente.');
+    return false;
+  }
   document.getElementById('progModal').classList.add('open');
   document.getElementById('progClose').style.display='none';
   document.getElementById('progBar').style.background='linear-gradient(90deg,#1565c0,#6b8bf5)';
@@ -6082,18 +6093,32 @@ async function autoLoadFromUrl(){
   setSyncStatus('updating','Carregando...');
   progUpdate('☁️ Carregando dados…','Buscando base de dados atualizada…',20);
   try{
-    const resp=await fetch(DATA_URL,{cache:'no-cache'});
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    let resp;
+    try{
+      resp=await fetch(DATA_URL,{cache:'no-cache'});
+    }catch(fetchErr){
+      // TypeError sem resposta = CORS bloqueado ou falha de rede
+      if(fetchErr instanceof TypeError){
+        throw new Error('Acesso bloqueado (CORS/rede). Configure CORS no Azure Blob para esta origem, ou use o botão ☁ (OneDrive) para autenticar.');
+      }
+      throw fetchErr;
+    }
+    if(resp.status===403) throw new Error('Acesso negado (HTTP 403). O container do Azure Blob não é público. Adicione um token SAS à URL ou use o botão ☁ (OneDrive).');
+    if(resp.status===404) throw new Error('Arquivo não encontrado (HTTP 404). O arquivo ainda não foi enviado ao Azure Blob Storage.');
+    if(!resp.ok) throw new Error('Erro HTTP '+resp.status+'. Verifique as configurações do Azure Blob Storage.');
+    // Mostra data do arquivo no blob para o usuário saber quão recente é
+    const lastMod=resp.headers.get('Last-Modified');
+    const lmStr=lastMod?new Date(lastMod).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null;
     progUpdate('☁️ Processando…','Lendo planilha e calculando KPIs…',75);
     const buf=await resp.arrayBuffer();
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     processWb(wb);
-    const ts=new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    progDone(true,'Dados carregados da nuvem com sucesso! · '+ts);
+    const ts=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    progDone(true,'Dados carregados com sucesso! '+(lmStr?'· Arquivo atualizado em: '+lmStr:'')+'  · Carregado às '+ts);
     return true;
   }catch(e){
     console.error('autoLoadFromUrl:',e);
-    progDone(false,'Não foi possível carregar dados da nuvem: '+e.message);
+    progDone(false,e.message||'Não foi possível carregar dados da nuvem');
     return false;
   }
 }
@@ -6129,8 +6154,9 @@ function setSyncStatus(state,label){
   if(!el) return;
   el.className='sync-pill sp-'+state;
   el.querySelector('.sp-label').textContent=label;
-  el.onclick=(state==='warn')?()=>autoLoadFromUrl():null;
-  el.title=state==='warn'?'Clique para carregar os dados atualizados':'Status da última atualização';
+  el.onclick=(state==='warn'||state==='error')?()=>autoLoadFromUrl():null;
+  el.style.cursor=(state==='warn'||state==='error')?'pointer':'default';
+  el.title=state==='warn'?'Clique para carregar os dados atualizados':state==='error'?'Clique para tentar novamente. Se persistir, use o botão ☁ (OneDrive) para autenticar.':'Status da última atualização';
 }
 async function checkNewData(){
   if(!DATA_URL||_syncLastLoad===0) return;
@@ -6179,12 +6205,16 @@ function progDone(ok,msg){
   bar.style.background=ok?'#34e0a1':'#f0598c';
   bar.style.setProperty('--shimmer','none');
 
-  document.getElementById('progMsg').textContent=msg;
+  document.getElementById('progMsg').textContent=ok?msg:'Não foi possível carregar os dados automaticamente.';
+  const detail=document.getElementById('progDetail');
+  if(detail) detail.textContent=ok?'':(msg||'');
+  const retryBtn=document.getElementById('progRetry');
+  if(retryBtn) retryBtn.style.display=ok?'none':'';
   document.getElementById('progClose').style.display='block';
   document.getElementById('refreshBtn').classList.remove('spinning');
   document.getElementById('refreshBtn').disabled=false;
   if(ok){const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setSyncStatus('ok','Atualizado · '+t);_syncLastLoad=Date.now();}
-  else{setSyncStatus('error','Falha na atualização');}
+  else{setSyncStatus('error','Falha na atualização — clique ☁ para autenticar via OneDrive');}
 }
 function closeProgModal(){
   const m=document.getElementById('progModal');
@@ -6210,6 +6240,8 @@ function closeProgModal(){
     document.getElementById('progTitle').textContent='Sincronizando';
     document.getElementById('progTitle').style.color='';
     document.getElementById('progMsg').textContent='';
+    const _det=document.getElementById('progDetail');if(_det)_det.textContent='';
+    const _rtr=document.getElementById('progRetry');if(_rtr)_rtr.style.display='none';
     document.getElementById('progBar').style.width='0%';
     document.getElementById('progBar').style.background='';
     document.getElementById('progClose').style.display='none';
