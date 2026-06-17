@@ -5401,7 +5401,7 @@ function renderMustPeakRanking(rows){
     const contrat=num((must.contrat||{})[p]);
     const pct=contrat>0?(peak/contrat*100):0;
     const margem=contrat-peak;
-    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(1),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selected!=='total'&&selected===p};
+    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(2),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selected!=='total'&&selected===p};
   }).sort((a,b)=> (b.pct-a.pct) || (b.peak-a.peak) || a.park.localeCompare(b.park, 'pt-BR'));
   if(!rank.length){
     host.innerHTML='<div class="no-data" style="height:140px"><span>—</span><span>Sem dados no período selecionado</span></div>';
@@ -5409,7 +5409,7 @@ function renderMustPeakRanking(rows){
   }
   const maxPeak=Math.max(...rank.map(r=>r.peak),0)||1;
   const loc=getDateLocale();
-  const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:1,maximumFractionDigits:1});
+  const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
   const activeRank=rank.find(r=>r.selected)||null;
   host.innerHTML=rank.map(r=>{
     const width=Math.max(12,(r.peak/maxPeak)*100);
