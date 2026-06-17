@@ -6259,6 +6259,32 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
     if(last&&(!dashData.meta.dataMax||last.data>dashData.meta.dataMax)) dashData.meta.dataMax=last.data;
   }
 
+  // Patch dashData.ppa.months[].daily — junho/2026 em diante vem do Way2 (2 casas decimais)
+  if(dashData?.ppa?.months?.length){
+    const moIdx={};
+    for(const mo of dashData.ppa.months){
+      const firstRec=(mo.daily||[]).find(r=>r?.data);
+      if(!firstRec) continue;
+      const k=`${firstRec.data.getFullYear()}-${String(firstRec.data.getMonth()+1).padStart(2,'0')}`;
+      moIdx[k]=mo;
+    }
+    const CUTOFF='2026-06';
+    const allPkWay2=Object.keys(WAY2_ENERGY_IDS);
+    for(const [day,vals] of Object.entries(dayMap)){
+      if(day.slice(0,7)<CUTOFF) continue;
+      const moKey=day.slice(0,7);
+      if(!moIdx[moKey]) continue;
+      const mo=moIdx[moKey];
+      const [y,mo2,d]=day.split('-').map(Number);
+      let rec=(mo.daily||[]).find(r=>r?.data&&r.data.getFullYear()===y&&r.data.getMonth()===mo2-1&&r.data.getDate()===d);
+      if(!rec){rec={data:new Date(y,mo2-1,d)};if(!mo.daily)mo.daily=[];mo.daily.push(rec);}
+      let tot=0;
+      for(const pk of allPkWay2){if(vals[pk]!=null){rec[pk]=+vals[pk].toFixed(2);tot+=vals[pk];}}
+      if(tot>0)rec.total=+tot.toFixed(2);
+    }
+    for(const mo of Object.values(moIdx)){if(mo.daily)mo.daily.sort((a,b)=>a.data-b.data);}
+  }
+
   // Patch dashData.must.ativa
   if(dashData&&dashData.must&&Array.isArray(dashData.must.ativa)){
     const mustDayMap={};
