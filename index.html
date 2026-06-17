@@ -4990,7 +4990,21 @@ function renderPagePPA(type){
   const ppaBrkProd=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num(mm.produzida&&mm.produzida[p]),0),0).toFixed(2);
   const ppaBrkMeta=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0),0).toFixed(2);
   const mlMeta=+_splitMths.reduce((s,mm)=>s+(num(mm.meta&&mm.meta._ml)||mlParks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0)),0).toFixed(2);
-  const _splitTotal=(ppaBrkProd||0)+(naoPpaTotal||0);
+  // Donut data: per-park breakdown when scope is ppa/ml, PPA vs ML when todos
+  const _donutByPark=chartScope!=='todos';
+  let _donutLabels,_donutData,_donutBgCol,_donutBdCol;
+  if(_donutByPark){
+    _donutLabels=chartParksBase;
+    _donutData=chartParksBase.map(prodAgg);
+    _donutBgCol=chartParksBase.map(p=>(PPA_COL[p]||'#A855F7')+'bb');
+    _donutBdCol=chartParksBase.map(p=>PPA_COL[p]||'#A855F7');
+  } else {
+    _donutLabels=['PPA BRK',translateAnyText('ML / Demais')];
+    _donutData=[ppaBrkProd,naoPpaTotal];
+    _donutBgCol=['rgba(168,85,247,.78)','rgba(45,212,191,.56)'];
+    _donutBdCol=['rgba(168,85,247,.95)','rgba(45,212,191,.88)'];
+  }
+  const _splitTotal=_donutData.reduce((s,v)=>s+(v||0),0);
   // Center-text plugin: draws total in the donut hole
   if(!window.__ppaDonutCenterReg__){
     window.__ppaDonutCenterReg__=true;
@@ -5021,12 +5035,12 @@ function renderPagePPA(type){
   if(splitCtx) charts['cPPAsplit']=new Chart(splitCtx,{
     type:'doughnut',
     data:{
-      labels:['PPA BRK',translateAnyText('ML / Demais')],
+      labels:_donutLabels,
       datasets:[{
-        data:[ppaBrkProd,naoPpaTotal],
-        backgroundColor:['rgba(168,85,247,.78)','rgba(45,212,191,.56)'],
-        hoverBackgroundColor:['rgba(168,85,247,.96)','rgba(45,212,191,.82)'],
-        borderColor:['rgba(168,85,247,.95)','rgba(45,212,191,.88)'],
+        data:_donutData,
+        backgroundColor:_donutBgCol,
+        hoverBackgroundColor:_donutByPark?_donutBdCol:['rgba(168,85,247,.96)','rgba(45,212,191,.82)'],
+        borderColor:_donutBdCol,
         borderWidth:2.5,hoverOffset:16,spacing:3,radius:'92%'
       }]
     },
@@ -5038,6 +5052,15 @@ function renderPagePPA(type){
           const v=c.parsed;
           const tot=_splitTotal||1;
           const pct=(v/tot*100).toFixed(1);
+          if(_donutByPark){
+            const p=_donutLabels[c.dataIndex];
+            const m=metaAgg(p);
+            const achiev=m>0?(v/m*100).toFixed(1):'—';
+            return [
+              ` ${p}: ${_fmtMWh(v)} MWh (${pct}% do escopo)`,
+              m>0?` Meta: ${_fmtMWh(m)} MWh · ${achiev}% atingido`:null
+            ].filter(Boolean);
+          }
           const meta=c.dataIndex===0?ppaBrkMeta:mlMeta;
           const achiev=meta>0?(v/meta*100).toFixed(1):'—';
           const achievTxt=meta>0?` · ${achiev}% da meta`:'';
@@ -5049,7 +5072,7 @@ function renderPagePPA(type){
       },
       onClick:(evt,elements)=>{
         if(!elements||!elements.length) return;
-        _ppaSetScope(elements[0].index===0?'ppa':'ml');
+        if(!_donutByPark) _ppaSetScope(elements[0].index===0?'ppa':'ml');
       }
     }
   });
@@ -5086,13 +5109,44 @@ function renderPagePPA(type){
     const tMeta=ppaBrkMeta+mlMeta;
     const tAchiev=tMeta>0?(_tot/tMeta*100).toFixed(1):'—';
     const tAchC=tMeta>0?(_tot>=tMeta?'#22c55e':_tot/tMeta>=0.8?'#f5c842':'#f2495c'):'#6a7a9a';
-    _si.innerHTML=
-      `<div style="${_lbl};color:#4a5a6a;margin-bottom:2px">TOTAL DO PERÍODO</div>`+
-      `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
-      `<div style="font-size:10px;font-weight:700;color:${tAchC};margin-bottom:10px">META ${_fmtMWh(tMeta)} MWh · ${tAchiev}% atingido</div>`+
-      _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',ppaBrkProd,_pp,ppaBrkMeta)+
-      _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm,mlMeta)+
-      `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
+    if(_donutByPark){
+      const _scopeColor=chartScope==='ppa'?'#A855F7':'#2DD4BF';
+      const _scopeName=chartScope==='ppa'?'PPA BRK':'ML / Demais';
+      const _scopeMeta=+chartParksBase.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
+      const _scopeAchiev=_scopeMeta>0?(_tot/_scopeMeta*100).toFixed(1):'—';
+      const _scopeAchC=_scopeMeta>0?(_tot>=_scopeMeta?'#22c55e':_tot/_scopeMeta>=0.8?'#f5c842':'#f2495c'):_scopeColor;
+      const _pkCard=p=>{
+        const v=prodAgg(p), m=metaAgg(p);
+        const pct=_tot>0?(v/_tot*100).toFixed(1):'0.0';
+        const ac=m>0?(v>=m?'#22c55e':v/m>=0.8?'#f5c842':'#f2495c'):_scopeColor;
+        const achiev=m>0?(v/m*100).toFixed(1):'—';
+        const col=PPA_COL[p]||_scopeColor;
+        const w=m>0?Math.min(100,v/m*100):0;
+        return `<div style="display:flex;flex-direction:column;padding:8px 10px;border-radius:8px;border:1px solid ${col}44;background:${col}0a;margin-bottom:5px">`+
+          `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">`+
+          `<span style="${_lbl};color:${col}">● ${p}</span>`+
+          `<span style="font-size:10px;font-weight:800;color:${ac};background:${ac}18;border:1px solid ${ac}44;border-radius:5px;padding:1px 5px">${achiev}%</span></div>`+
+          `<div style="background:${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)'};border-radius:99px;height:3px;overflow:hidden;margin:4px 0 3px"><div style="height:100%;width:${w.toFixed(1)}%;background:${col};border-radius:99px;transition:width .45s"></div></div>`+
+          `<div style="display:flex;justify-content:space-between;align-items:baseline">`+
+          `<span style="font-size:13px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.02em">${_fmtMWh(v)}<span style="font-size:8px;color:#6a7a9a;font-weight:400;margin-left:2px">MWh</span></span>`+
+          `<span style="font-size:8px;color:#6a7a9a">META <strong style="color:${col}">${_fmtMWh(m)}</strong></span></div>`+
+          `<div style="font-size:8px;color:#6a7a9a;margin-top:2px">${pct}% do escopo</div></div>`;
+      };
+      _si.innerHTML=
+        `<div style="${_lbl};color:${_scopeColor};margin-bottom:2px">● ${_scopeName}</div>`+
+        `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
+        `<div style="font-size:10px;font-weight:700;color:${_scopeAchC};margin-bottom:10px">META ${_fmtMWh(_scopeMeta)} MWh · ${_scopeAchiev}% atingido</div>`+
+        chartParksBase.map(_pkCard).join('')+
+        `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
+    } else {
+      _si.innerHTML=
+        `<div style="${_lbl};color:#4a5a6a;margin-bottom:2px">TOTAL DO PERÍODO</div>`+
+        `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
+        `<div style="font-size:10px;font-weight:700;color:${tAchC};margin-bottom:10px">META ${_fmtMWh(tMeta)} MWh · ${tAchiev}% atingido</div>`+
+        _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',ppaBrkProd,_pp,ppaBrkMeta)+
+        _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm,mlMeta)+
+        `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
+    }
     _si.querySelectorAll('[data-scope]').forEach(el=>{
       el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
     });
