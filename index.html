@@ -4950,12 +4950,44 @@ function renderPagePPA(type){
     _ss('ppaTopScopeSel');_ss('ppaChartScopeSel');_ss('ppaProgScopeSel');
     renderPagePPA();
   };
+  // Fix: use PPA-only production (not gerTotal which includes ML parks)
+  const ppaBrkProd=+parks.reduce((s,p)=>s+prod(p),0).toFixed(2);
+  const ppaBrkMeta=+parks.reduce((s,p)=>s+metap(p),0).toFixed(2);
+  const mlMeta=+(calc.mlMetaSubtotal||mlParks.reduce((s,p)=>s+metap(p),0)).toFixed(2);
+  const _splitTotal=(ppaBrkProd||0)+(naoPpaTotal||0);
+  // Center-text plugin: draws total in the donut hole
+  if(!window.__ppaDonutCenterReg__){
+    window.__ppaDonutCenterReg__=true;
+    if(typeof Chart!=='undefined'&&Chart.register){
+      Chart.register({
+        id:'ppaDonutCenter',
+        afterDraw:function(chart){
+          if(!chart.canvas||chart.canvas.id!=='cPPAsplit') return;
+          var ca=chart.chartArea; if(!ca) return;
+          var ds=chart.data.datasets[0]; if(!ds) return;
+          var tot=(ds.data||[]).reduce(function(s,v){return s+(v||0);},0);
+          var cx=(ca.left+ca.right)/2, cy=(ca.top+ca.bottom)/2;
+          var ctx2=chart.ctx;
+          var _clt=document.documentElement.getAttribute('data-theme')==='light';
+          ctx2.save();
+          ctx2.textAlign='center'; ctx2.textBaseline='middle';
+          ctx2.font='bold 15px Inter,system-ui';
+          ctx2.fillStyle=_clt?'#1e293b':'#dce6f8';
+          ctx2.fillText(Math.round(tot).toLocaleString('pt-BR'),cx,cy-9);
+          ctx2.font='600 8px Inter,system-ui';
+          ctx2.fillStyle=_clt?'#5a6a8a':'#7890a8';
+          ctx2.fillText('MWh · TOTAL PERÍODO',cx,cy+7);
+          ctx2.restore();
+        }
+      });
+    }
+  }
   if(splitCtx) charts['cPPAsplit']=new Chart(splitCtx,{
     type:'doughnut',
     data:{
-      labels:['PPA BRK',translateAnyText('Demais parques')],
+      labels:['PPA BRK',translateAnyText('ML / Demais')],
       datasets:[{
-        data:[gerTotal,naoPpaTotal],
+        data:[ppaBrkProd,naoPpaTotal],
         backgroundColor:['rgba(168,85,247,.78)','rgba(45,212,191,.56)'],
         hoverBackgroundColor:['rgba(168,85,247,.96)','rgba(45,212,191,.82)'],
         borderColor:['rgba(168,85,247,.95)','rgba(45,212,191,.88)'],
@@ -4963,10 +4995,21 @@ function renderPagePPA(type){
       }]
     },
     options:{
-      responsive:true,maintainAspectRatio:false,animation:{duration:0},cutout:'68%',
+      responsive:true,maintainAspectRatio:false,animation:{duration:0},cutout:'63%',
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:c=>` ${translateAnyText(c.label)}: ${_fmtMWh(c.parsed)} MWh (${(c.parsed/((gerTotal+naoPpaTotal)||1)*100).toFixed(1)}%)`}}
+        tooltip:{callbacks:{label:c=>{
+          const v=c.parsed;
+          const tot=_splitTotal||1;
+          const pct=(v/tot*100).toFixed(1);
+          const meta=c.dataIndex===0?ppaBrkMeta:mlMeta;
+          const achiev=meta>0?(v/meta*100).toFixed(1):'—';
+          const achievTxt=meta>0?` · ${achiev}% da meta`:'';
+          return [
+            ` ${translateAnyText(c.label)}: ${_fmtMWh(v)} MWh (${pct}% do total)${achievTxt}`,
+            meta>0?` Meta: ${_fmtMWh(meta)} MWh`:null
+          ].filter(Boolean);
+        }}}
       },
       onClick:(evt,elements)=>{
         if(!elements||!elements.length) return;
@@ -4977,28 +5020,43 @@ function renderPagePPA(type){
   // ── Painel lateral do donut ──
   const _si=document.getElementById('ppaSplitInfo');
   if(_si){
-    const _tot=(gerTotal||0)+(naoPpaTotal||0);
-    const _pp=_tot>0?(gerTotal/_tot*100).toFixed(1):'0.0';
+    const _tot=_splitTotal;
+    const _pp=_tot>0?(ppaBrkProd/_tot*100).toFixed(1):'0.0';
     const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
     const _cs=filters.ppaChartScope||'todos';
     const _splt_lt=document.documentElement.getAttribute('data-theme')==='light';
     const _lbl='font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase';
-    const _card=(scope,cor,bgAtivo,bgInativo,nome,val,pct)=>{
+    const _mbar=(val,meta,cor)=>{
+      const w=meta>0?Math.min(100,(val/meta*100)):0;
+      return `<div style="background:${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)'};border-radius:99px;height:4px;overflow:hidden;margin:5px 0 4px"><div style="height:100%;width:${w.toFixed(1)}%;background:${cor};border-radius:99px;transition:width .45s"></div></div>`;
+    };
+    const _card=(scope,cor,bgAtivo,bgInativo,nome,val,pct,meta)=>{
       const ativo=_cs===scope;
-      return `<div data-scope="${scope}" style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;border-radius:10px;border:1.5px solid ${cor}${ativo?'cc':'40'};background:${ativo?bgAtivo:bgInativo};cursor:pointer;margin-bottom:9px;transition:border-color .15s,background .15s">
-        <div>
-          <div style="${_lbl};color:${cor};margin-bottom:4px">● ${nome}</div>
-          <div style="font-size:17px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.03em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:3px">MWh</span></div>
+      const achiev=meta>0?(val/meta*100).toFixed(1):'—';
+      const ac=meta>0?(val>=meta?'#22c55e':val/meta>=0.8?'#f5c842':'#f2495c'):cor;
+      return `<div data-scope="${scope}" style="display:flex;flex-direction:column;padding:10px 12px;border-radius:10px;border:1.5px solid ${cor}${ativo?'cc':'40'};background:${ativo?bgAtivo:bgInativo};cursor:pointer;margin-bottom:8px;transition:border-color .15s,background .15s">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+          <span style="${_lbl};color:${cor}">● ${nome}</span>
+          <span style="font-size:10px;font-weight:800;color:${ac};background:${ac}18;border:1px solid ${ac}44;border-radius:5px;padding:1px 6px">${achiev}%</span>
         </div>
-        <div style="background:${cor}33;border-radius:8px;padding:6px 12px;font-size:16px;font-weight:800;color:${cor};letter-spacing:-.02em">${pct}%</div>
+        ${_mbar(val,meta,cor)}
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-size:16px;font-weight:800;color:${_splt_lt?'#1e293b':'#e8e0ff'};letter-spacing:-.02em">${_fmtMWh(val)}<span style="font-size:9px;color:#6a7a9a;font-weight:400;margin-left:2px">MWh</span></span>
+          <span style="font-size:9px;color:#6a7a9a;text-align:right">META <strong style="color:${cor}">${_fmtMWh(meta)}</strong> MWh</span>
+        </div>
+        <div style="font-size:9px;color:#6a7a9a;margin-top:3px">${pct}% do total do complexo</div>
       </div>`;
     };
+    const tMeta=ppaBrkMeta+mlMeta;
+    const tAchiev=tMeta>0?(_tot/tMeta*100).toFixed(1):'—';
+    const tAchC=tMeta>0?(_tot>=tMeta?'#22c55e':_tot/tMeta>=0.8?'#f5c842':'#f2495c'):'#6a7a9a';
     _si.innerHTML=
-      `<div style="${_lbl};color:#4a5a6a;margin-bottom:4px">TOTAL DO PERÍODO</div>`+
-      `<div style="font-size:20px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em;margin-bottom:16px">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:5px">MWh</span></div>`+
-      _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',gerTotal,_pp)+
-      _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm)+
-      `<div data-scope="todos" style="text-align:center;padding:7px 12px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ Todos os escopos</div>`;
+      `<div style="${_lbl};color:#4a5a6a;margin-bottom:2px">TOTAL DO PERÍODO</div>`+
+      `<div style="font-size:18px;font-weight:800;color:${_splt_lt?'#1e293b':'#fff'};letter-spacing:-.04em">${_fmtMWh(_tot)}<span style="font-size:10px;color:#5a6a8a;font-weight:400;margin-left:4px">MWh</span></div>`+
+      `<div style="font-size:10px;font-weight:700;color:${tAchC};margin-bottom:10px">META ${_fmtMWh(tMeta)} MWh · ${tAchiev}% atingido</div>`+
+      _card('ppa','#A855F7','rgba(168,85,247,.15)','rgba(168,85,247,.05)','PPA BRK',ppaBrkProd,_pp,ppaBrkMeta)+
+      _card('ml','#2DD4BF','rgba(45,212,191,.12)','rgba(45,212,191,.04)','ML / Demais',naoPpaTotal,_pm,mlMeta)+
+      `<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.1)'};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_splt_lt?'#4a5a6a':'#6a7a9a'};background:${_splt_lt?'rgba(0,0,0,.04)':'rgba(255,255,255,.03)'}">↺ TODOS OS ESCOPOS</div>`;
     _si.querySelectorAll('[data-scope]').forEach(el=>{
       el.addEventListener('click',()=>_ppaSetScope(el.dataset.scope));
     });
