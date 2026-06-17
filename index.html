@@ -5515,6 +5515,22 @@ function renderPageMUST(type){
     }
   };
 
+  const _mustTooltipTitle=function(items){
+    if(!items.length) return '';
+    const idx=items[0].dataIndex;
+    const g=grouped[idx];
+    if(!g||!g._date) return items[0].label||'';
+    const d=g._date;
+    const dd=String(d.getDate()).padStart(2,'0');
+    const mo=String(d.getMonth()+1).padStart(2,'0');
+    const yyyy=d.getFullYear();
+    const hh=String(d.getHours()).padStart(2,'0');
+    const mm=String(d.getMinutes()).padStart(2,'0');
+    if(gran==='15min'||gran==='30min') return `${dd}/${mo}/${yyyy} · ${hh}:${mm}`;
+    if(gran==='hora') return `${dd}/${mo}/${yyyy} · ${hh}:00`;
+    if(gran==='dia') return `${dd}/${mo}/${yyyy}`;
+    return items[0].label||'';
+  };
   mkChart('cMUST',{
     type:'bar',
     data:{labels,datasets:[
@@ -5523,6 +5539,7 @@ function renderPageMUST(type){
     ]},
     options:{
       ...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{...CHART_DEFAULTS.plugins.tooltip.callbacks,title:_mustTooltipTitle}}},
       scales:{
         x:xScale,
         y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,grace:'10%',suggestedMax:contr>0?contr*1.15:undefined,title:{display:true,text:'MW',color:'#8090b8',font:{size:9}}}
