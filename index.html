@@ -6332,10 +6332,11 @@ async function loadWay2FromBlob(){
       if(!r.ok) throw new Error('HTTP '+r.status);
       return r.json();
     };
+    const _t='?t='+Date.now();
     const [eMes,eMesAnt,eMust]=await Promise.all([
-      fetch(WAY2_BLOB_BASE+'way2_energia_mes.json',nc).then(_j),
-      fetch(WAY2_BLOB_BASE+'way2_energia_antmes.json',nc).then(_j),
-      fetch(WAY2_BLOB_BASE+'way2_must.json',nc).then(_j)
+      fetch(WAY2_BLOB_BASE+'way2_energia_mes.json'+_t,nc).then(_j),
+      fetch(WAY2_BLOB_BASE+'way2_energia_antmes.json'+_t,nc).then(_j),
+      fetch(WAY2_BLOB_BASE+'way2_must.json'+_t,nc).then(_j)
     ]);
     await _applyWay2Data(eMes,eMesAnt,eMust);
     console.log('✅ Way2 Blob — dados injetados ·',new Date().toLocaleTimeString('pt-BR'));
