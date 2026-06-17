@@ -4460,7 +4460,16 @@ function renderPagePPA(type){
   const gerTotal=calc.gerTotal;
   const metaTotal=calc.metaTotal;
   const equivTotal=calc.equivTotal;
-  const naoPpaTotal=M.daily.reduce((s,r)=>s+num(r.naoppa),0);
+  // V42 multi-month helper: months matching the V42 period selection
+  const _v42MatchMs=(()=>{
+    const sM=filters.ppaSelectedMonths,sY=filters.ppaSelectedYears;
+    if(!sM||!sM.length||!sY||!sY.length) return null;
+    const _fd=mm=>mm.daily&&mm.daily.length>0&&mm.daily[0]&&mm.daily[0].data instanceof Date?mm.daily[0].data:null;
+    const ms=ppa.months.filter(mm=>{const d=_fd(mm);return d&&sY.includes(d.getFullYear())&&sM.includes(d.getMonth());});
+    return ms.length?ms:null;
+  })();
+  // naoPpaTotal: aggregate ML/non-PPA across all selected months
+  const naoPpaTotal=(_v42MatchMs||[M]).reduce((s,mm)=>s+(mm.daily||[]).reduce((s2,r)=>s2+num(r.naoppa),0),0);
 
   // ── KPIs ──
   const kpiParks=(sel==='todos'?chartParksBase:[sel]);
@@ -4887,23 +4896,45 @@ function renderPagePPA(type){
   const evScope=(chartSel==='todos'?chartParksBase:[chartSel]);
   const evType=getToggle('ppaevo')||'bar';
   // Helper: get first daily date for a PPA month (used for sorting and year detection)
-  const _evDate=mm=>mm.daily&&mm.daily.length>0&&mm.daily[0]?.data instanceof Date?mm.daily[0].data:null;
+  const _evDate=mm=>mm.daily&&mm.daily.length>0&&mm.daily[0]&&mm.daily[0].data instanceof Date?mm.daily[0].data:null;
   const _evYrD=mm=>{const d=_evDate(mm);return d?d.getFullYear():null;};
-  // Monthly only when a year is filtered but no specific month (ex: filtrar 2026 → ver Jan-Jun)
-  // Daily: when a specific month is selected globally, OR when no year filter (default → show M.daily)
-  const evIsMonthly=(filters.mes==='todos' && filters.ano!=='todos');
-  let evLabels,evData,evXTitle;
-  if(evIsMonthly){
+  // V42 filter state
+  const _v42EvM=filters.ppaSelectedMonths, _v42EvY=filters.ppaSelectedYears;
+  const _v42EvMulti=_v42EvM&&_v42EvM.length>1&&_v42EvY&&_v42EvY.length>0;
+  const _v42EvSingle=!_v42EvMulti&&_v42EvM&&_v42EvM.length===1&&_v42EvY&&_v42EvY.length>0;
+  // Monthly only when V42 multi-month OR global year filter (no specific month)
+  const evIsMonthly=_v42EvMulti||(filters.mes==='todos'&&filters.ano!=='todos');
+  let evLabels=[],evData=[],evXTitle='';
+  if(_v42EvMulti){
+    // V42: show one bar per selected month, respecting year+month selection
+    const filtMonths=ppa.months.filter(mm=>{
+      const d=_evDate(mm); if(!d) return false;
+      return _v42EvY.includes(d.getFullYear())&&_v42EvM.includes(d.getMonth());
+    }).sort((a,b)=>{
+      const da=_evDate(a),db=_evDate(b);
+      if(!da&&!db)return 0;if(!da)return 1;if(!db)return-1;return da-db;
+    });
+    evLabels=filtMonths.map(mm=>{const d=_evDate(mm);return d?MNS[d.getMonth()+1]:mm.mes.slice(0,3);});
+    evData=filtMonths.map(mm=>+evScope.reduce((s,p)=>s+num(mm.produzida[p]),0).toFixed(2));
+    const evYears=[...new Set(filtMonths.map(mm=>_evYrD(mm)||0).filter(y=>y>0))].sort((a,b)=>a-b);
+    evXTitle=evYears.length>1?evYears.join(' / '):(evYears.length===1?String(evYears[0]):'');
+  }else if(_v42EvSingle){
+    // V42: single month selected — show daily bars for that month
+    const evM=ppa.months.find(mm=>{const d=_evDate(mm);return d&&_v42EvY.includes(d.getFullYear())&&d.getMonth()===_v42EvM[0];})||M;
+    const ev=evM.daily||[];
+    evLabels=ev.map(r=>String(r.data.getDate()));
+    evData=ev.map(r=>+evScope.reduce((s,p)=>s+num(r[p]),0).toFixed(2));
+    evXTitle=ev.length>0?(MNS[ev[0].data.getMonth()+1]||'').toLowerCase()+'/'+ev[0].data.getFullYear():'';
+  }else if(evIsMonthly){
+    // Legacy: year filter active but no specific month
     const filtMonths=ppa.months.filter(mm=>{
       if(filters.ano!=='todos'){const yr=_evYrD(mm);return yr===+filters.ano;}
       return true;
     }).sort((a,b)=>{
-      // Sort by actual first-day date (most reliable — avoids mesNum=0 bug)
       const da=_evDate(a), db=_evDate(b);
       if(!da&&!db) return 0; if(!da) return 1; if(!db) return -1;
       return da-db;
     });
-    // Month label derived from daily date (reliable even if mesNum=0)
     evLabels=filtMonths.map(mm=>{
       const d=_evDate(mm);
       return d?MNS[d.getMonth()+1]:mm.mes.slice(0,3);
@@ -4912,7 +4943,7 @@ function renderPagePPA(type){
     const evYears=[...new Set(filtMonths.map(mm=>_evYrD(mm)||0).filter(y=>y>0))].sort((a,b)=>a-b);
     evXTitle=evYears.length>1?evYears.join(' / '):(evYears.length===1?String(evYears[0]):(filters.ano!=='todos'?String(filters.ano):''));
   }else{
-    // Daily view: find PPA month matching global filter month+year
+    // Legacy daily view: find PPA month matching global filter month+year
     const tMes=parseInt(filters.mes),tAno=filters.ano!=='todos'?parseInt(filters.ano):null;
     const evM=ppa.months.find(mm=>{
       const d=_evDate(mm); if(!d) return false;
@@ -4950,10 +4981,11 @@ function renderPagePPA(type){
     _ss('ppaTopScopeSel');_ss('ppaChartScopeSel');_ss('ppaProgScopeSel');
     renderPagePPA();
   };
-  // Fix: use PPA-only production (not gerTotal which includes ML parks)
-  const ppaBrkProd=+parks.reduce((s,p)=>s+prod(p),0).toFixed(2);
-  const ppaBrkMeta=+parks.reduce((s,p)=>s+metap(p),0).toFixed(2);
-  const mlMeta=+(calc.mlMetaSubtotal||mlParks.reduce((s,p)=>s+metap(p),0)).toFixed(2);
+  // Fix: PPA-only production aggregated across all V42-selected months
+  const _splitMths=_v42MatchMs||[M];
+  const ppaBrkProd=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num(mm.produzida&&mm.produzida[p]),0),0).toFixed(2);
+  const ppaBrkMeta=+_splitMths.reduce((s,mm)=>s+parks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0),0).toFixed(2);
+  const mlMeta=+_splitMths.reduce((s,mm)=>s+(num(mm.meta&&mm.meta._ml)||mlParks.reduce((s2,p)=>s2+num((mm.meta&&mm.meta[p])||(mm.equiv&&mm.equiv[p])||0),0)),0).toFixed(2);
   const _splitTotal=(ppaBrkProd||0)+(naoPpaTotal||0);
   // Center-text plugin: draws total in the donut hole
   if(!window.__ppaDonutCenterReg__){
