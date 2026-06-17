@@ -6268,7 +6268,8 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
     for(const mo of dashData.ppa.months){
       const firstRec=(mo.daily||[]).find(r=>r?.data);
       if(!firstRec) continue;
-      const k=`${firstRec.data.getFullYear()}-${String(firstRec.data.getMonth()+1).padStart(2,'0')}`;
+      const _fd=firstRec.data instanceof Date?firstRec.data:new Date(firstRec.data);
+      const k=`${_fd.getUTCFullYear()}-${String(_fd.getUTCMonth()+1).padStart(2,'0')}`;
       moIdx[k]=mo;
     }
     const CUTOFF='2026-06';
@@ -6279,7 +6280,7 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
       if(!moIdx[moKey]) continue;
       const mo=moIdx[moKey];
       const [y,mo2,d]=day.split('-').map(Number);
-      let rec=(mo.daily||[]).find(r=>r?.data&&r.data.getFullYear()===y&&r.data.getMonth()===mo2-1&&r.data.getDate()===d);
+      let rec=(mo.daily||[]).find(r=>{if(!r?.data)return false;const _d=r.data instanceof Date?r.data:new Date(r.data);return _d.getUTCFullYear()===y&&_d.getUTCMonth()===mo2-1&&_d.getUTCDate()===d;});
       if(!rec){rec={data:new Date(y,mo2-1,d)};if(!mo.daily)mo.daily=[];mo.daily.push(rec);}
       let tot=0;
       for(const pk of allPkWay2){if(vals[pk]!=null){rec[pk]=+vals[pk].toFixed(2);tot+=vals[pk];}}
