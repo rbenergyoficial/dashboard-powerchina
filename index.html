@@ -6211,7 +6211,7 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
       const pk=parkKeys.find(k=>WAY2_ENERGY_IDS[k]===item.pontoId);
       if(!pk) continue;
       for(const v of (item.valores||[])){
-        if(v.valor==null||v.qualidade===1) continue;
+        if(v.valor==null||v.valor<0||v.qualidade===1) continue;
         const day=v.data.slice(0,10);
         if(!dayMap[day]) dayMap[day]={};
         dayMap[day][pk]=+(v.valor/1000).toFixed(4); // kWh→MWh
