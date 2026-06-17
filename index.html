@@ -883,6 +883,9 @@ function _themeCharts(light){
     <div id="syncPill" class="sync-pill sp-ready" title="Status da última atualização">
       <span class="sp-dot"></span><span class="sp-label">Aguardando</span>
     </div>
+    <div id="way2Pill" class="sync-pill sp-ready" title="Status Way2 API" style="display:none" onclick="loadWay2FromAPI(getWay2Token())">
+      <span class="sp-dot"></span><span class="sp-label">Way2</span>
+    </div>
     <div class="badge-status"><span class="dot"></span>Operacional</div>
   </div>
 </header>
@@ -1464,14 +1467,28 @@ function _themeCharts(light){
 
 <!-- MODAL SETUP -->
 <div class="modal-bg" id="setupModal">
-  <div class="modal">
+  <div class="modal" style="max-width:460px">
     <h3>🔐 Configurar Autenticação</h3>
-    <p>Configure o Client ID do Azure AD para atualização automática via OneDrive.</p>
+
+    <!-- OneDrive -->
+    <p style="margin:0 0 8px;font-size:11px;color:var(--t2)">Azure AD Client ID — atualização automática via OneDrive</p>
     <div class="modal-step"><div class="modal-step-n">1</div><div class="modal-step-t"><strong>Azure Portal → App Registration → Visão Geral</strong><br>Copie o ID do aplicativo (cliente)</div></div>
     <div class="modal-step"><div class="modal-step-n">2</div><div class="modal-step-t"><strong>Authentication → Redirect URI</strong><br>Confirme: <code>http://localhost:8080/MRD_Dashboard_v7.html</code></div></div>
-    <input class="modal-input" id="cidInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" spellcheck="false">
-    <div class="modal-saved" id="cidSaved"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Client ID salvo!</div>
-    <div class="modal-btns">
+    <input class="modal-input" id="cidInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (Azure AD Client ID)" spellcheck="false">
+
+    <!-- Separador Way2 -->
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0 10px">
+      <div style="flex:1;height:1px;background:rgba(107,139,245,.2)"></div>
+      <span style="font-size:10px;color:var(--t3);white-space:nowrap">⚡ Way2 PIM API</span>
+      <div style="flex:1;height:1px;background:rgba(107,139,245,.2)"></div>
+    </div>
+    <p style="margin:0 0 8px;font-size:11px;color:var(--t2)">Token Way2 — dados de geração e MUST em tempo real (atualização a cada 15 min)</p>
+    <input class="modal-input" id="way2TokenInput" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (Token Way2 PIM)" spellcheck="false">
+    <div id="way2TestResult" style="display:none;font-size:10px;padding:6px 8px;border-radius:6px;margin-top:6px"></div>
+    <button class="modal-btn secondary" style="margin-top:6px;padding:6px 14px;font-size:11px" onclick="testWay2Token()">🔌 Testar conexão</button>
+
+    <div class="modal-saved" id="cidSaved"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Configurações salvas!</div>
+    <div class="modal-btns" style="margin-top:14px">
       <button class="modal-btn primary" onclick="saveCid()">Salvar</button>
       <button class="modal-btn secondary" onclick="closeSetup()">Cancelar</button>
     </div>
@@ -2476,6 +2493,9 @@ function processWb(wb){
   if(pat.length>0) console.log('📅 Datas Patamares:', pat[0].data.toLocaleDateString(), '→', pat[pat.length-1].data.toLocaleDateString(), '| Exemplo ano/mes:', pat[0].data.getFullYear(), pat[0].data.getMonth()+1);
   updateHeader();
   try{ renderAll(); }catch(e){ console.error('renderAll error:', e); }
+  // Enriquecer automaticamente com dados em tempo real da API Way2
+  const _w2tok=getWay2Token();
+  if(_w2tok) setTimeout(()=>loadWay2FromAPI(_w2tok),600);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -6126,18 +6146,187 @@ async function autoLoadFromUrl(){
 // ═══════════════════════════════════════════════════════════════════
 // OAUTH / ONEDRIVE
 // ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// WAY2 PIM API — INTEGRAÇÃO DE DADOS EM TEMPO REAL
+// ═══════════════════════════════════════════════════════════════════
+const WAY2_BASE='https://pim.way2.com.br:183/api/v3/dados-de-medicao/pontos';
+const WAY2_TOKEN_KEY='mrd_way2_token';
+// IDs dos pontos Way2 por parque (energia líquida de geração)
+const WAY2_ENERGY_IDS={M1:6368,M2:6369,M3:6373,M4:6374,M5:6375,M6:6376,M7:6215,M8:6378,M9:6219};
+// IDs dos pontos Way2 por parque (MUST – demanda de transmissão)
+const WAY2_MUST_IDS={M1:6380,M2:6381,M3:6382,M4:6383,M5:6384,M6:6385,M7:6386,M8:6387,M9:6388};
+const WAY2_TOTAL_ID=6233; // Somatório Geração UFV Mauriti
+let _way2LastLoad=0;
+
+function getWay2Token(){return localStorage.getItem(WAY2_TOKEN_KEY)||'';}
+
+async function _way2Get(token,ids,grandezas,periodo,contexto='ConsiderarMesCheio',intervalo='UmDia'){
+  const p=new URLSearchParams({
+    ids:ids.join(','), grandezas:grandezas.join(','),
+    contextodasdatas:contexto, intervalo,
+    'medicao-temporelativo':periodo,
+    aplicarhorariodeverao:'false', separardadoscomcpsemcp:'false', 'medicao-hasvalue':'false'
+  });
+  const r=await fetch(`${WAY2_BASE}?${p}`,{headers:{'Pim-Auth':token},cache:'no-store'});
+  if(!r.ok) throw new Error('Way2 HTTP '+r.status);
+  return r.json();
+}
+
+async function testWay2Token(){
+  const tok=document.getElementById('way2TokenInput').value.trim();
+  const res=document.getElementById('way2TestResult');
+  res.style.display='block'; res.style.background='rgba(107,139,245,.12)'; res.style.color='var(--t2)';
+  res.textContent='Testando conexão…';
+  try{
+    const d=await _way2Get(tok,[WAY2_ENERGY_IDS.M1],['EneatLiqGeracao'],'Ontem','ConsiderarDiaCheio');
+    const v=d.dados?.[0]?.valores?.[0];
+    if(v!=null){
+      const mwh=(v.valor/1000).toFixed(1);
+      res.style.background='rgba(52,224,161,.12)'; res.style.color='#34e0a1';
+      res.textContent=`✓ Conexão OK · M1 ontem = ${mwh} MWh (qualidade ${v.qualidade})`;
+    } else {
+      res.style.background='rgba(245,200,75,.12)'; res.style.color='#f5c84b';
+      res.textContent='⚠ Resposta vazia — verifique o token';
+    }
+  }catch(e){
+    res.style.background='rgba(248,113,113,.12)'; res.style.color='#f87171';
+    res.textContent='✕ Erro: '+e.message;
+  }
+}
+
+async function loadWay2FromAPI(token,silent=false){
+  if(!token) return;
+  setWay2Status('updating','Carregando…');
+  try{
+    const parkKeys=Object.keys(WAY2_ENERGY_IDS);
+    const parkIds=Object.values(WAY2_ENERGY_IDS);
+    const mustIds=Object.values(WAY2_MUST_IDS);
+
+    // Buscar energia (mês atual + mês anterior) e MUST (mês atual) em paralelo
+    const [eMes,eMesAnt,eMust]=await Promise.all([
+      _way2Get(token,parkIds,['EneatLiqGeracao'],'EsteMes'),
+      _way2Get(token,parkIds,['EneatLiqGeracao'],'MesPassado'),
+      _way2Get(token,mustIds,['Demat'],'EsteMes')
+    ]);
+
+    // ── Construir mapa dia→parque→MWh ──
+    const dayMap={}; // {'YYYY-MM-DD':{M1:x,M2:x,...}}
+    for(const ds of [eMes,eMesAnt]){
+      for(const item of (ds.dados||[])){
+        const pk=parkKeys.find(k=>WAY2_ENERGY_IDS[k]===item.pontoId);
+        if(!pk) continue;
+        for(const v of (item.valores||[])){
+          if(v.valor==null||v.qualidade===1) continue; // pular dados vazios
+          const day=v.data.slice(0,10);
+          if(!dayMap[day]) dayMap[day]={};
+          dayMap[day][pk]=+(v.valor/1000).toFixed(4); // kWh→MWh
+        }
+      }
+    }
+
+    // ── Patch dashData.way2 ──
+    if(dashData&&Array.isArray(dashData.way2)){
+      const dk=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dd}`;};
+      const seen=new Set();
+      for(const rec of dashData.way2){
+        const day=dk(rec.data); seen.add(day);
+        if(!dayMap[day]) continue;
+        const vals=dayMap[day];
+        let tot=0;
+        for(const pk of parkKeys){if(vals[pk]!=null){rec[pk.toLowerCase()]=vals[pk];tot+=vals[pk];}}
+        if(tot>0){rec.total=+tot.toFixed(4);rec.liquida=rec.total;}
+        delete dayMap[day];
+      }
+      // Adicionar dias novos (vêm da API mas não estavam no Excel)
+      for(const [day,vals] of Object.entries(dayMap)){
+        if(seen.has(day)) continue;
+        const [y,mo,d]=day.split('-').map(Number);
+        const date=new Date(y,mo-1,d);
+        let tot=0; const rec={data:date,bruta:0,liquida:0,total:0,perdaPct:0,perdaMwh:0};
+        for(const pk of parkKeys){const v=vals[pk]||0;rec[pk.toLowerCase()]=v;tot+=v;}
+        rec.total=+tot.toFixed(4); rec.liquida=rec.total; rec.bruta=rec.total;
+        dashData.way2.push(rec);
+      }
+      dashData.way2.sort((a,b)=>a.data-b.data);
+
+      // Re-escalonar patamares para coincidir com liquida (mesma lógica do processWb)
+      if(dashData.patamares&&dashData.patamares.length){
+        const dk2=d=>d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+        const liqDay={},gvDay={};
+        dashData.way2.forEach(r=>{const k=dk2(r.data);liqDay[k]=(liqDay[k]||0)+(r.liquida||0);});
+        dashData.patamares.forEach(r=>{const k=dk2(r.data);gvDay[k]=(gvDay[k]||0)+r.gv;});
+        dashData.patamares.forEach(r=>{
+          const k=dk2(r.data);
+          if(liqDay[k]>0&&gvDay[k]>0){const f=liqDay[k]/gvDay[k];r.gv*=f;r.gv_h*=f;}
+        });
+      }
+
+      // Atualizar dataMax se API trouxe dados mais recentes
+      const last=dashData.way2[dashData.way2.length-1];
+      if(last&&(!dashData.meta.dataMax||last.data>dashData.meta.dataMax)) dashData.meta.dataMax=last.data;
+    }
+
+    // ── Patch dashData.must.ativa (MUST via Way2) ──
+    if(dashData&&dashData.must&&Array.isArray(dashData.must.ativa)){
+      const mustDayMap={};
+      const mustKeys=Object.keys(WAY2_MUST_IDS);
+      for(const item of (eMust.dados||[])){
+        const pk=mustKeys.find(k=>WAY2_MUST_IDS[k]===item.pontoId);
+        if(!pk) continue;
+        for(const v of (item.valores||[])){
+          if(v.valor==null) continue;
+          const day=v.data.slice(0,10);
+          if(!mustDayMap[day]) mustDayMap[day]={};
+          mustDayMap[day][pk]=+(v.valor/1000).toFixed(4); // kW→MW
+        }
+      }
+      const dk3=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dd}`;};
+      for(const rec of dashData.must.ativa){
+        const day=dk3(rec.data);
+        if(!mustDayMap[day]) continue;
+        const vals=mustDayMap[day]; let tot=0;
+        for(const pk of mustKeys){if(vals[pk]!=null){rec[pk]=vals[pk];tot+=vals[pk];}}
+        if(tot>0) rec.total=+tot.toFixed(4);
+      }
+    }
+
+    _way2LastLoad=Date.now();
+    const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    setWay2Status('ok',t);
+    updateHeader();
+    try{renderAll();}catch(e){console.error('renderAll após Way2:',e);}
+    console.log('✅ Way2 API — dados injetados com sucesso ·',t);
+  }catch(e){
+    console.error('loadWay2FromAPI:',e);
+    setWay2Status('error',e.message.length>30?e.message.slice(0,30)+'…':e.message);
+  }
+}
+
+// Auto-refresh Way2 a cada 15 minutos (dados novos chegam a cada 10min no PIM)
+setInterval(()=>{
+  const tok=getWay2Token();
+  if(tok&&dashData&&dashData.way2&&dashData.way2.length) loadWay2FromAPI(tok,true);
+},15*60*1000);
+
 function getCid(){return localStorage.getItem('mrd_cid')||'';}
 function saveCid(){
   const v=document.getElementById('cidInput').value.trim();
-  if(!v||v.length<30){alert('Client ID inválido.');return;}
-  localStorage.setItem('mrd_cid',v);
+  if(v&&v.length<30){alert('Client ID inválido.');return;}
+  if(v) localStorage.setItem('mrd_cid',v);
+  const w=document.getElementById('way2TokenInput').value.trim();
+  if(w) localStorage.setItem(WAY2_TOKEN_KEY,w);
   document.getElementById('cidSaved').style.display='block';
-  setTimeout(()=>{closeSetup();document.getElementById('cidSaved').style.display='none';},1500);
+  setTimeout(()=>{
+    closeSetup();
+    document.getElementById('cidSaved').style.display='none';
+    // Se token Way2 foi salvo e dados já carregados, atualizar imediatamente
+    if(w&&dashData&&dashData.way2&&dashData.way2.length) loadWay2FromAPI(w);
+  },1200);
 }
 function closeSetup(){document.getElementById('setupModal').classList.remove('open');}
 function openSetup(){
-  const s=getCid();
-  if(s) document.getElementById('cidInput').value=s;
+  const s=getCid(); if(s) document.getElementById('cidInput').value=s;
+  const w=getWay2Token(); if(w) document.getElementById('way2TokenInput').value=w;
   document.getElementById('setupModal').classList.add('open');
 }
 
@@ -6147,7 +6336,7 @@ function progUpdate(title,msg,pct,detail=''){
   document.getElementById('progBar').style.width=pct+'%';
   document.getElementById('progDetail').textContent=detail;
 }
-// ── Indicador de status de sincronização ──
+// ── Indicador de status de sincronização (planilha) ──
 let _syncLastLoad=0;
 function setSyncStatus(state,label){
   const el=document.getElementById('syncPill');
@@ -6157,6 +6346,16 @@ function setSyncStatus(state,label){
   el.onclick=(state==='warn'||state==='error')?()=>autoLoadFromUrl():null;
   el.style.cursor=(state==='warn'||state==='error')?'pointer':'default';
   el.title=state==='warn'?'Clique para carregar os dados atualizados':state==='error'?'Clique para tentar novamente. Se persistir, use o botão ☁ (OneDrive) para autenticar.':'Status da última atualização';
+}
+// ── Indicador de status Way2 API ──
+function setWay2Status(state,label){
+  const el=document.getElementById('way2Pill');
+  if(!el) return;
+  el.style.display='inline-flex';
+  el.className='sync-pill sp-'+state;
+  el.querySelector('.sp-label').textContent='⚡ Way2 · '+label;
+  el.style.cursor=(state==='error')?'pointer':'default';
+  el.title=state==='error'?'Clique para tentar novamente a conexão Way2':state==='ok'?'Dados em tempo real · Way2 PIM':'Way2 API';
 }
 async function checkNewData(){
   if(!DATA_URL||_syncLastLoad===0) return;
