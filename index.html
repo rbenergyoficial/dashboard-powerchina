@@ -5485,7 +5485,7 @@ function renderPageMUST(type){
 
   k.innerHTML=[
     {c:'blue',  lab:'DEMANDA MÁXIMA',     val:f1(peak),   unit:'MW', sub:`Pico · ${sel==='total'?'todos os parques':sel}`},
-    {c:'red',   lab:'DEMANDA CONTRATADA', val:f1(contr),  unit:'MW', sub:'Aba MUST · demanda contratada'},
+    {c:'red',   lab:'DEMANDA CONTRATADA', val:f1(contr),  unit:'MW', sub:'Limite contratual · MUST'},
     {c:'green', lab:'MARGEM DISPONÍVEL',  val:f1(margem), unit:'MW', sub:margem>=0?'Folga até o contratado':'Acima do contratado', vc:margem>=0?'var(--green)':'var(--red)'},
     {c:'purple',lab:'UTILIZAÇÃO MÁXIMA',  val:f1(util),   unit:'%',  sub:`${periodoTxt} · ${gran==='hora'?'1h':gran}`, vc:util>100?'var(--red)':'var(--green)'}
   ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
