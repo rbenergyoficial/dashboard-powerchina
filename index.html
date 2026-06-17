@@ -682,6 +682,14 @@ html[data-theme="light"] #page-must .must-cal-popup .mc-allbtn{background:rgba(0
 html[data-theme="light"] #page-must .must-cal-popup .mc-allbtn:hover{background:rgba(73,190,134,.10);border-color:rgba(73,190,134,.35);color:#1a7a50;}
 html[data-theme="light"] #page-must .must-cal-popup .mc-allbtn.on{background:rgba(73,190,134,.16);border-color:rgba(73,190,134,.45);color:#1a7a50;}
 html[data-theme="light"] #page-must .must-cal-popup .mc-range input.fdate{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.12);color:var(--t1);}
+/* MUST light mode — vivid texts */
+html[data-theme="light"] #page-must .kpi-label{color:var(--t2);}
+html[data-theme="light"] #page-must .kpi-sub{color:var(--t2);}
+html[data-theme="light"] #page-must .kpi-unit{color:var(--t2);opacity:.7;}
+html[data-theme="light"] #page-must .must-rank-side-sub{color:var(--t2);}
+html[data-theme="light"] #page-must .must-rank-side-meta{color:var(--t1);}
+html[data-theme="light"] #page-must .must-rank-foot{color:var(--t2);}
+html[data-theme="light"] #page-must .must-rank-em-analise{opacity:1;}
 /* Sidebar active states: cyan text stays readable but make it a bit darker */
 html[data-theme="light"] .side-nav .page-btn.on,
 html[data-theme="light"] .side-panel-btn.is-active,
@@ -5474,6 +5482,7 @@ function renderMustPeakRanking(rows){
 
 function renderPageMUST(type){
   type=(type==='line'||type==='bar')?type:getToggle('must');
+  const _must_lt=document.documentElement.getAttribute('data-theme')==='light';
   const must=dashData.must;
   const k=document.getElementById('mustKpis'); if(!k) return;
   if(!must||!must.ativa.length){ k.innerHTML='<div class="no-data" style="grid-column:1/-1;height:140px"><span>—</span><span>Sem dados de MUST na planilha</span></div>'; showNoData('cMUST'); return; }
@@ -5538,11 +5547,14 @@ function renderPageMUST(type){
   const denseIntraday=mode==='dia' && (gran==='15min' || gran==='30min' || gran==='hora');
   const mustMainSub=document.getElementById('mustMainSub'); if(mustMainSub){ mustMainSub.textContent=`${_T('Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST')} · ${mustScopeLabel}`; }
 
+  const _mustTickC=_must_lt?'#3a4a6a':'#c4d0ea';
+  const _mustTitleC=_must_lt?'#2c3e6a':'#c8d6f8';
   const xScale={
-    ...xAxisWithTitle({title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:'#c8d6f8',font:{size:13,weight:'700'}}}),
+    ...xAxisWithTitle({title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:_mustTitleC,font:{size:13,weight:'700'}}}),
+    title:{display:true,text:(mode==='dia' ? `Horários do dia ${diaLabel}` : `${gran==='hora'?'1h':gran} no período selecionado`),color:_mustTitleC,font:{size:13,weight:'700'}},
     ticks:{
       ...(CHART_DEFAULTS.scales.x?.ticks||{}),
-      color:'#c4d0ea',
+      color:_mustTickC,
       autoSkip:denseIntraday?false:true,
       maxTicksLimit:denseIntraday?96:18,
       maxRotation:denseIntraday?90:0,
@@ -5579,7 +5591,7 @@ function renderPageMUST(type){
       plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{...CHART_DEFAULTS.plugins.tooltip.callbacks,title:_mustTooltipTitle}}},
       scales:{
         x:xScale,
-        y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,grace:'10%',suggestedMax:contr>0?contr*1.15:undefined,title:{display:true,text:'MW',color:'#8090b8',font:{size:9}}}
+        y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,grace:'10%',suggestedMax:contr>0?contr*1.15:undefined,title:{display:true,text:'MW',color:_mustTitleC,font:{size:9}},ticks:{...CHART_DEFAULTS.scales.y.ticks,color:_mustTickC}}
       }
     }
   });
