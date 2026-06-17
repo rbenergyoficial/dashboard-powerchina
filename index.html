@@ -6320,7 +6320,10 @@ async function onRefreshClick(){
         const _d=Math.floor((_td-_ltd)/86400000);
         return _d>=2&&_td.getDate()>=3&&_ltd.getMonth()===_td.getMonth()&&_ltd.getFullYear()===_td.getFullYear();
       };
-      if(_isStale()){
+      // Só entra no loop de espera se o arquivo foi modificado há menos de 10 min
+      // (indica que o usuário salvou agora e o OneDrive ainda está sincronizando)
+      const _modAgeMs=_initModTime?Date.now()-new Date(_initModTime).getTime():Infinity;
+      if(_isStale()&&_modAgeMs<10*60*1000){
         const _metaOnly='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=lastModifiedDateTime';
         const _apiContent='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content';
         let _knownMod=_initModTime; let _downloaded=false;
