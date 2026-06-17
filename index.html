@@ -5539,6 +5539,7 @@ function renderPageMUST(type){
     ]},
     options:{
       ...CHART_DEFAULTS,
+      interaction:{mode:'index',intersect:false},
       plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{...CHART_DEFAULTS.plugins.tooltip.callbacks,title:_mustTooltipTitle}}},
       scales:{
         x:xScale,
