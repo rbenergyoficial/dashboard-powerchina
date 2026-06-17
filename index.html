@@ -6218,6 +6218,9 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
       }
     }
   }
+  // Cópia do dayMap antes do loop way2 deletar entradas — usada no patch PPA
+  const dayMapPPA={};
+  for(const [k,v] of Object.entries(dayMap)) dayMapPPA[k]=Object.assign({},v);
 
   // Patch dashData.way2
   if(dashData&&Array.isArray(dashData.way2)){
@@ -6270,7 +6273,7 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
     }
     const CUTOFF='2026-06';
     const allPkWay2=Object.keys(WAY2_ENERGY_IDS);
-    for(const [day,vals] of Object.entries(dayMap)){
+    for(const [day,vals] of Object.entries(dayMapPPA)){
       if(day.slice(0,7)<CUTOFF) continue;
       const moKey=day.slice(0,7);
       if(!moIdx[moKey]) continue;
