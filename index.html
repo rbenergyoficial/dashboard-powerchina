@@ -6280,6 +6280,9 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
       const mo=moIdx[moKey];
       const [y,mo2,d]=day.split('-').map(Number);
       let rec=(mo.daily||[]).find(r=>r?.data&&r.data.getFullYear()===y&&r.data.getMonth()===mo2-1&&r.data.getDate()===d);
+      // Só injeta Way2 se o registro não existe OU não tem dado validado da planilha
+      const hasExcelData=rec&&(rec.total>0||Object.keys(WAY2_ENERGY_IDS).some(pk=>rec[pk]>0));
+      if(hasExcelData) continue;
       if(!rec){rec={data:new Date(y,mo2-1,d)};if(!mo.daily)mo.daily=[];mo.daily.push(rec);}
       let tot=0;
       for(const pk of allPkWay2){if(vals[pk]!=null){rec[pk]=+vals[pk].toFixed(2);tot+=vals[pk];}}
