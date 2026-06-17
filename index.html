@@ -1661,6 +1661,26 @@ Object.assign(LANG_PACKS['en'].text, {"Demais parques": "Other plants", "PERÍOD
 Object.assign(LANG_PACKS['zh-CN'].text, {"Demais parques": "其他电站", "PERÍODO": "周期", "% de participação no total de GV · meta igualitária ≈ ": "占总 GV 的比例 · 平均目标 ≈ ", "Antes das perdas": "损耗前", "PERDAS TÉCNICAS": "技术损耗", "EFICIÊNCIA DE CONVERSÃO": "转换效率", "Maio": "五月", "Junho": "六月", "Julho": "七月", "Agosto": "八月", "Setembro": "九月", "Outubro": "十月", "Novembro": "十一月", "Dezembro": "十二月", "Janeiro": "一月", "Fevereiro": "二月", "Março": "三月", "Abril": "四月"});
 Object.assign(LANG_PACKS['en'].text, {"Meta 90%": "Target 90%", "PR Mensal × Meta 90%": "Monthly PR × Target 90%", "Evolução do PR vs meta por mês": "PR evolution vs target by month", "PPA BRK vs demais parques": "PPA BRK vs other plants", "Participação no Complexo": "Complex Share"});
 Object.assign(LANG_PACKS['zh-CN'].text, {"Meta 90%": "90% 目标", "PR Mensal × Meta 90%": "月度 PR × 90% 目标", "Evolução do PR vs meta por mês": "各月 PR 相对目标变化", "PPA BRK vs demais parques": "PPA BRK 对比其他电站", "Participação no Complexo": "园区占比"});
+Object.assign(LANG_PACKS['en'].text, {
+  "TOTAL DO PERÍODO":"TOTAL PERIOD",
+  "MWh · TOTAL PERÍODO":"MWh · TOTAL PERIOD",
+  "↺ TODOS OS ESCOPOS":"↺ ALL SCOPES",
+  "ML / Demais":"ML / Other",
+  "Parques PPA BRK · distribuição por parque":"PPA BRK plants · by plant",
+  "Parques ML · distribuição por parque":"ML plants · by plant",
+  "% do escopo":"% of scope",
+  "atingido":"achieved"
+});
+Object.assign(LANG_PACKS['zh-CN'].text, {
+  "TOTAL DO PERÍODO":"总计周期",
+  "MWh · TOTAL PERÍODO":"MWh · 总计周期",
+  "↺ TODOS OS ESCOPOS":"↺ 所有范围",
+  "ML / Demais":"ML / 其他",
+  "Parques PPA BRK · distribuição por parque":"PPA BRK 电站 · 各电站分布",
+  "Parques ML · distribuição por parque":"ML 电站 · 各电站分布",
+  "% do escopo":"% 占范围",
+  "atingido":"已达标"
+});
 Object.assign(LANG_PACKS['en'].text, {"Barras de energia gerada + linha de meta por parque": "Generated energy bars + target line by plant"});
 Object.assign(LANG_PACKS['zh-CN'].text, {"Barras de energia gerada + linha de meta por parque": "各电站发电量柱状图 + 目标线"});
 Object.assign(LANG_PACKS['en'].text,  {'Realizado':'Actual','Meta':'Target','Geração horária':'Hourly generation','Meta horária':'Hourly target','PR (%)':'PR (%)','Geração produzida':'Generated production'});
@@ -1964,6 +1984,8 @@ function translatePatternText(value){
     [/GWh frustrados/g,'GWh curtailed'],
     [/GWh verificados/g,'GWh verified'],
     [/do total/g,'of total'],
+    [/do escopo/g,'of scope'],
+    [/atingido da meta/g,'achieved of target'],
     [/Clique para filtrar/g,'Click to filter'],
     [/Horários do dia /g,'Day hours: '],
     [/no período selecionado/g,'in selected period'],
@@ -2008,6 +2030,8 @@ function translatePatternText(value){
     [/GWh frustrados/g,'GWh 受限电量'],
     [/GWh verificados/g,'GWh 已核验'],
     [/do total/g,'占总量'],
+    [/do escopo/g,'占范围'],
+    [/atingido da meta/g,'达到目标'],
     [/Clique para filtrar/g,'点击筛选'],
     [/Horários do dia /g,'当日时段 '],
     [/no período selecionado/g,'在所选周期'],
@@ -5040,7 +5064,7 @@ function renderPagePPA(type){
           ctx2.fillText(Math.round(tot).toLocaleString('pt-BR'),cx,cy-9);
           ctx2.font='600 8px Inter,system-ui';
           ctx2.fillStyle=_clt?'#5a6a8a':'#7890a8';
-          ctx2.fillText('MWh · TOTAL PERÍODO',cx,cy+7);
+          ctx2.fillText(_T('MWh · TOTAL PERÍODO'),cx,cy+7);
           ctx2.restore();
         }
       });
@@ -5071,8 +5095,8 @@ function renderPagePPA(type){
             const m=metaAgg(p);
             const achiev=m>0?(v/m*100).toFixed(1):'—';
             return [
-              ` ${p}: ${_fmtMWh(v)} MWh (${pct}% do escopo)`,
-              m>0?` Meta: ${_fmtMWh(m)} MWh · ${achiev}% atingido`:null
+              ` ${p}: ${_fmtMWh(v)} MWh (${_T(`${pct}% do escopo`)})`,
+              m>0?` ${_T('Meta')}: ${_fmtMWh(m)} MWh · ${achiev}% ${_T('atingido')}`:null
             ].filter(Boolean);
           }
           const meta=c.dataIndex===0?ppaBrkMeta:mlMeta;
@@ -5129,24 +5153,24 @@ function renderPagePPA(type){
           `</div>`+
           `<div style="font-size:15px;font-weight:800;color:${_txtMain};letter-spacing:-.03em;line-height:1.1">${_fmtMWh(val)}<span style="font-size:9px;font-weight:400;color:${_txtSub};margin-left:3px">MWh</span></div>`+
           _pbar(val,meta,col)+
-          `<div style="font-size:9px;color:${_txtSub}">${subLabel} · META <strong style="color:${col}">${_fmtMWh(meta)}</strong></div>`+
+          `<div style="font-size:9px;color:${_txtSub}">${_T(subLabel)} · ${_T('META')} <strong style="color:${col}">${_fmtMWh(meta)}</strong></div>`+
         `</div>`+
       `</div>`;
     };
     // Back to all button
-    const _btnTodos=`<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_btnBd};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_btnTx};background:${_btnBg}">↺ TODOS OS ESCOPOS</div>`;
+    const _btnTodos=`<div data-scope="todos" style="text-align:center;padding:6px 10px;border-radius:8px;border:1px solid ${_btnBd};cursor:pointer;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_btnTx};background:${_btnBg}">${_T('↺ TODOS OS ESCOPOS')}</div>`;
     // Header total
     const _hdrTotal=(cor,label,achiev,achC)=>
       `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.08)'}">`+
       _dot(cor,8)+
       `<div><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${_txtSub}">${label}</div>`+
       `<div style="font-size:17px;font-weight:800;color:${_txtMain};letter-spacing:-.04em;line-height:1">${_fmtMWh(_tot)}<span style="font-size:10px;color:${_txtSub};font-weight:400;margin-left:4px">MWh</span></div>`+
-      `<div style="font-size:9px;font-weight:700;color:${achC};margin-top:1px">${achiev}% atingido da meta</div>`+
+      `<div style="font-size:9px;font-weight:700;color:${achC};margin-top:1px">${_T(`${achiev}% atingido da meta`)}</div>`+
       `</div></div>`;
 
     if(_donutByPark){
       const _scopeColor=chartScope==='ppa'?'#A855F7':'#2DD4BF';
-      const _scopeName=chartScope==='ppa'?'PPA BRK':'ML / Demais';
+      const _scopeName=chartScope==='ppa'?'PPA BRK':_T('ML / Demais');
       const _scopeMeta=+chartParksBase.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
       const _scopeAchiev=_scopeMeta>0?(_tot/_scopeMeta*100).toFixed(1):'—';
       const _scopeAchC=_ac(_tot,_scopeMeta,_scopeColor);
@@ -5166,9 +5190,9 @@ function renderPagePPA(type){
       const _pp=_tot>0?(ppaBrkProd/_tot*100).toFixed(1):'0.0';
       const _pm=_tot>0?(naoPpaTotal/_tot*100).toFixed(1):'0.0';
       _si.innerHTML=
-        _hdrTotal('#6b8bf5','TOTAL DO PERÍODO',tAchiev,tAchC)+
+        _hdrTotal('#6b8bf5',_T('TOTAL DO PERÍODO'),tAchiev,tAchC)+
         _mkCard('ppa','#A855F7','PPA BRK',ppaBrkProd,ppaBrkMeta,`${_pp}% do total`,true)+
-        _mkCard('ml','#2DD4BF','ML / Demais',naoPpaTotal,mlMeta,`${_pm}% do total`,true)+
+        _mkCard('ml','#2DD4BF',_T('ML / Demais'),naoPpaTotal,mlMeta,`${_pm}% do total`,true)+
         _btnTodos;
     }
     _si.querySelectorAll('[data-scope]').forEach(el=>{
