@@ -444,7 +444,8 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa .ppa-compact-select{min-width:118px}
 #page-ppa .ppa-local-controls{display:none!important}
 #page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:300px;width:100%;padding:8px 6px 4px;gap:20px;overflow:hidden}
-#page-ppa .ppa-donut-shell canvas{flex:0 0 48%;height:100%!important;cursor:pointer}
+#page-ppa .ppa-donut-wrap{flex:0 0 46%;height:100%;position:relative;cursor:pointer}
+#page-ppa .ppa-donut-wrap canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important}
 #page-ppa .ppa-split-info{flex:1;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;overflow-y:auto;max-height:284px;padding-right:2px}
 #page-ppa .ppa-split-info::-webkit-scrollbar{width:3px}
 #page-ppa .ppa-split-info::-webkit-scrollbar-track{background:transparent}
@@ -1381,7 +1382,7 @@ function _themeCharts(light){
       <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub" id="ppaSplitSubtitle">PPA BRK vs demais parques</div></div></div>
-          <div class="ppa-donut-shell"><canvas id="cPPAsplit"></canvas><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
+          <div class="ppa-donut-shell"><div class="ppa-donut-wrap"><canvas id="cPPAsplit"></canvas></div><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
         </div>
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Taxa de Conclusão por Parque</div><div class="cc-sub">% atingido da meta contratada</div></div></div>
