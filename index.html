@@ -272,6 +272,7 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .kpi-label{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:6px;}
 .kpi-value{font-size:27px;font-weight:700;line-height:1;color:var(--t1);font-family:var(--display);letter-spacing:-.8px;font-feature-settings:'tnum';}
 .kpi-unit{font-size:12px;font-weight:500;opacity:.5;margin-left:3px;font-family:var(--font);}
+html[data-theme="light"] .kpi-unit{opacity:.75;}
 .kpi-sub{font-size:10px;color:var(--t3);margin-top:6px;line-height:1.4;}
 
 /* SECTIONS */
@@ -781,19 +782,41 @@ window.toggleTheme=function(){
   var wasLight=h.getAttribute('data-theme')==='light';
   if(wasLight){ h.removeAttribute('data-theme'); localStorage.setItem('dashTheme','dark'); }
   else { h.setAttribute('data-theme','light'); localStorage.setItem('dashTheme','light'); }
-  _themeCharts(!wasLight);
-  /* Full re-render of the active page so inline-styled overlays that aren't
-     individually re-callable (V40 stats panel, gauge cards) pick up the theme.
-     Falls back to the in-place chart update alone when no data is loaded. */
+  /* Full re-render first so charts are created/recreated in the correct theme */
   try{
     if(typeof renderAll==='function' && window.dashData && Array.isArray(dashData.patamares) && dashData.patamares.length){
       renderAll();
     }
   }catch(e){}
+  /* After re-render, update any surviving chart instances with correct theme colors */
+  _themeCharts(!wasLight);
 };
 
 /* Update all active Chart.js instances without full re-render */
 function _themeCharts(light){
+  /* Patch CHART_DEFAULTS so any chart created after this call uses correct colors */
+  try{
+    if(typeof CHART_DEFAULTS!=='undefined'){
+      var _tCol=light?'#606480':'#9fa8bb';
+      var _gCol=light?'rgba(0,0,0,.08)':'rgba(255,255,255,.07)';
+      ['x','y'].forEach(function(ax){
+        if(CHART_DEFAULTS.scales&&CHART_DEFAULTS.scales[ax]){
+          if(CHART_DEFAULTS.scales[ax].ticks) CHART_DEFAULTS.scales[ax].ticks.color=_tCol;
+          if(CHART_DEFAULTS.scales[ax].grid)  CHART_DEFAULTS.scales[ax].grid.color=_gCol;
+        }
+      });
+      if(CHART_DEFAULTS.plugins&&CHART_DEFAULTS.plugins.tooltip){
+        var _dt=CHART_DEFAULTS.plugins.tooltip;
+        _dt.backgroundColor=light?'rgba(255,255,255,.97)':'rgba(7,10,22,.97)';
+        _dt.borderColor    =light?'rgba(0,0,0,.12)':'rgba(255,255,255,.18)';
+        _dt.titleColor     =light?'#13121f':'#f0f4ff';
+        _dt.bodyColor      =light?'#606480':'#c8d4f0';
+      }
+      if(CHART_DEFAULTS.plugins&&CHART_DEFAULTS.plugins.legend&&CHART_DEFAULTS.plugins.legend.labels)
+        CHART_DEFAULTS.plugins.legend.labels.color=light?'#3c3f57':'#D8D9DA';
+    }
+  }catch(e){}
+  /* Update all active instances */
   try{
     if(typeof Chart==='undefined') return;
     var inst=Chart.instances||{};
@@ -813,8 +836,8 @@ function _themeCharts(light){
           var tt=o.plugins.tooltip;
           tt.backgroundColor=light?'rgba(255,255,255,.97)':'rgba(15,18,24,.95)';
           tt.borderColor=light?'rgba(0,0,0,.12)':'rgba(255,255,255,.12)';
-          tt.titleColor=light?'#13121f':'#D8D9DA';
-          tt.bodyColor=light?'#606480':'#A0AEC0';
+          tt.titleColor=light?'#13121f':'#f0f4ff';
+          tt.bodyColor=light?'#606480':'#c8d4f0';
         }
       }
       c.update('none');
@@ -2845,8 +2868,9 @@ const stackTotalsPlugin={
     if(!meta0||!meta0.data) return;
     const fmt=opts.fmt||(v=>v.toLocaleString(getDateLocale(),{maximumFractionDigits:2}));
     ctx.save();
+    const _stLt=document.documentElement.getAttribute('data-theme')==='light';
     ctx.font="700 10px 'JetBrains Mono',monospace";
-    ctx.fillStyle='#f0f4ff';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillStyle=_stLt?'#1e293b':'#f0f4ff';ctx.textAlign='center';ctx.textBaseline='bottom';
     meta0.data.forEach((bar,i)=>{
       let total=0,topY=bar.y;
       chart.data.datasets.forEach((ds,di)=>{
@@ -3563,12 +3587,13 @@ function renderRest1(){
       afterDraw(chart){
         const {ctx,chartArea:{top,left,width,height}}=chart;
         ctx.save();
+        const _ctLt=document.documentElement.getAttribute('data-theme')==='light';
         const cx=left+width/2, cy=top+height/2;
-        ctx.fillStyle='#f0f4ff';
+        ctx.fillStyle=_ctLt?'#0f172a':'#f0f4ff';
         ctx.font='bold 22px Inter,system-ui';
         ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillText(total.toFixed(1),cx,cy-9);
-        ctx.fillStyle='#7080a8';
+        ctx.fillStyle=_ctLt?'#374151':'#7080a8';
         ctx.font='600 9px Inter,system-ui';
         ctx.fillText('GWh TOTAL',cx,cy+11);
         ctx.restore();
@@ -3696,12 +3721,13 @@ function renderRest2(){
       afterDraw(chart){
         const {ctx,chartArea:{top,left,width,height}}=chart;
         ctx.save();
+        const _ct2Lt=document.documentElement.getAttribute('data-theme')==='light';
         const cx=left+width/2, cy=top+height/2;
-        ctx.fillStyle='#f0f4ff';
+        ctx.fillStyle=_ct2Lt?'#0f172a':'#f0f4ff';
         ctx.font='bold 22px Inter,system-ui';
         ctx.textAlign='center';ctx.textBaseline='middle';
         ctx.fillText(total.toLocaleString(getDateLocale()),cx,cy-9);
-        ctx.fillStyle='#7080a8';
+        ctx.fillStyle=_ct2Lt?'#374151':'#7080a8';
         ctx.font='600 9px Inter,system-ui';
         ctx.fillText(translateAnyText('EVENTOS'),cx,cy+11);
         ctx.restore();
