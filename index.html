@@ -5175,6 +5175,12 @@ function renderPagePPA(type){
       }
     }
   });
+  if(splitCtx){
+    splitCtx.addEventListener('mouseleave',()=>{
+      const tip=document.getElementById('_donutTip');
+      if(tip) tip.style.opacity='0';
+    });
+  }
   // ── Painel lateral do donut ──
   const _si=document.getElementById('ppaSplitInfo');
   if(_si){
