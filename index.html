@@ -1390,7 +1390,7 @@ function _themeCharts(light){
       </div>
       <div class="chart-row cols-2">
         <div class="cc">
-          <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub" id="ppaSplitSubtitle">PPA BRK vs demais parques</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Participação no Complexo</div><div class="cc-sub" id="ppaSplitSubtitle">PPA BRK vs ML</div></div></div>
           <div class="ppa-donut-shell"><div class="ppa-donut-wrap"><canvas id="cPPAsplit"></canvas></div><div class="ppa-split-info" id="ppaSplitInfo"></div></div>
         </div>
         <div class="cc">
@@ -5064,7 +5064,7 @@ function renderPagePPA(type){
   if(_splitSubEl) _splitSubEl.textContent=_T(
     chartScope==='ppa'?'Parques PPA BRK · distribuição por parque':
     chartScope==='ml' ?'Parques ML · distribuição por parque':
-    'PPA BRK vs demais parques');
+    'PPA BRK vs ML');
   // Donut data: per-park breakdown when scope is ppa/ml, PPA vs ML when todos
   const _donutByPark=chartScope!=='todos';
   let _donutLabels,_donutData,_donutBgCol,_donutBdCol;
@@ -5074,7 +5074,7 @@ function renderPagePPA(type){
     _donutBgCol=chartParksBase.map(p=>(PPA_COL[p]||'#A855F7')+'bb');
     _donutBdCol=chartParksBase.map(p=>PPA_COL[p]||'#A855F7');
   } else {
-    _donutLabels=['PPA BRK',translateAnyText('ML / Demais')];
+    _donutLabels=['PPA BRK','ML'];
     _donutData=[ppaBrkProd,naoPpaTotal];
     _donutBgCol=['rgba(168,85,247,.78)','rgba(45,212,191,.56)'];
     _donutBdCol=['rgba(168,85,247,.95)','rgba(45,212,191,.88)'];
@@ -5096,12 +5096,12 @@ function renderPagePPA(type){
           var _clt=document.documentElement.getAttribute('data-theme')==='light';
           ctx2.save();
           ctx2.textAlign='center'; ctx2.textBaseline='middle';
-          ctx2.font='bold 15px Inter,system-ui';
-          ctx2.fillStyle=_clt?'#1e293b':'#dce6f8';
-          ctx2.fillText(Math.round(tot).toLocaleString('pt-BR'),cx,cy-9);
-          ctx2.font='600 8px Inter,system-ui';
-          ctx2.fillStyle=_clt?'#5a6a8a':'#7890a8';
-          ctx2.fillText(_T('MWh · TOTAL PERÍODO'),cx,cy+7);
+          ctx2.font='bold 22px Inter,system-ui';
+          ctx2.fillStyle=_clt?'#0f172a':'#dce6f8';
+          ctx2.fillText(Math.round(tot).toLocaleString('pt-BR'),cx,cy-8);
+          ctx2.font='600 10px Inter,system-ui';
+          ctx2.fillStyle=_clt?'#374151':'#7890a8';
+          ctx2.fillText(_T('MWh · TOTAL PERÍODO'),cx,cy+13);
           ctx2.restore();
         }
       });
@@ -5161,8 +5161,8 @@ function renderPagePPA(type){
     const _cardBg=(col,ativo)=>_splt_lt
       ?(ativo?`rgba(255,255,255,1) border-box`:`rgba(255,255,255,.95)`)
       :(ativo?col+'28':col+'12');
-    const _txtMain=_splt_lt?'#0f172a':'#eef2ff';
-    const _txtSub=_splt_lt?'#475569':'#8898b8';
+    const _txtMain=_splt_lt?'#0a0f1e':'#eef2ff';
+    const _txtSub=_splt_lt?'#1e3a5f':'#8898b8';
     const _barBg=_splt_lt?'rgba(0,0,0,.10)':'rgba(255,255,255,.10)';
     const _btnBg=_splt_lt?'rgba(0,0,0,.05)':'rgba(255,255,255,.05)';
     const _btnBd=_splt_lt?'rgba(0,0,0,.12)':'rgba(255,255,255,.12)';
@@ -5178,14 +5178,14 @@ function renderPagePPA(type){
       const ac=_ac(val,meta,col);
       const achiev=meta>0?(val/meta*100).toFixed(1):'—';
       const ativo=dataScope&&_cs===dataScope;
-      const bg=_splt_lt?(ativo?'rgba(255,255,255,1)':'rgba(248,249,252,.95)'):(ativo?col+'28':col+'12');
-      const bd=ativo?col+'dd':(_splt_lt?col+'66':col+'40');
+      const bg=_splt_lt?(ativo?col+'2a':col+'12'):(ativo?col+'28':col+'12');
+      const bd=ativo?col+'dd':(_splt_lt?col+'aa':col+'40');
       const sh=_splt_lt?(ativo?`0 2px 10px ${col}30,0 1px 3px rgba(0,0,0,.08)`:'0 1px 4px rgba(0,0,0,.06)'):'none';
       return `<div ${dataScope?`data-scope="${dataScope}"`:''}  style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1.5px solid ${bd};background:${bg};box-shadow:${sh};${clickable?'cursor:pointer;':''}margin-bottom:7px;transition:border-color .2s,background .2s">`+
         _dot(col,11)+
         `<div style="flex:1;min-width:0">`+
           `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px">`+
-            `<span style="font-size:10px;font-weight:700;color:${_splt_lt?'#2c3a5a':col};letter-spacing:.01em">${nome}</span>`+
+            `<span style="font-size:10px;font-weight:700;color:${_splt_lt?'#0f172a':col};letter-spacing:.01em">${nome}</span>`+
             `<span style="font-size:10px;font-weight:800;color:${ac};background:${ac}22;border:1px solid ${ac}55;border-radius:5px;padding:1px 6px">${achiev}%</span>`+
           `</div>`+
           `<div style="font-size:15px;font-weight:800;color:${_txtMain};letter-spacing:-.03em;line-height:1.1">${_fmtMWh(val)}<span style="font-size:9px;font-weight:400;color:${_txtSub};margin-left:3px">MWh</span></div>`+
@@ -5207,7 +5207,7 @@ function renderPagePPA(type){
 
     if(_donutByPark){
       const _scopeColor=chartScope==='ppa'?'#A855F7':'#2DD4BF';
-      const _scopeName=chartScope==='ppa'?'PPA BRK':_T('ML / Demais');
+      const _scopeName=chartScope==='ppa'?'PPA BRK':'ML';
       const _scopeMeta=+chartParksBase.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
       const _scopeAchiev=_scopeMeta>0?(_tot/_scopeMeta*100).toFixed(1):'—';
       const _scopeAchC=_ac(_tot,_scopeMeta,_scopeColor);
@@ -5229,7 +5229,7 @@ function renderPagePPA(type){
       _si.innerHTML=
         _hdrTotal('#6b8bf5',_T('TOTAL DO PERÍODO'),tAchiev,tAchC)+
         _mkCard('ppa','#A855F7','PPA BRK',ppaBrkProd,ppaBrkMeta,`${_pp}% do total`,true)+
-        _mkCard('ml','#2DD4BF',_T('ML / Demais'),naoPpaTotal,mlMeta,`${_pm}% do total`,true)+
+        _mkCard('ml','#2DD4BF','ML',naoPpaTotal,mlMeta,`${_pm}% do total`,true)+
         _btnTodos;
     }
     _si.querySelectorAll('[data-scope]').forEach(el=>{
