@@ -6624,7 +6624,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,aggFactor,ufvSel,gran){
   const pm={};
   const allT=new Set();
   for(const item of (raw.dados||[])){
-    if(item.grandeza!==gran) continue;
+    if(item.nomeGrandeza!==gran) continue;
     const id=item.pontoId;
     pm[id]={};
     for(const v of (item.valores||[])){
