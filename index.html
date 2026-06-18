@@ -396,8 +396,8 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
   animation:barShimmer 1.6s ease-in-out infinite;}
 @keyframes barShimmer{to{left:200%}}
-.prog-detail{font-size:11px;color:var(--t2);font-family:var(--mono);margin-top:8px;margin-bottom:4px;line-height:1.5;text-align:left;padding:8px 10px;background:rgba(248,113,113,.08);border-left:3px solid rgba(248,113,113,.5);border-radius:0 6px 6px 0;display:none;}
-.prog-detail:not(:empty){display:block;}
+.prog-detail{font-size:10.5px;color:var(--t3);margin-top:10px;margin-bottom:2px;line-height:1.5;text-align:center;padding:5px 14px;background:rgba(107,139,245,.07);border:1px solid rgba(107,139,245,.14);border-radius:20px;display:none;letter-spacing:.02em;}
+.prog-detail:not(:empty){display:inline-block;}
 .prog-close{display:none;width:100%;margin-top:18px;padding:11px;border-radius:11px;
   background:linear-gradient(135deg,rgba(107,139,245,.14),rgba(45,212,191,.09));
   border:1px solid rgba(107,139,245,.28);color:var(--t1);font-size:12px;font-weight:600;
@@ -6583,7 +6583,7 @@ async function onRefreshClick(){
   progUpdate('🔄 Autenticando…','Validando sessão Microsoft…',10);
   try{
     const tok=await getAccessToken(cid);
-    progUpdate('🔄 Buscando arquivo…','Localizando '+ONEDRIVE_FILE+' no OneDrive…',35);
+    progUpdate('Localizando dados…','Conectando ao servidor de dados…',35);
     // Busca metadata primeiro — @microsoft.graph.downloadUrl é gerado fresh a cada chamada,
     // evitando que o CDN da Microsoft sirva versão em cache após uma modificação recente.
     const metaUrl='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl';
@@ -6593,20 +6593,20 @@ async function onRefreshClick(){
       const meta=await metaResp.json();
       const directUrl=meta['@microsoft.graph.downloadUrl'];
       _initModTime=meta.lastModifiedDateTime||null;
-      const modLabel=_initModTime?'Arquivo modificado: '+new Date(_initModTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
-      progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60,modLabel);
+      const modLabel=_initModTime?'🕐 Dados de '+new Date(_initModTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      progUpdate('Transferindo dados…','Sincronizando base de dados…',60,modLabel);
       if(directUrl){
         dlResp=await fetch(directUrl,{cache:'no-store'});
       } else {
         dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
       }
     } else {
-      progUpdate('🔄 Buscando arquivo…','Procurando '+ONEDRIVE_FILE+' por nome…',45);
+      progUpdate('Buscando dados…','Localizando base de dados na nuvem…',45);
       const searchResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root/search(q=\''+encodeURIComponent(ONEDRIVE_FILE)+'\')',{headers:{Authorization:'Bearer '+tok}});
       const searchData=await searchResp.json();
       const fileItem=(searchData.value||[]).find(f=>f.name===ONEDRIVE_FILE);
       if(!fileItem) throw new Error('Arquivo "'+ONEDRIVE_FILE+'" não encontrado no OneDrive. Verifique o nome ou use o botão Carregar.');
-      progUpdate('🔄 Baixando…','Baixando '+ONEDRIVE_FILE+'…',60,'ID: '+fileItem.id.slice(0,20)+'…');
+      progUpdate('Transferindo dados…','Sincronizando base de dados…',60);
       dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileItem.id+'/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
     }
     if(!dlResp||!dlResp.ok) throw new Error('Download falhou: '+(dlResp?dlResp.status:'sem resposta'));
