@@ -303,7 +303,7 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .cc.cc-drag-over{outline:2px dashed rgba(107,139,245,.50)!important;outline-offset:3px;}
 .cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
 .cc-title{font-size:13px;font-weight:700;color:#e4eaf8;letter-spacing:-.1px;font-family:var(--display);}
-.cc-sub{font-size:10px;color:#6a778e;margin-top:2px;letter-spacing:.01em;}
+.cc-sub{font-size:10px;color:#8b9dbe;margin-top:2px;letter-spacing:.01em;}
 .cc-body{position:relative;flex:1;min-height:0;}
 .cc-body canvas{width:100%!important;display:block;}
 
@@ -444,8 +444,8 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa .ppa-top-controls .fbar-label{margin:0;font-size:10px;letter-spacing:.08em}
 #page-ppa .ppa-compact-select{min-width:118px}
 #page-ppa .ppa-local-controls{display:none!important}
-#page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:300px;width:100%;padding:8px 6px 4px;gap:20px;overflow:hidden}
-#page-ppa .ppa-donut-wrap{flex:0 0 46%;height:100%;position:relative;cursor:pointer}
+#page-ppa .ppa-donut-shell{display:flex;flex-direction:row;align-items:center;height:330px;width:100%;padding:8px 6px 4px;gap:20px;overflow:hidden}
+#page-ppa .ppa-donut-wrap{flex:0 0 52%;height:100%;position:relative;cursor:pointer}
 #page-ppa .ppa-donut-wrap canvas{position:absolute!important;top:0;left:0;width:100%!important;height:100%!important}
 #page-ppa .ppa-split-info{flex:1;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;overflow-y:auto;max-height:284px;padding-right:2px}
 #page-ppa .ppa-split-info::-webkit-scrollbar{width:3px}
@@ -636,7 +636,7 @@ html[data-theme="light"] .cc:hover{
   border-color:rgba(107,139,245,.54);transform:translateY(-16px)!important;
   box-shadow:0 24px 64px rgba(0,0,0,.30),0 36px 80px rgba(0,0,0,.20),0 0 0 2px rgba(107,139,245,.65),0 0 44px rgba(107,139,245,.30),inset 0 1px 0 #fff;}
 html[data-theme="light"] .cc-title{color:#1a1d2e;}
-html[data-theme="light"] .cc-sub{color:#5a6275;}
+html[data-theme="light"] .cc-sub{color:#3a4d6e;}
 /* KPI cards */
 html[data-theme="light"] .kpi-card{background:#ffffff;border-color:rgba(107,139,245,.18);}
 html[data-theme="light"] .kpi-card:hover{border-color:rgba(107,139,245,.54)!important;}
@@ -2963,7 +2963,8 @@ const CHART_DEFAULTS={
         callback:function(v){return (typeof v==='number')?v.toLocaleString(getDateLocale(),{maximumFractionDigits:2}):v;}},
       border:{display:false,color:'rgba(255,255,255,.07)'}}
   },
-  datasets:{bar:{maxBarThickness:48,borderRadius:7,borderSkipped:false,barPercentage:0.92,categoryPercentage:0.88}}
+  datasets:{bar:{maxBarThickness:48,borderRadius:7,borderSkipped:false,barPercentage:0.92,categoryPercentage:0.88}},
+  layout:{padding:{left:20,right:20,top:4,bottom:0}}
 };
 // Persistência de visibilidade das séries por chart
 // Chave: chartId → Map(label → hidden)
