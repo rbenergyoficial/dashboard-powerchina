@@ -1561,6 +1561,11 @@ function _themeCharts(light){
     </div>
     <button class="modal-btn secondary" style="margin-top:8px;padding:6px 14px;font-size:11px" onclick="loadWay2FromBlob();closeSetup()">↺ Atualizar Way2 agora</button>
 
+    <!-- Token Way2 para consulta intradia direta -->
+    <div style="margin-top:12px;font-size:11px;color:var(--t3);margin-bottom:4px">Token Way2 PIM — para consulta intradia direta (opcional)</div>
+    <input class="modal-input" id="way2TokenInput" type="password" placeholder="Cole aqui o token Way2 para usar DEMANDA INTRADIA" spellcheck="false" autocomplete="off">
+    <div style="font-size:10px;color:var(--t4);margin-top:3px">Usado apenas para a seção Demanda Intradia · Way2 na página MUST. Os dados de geração e MUST mensais continuam via Power Automate.</div>
+
     <div class="modal-saved" id="cidSaved"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Configurações salvas!</div>
     <div class="modal-btns" style="margin-top:14px">
       <button class="modal-btn primary" onclick="saveCid()">Salvar</button>
@@ -6719,6 +6724,8 @@ function saveCid(){
   const v=document.getElementById('cidInput').value.trim();
   if(v&&v.length<30){alert('Client ID inválido.');return;}
   if(v) localStorage.setItem('mrd_cid',v);
+  const tok=document.getElementById('way2TokenInput')?.value?.trim();
+  if(tok) localStorage.setItem(WAY2_TOKEN_KEY,tok);
   document.getElementById('cidSaved').style.display='block';
   setTimeout(()=>{
     closeSetup();
@@ -6728,6 +6735,7 @@ function saveCid(){
 function closeSetup(){document.getElementById('setupModal').classList.remove('open');}
 function openSetup(){
   const s=getCid(); if(s) document.getElementById('cidInput').value=s;
+  const t=getWay2Token(); const ti=document.getElementById('way2TokenInput'); if(t&&ti) ti.value=t;
   // Atualizar status do blob Way2 no modal
   const pill=document.getElementById('way2Pill');
   const bs=document.getElementById('way2BlobStatus');
