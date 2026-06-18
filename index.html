@@ -1504,8 +1504,8 @@ function _themeCharts(light){
         DEMANDA INTRADIA · WAY2
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
-          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button></span></div>
-          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="CincoMinutos">5 min</option><option value="DezMinutos">10 min</option><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="DuasHoras">2 horas</option><option value="SeisHoras">6 horas</option><option value="UmDia">Diário</option></select></div>
+          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button><button class="must-month-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')">M4</button><button class="must-month-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')">M5</button><button class="must-month-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')">M6</button><button class="must-month-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')">M7</button><button class="must-month-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')">M8</button><button class="must-month-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')">M9</button></span></div>
+          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="DuasHoras">2 horas</option><option value="SeisHoras">6 horas</option><option value="UmDia">Diário</option></select></div>
           <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker"></div>
           <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
         </div>
@@ -6539,18 +6539,24 @@ setInterval(()=>{
 },10*60*1000);
 
 // ═══════════════════════════════════════════════════════════════════
-// MUST DEMANDA INTRADIA · WAY2 DIRETO
+// MUST DEMANDA INTRADIA · WAY2 (via Azure Blob / Power Automate)
 // ═══════════════════════════════════════════════════════════════════
 let _w2dChart=null;
-const _W2D_IDS={M1:6380,M2:6381,M3:6382};
+const _W2D_IDS={M1:6380,M2:6381,M3:6382,M4:6383,M5:6384,M6:6385,M7:6386,M8:6387,M9:6388};
 const _W2D_COLORS={
-  M1:{c:'#a855f7',bg:'rgba(168,85,247,.18)'},
-  M2:{c:'#2dd4bf',bg:'rgba(45,212,191,.18)'},
-  M3:{c:'#f5a623',bg:'rgba(245,166,35,.18)'},
+  M1:{c:'#a855f7',bg:'rgba(168,85,247,.13)'},
+  M2:{c:'#2dd4bf',bg:'rgba(45,212,191,.13)'},
+  M3:{c:'#f5a623',bg:'rgba(245,166,35,.13)'},
+  M4:{c:'#3b82f6',bg:'rgba(59,130,246,.13)'},
+  M5:{c:'#ef4444',bg:'rgba(239,68,68,.13)'},
+  M6:{c:'#22c55e',bg:'rgba(34,197,94,.13)'},
+  M7:{c:'#f97316',bg:'rgba(249,115,22,.13)'},
+  M8:{c:'#ec4899',bg:'rgba(236,72,153,.13)'},
+  M9:{c:'#14b8a6',bg:'rgba(20,184,166,.13)'},
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
-const _W2D_INTLABEL={CincoMinutos:'5 min',DezMinutos:'10 min',QuinzeMinutos:'15 min',
-  TrintaMinutos:'30 min',UmaHora:'1h',DuasHoras:'2h',SeisHoras:'6h',UmDia:'diário'};
+const _W2D_INTLABEL={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1h',DuasHoras:'2h',SeisHoras:'6h',UmDia:'diário'};
+const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,DuasHoras:8,SeisHoras:24,UmDia:96};
 const _W2D_GRANLABEL={
   Demat:'Demat — ativa líquida (geração−consumo)',
   DematDel:'DematDel — demanda canal Del',
@@ -6571,38 +6577,23 @@ function _w2dOverlay(id,show){
   if(el) el.classList.toggle('show',!!show);
 }
 
-// Consulta Way2 com datas absolutas (permite qualquer dia, não só hoje/ontem)
-async function _way2GetDia(token,ids,grandezas,dataStr,intervalo){
-  const p=new URLSearchParams({
-    ids:ids.join(','),
-    grandezas:grandezas.join(','),
-    contextodasdatas:'ConsiderarDiaCheio',
-    intervalo,
-    'medicao-datainicio':dataStr+'T00:00:00',
-    'medicao-datafim':dataStr+'T23:59:59',
-    aplicarhorariodeverao:'false',
-    separardadoscomcpsemcp:'false',
-    'medicao-hasvalue':'false'
-  });
-  const r=await fetch(`${WAY2_BASE}?${p}`,{headers:{'Pim-Auth':token},cache:'no-store'});
-  if(!r.ok) throw new Error('Way2 HTTP '+r.status+' — verifique o token e os IDs de ponto');
-  return r.json();
+function _w2dAggregate(vals,factor){
+  if(factor<=1) return vals;
+  const out=[];
+  for(let i=0;i<vals.length;i+=factor){
+    const chunk=vals.slice(i,i+factor).filter(v=>v!=null);
+    out.push(chunk.length?+Math.max(...chunk).toFixed(4):null);
+  }
+  return out;
 }
 
 async function loadW2Demanda(){
-  const token=getWay2Token();
-  if(!token){
-    document.getElementById('w2dErrMsg').textContent='Token Way2 não configurado. Acesse ☁ Configurações e informe o token.';
-    _w2dOverlay('w2dLoading',false);
-    _w2dOverlay('w2dErr',true);
-    return;
-  }
   const dp=document.getElementById('w2dDatePicker');
   const dataStr=(dp&&dp.value)||new Date().toISOString().slice(0,10);
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
+  const aggFactor=_W2D_AGG[intervalo]||1;
   const ufv=_w2dSt.ufv;
   const gran=_w2dSt.gran;
-  const ids=ufv==='all'?[_W2D_IDS.M1,_W2D_IDS.M2,_W2D_IDS.M3]:[_W2D_IDS[ufv]];
 
   _w2dOverlay('w2dErr',false);
   _w2dOverlay('w2dLoading',true);
@@ -6610,9 +6601,12 @@ async function loadW2Demanda(){
   if(btn) btn.disabled=true;
 
   try{
-    const data=await _way2GetDia(token,ids,[gran],dataStr,intervalo);
+    const url=`${WAY2_BLOB_BASE}way2_must_intradia_${dataStr}.json`;
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok) throw new Error(`Dados indisponíveis para ${dataStr}. Configure o fluxo Power Automate para gravar way2_must_intradia_${dataStr}.json no Azure Blob.`);
+    const data=await r.json();
     _w2dOverlay('w2dLoading',false);
-    _renderW2Demanda(data,dataStr,intervalo,ufv,gran);
+    _renderW2Demanda(data,dataStr,intervalo,aggFactor,ufv,gran);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
     document.getElementById('w2dErrMsg').textContent=e.message;
@@ -6623,81 +6617,79 @@ async function loadW2Demanda(){
   }
 }
 
-function _renderW2Demanda(raw,dataStr,intervalo,ufvSel,gran){
+function _renderW2Demanda(raw,dataStr,intervalo,aggFactor,ufvSel,gran){
   const canvas=document.getElementById('cW2Dem');
   if(!canvas) return;
 
-  // pontoId → {HH:MM → valor MW}
   const pm={};
+  const allT=new Set();
   for(const item of (raw.dados||[])){
-    pm[item.pontoId]={};
+    if(item.grandeza!==gran) continue;
+    const id=item.pontoId;
+    pm[id]={};
     for(const v of (item.valores||[])){
       if(v.valor==null) continue;
       const t=v.data.slice(11,16);
-      pm[item.pontoId][t]=+(v.valor/1000).toFixed(4); // kW→MW
+      pm[id][t]=+(v.valor/1000).toFixed(4); // kW→MW
+      allT.add(t);
     }
   }
 
-  const allT=new Set();
-  Object.values(pm).forEach(m=>Object.keys(m).forEach(t=>allT.add(t)));
   const labels=[...allT].sort();
-
   if(!labels.length){
-    document.getElementById('w2dErrMsg').textContent='Nenhum dado retornado para este intervalo/data. Tente outro intervalo ou verifique os IDs dos pontos Way2.';
+    document.getElementById('w2dErrMsg').textContent='Nenhum dado para esta grandeza. Verifique o Power Automate.';
     _w2dOverlay('w2dErr',true);
     return;
   }
 
-  const parks=ufvSel==='all'?['M1','M2','M3']:[ufvSel];
+  const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
+  const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
+
   const datasets=parks.map(pk=>{
     const id=_W2D_IDS[pk];
-    const vals=pm[id]||{};
+    const pdata=pm[id]||{};
+    const vals15=labels.map(t=>pdata[t]??null);
     const col=_W2D_COLORS[pk];
     return{
-      label:pk,
-      data:labels.map(t=>vals[t]??null),
+      label:pk,data:_w2dAggregate(vals15,aggFactor),
       borderColor:col.c,backgroundColor:col.bg,
-      fill:ufvSel!=='all',tension:.3,
-      borderWidth:2,pointRadius:0,pointHoverRadius:4,spanGaps:true
+      fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:4,spanGaps:true
     };
   });
 
-  // Linha Total (M1+M2+M3) quando "Todas"
   if(ufvSel==='all'){
+    const allPks=Object.keys(_W2D_IDS);
+    const totalVals=labels.map(t=>{
+      let s=0,ok=false;
+      allPks.forEach(pk=>{const v=(pm[_W2D_IDS[pk]]||{})[t];if(v!=null){s+=v;ok=true;}});
+      return ok?+s.toFixed(4):null;
+    });
     datasets.push({
-      label:'Total',
-      data:labels.map(t=>{
-        let s=0,ok=false;
-        ['M1','M2','M3'].forEach(pk=>{
-          const v=(pm[_W2D_IDS[pk]]||{})[t];
-          if(v!=null){s+=v;ok=true;}
-        });
-        return ok?+s.toFixed(4):null;
-      }),
+      label:'Total',data:_w2dAggregate(totalVals,aggFactor),
       borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-      fill:false,tension:.3,borderWidth:2.5,
-      borderDash:[6,3],pointRadius:0,pointHoverRadius:5,spanGaps:true
+      fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],
+      pointRadius:0,pointHoverRadius:5,spanGaps:true
     });
   }
 
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
   const [y,m,d]=dataStr.split('-');
+  const meta=raw.geradoEm?` · atualizado ${raw.geradoEm.slice(11,16)}`:'';
   document.getElementById('w2dTitle').textContent=
-    `${_W2D_GRANLABEL[gran]||gran} · ${ufvSel==='all'?'M1 · M2 · M3 · Total':ufvSel}`;
+    `${_W2D_GRANLABEL[gran]||gran} · ${ufvSel==='all'?'M1–M9 · Total':ufvSel}`;
   document.getElementById('w2dSub').textContent=
-    `${d}/${m}/${y} · intervalo ${_W2D_INTLABEL[intervalo]||intervalo} · ${labels.length} pontos · Way2 PIM API`;
+    `${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo} · ${aggLabels.length} pontos · Way2 via Power Automate${meta}`;
 
   _w2dChart=new Chart(canvas,{
-    type:'line',data:{labels,datasets},
+    type:'line',data:{labels:aggLabels,datasets},
     options:{
       responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,labels:{color:'#b6bac8',font:{size:11},boxWidth:12,padding:14,usePointStyle:true}},
+        legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,padding:8,usePointStyle:true}},
         tooltip:{
-          backgroundColor:'rgba(8,11,22,.95)',
-          borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+          backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
           callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`}
         }
