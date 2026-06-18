@@ -4184,6 +4184,7 @@ function safeRender(fn){try{fn();}catch(e){console.warn('Chart render error:',e)
 // Executa tarefas em fatias para não travar o browser
 let _renderTimer=null;
 let _renderSeq=0; // cancela renders antigos se filtro mudar
+let _filtersLoaded=false;
 
 function destroyAllCharts(){
   Object.keys(charts).forEach(function(id){
@@ -6023,6 +6024,14 @@ function renderAll(){
   _renderSeq++; // cancela imediatamente batches antigos antes do próximo ciclo
   _renderTimer=setTimeout(function(){
     _renderTimer=null;
+    // Restaura filtros do localStorage na primeira renderização após carregamento
+    if(!_filtersLoaded&&dashData&&dashData.patamares&&dashData.patamares.length){
+      _filtersLoaded=true;
+      try{
+        const sf=localStorage.getItem('mrd_filters_v2');
+        if(sf){Object.assign(filters,JSON.parse(sf));syncFilterUI();}
+      }catch(e){}
+    }
     clearFilterCache(); // limpa cache de filtros ao novo render
     destroyAllCharts(); // força redraw completo, evitando barras visuais antigas
     // KPIs e header são leves — renderizar imediatamente
@@ -6035,6 +6044,8 @@ function renderAll(){
     requestAnimationFrame(applyTranslations);
     if(document.documentElement.getAttribute('data-theme')==='light')
       requestAnimationFrame(function(){_themeCharts(true);});
+    // Persiste estado dos filtros para sobreviver a F5 e auto-refresh
+    try{localStorage.setItem('mrd_filters_v2',JSON.stringify(filters));}catch(e){}
   },60); // debounce curto para manter resposta imediata aos filtros
 }
 
@@ -6907,6 +6918,14 @@ async function checkNewData(){
   }catch(e){}
 }
 setInterval(checkNewData,5*60*1000);
+
+// Atualiza dados ao retornar para a aba (evita depender de F5)
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='visible'&&_syncLastLoad>0){
+    checkNewData();
+    if(dashData&&dashData.way2&&dashData.way2.length) loadWay2FromBlob();
+  }
+});
 
 function progDone(ok,msg){
   /* swap spinner → animated ring icon */
