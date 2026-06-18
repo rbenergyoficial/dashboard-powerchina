@@ -6481,11 +6481,12 @@ function progDone(ok,msg){
   bar.style.background=ok?'#34e0a1':'#f0598c';
   bar.style.setProperty('--shimmer','none');
 
-  document.getElementById('progMsg').textContent=ok?msg:'Não foi possível carregar os dados automaticamente.';
+  const _isPopupBlocked=!ok&&(msg||'').toLowerCase().includes('popup');
+  document.getElementById('progMsg').textContent=ok?msg:(_isPopupBlocked?'Popup bloqueado pelo browser.':'Não foi possível carregar os dados automaticamente.');
   const detail=document.getElementById('progDetail');
-  if(detail) detail.textContent=ok?'':(msg||'');
+  if(detail) detail.textContent=ok?'':(_isPopupBlocked?'No Edge: clique no ícone 🚫 na barra de endereço → "Sempre permitir popups" → recarregue a página.':(msg||''));
   const retryBtn=document.getElementById('progRetry');
-  if(retryBtn) retryBtn.style.display=ok?'none':'';
+  if(retryBtn){retryBtn.style.display=ok?'none':''; retryBtn.textContent=_isPopupBlocked?'↺ Recarregar página':'↺ Tentar Novamente'; if(_isPopupBlocked) retryBtn.onclick=()=>location.reload();}
   document.getElementById('progClose').style.display='block';
   document.getElementById('refreshBtn').classList.remove('spinning');
   document.getElementById('refreshBtn').disabled=false;
