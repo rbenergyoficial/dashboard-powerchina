@@ -1505,7 +1505,7 @@ function _themeCharts(light){
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
           <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button><button class="must-month-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')">M4</button><button class="must-month-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')">M5</button><button class="must-month-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')">M6</button><button class="must-month-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')">M7</button><button class="must-month-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')">M8</button><button class="must-month-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')">M9</button></span></div>
-          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="DuasHoras">2 horas</option><option value="SeisHoras">6 horas</option><option value="UmDia">Diário</option></select></div>
+          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option></select></div>
           <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker"></div>
           <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
         </div>
@@ -6555,8 +6555,9 @@ const _W2D_COLORS={
   M9:{c:'#14b8a6',bg:'rgba(20,184,166,.13)'},
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
-const _W2D_INTLABEL={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1h',DuasHoras:'2h',SeisHoras:'6h',UmDia:'diário'};
-const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,DuasHoras:8,SeisHoras:24,UmDia:96};
+const _W2D_INTLABEL={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano'};
+const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96};
+const _W2D_MULTIDAY=['Semana','Mes','Ano'];
 const _W2D_GRANLABEL={
   Demat:'Demat — ativa líquida (geração−consumo)',
   DematDel:'DematDel — demanda canal Del',
@@ -6591,7 +6592,6 @@ async function loadW2Demanda(){
   const dp=document.getElementById('w2dDatePicker');
   const dataStr=(dp&&dp.value)||new Date().toISOString().slice(0,10);
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
-  const aggFactor=_W2D_AGG[intervalo]||1;
   const ufv=_w2dSt.ufv;
   const gran=_w2dSt.gran;
 
@@ -6600,6 +6600,11 @@ async function loadW2Demanda(){
   const btn=document.getElementById('w2dBuscarBtn');
   if(btn) btn.disabled=true;
 
+  if(_W2D_MULTIDAY.includes(intervalo)){
+    return _loadW2MultiDay(gran,ufv,intervalo,dataStr);
+  }
+
+  const aggFactor=_W2D_AGG[intervalo]||1;
   try{
     const url=`${WAY2_BLOB_BASE}way2_must_intradia_${dataStr}.json`;
     const r=await fetch(url,{cache:'no-store'});
@@ -6612,6 +6617,108 @@ async function loadW2Demanda(){
     document.getElementById('w2dErrMsg').textContent=e.message;
     _w2dOverlay('w2dErr',true);
     console.error('loadW2Demanda:',e);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+}
+
+async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
+  const btn=document.getElementById('w2dBuscarBtn');
+  try{
+    const ref=new Date(refDateStr+'T12:00:00');
+    const dates=[];
+    if(intervalo==='Semana'){
+      for(let i=6;i>=0;i--){const d=new Date(ref);d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
+    }else if(intervalo==='Mes'){
+      for(let i=29;i>=0;i--){const d=new Date(ref);d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
+    }else{
+      for(let i=11;i>=0;i--){
+        const d=new Date(ref.getFullYear(),ref.getMonth()-i,1);
+        dates.push(d.toISOString().slice(0,10));
+      }
+    }
+
+    const fetched=await Promise.allSettled(
+      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
+
+    const _dayMax=(raw,pkId)=>{
+      if(!raw) return null;
+      const item=(raw.dados||[]).find(x=>x.pontoId===pkId&&x.nomeGrandeza===gran);
+      if(!item) return null;
+      const vals=(item.valores||[]).filter(v=>v.valor!=null).map(v=>+(v.valor/1000).toFixed(4));
+      return vals.length?+Math.max(...vals).toFixed(3):null;
+    };
+
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+
+    const xLabels=dayData.map(({date})=>{
+      const[y,m,d]=date.split('-');
+      return intervalo==='Ano'?`${m}/${y.slice(2)}`:`${d}/${m}`;
+    });
+
+    const datasets=parks.map(pk=>{
+      const col=_W2D_COLORS[pk];
+      return{label:pk,data:dayData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
+        borderColor:col.c,backgroundColor:col.bg,
+        fill:false,tension:.3,borderWidth:1.5,pointRadius:3,pointHoverRadius:5,spanGaps:true};
+    });
+
+    if(ufv==='all'){
+      const totalData=dayData.map(({raw})=>{
+        if(!raw) return null;
+        let s=0,ok=false;
+        allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
+        return ok?+s.toFixed(3):null;
+      });
+      datasets.push({label:'Total',data:totalData,
+        borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],
+        pointRadius:3,pointHoverRadius:5,spanGaps:true});
+    }
+
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+
+    const[y,m,d]=refDateStr.split('-');
+    const rangeMap={Semana:'últimos 7 dias',Mes:'últimos 30 dias',Ano:'últimos 12 meses'};
+    const avail=dayData.filter(x=>x.raw).length;
+    document.getElementById('w2dTitle').textContent=
+      `${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=
+      `${rangeMap[intervalo]} · até ${d}/${m}/${y} · máx diário · ${avail}/${dayData.length} dias disponíveis · Way2`;
+
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{
+      type:'line',data:{labels:xLabels,datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,animation:false,
+        interaction:{mode:'index',intersect:false},
+        plugins:{
+          legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,padding:8,usePointStyle:true}},
+          tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+            titleColor:'#f2f3f8',bodyColor:'#b6bac8',
+            callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}
+        },
+        scales:{
+          x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,
+              maxTicksLimit:intervalo==='Ano'?12:intervalo==='Mes'?15:7},
+             grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+          y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
+             grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+             title:{display:true,text:'MW pico/dia',color:'#565b70',font:{size:10}}}
+        }
+      }
+    });
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2MultiDay:',e);
   }finally{
     if(btn) btn.disabled=false;
   }
