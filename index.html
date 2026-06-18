@@ -10710,7 +10710,7 @@ window._ppaChartGet=function(id){return charts[id];};
       type:chartType==='line'?'line':'bar',
       data:{labels,datasets:[
         genDataset,
-        {type:'line',label:_T('Meta'),data:meta,borderColor:'#FFD166',backgroundColor:'#FFD166',borderWidth:3,borderDash:[8,4],pointRadius:0,pointHoverRadius:4,pointBackgroundColor:'#FFD166',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1},
+        {type:'line',label:_T('Meta'),data:meta,borderColor:'rgba(255,218,80,0.88)',backgroundColor:'rgba(255,218,80,0.06)',borderWidth:2.2,borderDash:[14,6],borderCapStyle:'round',pointRadius:0,pointHoverRadius:5,pointBackgroundColor:'rgba(255,218,80,0.88)',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1},
         ...(hasIrr?[{type:'line',label:_T('Irradiância (kWh/m²)'),data:irrData,borderColor:'rgba(245,200,75,0.85)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(245,200,75,0.85)',fill:false,tension:0.18,yAxisID:'y2',order:0,spanGaps:true}]:[])
       ]},
       options:{
@@ -12258,12 +12258,13 @@ window._ppaChartGet=function(id){return charts[id];};
               var irrLbl=lang==='zh-CN'?'辐照量 (kWh/m²)':(lang==='en'?'Irradiance (kWh/m²)':'Irradiância (kWh/m²)');
               cfg.data.datasets.push({
                 type:'line', label:irrLbl, data:irrData,
-                borderColor:'#F5C842', backgroundColor:'rgba(245,200,66,0.08)',
-                borderWidth:1.5,
-                pointRadius:3, pointHoverRadius:5,
+                borderColor:'rgba(250,210,60,0.95)', backgroundColor:'rgba(245,200,66,0.06)',
+                borderWidth:2.5,
+                pointRadius:4, pointHoverRadius:7,
                 pointStyle:'circle',
-                pointBackgroundColor:'#F5C842', pointBorderColor:'#F5C842',
-                fill:false, tension:0,
+                pointBackgroundColor:'#F5C842',
+                pointBorderColor:'rgba(8,12,28,0.65)', pointBorderWidth:1.8,
+                fill:false, tension:0.38, spanGaps:true,
                 yAxisID:'y2', order:3
               });
               if(!cfg.options) cfg.options={};
