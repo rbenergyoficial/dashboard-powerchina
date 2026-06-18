@@ -1505,7 +1505,7 @@ function _themeCharts(light){
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
           <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button><button class="must-month-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')">M4</button><button class="must-month-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')">M5</button><button class="must-month-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')">M6</button><button class="must-month-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')">M7</button><button class="must-month-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')">M8</button><button class="must-month-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')">M9</button></span></div>
-          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option></select></div>
+          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="CincoMinutos">5 min</option><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option></select></div>
           <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker"></div>
           <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
         </div>
@@ -6555,7 +6555,11 @@ const _W2D_COLORS={
   M9:{c:'#14b8a6',bg:'rgba(20,184,166,.13)'},
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
-const _W2D_INTLABEL={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano'};
+const _W2D_INTLABEL={CincoMinutos:'5 min',QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano'};
+const _W2D_BASE_AGG={
+  CincoMinutos: {CincoMinutos:1,QuinzeMinutos:3,TrintaMinutos:6,UmaHora:12,UmDia:288},
+  QuinzeMinutos:{QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96}
+};
 const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96};
 const _W2D_MULTIDAY=['Semana','Mes','Ano'];
 const _W2D_GRANLABEL={
@@ -6724,7 +6728,10 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
   }
 }
 
-function _renderW2Demanda(raw,dataStr,intervalo,aggFactor,ufvSel,gran){
+function _renderW2Demanda(raw,dataStr,intervalo,_unused,ufvSel,gran){
+  const baseInt=raw.intervalo||'QuinzeMinutos';
+  const aggMap=_W2D_BASE_AGG[baseInt]||_W2D_BASE_AGG['QuinzeMinutos'];
+  const aggFactor=aggMap[intervalo]||1;
   const canvas=document.getElementById('cW2Dem');
   if(!canvas) return;
 
