@@ -2862,23 +2862,27 @@ function solidHex(c){
 function hexRgb(c){const h=solidHex(c).slice(1);return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
 function darkenRgb(rgb,pct){const k=1+pct/100;return rgb.map(v=>Math.max(0,Math.min(255,Math.round(v*k))));}
 function rgbaStr(rgb,a){return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;}
-// Opacidades suaves (menos brilho): base translúcida embaixo → cor mais visível em cima
+// Opacidades suaves (mantidas para compatibilidade)
 const GRAD_A0=0.62, GRAD_A1=0.84;
-// ── Gradiente vertical para barras (tom escuro suave embaixo → cor em cima)
+// ── Gradiente vertical para barras (base quase invisível → cor viva no topo)
 function barGrad(context,c0,c1){
   const area=context.chart.chartArea, rgb1=hexRgb(c1);
-  if(!area) return rgbaStr(rgb1,GRAD_A1);
+  if(!area) return rgbaStr(rgb1,0.90);
   const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
-  g.addColorStop(0,rgbaStr(hexRgb(c0),GRAD_A0+0.05));g.addColorStop(1,rgbaStr(rgb1,GRAD_A1));
+  g.addColorStop(0,rgbaStr(hexRgb(c0),0.04));
+  g.addColorStop(0.42,rgbaStr(rgb1,0.40));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb1,16),0.94));
   return g;
 }
-// Gradiente a partir de QUALQUER cor: base escura translúcida → cor suave em cima
+// Gradiente a partir de QUALQUER cor: base quase invisível → cor viva no topo
 function gradFrom(context,color){
   const rgb=hexRgb(color||'#6b7a9a');
   const area=context.chart.chartArea;
-  if(!area) return rgbaStr(rgb,GRAD_A1);
+  if(!area) return rgbaStr(rgb,0.90);
   const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
-  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-45),GRAD_A0));g.addColorStop(1,rgbaStr(rgb,GRAD_A1));
+  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),0.04));
+  g.addColorStop(0.42,rgbaStr(rgb,0.40));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb,16),0.94));
   return g;
 }
 // Versão horizontal — para barras horizontais (cascata)
