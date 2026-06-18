@@ -6675,7 +6675,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,aggFactor,ufvSel,gran){
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
   const [y,m,d]=dataStr.split('-');
-  const meta=raw.geradoEm?` · atualizado ${raw.geradoEm.slice(11,16)}`:'';
+  const meta=raw.geradoEm?` · atualizado ${new Date(raw.geradoEm+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})}`:'';
   document.getElementById('w2dTitle').textContent=
     `${_W2D_GRANLABEL[gran]||gran} · ${ufvSel==='all'?'M1–M9 · Total':ufvSel}`;
   document.getElementById('w2dSub').textContent=
