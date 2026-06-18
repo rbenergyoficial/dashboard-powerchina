@@ -4232,7 +4232,7 @@ function renderUFVperdas(){
   const pct=gg.map(r=>r.bruta>0?+((1-r.liquida/r.bruta)*100).toFixed(2):null);
   mkChart('cUFVperdas',{type:'line',data:{labels,datasets:[
     {label:'% Perdas Técnicas',data:pct,borderColor:'#F0598C',
-      backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'transparent';const grd=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);grd.addColorStop(0,'rgba(240,89,140,.02)');grd.addColorStop(1,'rgba(240,89,140,.28)');return grd;},
+      backgroundColor:ctx=>{const a=ctx.chart.chartArea;const _l=document.documentElement.getAttribute('data-theme')==='light';if(!a)return 'transparent';const grd=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);grd.addColorStop(0,_l?'rgba(240,89,140,.18)':'rgba(240,89,140,.02)');grd.addColorStop(1,_l?'rgba(240,89,140,.62)':'rgba(240,89,140,.28)');return grd;},
       fill:true,tension:.35,pointRadius:0,borderWidth:2.5,spanGaps:true}
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false}},scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'%',color:'#8090b8',font:{size:9}}}}}});
 }
@@ -5090,10 +5090,10 @@ function renderPagePPA(type){
   }
   const evDataset=evType==='line'
     ?{label:(sel==='todos'?'PPA/ML':sel)+' (MWh)',data:evData,borderColor:'#A855F7',
-      backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'transparent';const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,'rgba(168,85,247,.02)');g.addColorStop(1,'rgba(168,85,247,.34)');return g;},
+      backgroundColor:ctx=>{const a=ctx.chart.chartArea;const _l=document.documentElement.getAttribute('data-theme')==='light';if(!a)return 'transparent';const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,_l?'rgba(168,85,247,.18)':'rgba(168,85,247,.02)');g.addColorStop(1,_l?'rgba(168,85,247,.65)':'rgba(168,85,247,.34)');return g;},
       fill:true,tension:.35,pointRadius:2,borderWidth:2.5}
     :{label:(sel==='todos'?'PPA/ML':sel)+' (MWh)',data:evData,
-      backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'rgba(168,85,247,.6)';const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,'rgba(168,85,247,.85)');g.addColorStop(1,'rgba(168,85,247,.35)');return g;},
+      backgroundColor:ctx=>{const a=ctx.chart.chartArea;const _l=document.documentElement.getAttribute('data-theme')==='light';if(!a)return _l?'rgba(168,85,247,.85)':'rgba(168,85,247,.6)';const g=ctx.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,_l?'rgba(168,85,247,.97)':'rgba(168,85,247,.85)');g.addColorStop(1,_l?'rgba(168,85,247,.55)':'rgba(168,85,247,.35)');return g;},
       borderColor:'#A855F7',borderWidth:1.4,borderRadius:6,barPercentage:0.7,categoryPercentage:0.86};
   const evXAxis={...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:evIsMonthly?11:9,weight:'700'}}};
   if(evXTitle) evXAxis.title={display:true,text:evXTitle,color:'#b8c4e0',font:{size:11,weight:'700',family:"'Inter',system-ui"},padding:{top:4}};
@@ -5864,7 +5864,7 @@ function renderPageMUST(type){
   const activeColor=mustParkColor(sel==='total'?'total':sel);
   const ativaDs = type==='line'
     ? {label:ativaLabel,data:data,type:'line',borderColor:activeColor,pointRadius:0,borderWidth:2.5,tension:.3,fill:true,order:2,
-        backgroundColor:ctx=>{const a=ctx.chart.chartArea;if(!a)return 'transparent';const rgb=hexRgb(activeColor);const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,rgbaStr(rgb,.03));g.addColorStop(1,rgbaStr(rgb,.28));return g;}}
+        backgroundColor:ctx=>{const a=ctx.chart.chartArea;const _l=document.documentElement.getAttribute('data-theme')==='light';if(!a)return 'transparent';const rgb=hexRgb(activeColor);const g=ctx.chart.ctx.createLinearGradient(0,a.bottom,0,a.top);g.addColorStop(0,rgbaStr(rgb,_l?.20:.03));g.addColorStop(1,rgbaStr(rgb,_l?.60:.28));return g;}}
     : {label:ativaLabel,data:data,type:'bar',backgroundColor:ctx=>gradFrom(ctx,activeColor),borderColor:activeColor,borderWidth:1,borderRadius:7,order:2,maxBarThickness:36};
 
   const denseIntraday=mode==='dia' && (gran==='15min' || gran==='30min' || gran==='hora');
