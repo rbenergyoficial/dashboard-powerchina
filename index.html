@@ -5123,26 +5123,50 @@ function renderPagePPA(type){
       responsive:true,maintainAspectRatio:false,animation:{duration:0},cutout:'63%',
       plugins:{
         legend:{display:false},
-        tooltip:{callbacks:{label:c=>{
+        tooltip:{enabled:false,external:(ctx)=>{
+          let el=document.getElementById('_donutTip');
+          if(!el){el=document.createElement('div');el.id='_donutTip';el.style.cssText='position:fixed;z-index:9999;pointer-events:none;padding:10px 13px;border-radius:10px;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.55;box-shadow:0 4px 18px rgba(0,0,0,.28);transition:opacity .15s;min-width:160px;max-width:230px;opacity:0';document.body.appendChild(el);}
+          const tt=ctx.tooltip;
+          if(!tt||!tt.dataPoints||!tt.dataPoints.length){el.style.opacity='0';return;}
+          const c=tt.dataPoints[0];
           const v=c.parsed;
           const tot=_splitTotal||1;
           const pct=(v/tot*100).toFixed(1);
+          const isLt=document.documentElement.getAttribute('data-theme')==='light';
+          el.style.background=isLt?'rgba(255,255,255,.97)':'rgba(15,22,40,.97)';
+          el.style.border=isLt?'1px solid rgba(0,0,0,.12)':'1px solid rgba(255,255,255,.10)';
+          el.style.color=isLt?'#0f172a':'#dce6f8';
+          let html='';
+          const col=_donutBdCol[c.dataIndex]||'#A855F7';
           if(_donutByPark){
             const p=_donutLabels[c.dataIndex];
             const m=metaAgg(p);
             const achiev=m>0?(v/m*100).toFixed(1):'—';
-            return [
-              ` ${p}: ${_fmtMWh(v)} MWh (${_T(`${pct}% do escopo`)})`,
-              m>0?` ${_T('Meta')}: ${_fmtMWh(m)} MWh · ${achiev}% ${_T('atingido')}`:null
-            ].filter(Boolean);
+            const ac=m>0?(v>=m?'#22c55e':v/m>=0.8?'#f5c842':'#f2495c'):col;
+            html=`<div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0"></span><span style="font-weight:700;font-size:13px">${p}</span></div>`
+              +`<div style="font-size:15px;font-weight:800;letter-spacing:-.03em">${_fmtMWh(v)}<span style="font-size:9px;font-weight:400;margin-left:3px">MWh</span></div>`
+              +`<div style="font-size:10px;opacity:.7;margin-top:2px">${pct}% ${_T('do escopo')}</div>`
+              +(m>0?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${isLt?'rgba(0,0,0,.08)':'rgba(255,255,255,.08)'};font-size:10px"><span style="color:${isLt?'#475569':'#8898b8'}">${_T('Meta')}: ${_fmtMWh(m)} MWh</span> · <span style="color:${ac};font-weight:700">${achiev}%</span></div>`:'');
+          } else {
+            const lbl=translateAnyText(c.label);
+            const meta=c.dataIndex===0?ppaBrkMeta:mlMeta;
+            const achiev=meta>0?(v/meta*100).toFixed(1):'—';
+            const ac=meta>0?(v>=meta?'#22c55e':v/meta>=0.8?'#f5c842':'#f2495c'):col;
+            html=`<div style="display:flex;align-items:center;gap:7px;margin-bottom:7px"><span style="width:9px;height:9px;border-radius:50%;background:${col};flex-shrink:0"></span><span style="font-weight:700;font-size:13px">${lbl}</span></div>`
+              +`<div style="font-size:15px;font-weight:800;letter-spacing:-.03em">${_fmtMWh(v)}<span style="font-size:9px;font-weight:400;margin-left:3px">MWh</span></div>`
+              +`<div style="font-size:10px;opacity:.7;margin-top:2px">${pct}% do total</div>`
+              +(meta>0?`<div style="margin-top:6px;padding-top:6px;border-top:1px solid ${isLt?'rgba(0,0,0,.08)':'rgba(255,255,255,.08)'};font-size:10px"><span style="color:${isLt?'#475569':'#8898b8'}">${_T('Meta')}: ${_fmtMWh(meta)} MWh</span> · <span style="color:${ac};font-weight:700">${achiev}%</span></div>`:'');
           }
-          const meta=c.dataIndex===0?ppaBrkMeta:mlMeta;
-          const achiev=meta>0?(v/meta*100).toFixed(1):'—';
-          const achievTxt=meta>0?` · ${achiev}% da meta`:'';
-          return [
-            ` ${translateAnyText(c.label)}: ${_fmtMWh(v)} MWh (${pct}% do total)${achievTxt}`,
-            meta>0?` Meta: ${_fmtMWh(meta)} MWh`:null
-          ].filter(Boolean);
+          el.innerHTML=html;
+          const cx=tt.caretX, cy=tt.caretY;
+          const canvasRect=ctx.chart.canvas.getBoundingClientRect();
+          let tx=canvasRect.left+cx+14, ty=canvasRect.top+cy-10;
+          el.style.opacity='0';document.body.appendChild(el);
+          const tw=el.offsetWidth||210, th=el.offsetHeight||80;
+          if(tx+tw>window.innerWidth-10) tx=canvasRect.left+cx-tw-14;
+          if(ty+th>window.innerHeight-10) ty=window.innerHeight-th-10;
+          if(ty<10) ty=10;
+          el.style.left=tx+'px'; el.style.top=ty+'px'; el.style.opacity='1';
         }}}
       },
       onClick:(evt,elements)=>{
