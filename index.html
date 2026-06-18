@@ -5259,9 +5259,9 @@ function renderPagePPA(type){
     const _hdrTotal=(cor,label,achiev,achC)=>
       `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${_splt_lt?'rgba(0,0,0,.08)':'rgba(255,255,255,.08)'}">`+
       _dot(cor,8)+
-      `<div><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${_txtSub}">${label}</div>`+
-      `<div style="font-size:17px;font-weight:800;color:${_txtMain};letter-spacing:-.04em;line-height:1">${_fmtMWh(_tot)}<span style="font-size:10px;color:${_txtSub};font-weight:400;margin-left:4px">MWh</span></div>`+
-      `<div style="font-size:9px;font-weight:700;color:${achC};margin-top:1px">${_T(`${achiev}% atingido da meta`)}</div>`+
+      `<div><div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${_txtSub};margin-bottom:4px">${label}</div>`+
+      `<div style="font-size:17px;font-weight:800;color:${_txtMain};letter-spacing:-.04em;line-height:1.15">${_fmtMWh(_tot)}<span style="font-size:10px;color:${_txtSub};font-weight:400;margin-left:4px">MWh</span></div>`+
+      `<div style="font-size:9px;font-weight:700;color:${achC};margin-top:5px">${_T(`${achiev}% atingido da meta`)}</div>`+
       `</div></div>`;
 
     if(_donutByPark){
