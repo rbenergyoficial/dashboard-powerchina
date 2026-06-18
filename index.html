@@ -10325,9 +10325,9 @@ window._ppaChartGet=function(id){return charts[id];};
   const MONTHS_V30 = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   const BLUE_V30 = '#0060AE';
   const BLUE_LINE_V30 = 'rgba(0,96,174,.95)';
-  const BLUE_FILL_TOP_V30 = 'rgba(42,148,230,.88)';
-  const BLUE_FILL_MID_V30 = 'rgba(0,102,184,.80)';
-  const BLUE_FILL_BOT_V30 = 'rgba(0,82,164,.68)';
+  const BLUE_FILL_TOP_V30 = 'rgba(72,178,255,.94)';
+  const BLUE_FILL_MID_V30 = 'rgba(20,130,220,.46)';
+  const BLUE_FILL_BOT_V30 = 'rgba(0,55,130,.05)';
   const isoV30 = d => d ? new Date(d).toISOString().slice(0,10) : '';
   const addDaysV30 = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
   const uniqNumsV30 = arr => [...new Set((Array.isArray(arr)?arr:[]).map(v=>Number(v)).filter(v=>Number.isFinite(v) && v>=0 && v<12))].sort((a,b)=>a-b);
@@ -10484,20 +10484,20 @@ window._ppaChartGet=function(id){return charts[id];};
     const chart=ctx.chart;
     const area=chart.chartArea;
     if(!area) return BLUE_FILL_MID_V30;
-    const g=chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-    g.addColorStop(0, BLUE_FILL_TOP_V30);
+    const g=chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+    g.addColorStop(0, BLUE_FILL_BOT_V30);
     g.addColorStop(0.45, BLUE_FILL_MID_V30);
-    g.addColorStop(1, BLUE_FILL_BOT_V30);
+    g.addColorStop(1, BLUE_FILL_TOP_V30);
     return g;
   }
   function barGradientHoverV30(ctx){
     const chart=ctx.chart;
     const area=chart.chartArea;
-    if(!area) return 'rgba(0,35,90,0.42)';
-    const g=chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-    g.addColorStop(0, 'rgba(0,55,120,0.52)');
-    g.addColorStop(0.45, 'rgba(0,38,100,0.44)');
-    g.addColorStop(1, 'rgba(0,28,80,0.34)');
+    if(!area) return 'rgba(20,120,220,0.58)';
+    const g=chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+    g.addColorStop(0, 'rgba(0,55,130,0.10)');
+    g.addColorStop(0.45, 'rgba(10,110,210,0.58)');
+    g.addColorStop(1, 'rgba(90,200,255,0.98)');
     return g;
   }
 
@@ -10699,7 +10699,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
     const genDataset = chartType==='line'
       ? {type:'line',label:`${_T('Geração')} ${group}`,data:prod,borderColor:BLUE_LINE_V30,backgroundColor:'rgba(0,96,174,.16)',borderWidth:3,pointRadius:2,pointHoverRadius:5,pointBackgroundColor:BLUE_LINE_V30,pointBorderColor:'#0b0f1a',pointBorderWidth:1,fill:false,tension:.18,yAxisID:'y',order:2}
-      : {type:'bar',label:`${_T('Geração')} ${group}`,data:prod,backgroundColor:(ctx)=>barGradientV30(ctx),hoverBackgroundColor:(ctx)=>barGradientHoverV30(ctx),borderColor:'rgba(90,180,235,.55)',borderWidth:1.0,borderRadius:4,maxBarThickness: gran==='ano' ? 110 : (labels.length<=8 ? 80 : 30),barThickness:undefined,barPercentage: gran==='ano' ? 0.82 : (labels.length<=8 ? 0.85 : 0.9),order:2};
+      : {type:'bar',label:`${_T('Geração')} ${group}`,data:prod,backgroundColor:(ctx)=>barGradientV30(ctx),hoverBackgroundColor:(ctx)=>barGradientHoverV30(ctx),borderColor:'rgba(90,190,255,.45)',borderWidth:1.2,borderRadius: gran==='ano' ? 8 : 12,maxBarThickness: gran==='ano' ? 110 : (labels.length<=8 ? 80 : 36),barThickness:undefined,barPercentage: gran==='ano' ? 0.82 : (labels.length<=8 ? 0.85 : 0.88),order:2};
     const yMax=Math.max(1,...prod,...meta)*1.18;
 
     if(titleEl) titleEl.textContent=title;
