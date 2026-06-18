@@ -2900,45 +2900,55 @@ function darkenRgb(rgb,pct){const k=1+pct/100;return rgb.map(v=>Math.max(0,Math.
 function rgbaStr(rgb,a){return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;}
 // Opacidades suaves (mantidas para compatibilidade)
 const GRAD_A0=0.62, GRAD_A1=0.84;
+// Helper: retorna opacidades adaptadas ao tema atual
+function _gradOp(){
+  const lt=document.documentElement.getAttribute('data-theme')==='light';
+  return lt?{b:0.28,m:0.72,t:0.97,dk:22}:{b:0.04,m:0.40,t:0.94,dk:16};
+}
 // ── Gradiente vertical para barras (base quase invisível → cor viva no topo)
 function barGrad(context,c0,c1){
   const area=context.chart.chartArea, rgb1=hexRgb(c1);
+  const op=_gradOp();
   if(!area) return rgbaStr(rgb1,0.90);
   const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
-  g.addColorStop(0,rgbaStr(hexRgb(c0),0.04));
-  g.addColorStop(0.42,rgbaStr(rgb1,0.40));
-  g.addColorStop(1,rgbaStr(darkenRgb(rgb1,16),0.94));
+  g.addColorStop(0,rgbaStr(hexRgb(c0),op.b));
+  g.addColorStop(0.42,rgbaStr(rgb1,op.m));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb1,op.dk),op.t));
   return g;
 }
 // Gradiente a partir de QUALQUER cor: base quase invisível → cor viva no topo
 function gradFrom(context,color){
   const rgb=hexRgb(color||'#6b7a9a');
   const area=context.chart.chartArea;
+  const op=_gradOp();
   if(!area) return rgbaStr(rgb,0.90);
   const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
-  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),0.04));
-  g.addColorStop(0.42,rgbaStr(rgb,0.40));
-  g.addColorStop(1,rgbaStr(darkenRgb(rgb,16),0.94));
+  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),op.b));
+  g.addColorStop(0.42,rgbaStr(rgb,op.m));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb,op.dk),op.t));
   return g;
 }
 // Versão horizontal — para barras horizontais (cascata)
 function gradFromH(context,color){
   const rgb=hexRgb(color||'#6b7a9a');
   const area=context.chart.chartArea;
-  if(!area) return rgbaStr(rgb,GRAD_A1);
+  const lt=document.documentElement.getAttribute('data-theme')==='light';
+  if(!area) return rgbaStr(rgb,lt?0.92:GRAD_A1);
   const g=context.chart.ctx.createLinearGradient(area.left,0,area.right,0);
-  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-45),GRAD_A0));g.addColorStop(1,rgbaStr(rgb,GRAD_A1));
+  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-45),lt?0.55:GRAD_A0));
+  g.addColorStop(1,rgbaStr(rgb,lt?0.92:GRAD_A1));
   return g;
 }
 // Gradiente premium: quase invisível na base → cor vibrante no topo (efeito glass/neon)
 function gradPremiumBar(context,color){
   const rgb=hexRgb(color||'#6b7a9a');
   const area=context.chart.chartArea;
+  const op=_gradOp();
   if(!area) return rgbaStr(rgb,0.88);
   const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
-  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),0.04));
-  g.addColorStop(0.42,rgbaStr(rgb,0.38));
-  g.addColorStop(1,rgbaStr(darkenRgb(rgb,18),0.94));
+  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),op.b));
+  g.addColorStop(0.42,rgbaStr(rgb,op.m));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb,op.dk),op.t));
   return g;
 }
 
@@ -10562,21 +10572,35 @@ window._ppaChartGet=function(id){return charts[id];};
   function barGradientV30(ctx){
     const chart=ctx.chart;
     const area=chart.chartArea;
-    if(!area) return BLUE_FILL_MID_V30;
+    const lt=document.documentElement.getAttribute('data-theme')==='light';
+    if(!area) return lt?'rgba(20,100,200,0.72)':BLUE_FILL_MID_V30;
     const g=chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
-    g.addColorStop(0, BLUE_FILL_BOT_V30);
-    g.addColorStop(0.45, BLUE_FILL_MID_V30);
-    g.addColorStop(1, BLUE_FILL_TOP_V30);
+    if(lt){
+      g.addColorStop(0,  'rgba(0,70,160,0.26)');
+      g.addColorStop(0.45,'rgba(15,110,210,0.72)');
+      g.addColorStop(1,  'rgba(30,140,240,0.97)');
+    } else {
+      g.addColorStop(0, BLUE_FILL_BOT_V30);
+      g.addColorStop(0.45, BLUE_FILL_MID_V30);
+      g.addColorStop(1, BLUE_FILL_TOP_V30);
+    }
     return g;
   }
   function barGradientHoverV30(ctx){
     const chart=ctx.chart;
     const area=chart.chartArea;
-    if(!area) return 'rgba(20,120,220,0.58)';
+    const lt=document.documentElement.getAttribute('data-theme')==='light';
+    if(!area) return lt?'rgba(10,90,200,0.82)':'rgba(20,120,220,0.58)';
     const g=chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
-    g.addColorStop(0, 'rgba(0,55,130,0.10)');
-    g.addColorStop(0.45, 'rgba(10,110,210,0.58)');
-    g.addColorStop(1, 'rgba(90,200,255,0.98)');
+    if(lt){
+      g.addColorStop(0,  'rgba(0,60,150,0.38)');
+      g.addColorStop(0.45,'rgba(10,100,210,0.82)');
+      g.addColorStop(1,  'rgba(40,160,255,0.99)');
+    } else {
+      g.addColorStop(0, 'rgba(0,55,130,0.10)');
+      g.addColorStop(0.45, 'rgba(10,110,210,0.58)');
+      g.addColorStop(1, 'rgba(90,200,255,0.98)');
+    }
     return g;
   }
 
