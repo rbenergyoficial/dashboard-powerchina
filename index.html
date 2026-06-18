@@ -5089,8 +5089,8 @@ function renderPagePPA(type){
   } else {
     _donutLabels=['PPA BRK','ML'];
     _donutData=[ppaBrkProd,naoPpaTotal];
-    _donutBgCol=['rgba(168,85,247,.78)','rgba(45,212,191,.56)'];
-    _donutBdCol=['rgba(168,85,247,.95)','rgba(45,212,191,.88)'];
+    _donutBgCol=['rgba(168,85,247,.46)','rgba(45,212,191,.34)'];
+    _donutBdCol=['rgba(168,85,247,.90)','rgba(45,212,191,.80)'];
   }
   const _splitTotal=_donutData.reduce((s,v)=>s+(v||0),0);
   // Center-text plugin: draws total in the donut hole
@@ -5283,7 +5283,7 @@ function renderPagePPA(type){
   // ── % da Meta Atingida por parque ──
   const _compType=getToggle('ppacomp');
   const _compPcts=chartParksBase.map(p=>+pctpAgg(p).toFixed(1));
-  const _compColors=chartParksBase.map(p=>{const pct=+pctpAgg(p).toFixed(1);return pct>=100?(PPA_COL[p]||'#34E0A1'):(pct>=85?'#F5C84B':'#F59E0B');});
+  const _compColors=chartParksBase.map(p=>PPA_COL[p]||'#6B7BD6');
   const _compDs=_compType==='line'
     ?{label:'% da meta',data:_compPcts,
         borderColor:(ctx)=>_compColors[ctx.dataIndex]||'#F5C84B',
