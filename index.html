@@ -2890,6 +2890,17 @@ function gradFromH(context,color){
   g.addColorStop(0,rgbaStr(darkenRgb(rgb,-45),GRAD_A0));g.addColorStop(1,rgbaStr(rgb,GRAD_A1));
   return g;
 }
+// Gradiente premium: quase invisível na base → cor vibrante no topo (efeito glass/neon)
+function gradPremiumBar(context,color){
+  const rgb=hexRgb(color||'#6b7a9a');
+  const area=context.chart.chartArea;
+  if(!area) return rgbaStr(rgb,0.88);
+  const g=context.chart.ctx.createLinearGradient(0,area.bottom,0,area.top);
+  g.addColorStop(0,rgbaStr(darkenRgb(rgb,-55),0.04));
+  g.addColorStop(0.42,rgbaStr(rgb,0.38));
+  g.addColorStop(1,rgbaStr(darkenRgb(rgb,18),0.94));
+  return g;
+}
 
 const _T=translateAnyText; // shorthand for chart label i18n
 const CHART_DEFAULTS={
@@ -4718,11 +4729,12 @@ function renderPagePPA(type){
         type:'bar',
         label:labelGer,
         data:mainProd,
-        backgroundColor:(ctx)=>gradFrom(ctx,seriesColor),
-        borderColor:seriesColor,
-        borderWidth:1.4,
-        borderRadius:10,
-        maxBarThickness:24,
+        backgroundColor:(ctx)=>gradPremiumBar(ctx,seriesColor),
+        borderColor:'transparent',
+        borderWidth:0,
+        borderRadius:14,
+        maxBarThickness:32,
+        barPercentage:0.78,
         order:2
       };
   const yMax=Math.max(1,...mainProd,...mainMeta)*1.22;
@@ -7231,8 +7243,8 @@ window._ppaChartGet=function(id){return charts[id];};
         }
       : {
           type:'bar', label: translateAnyText(gran==='ano'?'Geração mensal':'Geração'), data: mainProd,
-          backgroundColor:(ctx)=>gradFrom(ctx,seriesColor), borderColor:seriesColor, borderWidth:1.4,
-          borderRadius:10, maxBarThickness: gran==='ano'?120:24, barPercentage: gran==='ano'?0.82:0.9, order:2
+          backgroundColor:(ctx)=>gradPremiumBar(ctx,seriesColor), borderColor:'transparent', borderWidth:0,
+          borderRadius:14, maxBarThickness: gran==='ano'?120:32, barPercentage: gran==='ano'?0.82:0.78, order:2
         };
     const yMax=Math.max(1,...mainProd,...mainMeta)*1.22;
     mkChart('cPPARank',{
