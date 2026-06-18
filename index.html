@@ -5293,9 +5293,9 @@ function renderPagePPA(type){
         pointBackgroundColor:_compColors,
         pointBorderColor:'#fff',pointBorderWidth:1.5,pointHoverRadius:8}
     :{label:'% da meta',data:_compPcts,
-        backgroundColor:(ctx)=>{const base=_compColors[ctx.dataIndex]||'#F5C84B';return gradFrom(ctx,base);},
-        borderColor:(ctx)=>_compColors[ctx.dataIndex]||'#F5C84B',
-        borderWidth:1.6,borderRadius:10,maxBarThickness:54,hoverBorderWidth:2.2};
+        backgroundColor:(ctx)=>{const base=_compColors[ctx.dataIndex]||'#F5C84B';return gradPremiumBar(ctx,base);},
+        borderColor:'transparent',
+        borderWidth:0,borderRadius:14,maxBarThickness:60,barPercentage:0.78,hoverBorderWidth:0};
   mkChart('cPPAcomp',{
     type:_compType,
     data:{labels:chartParksBase,datasets:[_compDs]},
