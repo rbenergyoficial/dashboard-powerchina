@@ -590,6 +590,13 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-row{grid-template-columns:72px minmax(0,1fr) 104px;gap:10px}
 #page-must .must-rank-pct{font-size:15px}
 #page-must .must-rank-side-meta{font-size:9px}
+/* ── Way2 Demanda Intradia ── */
+#page-must #sec-must-w2dem .cc-body{height:300px!important;position:relative;overflow:hidden}
+#page-must .w2d-overlay{display:none;position:absolute;inset:0;border-radius:12px;align-items:center;justify-content:center;background:rgba(8,8,13,.78)}
+#page-must .w2d-overlay.show{display:flex}
+#page-must .w2d-overlay.loading{gap:10px;font-size:12px;color:var(--t3)}
+#page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
+#page-must .w2d-overlay.error{flex-direction:column;gap:8px}
 @media (max-width: 1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:12px}#page-must #page-must-main-chart .cc-body{height:440px!important;min-height:440px!important;max-height:440px!important;flex:none}#page-must #sec-must-ranking .cc-body{height:auto!important;min-height:unset!important;max-height:none!important;overflow:visible;flex:none}}
 @media (max-width: 1100px){
   #page-must .must-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1133,14 +1140,14 @@ function _themeCharts(light){
             <div><div class="cc-title">Energia Frustrada por Período</div><div class="cc-sub">Energia perdida por restrições ONS</div></div>
             <div class="toggle-grp" id="tg-gf1"><button class="toggle-btn on" data-chart="gf1" data-t="bar">BAR</button><button class="toggle-btn" data-chart="gf1" data-t="line">LINE</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cGF1"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cGF1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Disponibilidade Aproveitada</div><div class="cc-sub">GV + GF + Capacidade ociosa</div></div>
             <div class="toggle-grp" id="tg-ger3"><button class="toggle-btn on" data-chart="ger3" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ger3" data-t="line">LINE</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cGer3"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cGer3"></canvas></div>
         </div>
       </div>
     </div>
@@ -1158,13 +1165,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Energia Bruta vs Líquida</div><div class="cc-sub">Energia produzida (líquida) × bruta · perdas técnicas</div></div>
             <div class="toggle-grp" id="tg-ufvliq"><button class="toggle-btn on" data-chart="ufvliq" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ufvliq" data-t="line">LINE</button></div>
           </div>
-          <div class="cc-body" style="height:250px"><canvas id="cUFVliq"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cUFVliq"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">% Perdas Técnicas ao Longo do Tempo</div><div class="cc-sub">Eficiência de conversão Bruta → Líquida</div></div>
           </div>
-          <div class="cc-body" style="height:250px"><canvas id="cUFVperdas"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cUFVperdas"></canvas></div>
         </div>
       </div>
     </div>
@@ -1186,13 +1193,13 @@ function _themeCharts(light){
             <div><div class="cc-title">PR ao Longo do Tempo</div><div class="cc-sub">PR = (GV+GF)/(GV+GF+GRef) · meta 90%</div></div>
             <div class="toggle-grp" id="tg-pr1"><button class="toggle-btn on" data-chart="pr1" data-t="line">LINE</button><button class="toggle-btn" data-chart="pr1" data-t="bar">BAR</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cPR1"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cPR1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Distribuição de PR (Histograma)</div><div class="cc-sub">Frequência dos valores diários de PR</div></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cPR3"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cPR3"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1243,7 +1250,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Horas de Restrição por Período</div><div class="cc-sub">Total de horas limitadas + potência média</div></div>
             <div class="toggle-grp" id="tg-rest3"><button class="toggle-btn on" data-chart="rest3" data-t="bar">BAR</button><button class="toggle-btn" data-chart="rest3" data-t="line">LINE</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cRest3"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cRest3"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -1305,13 +1312,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Irradiância × Energia Produzida (Líquida)</div><div class="cc-sub">Correlação solar · eixo duplo</div></div>
             <div class="toggle-grp" id="tg-irr1"><button class="toggle-btn on" data-chart="irr1" data-t="line">LINE</button><button class="toggle-btn" data-chart="irr1" data-t="bar">BAR</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cIrr1"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cIrr1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Scatter: Irradiância vs GV</div><div class="cc-sub">Cada ponto = 1 dia · linha de tendência</div></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cIrr2"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cIrr2"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1320,13 +1327,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Irradiância por UFV (M1–M9)</div><div class="cc-sub">Comparativo entre estações meteorológicas</div></div>
             <div class="toggle-grp" id="tg-irr3"><button class="toggle-btn on" data-chart="irr3" data-t="line">LINE</button><button class="toggle-btn" data-chart="irr3" data-t="bar">BAR</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cIrr3"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cIrr3"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">PR × Irradiância (Benchmark)</div><div class="cc-sub">Scatter por dia · tendência</div></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cAdv1b"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cAdv1b"></canvas></div>
         </div>
       </div>
     </div>
@@ -1347,7 +1354,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Geração por UFV (Comparativo)</div><div class="cc-sub">M1 a M9 + Somatório</div></div>
             <div class="toggle-grp" id="tg-ufv1"><button class="toggle-btn on" data-chart="ufv1" data-t="bar">BAR</button><button class="toggle-btn" data-chart="ufv1" data-t="line">LINE</button></div>
           </div>
-          <div class="cc-body" style="height:220px"><canvas id="cUFV1"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cUFV1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -1362,13 +1369,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Evolução Temporal por UFV</div><div class="cc-sub">Geração individual ao longo do tempo</div></div>
             <div class="toggle-grp" id="tg-ufv2"><button class="toggle-btn on" data-chart="ufv2" data-t="line">LINE</button><button class="toggle-btn" data-chart="ufv2" data-t="bar">BAR</button></div>
           </div>
-          <div class="cc-body" style="height:250px"><canvas id="cUFV2"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cUFV2"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Heatmap UFV × Período</div><div class="cc-sub">MWh por UFV ao longo dos meses</div></div>
           </div>
-          <div class="cc-body" style="height:250px;overflow:auto;"><div class="heatmap-wrap" id="hmUFV"></div></div>
+          <div class="cc-body" style="height:300px;overflow:auto;"><div class="heatmap-wrap" id="hmUFV"></div></div>
         </div>
       </div>
     </div>
@@ -1486,6 +1493,32 @@ function _themeCharts(light){
               <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
             </div>
             <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- SEÇÃO: Demanda Intradia Way2 -->
+    <div class="section" id="sec-must-w2dem" style="margin-top:14px">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        DEMANDA INTRADIA · WAY2
+        <div class="must-top-controls">
+          <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
+          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button></span></div>
+          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect"><option value="CincoMinutos">5 min</option><option value="DezMinutos">10 min</option><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="DuasHoras">2 horas</option><option value="SeisHoras">6 horas</option><option value="UmDia">Diário</option></select></div>
+          <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker"></div>
+          <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
+        </div>
+      </div>
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div><div class="cc-sub" id="w2dSub">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div></div>
+          </div>
+          <div class="cc-body">
+            <canvas id="cW2Dem"></canvas>
+            <div class="w2d-overlay loading" id="w2dLoading"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>Consultando Way2…</div>
+            <div class="w2d-overlay error" id="w2dErr"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f0598c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="w2dErrMsg" style="font-size:11px;color:#f0598c;text-align:center;max-width:260px"></span><span style="font-size:9px;color:var(--t4)">Verifique o token Way2 nas Configurações</span></div>
           </div>
         </div>
       </div>
@@ -6499,6 +6532,187 @@ async function loadWay2FromAPI(token){
 setInterval(()=>{
   if(dashData&&dashData.way2&&dashData.way2.length) loadWay2FromBlob();
 },10*60*1000);
+
+// ═══════════════════════════════════════════════════════════════════
+// MUST DEMANDA INTRADIA · WAY2 DIRETO
+// ═══════════════════════════════════════════════════════════════════
+let _w2dChart=null;
+const _W2D_IDS={M1:6380,M2:6381,M3:6382};
+const _W2D_COLORS={
+  M1:{c:'#a855f7',bg:'rgba(168,85,247,.18)'},
+  M2:{c:'#2dd4bf',bg:'rgba(45,212,191,.18)'},
+  M3:{c:'#f5a623',bg:'rgba(245,166,35,.18)'},
+  Total:{c:'#6b8bf5',bg:'transparent'}
+};
+const _W2D_INTLABEL={CincoMinutos:'5 min',DezMinutos:'10 min',QuinzeMinutos:'15 min',
+  TrintaMinutos:'30 min',UmaHora:'1h',DuasHoras:'2h',SeisHoras:'6h',UmDia:'diário'};
+const _W2D_GRANLABEL={
+  Demat:'Demat — ativa líquida (geração−consumo)',
+  DematDel:'DematDel — demanda canal Del',
+  DematRec:'DematRec — demanda canal Rec'
+};
+const _w2dSt={gran:'Demat',ufv:'all'};
+
+function _w2dChip(btn,tipo){
+  const grp=document.getElementById(tipo==='gran'?'w2dGranGroup':'w2dUfvGroup');
+  if(grp) grp.querySelectorAll('.must-month-chip').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(tipo==='gran') _w2dSt.gran=btn.dataset.gran;
+  else _w2dSt.ufv=btn.dataset.ufv;
+}
+
+function _w2dOverlay(id,show){
+  const el=document.getElementById(id);
+  if(el) el.classList.toggle('show',!!show);
+}
+
+// Consulta Way2 com datas absolutas (permite qualquer dia, não só hoje/ontem)
+async function _way2GetDia(token,ids,grandezas,dataStr,intervalo){
+  const p=new URLSearchParams({
+    ids:ids.join(','),
+    grandezas:grandezas.join(','),
+    contextodasdatas:'ConsiderarDiaCheio',
+    intervalo,
+    'medicao-datainicio':dataStr+'T00:00:00',
+    'medicao-datafim':dataStr+'T23:59:59',
+    aplicarhorariodeverao:'false',
+    separardadoscomcpsemcp:'false',
+    'medicao-hasvalue':'false'
+  });
+  const r=await fetch(`${WAY2_BASE}?${p}`,{headers:{'Pim-Auth':token},cache:'no-store'});
+  if(!r.ok) throw new Error('Way2 HTTP '+r.status+' — verifique o token e os IDs de ponto');
+  return r.json();
+}
+
+async function loadW2Demanda(){
+  const token=getWay2Token();
+  if(!token){
+    document.getElementById('w2dErrMsg').textContent='Token Way2 não configurado. Acesse ☁ Configurações e informe o token.';
+    _w2dOverlay('w2dLoading',false);
+    _w2dOverlay('w2dErr',true);
+    return;
+  }
+  const dp=document.getElementById('w2dDatePicker');
+  const dataStr=(dp&&dp.value)||new Date().toISOString().slice(0,10);
+  const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
+  const ufv=_w2dSt.ufv;
+  const gran=_w2dSt.gran;
+  const ids=ufv==='all'?[_W2D_IDS.M1,_W2D_IDS.M2,_W2D_IDS.M3]:[_W2D_IDS[ufv]];
+
+  _w2dOverlay('w2dErr',false);
+  _w2dOverlay('w2dLoading',true);
+  const btn=document.getElementById('w2dBuscarBtn');
+  if(btn) btn.disabled=true;
+
+  try{
+    const data=await _way2GetDia(token,ids,[gran],dataStr,intervalo);
+    _w2dOverlay('w2dLoading',false);
+    _renderW2Demanda(data,dataStr,intervalo,ufv,gran);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('loadW2Demanda:',e);
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+}
+
+function _renderW2Demanda(raw,dataStr,intervalo,ufvSel,gran){
+  const canvas=document.getElementById('cW2Dem');
+  if(!canvas) return;
+
+  // pontoId → {HH:MM → valor MW}
+  const pm={};
+  for(const item of (raw.dados||[])){
+    pm[item.pontoId]={};
+    for(const v of (item.valores||[])){
+      if(v.valor==null) continue;
+      const t=v.data.slice(11,16);
+      pm[item.pontoId][t]=+(v.valor/1000).toFixed(4); // kW→MW
+    }
+  }
+
+  const allT=new Set();
+  Object.values(pm).forEach(m=>Object.keys(m).forEach(t=>allT.add(t)));
+  const labels=[...allT].sort();
+
+  if(!labels.length){
+    document.getElementById('w2dErrMsg').textContent='Nenhum dado retornado para este intervalo/data. Tente outro intervalo ou verifique os IDs dos pontos Way2.';
+    _w2dOverlay('w2dErr',true);
+    return;
+  }
+
+  const parks=ufvSel==='all'?['M1','M2','M3']:[ufvSel];
+  const datasets=parks.map(pk=>{
+    const id=_W2D_IDS[pk];
+    const vals=pm[id]||{};
+    const col=_W2D_COLORS[pk];
+    return{
+      label:pk,
+      data:labels.map(t=>vals[t]??null),
+      borderColor:col.c,backgroundColor:col.bg,
+      fill:ufvSel!=='all',tension:.3,
+      borderWidth:2,pointRadius:0,pointHoverRadius:4,spanGaps:true
+    };
+  });
+
+  // Linha Total (M1+M2+M3) quando "Todas"
+  if(ufvSel==='all'){
+    datasets.push({
+      label:'Total',
+      data:labels.map(t=>{
+        let s=0,ok=false;
+        ['M1','M2','M3'].forEach(pk=>{
+          const v=(pm[_W2D_IDS[pk]]||{})[t];
+          if(v!=null){s+=v;ok=true;}
+        });
+        return ok?+s.toFixed(4):null;
+      }),
+      borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+      fill:false,tension:.3,borderWidth:2.5,
+      borderDash:[6,3],pointRadius:0,pointHoverRadius:5,spanGaps:true
+    });
+  }
+
+  if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+
+  const [y,m,d]=dataStr.split('-');
+  document.getElementById('w2dTitle').textContent=
+    `${_W2D_GRANLABEL[gran]||gran} · ${ufvSel==='all'?'M1 · M2 · M3 · Total':ufvSel}`;
+  document.getElementById('w2dSub').textContent=
+    `${d}/${m}/${y} · intervalo ${_W2D_INTLABEL[intervalo]||intervalo} · ${labels.length} pontos · Way2 PIM API`;
+
+  _w2dChart=new Chart(canvas,{
+    type:'line',data:{labels,datasets},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:true,labels:{color:'#b6bac8',font:{size:11},boxWidth:12,padding:14,usePointStyle:true}},
+        tooltip:{
+          backgroundColor:'rgba(8,11,22,.95)',
+          borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+          titleColor:'#f2f3f8',bodyColor:'#b6bac8',
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`}
+        }
+      },
+      scales:{
+        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:24},
+           grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
+           grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+           title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
+      }
+    }
+  });
+}
+
+// Inicializa datepicker com hoje ao carregar a página
+document.addEventListener('DOMContentLoaded',function(){
+  const dp=document.getElementById('w2dDatePicker');
+  if(dp) dp.value=new Date().toISOString().slice(0,10);
+});
 
 function getCid(){return localStorage.getItem('mrd_cid')||'';}
 function saveCid(){
