@@ -6598,6 +6598,7 @@ const _W2D_GRANLABEL={
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
 let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
+let _w2dSubBase='';  // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
 
 function _w2dToggleChart(btn){
   document.querySelectorAll('#tg-w2d .toggle-btn').forEach(b=>b.classList.remove('on'));
@@ -6732,6 +6733,12 @@ function _w2dUpdateContrLine(){
   const cv=onPks.length===1?num(dashData?.must?.contrat?.[onPks[0]]||0):num(dashData?.must?.contrat?.total||0);
   const ci=_w2dChart.data.datasets.findIndex(ds=>ds.label==='_contr');
   if(ci>=0&&cv>0){_w2dChart.data.datasets[ci].data=new Array(_w2dChart.data.datasets[ci].data.length).fill(cv);_w2dChart.update('none');}
+  // Atualiza título e subtítulo com o parque/contrato atual
+  const pkLbl=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'M1–M9 · Total';
+  const tEl=document.getElementById('w2dTitle');
+  if(tEl) tEl.textContent=`Demanda Ativa vs Contratada (MUST) · ${pkLbl}`;
+  const sEl=document.getElementById('w2dSub');
+  if(sEl&&_w2dSubBase) sEl.textContent=`${_w2dSubBase}${cv>0?' · MUST: '+_w2dFmtMW(cv,2):''}`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
@@ -7396,13 +7403,34 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
 
   const [y,m,d]=dataStr.split('-');
   const meta=raw.geradoEm?` · atualizado ${new Date(raw.geradoEm+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})}`:'';
-  document.getElementById('w2dTitle').textContent=
-    `${_W2D_GRANLABEL[gran]||gran} · ${ufvSel==='all'?'M1–M9 · Total':ufvSel}`;
-  document.getElementById('w2dSub').textContent=
-    `${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo} · ${aggLabels.length} pontos · Way2 via Power Automate${meta}`;
+  const _pkLabel=ufvSel==='all'?'M1–M9 · Total':ufvSel;
+  _w2dSubBase=`${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo}${meta}`;
+  document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
+  const _cSub=num(dashData?.must?.contrat?.total||0);
+  document.getElementById('w2dSub').textContent=`${_w2dSubBase}${_cSub>0?' · MUST: '+_w2dFmtMW(_cSub,2):''}`;
 
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
+    plugins:[{id:'_cLbl',afterDraw(chart){
+      const ci=chart.data.datasets.findIndex(d=>d.label==='_contr');
+      if(ci<0) return;
+      const val=chart.data.datasets[ci].data[0];
+      if(!val) return;
+      const yPx=chart.scales.y?.getPixelForValue(val);
+      const xR=chart.chartArea?.right||chart.scales.x?.right||chart.width-10;
+      const ctx=chart.ctx;
+      ctx.save();
+      ctx.font='bold 10px system-ui,sans-serif';
+      const lbl=`MUST ${_w2dFmtMW(val,2)}`;
+      const tw=ctx.measureText(lbl).width+12;
+      ctx.fillStyle='rgba(40,10,10,.72)';
+      ctx.fillRect(xR-tw,yPx-17,tw,15);
+      ctx.fillStyle='rgba(255,110,110,.95)';
+      ctx.textAlign='right';
+      ctx.textBaseline='middle';
+      ctx.fillText(lbl,xR-4,yPx-10);
+      ctx.restore();
+    }}],
     options:{
       responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},
