@@ -7182,7 +7182,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const dates=[];
     const d=new Date(from+'T12:00:00'),end=new Date(to+'T12:00:00');
     while(d<=end){dates.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
-    if(dates.length>31) throw new Error(`Período muito longo (${dates.length} dias). Máximo para intraday: 31 dias.`);
+    if(dates.length>60) throw new Error(`Período muito longo (${dates.length} dias). Máximo para intraday: 60 dias.`);
     const fetched=await Promise.allSettled(
       dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
         .then(r=>r.ok?r.json():null).catch(()=>null))
