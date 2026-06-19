@@ -5907,6 +5907,7 @@ function renderPageMUST(type){
     {c:'green', lab:'MARGEM DISPONÍVEL',  val:f1(margem), unit:'MW', sub:margem>=0?'Folga até o contratado':'Acima do contratado', vc:margem>=0?'var(--green)':'var(--red)'},
     {c:'purple',lab:'UTILIZAÇÃO MÁXIMA',  val:f1(util),   unit:'%',  sub:`${periodoTxt} · ${gran==='hora'?'1h':gran}`, vc:util>100?'var(--red)':'var(--green)'}
   ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
+  _w2dRefreshKpi(); // sobrescreve com peak Way2 se já calculado
 
   const contrData=grouped.map(()=>+contr.toFixed(2));
   const ativaLabel=(sel==='total'?'Demanda Ativa Total':'Demanda Ativa '+sel)+' (MW)';
@@ -6596,6 +6597,7 @@ const _W2D_GRANLABEL={
 };
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
+let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
 
 function _w2dToggleChart(btn){
   document.querySelectorAll('#tg-w2d .toggle-btn').forEach(b=>b.classList.remove('on'));
@@ -6719,6 +6721,21 @@ function _w2dAggregate(vals,factor){
 }
 // Formata MW em pt-BR: vírgula decimal, ponto milhar
 const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
+// Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
+function _w2dRefreshKpi(){
+  if(!_w2dLastKpi) return;
+  const kEl=document.getElementById('mustKpis');
+  if(!kEl) return;
+  const {peak,contr,margem,util,parkLabel,dataStr,intervalo}=_w2dLastKpi;
+  const f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+  const[yy,mm,dd]=dataStr.split('-');
+  kEl.innerHTML=[
+    {c:'blue',  lab:'DEMANDA MÁXIMA',    val:f1(peak),   unit:'MW',sub:`Pico · ${parkLabel}`},
+    {c:'red',   lab:'DEMANDA CONTRATADA',val:f1(contr),  unit:'MW',sub:'Limite contratual · MUST'},
+    {c:'green', lab:'MARGEM DISPONÍVEL', val:f1(margem), unit:'MW',sub:margem>=0?'Folga até o contratado':'⚠ Acima do contratado',vc:margem>=0?'var(--green)':'var(--red)'},
+    {c:'purple',lab:'UTILIZAÇÃO MÁXIMA', val:f1(util),   unit:'%', sub:`Dia ${dd}/${mm}/${yy} · ${_W2D_INTLABEL[intervalo]||intervalo}`,vc:util>100?'var(--red)':'var(--green)'}
+  ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
+}
 
 async function loadW2Demanda(){
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
@@ -7387,6 +7404,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     const f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
     const [yy,mm,dd]=dataStr.split('-');
     const parkLabel=ufvSel==='all'?'todos os parques':ufvSel;
+    _w2dLastKpi={peak,contr,margem,util,parkLabel,dataStr,intervalo};
     kEl.innerHTML=[
       {c:'blue',  lab:'DEMANDA MÁXIMA',    val:f1(peak),   unit:'MW',sub:`Pico · ${parkLabel}`},
       {c:'red',   lab:'DEMANDA CONTRATADA',val:f1(contr),  unit:'MW',sub:'Limite contratual · MUST'},
