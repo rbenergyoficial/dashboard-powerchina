@@ -7405,7 +7405,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       }}],
       options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
-      plugins:{legend:{display:false},tooltip:{position:'nearest',caretPadding:6,backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+      plugins:{legend:{display:false},tooltip:{position:'nearest',caretPadding:16,backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',
         callbacks:{
           title:items=>{const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
@@ -7560,7 +7560,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       plugins:{
         legend:{display:false},
         tooltip:{
-          position:'nearest',caretPadding:6,
+          position:'nearest',caretPadding:16,
           backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
           callbacks:{
