@@ -7065,7 +7065,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
-          title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}}});
+          title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}});
     document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
     _w2dOverlay('w2dLoading',false);
   }catch(e){
@@ -7126,7 +7126,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
-          title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}}});
+          title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
     _w2dOverlay('w2dLoading',false);
   }catch(e){
