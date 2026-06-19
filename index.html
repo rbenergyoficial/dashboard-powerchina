@@ -7181,6 +7181,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   }
 
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
+  // Para 30min: desloca label +15min para mostrar fim do intervalo (ex: 00:30, 01:00, 01:30...)
+  const _shiftLabel=(t,min)=>{const[h,m]=t.split(':').map(Number),tot=h*60+m+min;return`${String(Math.floor(tot/60)%24).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
+  const displayLabels=aggFactor===2?aggLabels.map(t=>_shiftLabel(t,15)):aggLabels;
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
   // Parâmetros visuais por granularidade e tipo de gráfico
@@ -7224,7 +7227,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     `${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo} · ${aggLabels.length} pontos · Way2 via Power Automate${meta}`;
 
   _w2dChart=new Chart(canvas,{
-    type:'line',data:{labels:aggLabels,datasets},
+    type:'line',data:{labels:displayLabels,datasets},
     options:{
       responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},
