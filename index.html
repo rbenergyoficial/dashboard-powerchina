@@ -6624,7 +6624,7 @@ function _w2dAggregate(vals,factor){
   const out=[];
   for(let i=0;i<vals.length;i+=factor){
     const chunk=vals.slice(i,i+factor).filter(v=>v!=null);
-    out.push(chunk.length?+Math.max(...chunk).toFixed(4):null);
+    out.push(chunk.length?+(chunk.reduce((a,b)=>a+b,0)/chunk.length).toFixed(4):null);
   }
   return out;
 }
@@ -6824,14 +6824,12 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   // Parâmetros visuais por granularidade e tipo de gráfico
   const forceBar=_w2dSt.chartType==='bar';
   const isBar=forceBar||aggFactor>=96;
-  const ptR=aggFactor<=1?0:aggFactor<=2?2:aggFactor<=4?4:5;
+  const ptR=aggFactor<=1?0:aggFactor<=2?3:aggFactor<=4?4:5;
   const tns=aggFactor>=4?0:.3;
-  // 30min usa stepped para distinguir visualmente do 15min suave
-  const stepped=(!isBar&&aggFactor===2)?'before':false;
 
   const _mkDs=(pk,agg,col)=>isBar
     ?{label:pk,data:agg,type:'bar',backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true}
-    :{label:pk,data:agg,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:stepped?0:tns,stepped,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,4),pointBackgroundColor:col.c,spanGaps:true};
+    :{label:pk,data:agg,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:tns,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,4),pointBackgroundColor:col.c,spanGaps:true};
 
   const datasets=parks.map(pk=>{
     const pdata=pm[_W2D_IDS[pk]]||{};
