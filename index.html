@@ -7194,6 +7194,11 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const BASE_AGG=aggFactor<=1?BASE_15:BASE_15.filter((_,i)=>i%aggFactor===0);
     const DISP_TIMES=shiftMin>0?BASE_AGG.map(t=>shiftLbl(t,shiftMin)):BASE_AGG;
     const ptsPerDay=DISP_TIMES.length;
+    // Espaçamento adaptativo: menos ticks por dia quanto mais dias houver
+    const timeTickStep=dates.length<=3?Math.floor(ptsPerDay/6):   // ~4h
+                       dates.length<=7?Math.floor(ptsPerDay/4):   // 6h
+                       dates.length<=14?Math.floor(ptsPerDay/2):  // 12h
+                       ptsPerDay;                                  // só data, sem horário
     const allPks=Object.keys(_W2D_IDS);
     const parks=ufv==='all'?allPks:[ufv];
     const pkVals={};
@@ -7216,7 +7221,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         const pdata=pm[_W2D_IDS[pk]]||{};
         pkVals[pk].push(..._w2dAggregate(BASE_15.map(t=>pdata[t]??null),aggFactor));
       });
-      DISP_TIMES.forEach((t,ti)=>allLabels.push(ti===0?`${dd}/${mo}`:ti%Math.max(1,Math.floor(ptsPerDay/4))===0?t:''));
+      DISP_TIMES.forEach((t,ti)=>allLabels.push(ti===0?`${dd}/${mo}`:ti%timeTickStep===0?t:''));
     });
     const isBar=_w2dSt.chartType==='bar';
     const datasets=parks.map(pk=>{
