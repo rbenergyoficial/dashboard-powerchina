@@ -6189,6 +6189,10 @@ function clearFilters(){
   filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
   clearFilterCache();
   syncFilterUI();
+  // Reseta seleção de parque UFV no gráfico Way2 para "Todas"
+  const ufvTodas=document.querySelector('#w2dUfvGroup [data-ufv="all"]');
+  if(ufvTodas) _w2dChip(ufvTodas,'ufv');
+  if(_w2dChart) loadW2Demanda();
   renderAll();
 }
 function syncFilterUI(){
