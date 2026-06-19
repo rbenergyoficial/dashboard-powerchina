@@ -6699,7 +6699,7 @@ function _w2dRenderDateUI(){
   }else{
     const oneMonthAgo=new Date();oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
     const fromDef=oneMonthAgo.toISOString().slice(0,10);
-    container.innerHTML=`<input type="date" class="fdate" id="w2dFrom" value="${fromDef}" style="min-width:110px" onchange="_w2dSyncToMust()"><span style="color:var(--t4);font-size:10px;padding:0 4px">até</span><input type="date" class="fdate" id="w2dTo" value="${today}" style="min-width:110px" onchange="_w2dSyncToMust()">`;
+    container.innerHTML=`<select class="fselect" id="w2dRangeInterval" style="min-width:88px" onchange="_w2dSyncToMust()"><option value="diario">Pico/dia</option><option value="QuinzeMinutos">15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option></select><input type="date" class="fdate" id="w2dFrom" value="${fromDef}" style="min-width:110px" onchange="_w2dSyncToMust()"><span style="color:var(--t4);font-size:10px;padding:0 4px">até</span><input type="date" class="fdate" id="w2dTo" value="${today}" style="min-width:110px" onchange="_w2dSyncToMust()">`;
   }
 }
 
@@ -6780,6 +6780,8 @@ async function loadW2Demanda(){
     if(btn) btn.disabled=false;
     return;
   }
+  const rangeIv=document.getElementById('w2dRangeInterval')?.value||'diario';
+  if(rangeIv!=='diario') return _loadW2RangeIntraday(gran,ufv,from,to,rangeIv,btn);
   return _loadW2RangeView(gran,ufv,from,to,btn);
 }
 
@@ -7171,6 +7173,90 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
     document.getElementById('w2dErrMsg').textContent=e.message;
     _w2dOverlay('w2dErr',true);
     console.error('_loadW2RangeView:',e);
+  }finally{if(btn) btn.disabled=false;}
+}
+
+// Personalizado com intervalo intraday (15min/30min/1h) — concatena dias
+async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
+  try{
+    const dates=[];
+    const d=new Date(from+'T12:00:00'),end=new Date(to+'T12:00:00');
+    while(d<=end){dates.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
+    if(dates.length>31) throw new Error(`Período muito longo (${dates.length} dias). Máximo para intraday: 31 dias.`);
+    const fetched=await Promise.allSettled(
+      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const aggFactor=interval==='TrintaMinutos'?2:interval==='UmaHora'?4:1;
+    const shiftMin=aggFactor===2?15:aggFactor===4?45:0;
+    const BASE_15=Array.from({length:96},(_,i)=>{const h=Math.floor(i*15/60),m=(i*15)%60;return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;});
+    const shiftLbl=(t,min)=>{const[h,m]=t.split(':').map(Number),tot=h*60+m+min;return`${String(Math.floor(tot/60)%24).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
+    const BASE_AGG=aggFactor<=1?BASE_15:BASE_15.filter((_,i)=>i%aggFactor===0);
+    const DISP_TIMES=shiftMin>0?BASE_AGG.map(t=>shiftLbl(t,shiftMin)):BASE_AGG;
+    const ptsPerDay=DISP_TIMES.length;
+    // Labels: "DD/MM" apenas no início de cada dia, "" nos demais
+    const allLabels=[];
+    dates.forEach(dt=>{
+      const[,mo,dd]=dt.split('-');
+      DISP_TIMES.forEach((t,ti)=>allLabels.push(ti===0?`${dd}/${mo}`:ti%Math.max(1,Math.floor(ptsPerDay/4))===0?t:''));
+    });
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+    const pkVals={};
+    allPks.forEach(pk=>{pkVals[pk]=[];});
+    dates.forEach((dt,di)=>{
+      const raw=fetched[di].status==='fulfilled'?fetched[di].value:null;
+      allPks.forEach(pk=>{
+        const item=raw?(raw.dados||[]).find(x=>x.pontoId===_W2D_IDS[pk]&&x.nomeGrandeza===gran):null;
+        const pdata={};
+        if(item)(item.valores||[]).forEach(v=>{if(v.tempo&&v.valor!=null)pdata[v.tempo.slice(11,16)]=+(v.valor/1000).toFixed(4);});
+        pkVals[pk].push(..._w2dAggregate(BASE_15.map(t=>pdata[t]??null),aggFactor));
+      });
+    });
+    const isBar=_w2dSt.chartType==='bar';
+    const datasets=parks.map(pk=>{
+      const col=_W2D_COLORS[pk];
+      if(isBar) return{label:pk,data:pkVals[pk],type:'bar',backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:2,spanGaps:false};
+      return{label:pk,data:pkVals[pk],borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:4,spanGaps:false};
+    });
+    if(ufv==='all'){
+      const total=Array.from({length:dates.length*ptsPerDay},(_,i)=>{
+        let s=0,ok=false;
+        allPks.forEach(pk=>{const v=pkVals[pk][i];if(v!=null){s+=v;ok=true;}});
+        return ok?+s.toFixed(3):null;
+      });
+      if(isBar) datasets.push({label:'Total',data:total,type:'bar',backgroundColor:'rgba(255,255,255,.15)',borderColor:'#fff',borderWidth:1,borderRadius:2,spanGaps:false});
+      else datasets.push({label:'Total',data:total,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:2,borderDash:[6,3],pointRadius:0,pointHoverRadius:5,spanGaps:false});
+    }
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+    const avail=fetched.filter(r=>r.status==='fulfilled'&&r.value).length;
+    const[fy,fm,fd]=from.split('-');const[ty,tm,td]=to.split('-');
+    const intLabel={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora'}[interval]||interval;
+    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · ${intLabel} intraday · ${avail}/${dates.length} dias · Way2`;
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},options:{
+      responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',
+        callbacks:{
+          title:items=>{const lbl=allLabels[items[0]?.dataIndex]||'';const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
+          label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`
+        }}},
+      scales:{
+        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
+           grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
+           grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+           title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
+    _w2dApplyChipVisibility();
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2RangeIntraday:',e);
   }finally{if(btn) btn.disabled=false;}
 }
 
