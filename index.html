@@ -6759,8 +6759,18 @@ function _w2dUpdateContrLine(){
   _w2dChart.update('none');
   const tEl=document.getElementById('w2dTitle');
   if(tEl) tEl.textContent=`Demanda Ativa vs Contratada (MUST) · ${pkLbl}`;
+  _w2dRenderSub();
+}
+// Constrói e aplica o subtítulo do gráfico Way2 com pico destacado (sem repetir valor MUST)
+function _w2dRenderSub(){
   const sEl=document.getElementById('w2dSub');
-  if(sEl&&_w2dSubBase) sEl.textContent=`${_w2dSubBase}${mustStr}`;
+  if(!sEl||!_w2dSubBase) return;
+  if(!_w2dLastKpi||!(_w2dLastKpi.peak>0)){sEl.textContent=_w2dSubBase;return;}
+  const {peak,util,peakTime}=_w2dLastKpi;
+  const hi='color:#cdd0dc;font-weight:600';
+  const uc=util>100?'color:#ff7575;font-weight:600':'color:#7dda88;font-weight:600';
+  const tStr=peakTime?` às <span style="${hi}">${peakTime}</span>`:'';
+  sEl.innerHTML=`${_w2dSubBase} &nbsp;·&nbsp; Pico <span style="${hi}">${_w2dFmtMW(peak,3)}</span>${tStr} &nbsp;·&nbsp; <span style="${uc}">${util.toFixed(1)}% do MUST</span>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
@@ -6778,11 +6788,14 @@ function _w2dUpdateKpiPeak(){
     peakData=Array.from({length:len},(_,i)=>{let s=0,ok=false;all.forEach(d=>{if(d[i]!=null){s+=d[i];ok=true;}});return ok?+s.toFixed(3):null;});
   }
   const peak=peakData.length?Math.max(...peakData.filter(v=>v!=null),0):0;
+  const peakIdx=peakData.findIndex(v=>v===peak);
+  const peakTime=peakIdx>=0?((_w2dChart.data.labels||[])[peakIdx]||''):'';
   const must=dashData?.must;
   const parkLabel=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'todos os parques';
   const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
   const margem=contr-peak, util=contr>0?peak/contr*100:0;
-  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel});
+  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime});
+  _w2dRenderSub();
 }
 // Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
 function _w2dRefreshKpi(){
@@ -7428,8 +7441,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const _pkLabel=ufvSel==='all'?'M1–M9 · Total':ufvSel;
   _w2dSubBase=`${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo}${meta}`;
   document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
-  const _cSub=num(dashData?.must?.contrat?.total||0);
-  document.getElementById('w2dSub').textContent=`${_w2dSubBase}${_cSub>0?' · MUST: '+_w2dFmtMW(_cSub,2):''}`;
+  document.getElementById('w2dSub').textContent=_w2dSubBase;
 
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
@@ -7491,6 +7503,8 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       ?(datasets.find(d=>d.label==='Total')?.data||[])
       :(datasets[0]?.data||[]);
     const peak=peakArr.length?Math.max(...peakArr.filter(v=>v!=null),0):0;
+    const peakIdx=peakArr.findIndex(v=>v===peak);
+    const peakTime=peakIdx>=0?(displayLabels[peakIdx]||''):'';
     const must=dashData?.must;
     const contr=ufvSel==='all'?num(must?.contrat?.total||0):num(must?.contrat?.[ufvSel]||0);
     const margem=contr-peak;
@@ -7498,13 +7512,14 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     const f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
     const [yy,mm,dd]=dataStr.split('-');
     const parkLabel=ufvSel==='all'?'todos os parques':ufvSel;
-    _w2dLastKpi={peak,contr,margem,util,parkLabel,dataStr,intervalo};
+    _w2dLastKpi={peak,contr,margem,util,parkLabel,dataStr,intervalo,peakTime};
     kEl.innerHTML=[
       {c:'blue',  lab:'DEMANDA MÁXIMA',    val:f1(peak),   unit:'MW',sub:`Pico · ${parkLabel}`},
       {c:'red',   lab:'DEMANDA CONTRATADA',val:f1(contr),  unit:'MW',sub:'Limite contratual · MUST'},
       {c:'green', lab:'MARGEM DISPONÍVEL', val:f1(margem), unit:'MW',sub:margem>=0?'Folga até o contratado':'⚠ Acima do contratado',vc:margem>=0?'var(--green)':'var(--red)'},
       {c:'purple',lab:'UTILIZAÇÃO MÁXIMA', val:f1(util),   unit:'%', sub:`Dia ${dd}/${mm}/${yy} · ${_W2D_INTLABEL[intervalo]||intervalo}`,vc:util>100?'var(--red)':'var(--green)'}
     ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
+    _w2dRenderSub();
   }
 }
 
