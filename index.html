@@ -499,7 +499,8 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-month-chip:hover{border-color:rgba(107,139,245,.38);background:rgba(107,139,245,.12)}
 .w2d-park-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:var(--t3);font-size:10px;font-weight:700;cursor:pointer;transition:.18s;letter-spacing:.3px}
 .w2d-park-chip::before{content:'';flex-shrink:0;width:6px;height:14px;border-radius:2px;background:var(--pk-c,#6b8bf5)}
-.w2d-park-chip.on{background:var(--pk-bg,rgba(107,139,245,.18));border-color:var(--pk-c,#6b8bf5);color:#fff}
+.w2d-park-chip.on{background:var(--pk-c,#6b8bf5);border-color:var(--pk-c,#6b8bf5);color:#fff}
+.w2d-park-chip.on::before{background:rgba(255,255,255,.35)}
 .w2d-park-chip:not(.on):hover{border-color:var(--pk-c,#6b8bf5);background:var(--pk-bg,rgba(107,139,245,.10))}
 #page-must .must-day-nav{height:34px;min-width:34px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
 #page-must .must-day-nav:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.38)}
@@ -6688,12 +6689,10 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     if(intervalo==='Semana'){
       for(let i=6;i>=0;i--){const d=new Date(ref);d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
     }else if(intervalo==='Mes'){
-      // Todos os dias do mês selecionado
       const y=ref.getFullYear(),m=ref.getMonth();
       const dias=new Date(y,m+1,0).getDate();
       for(let d=1;d<=dias;d++) dates.push(ymd(y,m,d));
     }else{
-      // Todos os meses do ano selecionado (usando dia 15 como representativo)
       const y=ref.getFullYear();
       for(let m=0;m<12;m++) dates.push(ymd(y,m,15));
     }
@@ -6715,6 +6714,8 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     const allPks=Object.keys(_W2D_IDS);
     const parks=ufv==='all'?allPks:[ufv];
 
+    const _MON_PT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const _MON_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     const xLabels=dayData.map(({date})=>{
       const[y,m,d]=date.split('-');
       return intervalo==='Ano'?`${_MON_PT[+m-1]}/${y.slice(2)}`:`${d}/${m}`;
@@ -6743,8 +6744,6 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
     const[y,m,d]=refDateStr.split('-');
-    const _MON_PT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-    const _MON_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
     const rangeMap={
       Semana:`${d}/${m}/${y} — 7 dias`,
       Mes:`${_MON_FULL[ref.getMonth()]} ${ref.getFullYear()}`,
@@ -6765,11 +6764,11 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
         interaction:{mode:'index',intersect:false},
         plugins:{
           legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
-            generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
-              const vis=chart.isDatasetVisible(i);
-              const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
-              return{text:ds.label,fillStyle:vis?col:'rgba(255,255,255,.10)',strokeStyle:'transparent',lineWidth:0,fontColor:vis?'#b6bac8':'#454a5e',hidden:false,datasetIndex:i};
-            })}},
+              generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
+                const vis=chart.isDatasetVisible(i);
+                const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
+                return{text:ds.label,fillStyle:vis?col:'rgba(255,255,255,.10)',strokeStyle:'transparent',lineWidth:0,fontColor:vis?'#b6bac8':'#454a5e',hidden:false,datasetIndex:i};
+              })}},
           tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
             titleColor:'#f2f3f8',bodyColor:'#b6bac8',
             callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}
