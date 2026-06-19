@@ -7360,7 +7360,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const isBar=_w2dSt.chartType==='bar';
     const datasets=parks.map(pk=>{
       const col=_W2D_COLORS[pk];
-      if(isBar) return{label:pk,data:pkVals[pk],type:'bar',backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:2,spanGaps:false};
+      if(isBar) return{label:pk,data:pkVals[pk],type:'bar',backgroundColor:ctx=>gradFrom(ctx,col.c),borderColor:col.c,borderWidth:1,borderRadius:2,spanGaps:false};
       return{label:pk,data:pkVals[pk],borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false};
     });
     if(ufv==='all'){
@@ -7369,7 +7369,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         allPks.forEach(pk=>{const v=pkVals[pk][i];if(v!=null){s+=v;ok=true;}});
         return ok?+s.toFixed(3):null;
       });
-      if(isBar) datasets.push({label:'Total',data:total,type:'bar',backgroundColor:'rgba(255,255,255,.15)',borderColor:'#fff',borderWidth:1,borderRadius:2,spanGaps:false});
+      if(isBar) datasets.push({label:'Total',data:total,type:'bar',backgroundColor:ctx=>gradFrom(ctx,_W2D_COLORS.Total.c),borderColor:_W2D_COLORS.Total.c,borderWidth:1,borderRadius:2,spanGaps:false});
       else datasets.push({label:'Total',data:total,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:2,borderDash:[6,3],pointRadius:0,pointHoverRadius:9,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false});
     }
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
@@ -7489,7 +7489,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const tns=aggFactor>=4?0:.3;
 
   const _mkDs=(pk,agg,col)=>isBar
-    ?{label:pk,data:agg,type:'bar',backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true}
+    ?{label:pk,data:agg,type:'bar',backgroundColor:ctx=>gradFrom(ctx,col.c),borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true}
     :{label:pk,data:agg,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:tns,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,8),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:col.c,spanGaps:true};
 
   const datasets=parks.map(pk=>{
@@ -7507,7 +7507,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     });
     const totAgg=_w2dAggregate(totalVals,aggFactor);
     if(isBar){
-      datasets.push({label:'Total',data:totAgg,type:'bar',backgroundColor:'rgba(255,255,255,.15)',borderColor:'#fff',borderWidth:1.5,borderRadius:4,spanGaps:true});
+      datasets.push({label:'Total',data:totAgg,type:'bar',backgroundColor:ctx=>gradFrom(ctx,_W2D_COLORS.Total.c),borderColor:_W2D_COLORS.Total.c,borderWidth:1.5,borderRadius:4,spanGaps:true});
     }else{
       datasets.push({label:'Total',data:totAgg,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:tns,borderWidth:2.5,borderDash:[6,3],pointRadius:ptR,pointHoverRadius:Math.max(ptR,9),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:_W2D_COLORS.Total.c,spanGaps:true});
     }
