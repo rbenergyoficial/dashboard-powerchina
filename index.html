@@ -6795,6 +6795,7 @@ function _w2dUpdateKpiPeak(){
   const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
   const margem=contr-peak, util=contr>0?peak/contr*100:0;
   Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime});
+  _w2dRefreshKpi();
   _w2dRenderSub();
 }
 // Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
@@ -7494,9 +7495,8 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       }
     }
   });
-  _w2dApplyChipVisibility();
 
-  // Atualiza KPI cards com os dados do gráfico Way2
+  // Atualiza KPI cards com os dados do gráfico Way2 (total, base para _w2dUpdateKpiPeak corrigir)
   const kEl=document.getElementById('mustKpis');
   if(kEl){
     const peakArr=ufvSel==='all'
@@ -7521,6 +7521,8 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
     _w2dRenderSub();
   }
+  // Aplica visibilidade dos chips DEPOIS do KPI base para _w2dUpdateKpiPeak corrigir por parque
+  _w2dApplyChipVisibility();
 }
 
 // Inicializa datepicker e restaura última página visitada (padrão: must)
