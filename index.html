@@ -6614,18 +6614,34 @@ function _w2dChip(btn,tipo){
   const parkChips=allChips.filter(b=>b.dataset.ufv!=='all');
   const todasBtn=allChips.find(b=>b.dataset.ufv==='all');
   if(ufv==='all'){
-    // Toggle: se Todas está ON → desliga tudo; se OFF → liga tudo
-    const ligar=!btn.classList.contains('on');
-    allChips.forEach(b=>b.classList.toggle('on',ligar));
-    if(_w2dChart){_w2dChart.data.datasets.forEach((_,i)=>_w2dChart.setDatasetVisibility(i,ligar));_w2dChart.update();}
+    // Todas: sempre reativa tudo (reset)
+    allChips.forEach(b=>b.classList.add('on'));
+    if(_w2dChart){_w2dChart.data.datasets.forEach((_,i)=>_w2dChart.setDatasetVisibility(i,true));_w2dChart.update();}
+  }else if(todasBtn?.classList.contains('on')){
+    // Todas estava ON → seleção exclusiva: só este parque, Total some, Todas apaga
+    parkChips.forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    todasBtn.classList.remove('on');
+    if(_w2dChart){
+      _w2dChart.data.datasets.forEach((ds,i)=>_w2dChart.setDatasetVisibility(i,ds.label===ufv));
+      _w2dChart.update();
+    }
   }else{
+    // Todas OFF → toggle individual
     btn.classList.toggle('on');
     const isOn=btn.classList.contains('on');
     if(_w2dChart){
       const idx=_w2dChart.data.datasets.findIndex(ds=>ds.label===ufv);
       if(idx>=0){_w2dChart.setDatasetVisibility(idx,isOn);_w2dChart.update();}
     }
-    if(todasBtn) todasBtn.classList.toggle('on',parkChips.every(b=>b.classList.contains('on')));
+    // Se todos os parques individuais estiverem on → reativa Todas + Total
+    if(parkChips.every(b=>b.classList.contains('on'))){
+      todasBtn?.classList.add('on');
+      if(_w2dChart){
+        const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
+        if(ti>=0){_w2dChart.setDatasetVisibility(ti,true);_w2dChart.update();}
+      }
+    }
   }
   filters.mustPark=ufv==='all'?'total':ufv;
   if(typeof renderPageMUST==='function') renderPageMUST();
