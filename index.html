@@ -6794,15 +6794,27 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
+  // Parâmetros visuais por granularidade
+  const isBar=aggFactor>=96; // UmDia: barras
+  const ptR=aggFactor<=1?0:aggFactor<=2?3:aggFactor<=4?4:5; // pontos maiores p/ 30min/1h
+  const tns=aggFactor>=4?0:.3; // sem interpolação suave para 1h+
+
   const datasets=parks.map(pk=>{
     const id=_W2D_IDS[pk];
     const pdata=pm[id]||{};
     const vals15=labels.map(t=>pdata[t]??null);
     const col=_W2D_COLORS[pk];
+    const agg=_w2dAggregate(vals15,aggFactor);
+    if(isBar) return{
+      label:pk,data:agg,type:'bar',
+      backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true
+    };
     return{
-      label:pk,data:_w2dAggregate(vals15,aggFactor),
+      label:pk,data:agg,
       borderColor:col.c,backgroundColor:col.bg,
-      fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:4,spanGaps:true
+      fill:false,tension:tns,borderWidth:1.5,
+      pointRadius:ptR,pointHoverRadius:Math.max(ptR,4),
+      pointBackgroundColor:col.c,spanGaps:true
     };
   });
 
@@ -6813,12 +6825,12 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       allPks.forEach(pk=>{const v=(pm[_W2D_IDS[pk]]||{})[t];if(v!=null){s+=v;ok=true;}});
       return ok?+s.toFixed(4):null;
     });
-    datasets.push({
-      label:'Total',data:_w2dAggregate(totalVals,aggFactor),
-      borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-      fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],
-      pointRadius:0,pointHoverRadius:5,spanGaps:true
-    });
+    const totAgg=_w2dAggregate(totalVals,aggFactor);
+    if(isBar){
+      datasets.push({label:'Total',data:totAgg,type:'bar',backgroundColor:'rgba(255,255,255,.15)',borderColor:'#fff',borderWidth:1.5,borderRadius:4,spanGaps:true});
+    }else{
+      datasets.push({label:'Total',data:totAgg,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:tns,borderWidth:2.5,borderDash:[6,3],pointRadius:ptR,pointHoverRadius:Math.max(ptR,5),pointBackgroundColor:_W2D_COLORS.Total.c,spanGaps:true});
+    }
   }
 
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
