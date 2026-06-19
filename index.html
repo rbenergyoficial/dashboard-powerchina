@@ -1478,8 +1478,8 @@ function _themeCharts(light){
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
           <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="w2d-park-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')" style="--pk-c:#2dd4bf;--pk-bg:rgba(45,212,191,.18)">M2</button><button class="w2d-park-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f5a623;--pk-bg:rgba(245,166,35,.18)">M3</button><button class="w2d-park-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')" style="--pk-c:#22c55e;--pk-bg:rgba(34,197,94,.18)">M6</button><button class="w2d-park-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')" style="--pk-c:#14b8a6;--pk-bg:rgba(20,184,166,.18)">M9</button></span></div>
-          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect" onchange="_w2dSyncToMust()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option></select></div>
-          <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker" onchange="_w2dSyncToMust()"></div>
+          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect" onchange="_w2dOnIntervalChange()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option><option value="Personalizado">Personalizado</option></select></div>
+          <div class="fg" id="w2dDateFg"><span class="fbar-label" id="w2dDateLabel">Data</span><span id="w2dDateContainer" style="display:flex;align-items:center;gap:4px"></span></div>
           <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
         </div>
       </div>
@@ -6190,9 +6190,11 @@ function clearFilters(){
   filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
   clearFilterCache();
   syncFilterUI();
-  // Reseta seleção de parque UFV no gráfico Way2 para "Todas"
+  // Reseta seleção de parque UFV + intervalo/data do gráfico Way2
   const ufvTodas=document.querySelector('#w2dUfvGroup [data-ufv="all"]');
   if(ufvTodas) _w2dChip(ufvTodas,'ufv');
+  const intSel=document.getElementById('w2dIntervalSel');
+  if(intSel){intSel.value='QuinzeMinutos';_w2dOnIntervalChange();}
   if(_w2dChart) loadW2Demanda();
   renderAll();
 }
@@ -6577,14 +6579,14 @@ const _W2D_COLORS={
   M9:{c:'#14b8a6',bg:'rgba(20,184,166,.13)'},
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
-const _W2D_INTLABEL={CincoMinutos:'5 min',QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano'};
+const _W2D_INTLABEL={CincoMinutos:'5 min',QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano',Personalizado:'personalizado'};
 const _W2D_BASE_AGG={
   CincoMinutos: {CincoMinutos:1,QuinzeMinutos:3,TrintaMinutos:6,UmaHora:12,UmDia:288},
   QuinzeMinutos:{QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96}
 };
 const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96};
 const _W2D_MULTIDAY=['Semana','Mes','Ano'];
-const _W2D_TO_MUST_GRAN={CincoMinutos:'15min',QuinzeMinutos:'15min',TrintaMinutos:'30min',UmaHora:'hora',UmDia:'dia',Semana:'semana',Mes:'mes',Ano:'ano'};
+const _W2D_TO_MUST_GRAN={CincoMinutos:'15min',QuinzeMinutos:'15min',TrintaMinutos:'30min',UmaHora:'hora',UmDia:'dia',Semana:'semana',Mes:'mes',Ano:'ano',Personalizado:'15min'};
 const _W2D_GRANLABEL={
   Demat:'Demat — ativa líquida (geração−consumo)',
   DematDel:'DematDel — demanda canal Del',
@@ -6642,6 +6644,44 @@ function _w2dSyncToMust(){
   if(typeof renderPageMUST==='function') renderPageMUST();
 }
 
+function _w2dOnIntervalChange(){
+  const iv=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
+  const lbl=document.getElementById('w2dDateLabel');
+  if(lbl){
+    if(['UmDia','Semana'].includes(iv)) lbl.textContent='Mês';
+    else if(iv==='Mes') lbl.textContent='Ano';
+    else if(iv==='Ano') lbl.textContent='Anos';
+    else if(iv==='Personalizado') lbl.textContent='Período';
+    else lbl.textContent='Data';
+  }
+  _w2dRenderDateUI();
+  _w2dSyncToMust();
+}
+
+function _w2dRenderDateUI(){
+  const container=document.getElementById('w2dDateContainer');
+  if(!container) return;
+  const iv=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
+  const today=new Date().toISOString().slice(0,10);
+  const thisMonth=today.slice(0,7);
+  const thisYear=new Date().getFullYear();
+  if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(iv)){
+    container.innerHTML=`<input type="date" class="fdate" id="w2dDatePicker" value="${today}" onchange="_w2dSyncToMust()">`;
+  }else if(['UmDia','Semana'].includes(iv)){
+    container.innerHTML=`<input type="month" class="fdate" id="w2dMonthPicker" value="${thisMonth}" onchange="_w2dSyncToMust()">`;
+  }else if(iv==='Mes'){
+    const yrs=[thisYear-2,thisYear-1,thisYear,thisYear+1].filter(y=>y>=2023);
+    container.innerHTML=`<select class="fselect" id="w2dYearPicker" onchange="_w2dSyncToMust()">${yrs.map(y=>`<option value="${y}"${y===thisYear?' selected':''}>${y}</option>`).join('')}</select>`;
+  }else if(iv==='Ano'){
+    const yrs=[thisYear-2,thisYear-1,thisYear,thisYear+1].filter(y=>y>=2023);
+    container.innerHTML=yrs.map(y=>`<button class="w2d-park-chip${y>=thisYear-1?' on':''}" data-yr="${y}" onclick="this.classList.toggle('on')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">${y}</button>`).join('');
+  }else{
+    const oneMonthAgo=new Date();oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
+    const fromDef=oneMonthAgo.toISOString().slice(0,10);
+    container.innerHTML=`<input type="date" class="fdate" id="w2dFrom" value="${fromDef}" style="min-width:110px" onchange="_w2dSyncToMust()"><span style="color:var(--t4);font-size:10px;padding:0 4px">até</span><input type="date" class="fdate" id="w2dTo" value="${today}" style="min-width:110px" onchange="_w2dSyncToMust()">`;
+  }
+}
+
 function _w2dOverlay(id,show){
   const el=document.getElementById(id);
   if(el) el.classList.toggle('show',!!show);
@@ -6658,48 +6698,68 @@ function _w2dAggregate(vals,factor){
 }
 
 async function loadW2Demanda(){
-  const dp=document.getElementById('w2dDatePicker');
-  const dataStr=(dp&&dp.value)||new Date().toISOString().slice(0,10);
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
   const ufv=_w2dSt.ufv;
   const gran=_w2dSt.gran;
-
   _w2dOverlay('w2dErr',false);
   _w2dOverlay('w2dLoading',true);
   const btn=document.getElementById('w2dBuscarBtn');
   if(btn) btn.disabled=true;
 
-  if(_W2D_MULTIDAY.includes(intervalo)){
-    return _loadW2MultiDay(gran,ufv,intervalo,dataStr);
+  // INTRADAY: 15min / 30min / 1h / 5min — picker de dia específico
+  if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(intervalo)){
+    const dataStr=document.getElementById('w2dDatePicker')?.value||new Date().toISOString().slice(0,10);
+    try{
+      let blobName,baseInt;
+      if(intervalo==='CincoMinutos'){blobName=`way2_must_intradia_${dataStr}.json`;baseInt='CincoMinutos';}
+      else if(intervalo==='QuinzeMinutos'){blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`;baseInt='QuinzeMinutos';}
+      else{blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`;baseInt='QuinzeMinutos';}
+      const r=await fetch(`${WAY2_BLOB_BASE}${blobName}`,{cache:'no-store'});
+      if(!r.ok) throw new Error(`Dados indisponíveis para ${dataStr}.`);
+      const data=await r.json();
+      _w2dOverlay('w2dLoading',false);
+      _renderW2Demanda(data,dataStr,intervalo,baseInt,ufv,gran);
+    }catch(e){
+      _w2dOverlay('w2dLoading',false);
+      document.getElementById('w2dErrMsg').textContent=e.message;
+      _w2dOverlay('w2dErr',true);
+      console.error('loadW2Demanda:',e);
+    }finally{if(btn) btn.disabled=false;}
+    return;
   }
-
-  try{
-    // TrintaMinutos/UmaHora/UmDia: agrega a partir do blob de 15min (dados ONS)
-    const _AGG_FROM_15=['TrintaMinutos','UmaHora','UmDia'];
-    let blobName, baseInt;
-    if(intervalo==='CincoMinutos'){
-      blobName=`way2_must_intradia_${dataStr}.json`; baseInt='CincoMinutos';
-    }else if(intervalo==='QuinzeMinutos'){
-      blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`; baseInt='QuinzeMinutos';
-    }else if(_AGG_FROM_15.includes(intervalo)){
-      blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`; baseInt='QuinzeMinutos';
-    }else{
-      blobName=`way2_must_intradia_${intervalo}_${dataStr}.json`; baseInt=intervalo;
+  // DIA / SEMANA — picker de mês → gráfico mostra dias ou semanas
+  if(['UmDia','Semana'].includes(intervalo)){
+    const monthStr=document.getElementById('w2dMonthPicker')?.value||new Date().toISOString().slice(0,7);
+    return _loadW2MonthView(gran,ufv,intervalo,monthStr,btn);
+  }
+  // MÊS — picker de ano → gráfico mostra meses
+  if(intervalo==='Mes'){
+    const year=+(document.getElementById('w2dYearPicker')?.value||new Date().getFullYear());
+    return _loadW2YearView(gran,ufv,year,btn);
+  }
+  // ANO — chips de anos → gráfico mostra anos
+  if(intervalo==='Ano'){
+    const years=[...document.querySelectorAll('#w2dDateContainer [data-yr].on')].map(b=>+b.dataset.yr);
+    if(!years.length){
+      _w2dOverlay('w2dLoading',false);
+      document.getElementById('w2dErrMsg').textContent='Selecione ao menos um ano acima.';
+      _w2dOverlay('w2dErr',true);
+      if(btn) btn.disabled=false;
+      return;
     }
-    const url=`${WAY2_BLOB_BASE}${blobName}`;
-    const r=await fetch(url,{cache:'no-store'});
-    if(!r.ok) throw new Error(`Dados indisponíveis para ${dataStr}.`);
-    const data=await r.json();
-    _w2dOverlay('w2dLoading',false);
-    _renderW2Demanda(data,dataStr,intervalo,baseInt,ufv,gran);
-  }catch(e){
-    _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
-    console.error('loadW2Demanda:',e);
-  }finally{
-    if(btn) btn.disabled=false;
+    return _loadW2MultiYearView(gran,ufv,years,btn);
   }
+  // PERSONALIZADO — faixa de datas livre
+  const from=document.getElementById('w2dFrom')?.value;
+  const to=document.getElementById('w2dTo')?.value;
+  if(!from||!to){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent='Selecione período inicial e final.';
+    _w2dOverlay('w2dErr',true);
+    if(btn) btn.disabled=false;
+    return;
+  }
+  return _loadW2RangeView(gran,ufv,from,to,btn);
 }
 
 async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
@@ -6816,6 +6876,265 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
   }finally{
     if(btn) btn.disabled=false;
   }
+}
+
+// Dia / Semana: mês picker → todos os dias do mês ou agregado por semana
+async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
+  const MON_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  try{
+    const[ys,ms]=monthStr.split('-').map(Number);
+    const pad=n=>String(n).padStart(2,'0');
+    const daysInMonth=new Date(ys,ms,0).getDate();
+    const dates=Array.from({length:daysInMonth},(_,i)=>`${ys}-${pad(ms)}-${pad(i+1)}`);
+    const fetched=await Promise.allSettled(
+      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
+    const _dayMax=(raw,pkId)=>{
+      if(!raw) return null;
+      const item=(raw.dados||[]).find(x=>x.pontoId===pkId&&x.nomeGrandeza===gran);
+      if(!item) return null;
+      const vals=(item.valores||[]).filter(v=>v.valor!=null).map(v=>+(v.valor/1000).toFixed(4));
+      return vals.length?+Math.max(...vals).toFixed(3):null;
+    };
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+    let xLabels,datasets;
+    if(intervalo==='UmDia'){
+      xLabels=dayData.map(({date})=>date.slice(8)); // "01"…"31"
+      datasets=parks.map(pk=>{
+        const col=_W2D_COLORS[pk];
+        return{label:pk,data:dayData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
+          borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:3,pointHoverRadius:5,spanGaps:true};
+      });
+    }else{ // Semana: agrupa de 7 em 7 dias
+      const weeks=[];
+      for(let i=0;i<dayData.length;i+=7) weeks.push(dayData.slice(i,i+7));
+      xLabels=weeks.map((_,i)=>`Sem ${i+1}`);
+      datasets=parks.map(pk=>{
+        const col=_W2D_COLORS[pk];
+        const data=weeks.map(wk=>{
+          const vals=wk.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])).filter(v=>v!=null);
+          return vals.length?+Math.max(...vals).toFixed(3):null;
+        });
+        return{label:pk,data,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:2,pointRadius:4,pointHoverRadius:6,spanGaps:true};
+      });
+    }
+    if(ufv==='all'){
+      const data=xLabels.map((_,xi)=>{
+        let s=0,ok=false;
+        allPks.forEach(pk=>{const v=datasets.find(d=>d.label===pk)?.data[xi];if(v!=null){s+=v;ok=true;}});
+        return ok?+s.toFixed(3):null;
+      });
+      datasets.push({label:'Total',data,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
+    }
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+    const avail=dayData.filter(x=>x.raw).length;
+    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=`${MON_FULL[ms-1]} ${ys} · ${intervalo==='Semana'?'máx semanal':'máx diário'} · ${avail}/${daysInMonth} dias disponíveis · Way2`;
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{type:'line',data:{labels:xLabels,datasets},options:{
+      responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:15},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+          title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
+    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2MonthView:',e);
+  }finally{if(btn) btn.disabled=false;}
+}
+
+// Mês: year picker → 12 meses no eixo X (amostra dia 15 de cada mês)
+async function _loadW2YearView(gran,ufv,year,btn){
+  const MON_PT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  try{
+    const pad=n=>String(n).padStart(2,'0');
+    const dates=Array.from({length:12},(_,m)=>`${year}-${pad(m+1)}-15`);
+    const fetched=await Promise.allSettled(
+      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const monthData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
+    const _dayMax=(raw,pkId)=>{
+      if(!raw) return null;
+      const item=(raw.dados||[]).find(x=>x.pontoId===pkId&&x.nomeGrandeza===gran);
+      if(!item) return null;
+      const vals=(item.valores||[]).filter(v=>v.valor!=null).map(v=>+(v.valor/1000).toFixed(4));
+      return vals.length?+Math.max(...vals).toFixed(3):null;
+    };
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+    const datasets=parks.map(pk=>{
+      const col=_W2D_COLORS[pk];
+      return{label:pk,data:monthData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
+        borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:3,pointHoverRadius:5,spanGaps:true};
+    });
+    if(ufv==='all'){
+      const totalData=monthData.map(({raw})=>{
+        if(!raw) return null;
+        let s=0,ok=false;
+        allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
+        return ok?+s.toFixed(3):null;
+      });
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
+    }
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+    const avail=monthData.filter(x=>x.raw).length;
+    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=`Ano ${year} · pico mensal · ${avail}/12 meses disponíveis · Way2`;
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{type:'line',data:{labels:MON_PT,datasets},options:{
+      responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+          title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
+    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2YearView:',e);
+  }finally{if(btn) btn.disabled=false;}
+}
+
+// Ano: chips de anos → pico anual por parque (amostra dia 15 × 12 meses por ano)
+async function _loadW2MultiYearView(gran,ufv,years,btn){
+  try{
+    const pad=n=>String(n).padStart(2,'0');
+    const allDates=years.flatMap(y=>Array.from({length:12},(_,m)=>`${y}-${pad(m+1)}-15`));
+    const fetched=await Promise.allSettled(
+      allDates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const yearData={};
+    years.forEach((y,yi)=>{
+      yearData[y]=fetched.slice(yi*12,(yi+1)*12).map(r=>r.status==='fulfilled'?r.value:null);
+    });
+    const _dayMax=(raw,pkId)=>{
+      if(!raw) return null;
+      const item=(raw.dados||[]).find(x=>x.pontoId===pkId&&x.nomeGrandeza===gran);
+      if(!item) return null;
+      const vals=(item.valores||[]).filter(v=>v.valor!=null).map(v=>+(v.valor/1000).toFixed(4));
+      return vals.length?+Math.max(...vals).toFixed(3):null;
+    };
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+    const datasets=parks.map(pk=>{
+      const col=_W2D_COLORS[pk];
+      const data=years.map(y=>{
+        const vals=yearData[y].map(raw=>_dayMax(raw,_W2D_IDS[pk])).filter(v=>v!=null);
+        return vals.length?+Math.max(...vals).toFixed(3):null;
+      });
+      return{label:pk,data,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:2,pointRadius:5,pointHoverRadius:7,spanGaps:true};
+    });
+    if(ufv==='all'){
+      const totalData=years.map(y=>{
+        const mxs=yearData[y].map(raw=>{
+          if(!raw) return null;
+          let s=0,ok=false;
+          allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
+          return ok?+s.toFixed(3):null;
+        }).filter(v=>v!=null);
+        return mxs.length?+Math.max(...mxs).toFixed(3):null;
+      });
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:5,pointHoverRadius:7,spanGaps:true});
+    }
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=`${years.join(', ')} · pico anual · Way2`;
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{type:'line',data:{labels:years.map(String),datasets},options:{
+      responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+          title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}}});
+    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2MultiYearView:',e);
+  }finally{if(btn) btn.disabled=false;}
+}
+
+// Personalizado: faixa de datas livre → pico diário
+async function _loadW2RangeView(gran,ufv,from,to,btn){
+  try{
+    const dates=[];
+    const d=new Date(from+'T12:00:00'),end=new Date(to+'T12:00:00');
+    while(d<=end){dates.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
+    if(dates.length>92) throw new Error(`Período muito longo (${dates.length} dias). Máximo: 92 dias.`);
+    const fetched=await Promise.allSettled(
+      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
+        .then(r=>r.ok?r.json():null).catch(()=>null))
+    );
+    const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
+    const _dayMax=(raw,pkId)=>{
+      if(!raw) return null;
+      const item=(raw.dados||[]).find(x=>x.pontoId===pkId&&x.nomeGrandeza===gran);
+      if(!item) return null;
+      const vals=(item.valores||[]).filter(v=>v.valor!=null).map(v=>+(v.valor/1000).toFixed(4));
+      return vals.length?+Math.max(...vals).toFixed(3):null;
+    };
+    const allPks=Object.keys(_W2D_IDS);
+    const parks=ufv==='all'?allPks:[ufv];
+    const xLabels=dayData.map(({date})=>{const[,m,dd]=date.split('-');return`${dd}/${m}`;});
+    const datasets=parks.map(pk=>{
+      const col=_W2D_COLORS[pk];
+      return{label:pk,data:dayData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
+        borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:2,pointHoverRadius:5,spanGaps:true};
+    });
+    if(ufv==='all'){
+      const totalData=dayData.map(({raw})=>{
+        if(!raw) return null;
+        let s=0,ok=false;
+        allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
+        return ok?+s.toFixed(3):null;
+      });
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
+        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:2,pointHoverRadius:5,spanGaps:true});
+    }
+    if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
+    const avail=dayData.filter(x=>x.raw).length;
+    const[fy,fm,fd]=from.split('-');const[ty,tm,td]=to.split('-');
+    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
+    document.getElementById('w2dSub').textContent=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · máx diário · ${avail}/${dates.length} dias disponíveis · Way2`;
+    const canvas=document.getElementById('cW2Dem');
+    if(!canvas) return;
+    _w2dChart=new Chart(canvas,{type:'line',data:{labels:xLabels,datasets},options:{
+      responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
+          title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}}});
+    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dOverlay('w2dLoading',false);
+  }catch(e){
+    _w2dOverlay('w2dLoading',false);
+    document.getElementById('w2dErrMsg').textContent=e.message;
+    _w2dOverlay('w2dErr',true);
+    console.error('_loadW2RangeView:',e);
+  }finally{if(btn) btn.disabled=false;}
 }
 
 function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
@@ -6938,8 +7257,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
 
 // Inicializa datepicker com hoje ao carregar a página
 document.addEventListener('DOMContentLoaded',function(){
-  const dp=document.getElementById('w2dDatePicker');
-  if(dp) dp.value=new Date().toISOString().slice(0,10);
+  _w2dRenderDateUI();
 });
 
 function getCid(){return localStorage.getItem('mrd_cid')||'';}
