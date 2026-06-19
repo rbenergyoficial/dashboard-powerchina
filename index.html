@@ -7423,7 +7423,7 @@ function progDone(ok,msg){
   document.getElementById('progClose').style.display='block';
   document.getElementById('refreshBtn').classList.remove('spinning');
   document.getElementById('refreshBtn').disabled=false;
-  if(ok){const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setSyncStatus('ok','Atualizado · '+t);_syncLastLoad=Date.now();}
+  if(ok){const t=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});setSyncStatus('ok','Atualizado · '+t);_syncLastLoad=Date.now();setTimeout(closeProgModal,2000);}
   else{setSyncStatus('error','Falha na atualização — clique ☁ para autenticar via OneDrive');}
 }
 function closeProgModal(){
