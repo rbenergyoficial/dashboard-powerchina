@@ -6634,30 +6634,18 @@ async function loadW2Demanda(){
   }
 
   try{
-    const token=getWay2Token();
-    if(intervalo!=='CincoMinutos'&&token){
-      // Chama API Way2 diretamente com o intervalo correto
-      const ids=Object.values(_W2D_IDS);
-      const p=new URLSearchParams({
-        ids:ids.join(','), grandezas:[gran].join(','),
-        contextodasdatas:'ConsiderarDiaCheio', intervalo,
-        'medicao-datainicio':dataStr+'T00:00:00',
-        'medicao-datafim':dataStr+'T23:59:59',
-        aplicarhorariodeverao:'false', separardadoscomcpsemcp:'false', 'medicao-hasvalue':'false'
-      });
-      const r=await fetch(`${WAY2_BASE}?${p}`,{headers:{'Pim-Auth':token},cache:'no-store'});
-      if(!r.ok) throw new Error(`Erro ao buscar dados Way2 para ${dataStr} (${intervalo}).`);
-      const data=await r.json();
-      _w2dOverlay('w2dLoading',false);
-      _renderW2Demanda(data,dataStr,intervalo,intervalo,ufv,gran);
-    }else{
-      const url=`${WAY2_BLOB_BASE}way2_must_intradia_${dataStr}.json`;
-      const r=await fetch(url,{cache:'no-store'});
-      if(!r.ok) throw new Error(`Dados indisponíveis para ${dataStr}. Configure o fluxo Power Automate para gravar way2_must_intradia_${dataStr}.json no Azure Blob.`);
-      const data=await r.json();
-      _w2dOverlay('w2dLoading',false);
-      _renderW2Demanda(data,dataStr,intervalo,'CincoMinutos',ufv,gran);
+    const blobName=intervalo==='CincoMinutos'
+      ?`way2_must_intradia_${dataStr}.json`
+      :`way2_must_intradia_${intervalo}_${dataStr}.json`;
+    const url=`${WAY2_BLOB_BASE}${blobName}`;
+    const r=await fetch(url,{cache:'no-store'});
+    if(!r.ok){
+      if(intervalo!=='CincoMinutos') throw new Error(`Dados de ${intervalo} indisponíveis para ${dataStr}. O fluxo Power Automate precisa salvar o blob way2_must_intradia_${intervalo}_${dataStr}.json.`);
+      throw new Error(`Dados indisponíveis para ${dataStr}.`);
     }
+    const data=await r.json();
+    _w2dOverlay('w2dLoading',false);
+    _renderW2Demanda(data,dataStr,intervalo,intervalo,ufv,gran);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
     document.getElementById('w2dErrMsg').textContent=e.message;
