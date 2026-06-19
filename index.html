@@ -7209,7 +7209,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       allPks.forEach(pk=>{
         const item=raw?(raw.dados||[]).find(x=>x.pontoId===_W2D_IDS[pk]&&x.nomeGrandeza===gran):null;
         const pdata={};
-        if(item)(item.valores||[]).forEach(v=>{if(v.tempo&&v.valor!=null)pdata[v.tempo.slice(11,16)]=+(v.valor/1000).toFixed(4);});
+        if(item)(item.valores||[]).forEach(v=>{if(v.data&&v.valor!=null)pdata[v.data.slice(11,16)]=+(v.valor/1000).toFixed(4);});
         pkVals[pk].push(..._w2dAggregate(BASE_15.map(t=>pdata[t]??null),aggFactor));
       });
     });
