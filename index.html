@@ -7282,11 +7282,10 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   }
 }
 
-// Inicializa datepicker e restaura última página visitada
+// Inicializa datepicker e restaura última página visitada (padrão: must)
 document.addEventListener('DOMContentLoaded',function(){
   _w2dRenderDateUI();
-  const lastPage=localStorage.getItem('mrd_lastPage');
-  if(lastPage && lastPage!=='pat') switchPage(lastPage);
+  switchPage(localStorage.getItem('mrd_lastPage')||'must');
 });
 
 function getCid(){return localStorage.getItem('mrd_cid')||'';}
