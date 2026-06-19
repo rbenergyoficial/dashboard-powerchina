@@ -6764,9 +6764,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
         responsive:true,maintainAspectRatio:false,animation:false,
         interaction:{mode:'index',intersect:false},
         plugins:{
-          legend:{display:true,
-            onClick:(_evt,item,lg)=>{const lbl=lg.chart.data.datasets[item.datasetIndex]?.label;if(!lbl)return;const btn=document.querySelector('#w2dUfvGroup [data-ufv="'+(lbl==='Total'?'all':lbl)+'"]');if(btn)_w2dChip(btn,'ufv');},
-            labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
+          legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
               generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
                 const vis=chart.isDatasetVisible(i);
                 const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
@@ -6878,9 +6876,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,
-          onClick:(_evt,item,lg)=>{const lbl=lg.chart.data.datasets[item.datasetIndex]?.label;if(!lbl)return;const btn=document.querySelector('#w2dUfvGroup [data-ufv="'+(lbl==='Total'?'all':lbl)+'"]');if(btn)_w2dChip(btn,'ufv');},
-          labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
+        legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
             generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
               const vis=chart.isDatasetVisible(i);
               const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
