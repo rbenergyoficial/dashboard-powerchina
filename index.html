@@ -7378,14 +7378,24 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
            grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
-    // Calcula KPI diretamente dos datasets do período completo (não depende de _w2dLastKpi prévio)
-    const _peakDs=_onC.length===0?(datasets.find(d=>d.label==='Total')?.data||[]):
-      _onC.length===1?(datasets.find(d=>d.label===_onC[0])?.data||[]):
-      (()=>{const _a=_onC.map(pk=>datasets.find(d=>d.label===pk)?.data||[]);const _l=Math.max(..._a.map(d=>d.length));return Array.from({length:_l},(_,i)=>{let s=0,ok=false;_a.forEach(d=>{if(d[i]!=null){s+=d[i];ok=true;}});return ok?+s.toFixed(3):null;})})();
+    // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
+    const _peakDs=_onC.length===0?
+      (()=>{const _tot=Array.from({length:dates.length*ptsPerDay},(_,i)=>{let s=0,ok=false;allPks.forEach(pk=>{const v=pkVals[pk][i];if(v!=null){s+=v;ok=true;}});return ok?+s.toFixed(3):null;});return _tot;})():
+      _onC.length===1?pkVals[_onC[0]]||[]:
+      (()=>{const _a=_onC.map(pk=>pkVals[pk]||[]);const _l=Math.max(..._a.map(d=>d.length));return Array.from({length:_l},(_,i)=>{let s=0,ok=false;_a.forEach(d=>{if(d[i]!=null){s+=d[i];ok=true;}});return ok?+s.toFixed(3):null;})})();
     const _pk=_peakDs.length?Math.max(..._peakDs.filter(v=>v!=null),0):0;
+    // Descobre data e hora do pico pelo índice
+    const _peakIdx=_peakDs.findIndex(v=>v===_pk);
+    let _peakTime='';
+    if(_peakIdx>=0){
+      const _dayIdx=Math.floor(_peakIdx/ptsPerDay);
+      const _tIdx=_peakIdx%ptsPerDay;
+      const[_pdy,_pdm,_pdd]=(dates[_dayIdx]||'').split('-');
+      _peakTime=_pdd?`${_pdd}/${_pdm} ${DISP_TIMES[_tIdx]||''}`:DISP_TIMES[_tIdx]||'';
+    }
     const _pkPl=_onC.length===0?'todos os parques':_onC.length===1?_onC[0]:_onC.join('+');
     const _ct=_onC.length===1?num(dashData?.must?.contrat?.[_onC[0]]||0):num(dashData?.must?.contrat?.total||0);
-    _w2dLastKpi={peak:_pk,contr:_ct,margem:_ct-_pk,util:_ct>0?_pk/_ct*100:0,parkLabel:_pkPl,dataStr:to,intervalo:interval,peakTime:''};
+    _w2dLastKpi={peak:_pk,contr:_ct,margem:_ct-_pk,util:_ct>0?_pk/_ct*100:0,parkLabel:_pkPl,dataStr:to,intervalo:interval,peakTime:_peakTime};
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
