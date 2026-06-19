@@ -2867,6 +2867,7 @@ function applyPageChrome(page){
   if(isPpa) movePpaCardsSection();
 }
 function switchPage(page){
+  localStorage.setItem('mrd_lastPage',page);
   var _mp=document.getElementById('mustCalPopup'),_mt=document.getElementById('mustCalTrigger');
   if(_mp){_mp.classList.remove('open');_mp.style.display='none';}
   if(_mt) _mt.classList.remove('open');
@@ -7281,9 +7282,11 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   }
 }
 
-// Inicializa datepicker com hoje ao carregar a página
+// Inicializa datepicker e restaura última página visitada
 document.addEventListener('DOMContentLoaded',function(){
   _w2dRenderDateUI();
+  const lastPage=localStorage.getItem('mrd_lastPage');
+  if(lastPage && lastPage!=='pat') switchPage(lastPage);
 });
 
 function getCid(){return localStorage.getItem('mrd_cid')||'';}
