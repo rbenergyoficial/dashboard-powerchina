@@ -6717,6 +6717,8 @@ function _w2dAggregate(vals,factor){
   }
   return out;
 }
+// Formata MW em pt-BR: vírgula decimal, ponto milhar
+const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
 
 async function loadW2Demanda(){
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
@@ -6872,7 +6874,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
           legend:{display:false},
           tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
             titleColor:'#f2f3f8',bodyColor:'#b6bac8',
-            callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}
+            callbacks:{label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y,2)}`}}
         },
         scales:{
           x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false,
@@ -6966,7 +6968,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:xLabels,datasets},options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
-        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y,2)}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:15},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
@@ -7028,7 +7030,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:MON_PT,datasets},options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
-        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y,2)}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
@@ -7097,7 +7099,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:years.map(String),datasets},options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
-        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y,2)}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}});
@@ -7162,7 +7164,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:xLabels,datasets},options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
-        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}},
+        titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y,2)}`}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
@@ -7252,7 +7254,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',
         callbacks:{
           title:items=>{const lbl=allLabels[items[0]?.dataIndex]||'';const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
-          label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`
+          label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
         }}},
       scales:{
         x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
@@ -7356,7 +7358,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
           callbacks:{
             title:items=>{const[y,m,d]=dataStr.split('-');return`📅  ${d}/${m}/${y}  ·  ${items[0]?.label||''}`;},
-            label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`
+            label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
           }
         }
       },
