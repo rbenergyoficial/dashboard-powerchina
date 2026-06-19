@@ -6637,6 +6637,7 @@ function _w2dChip(btn,tipo){
       if(idx>=0){_w2dChart.setDatasetVisibility(idx,isOn);_w2dChart.update();}
     }
   }
+  _w2dUpdateContrLine();
   _w2dUpdateKpiPeak();
   filters.mustPark=ufv==='all'?'total':ufv;
   if(typeof renderPageMUST==='function') renderPageMUST();
@@ -6722,6 +6723,14 @@ function _w2dAggregate(vals,factor){
 }
 // Formata MW em pt-BR: vírgula decimal, ponto milhar
 const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
+// Atualiza a linha de referência de demanda contratada ao trocar chip de parque
+function _w2dUpdateContrLine(){
+  if(!_w2dChart) return;
+  const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')].filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
+  const cv=onPks.length===1?num(dashData?.must?.contrat?.[onPks[0]]||0):num(dashData?.must?.contrat?.total||0);
+  const ci=_w2dChart.data.datasets.findIndex(ds=>ds.label==='_contr');
+  if(ci>=0&&cv>0){_w2dChart.data.datasets[ci].data=new Array(_w2dChart.data.datasets[ci].data.length).fill(cv);_w2dChart.update('none');}
+}
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
   if(!_w2dLastKpi||!_w2dChart) return;
@@ -7377,6 +7386,10 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     }
   }
 
+  // Linha de referência: demanda contratada (atualizada por _w2dUpdateContrLine ao trocar chip)
+  const _cBase=num(dashData?.must?.contrat?.total||0);
+  if(_cBase>0) datasets.push({label:'_contr',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
+
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
   const [y,m,d]=dataStr.split('-');
@@ -7398,7 +7411,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
           callbacks:{
             title:items=>{const[y,m,d]=dataStr.split('-');return`📅  ${d}/${m}/${y}  ·  ${items[0]?.label||''}`;},
-            label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
+            label:ctx=>ctx.dataset.label.startsWith('_')?null:` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
           }
         }
       },
