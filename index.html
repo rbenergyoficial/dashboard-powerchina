@@ -6614,8 +6614,10 @@ function _w2dChip(btn,tipo){
   const parkChips=allChips.filter(b=>b.dataset.ufv!=='all');
   const todasBtn=allChips.find(b=>b.dataset.ufv==='all');
   if(ufv==='all'){
-    allChips.forEach(b=>b.classList.add('on'));
-    if(_w2dChart){_w2dChart.data.datasets.forEach((_,i)=>_w2dChart.setDatasetVisibility(i,true));_w2dChart.update();}
+    // Toggle: se Todas está ON → desliga tudo; se OFF → liga tudo
+    const ligar=!btn.classList.contains('on');
+    allChips.forEach(b=>b.classList.toggle('on',ligar));
+    if(_w2dChart){_w2dChart.data.datasets.forEach((_,i)=>_w2dChart.setDatasetVisibility(i,ligar));_w2dChart.update();}
   }else{
     btn.classList.toggle('on');
     const isOn=btn.classList.contains('on');
