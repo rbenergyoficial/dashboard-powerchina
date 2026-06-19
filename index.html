@@ -6598,7 +6598,8 @@ const _W2D_GRANLABEL={
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
 let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
-let _w2dSubBase='';  // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
+let _w2dSubBase='';     // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
+let _w2dRangeCtx=null; // {dates,DISP_TIMES,ptsPerDay,showTime} — contexto do range intraday para peakTime
 
 function _w2dToggleChart(btn){
   document.querySelectorAll('#tg-w2d .toggle-btn').forEach(b=>b.classList.remove('on'));
@@ -6803,7 +6804,17 @@ function _w2dUpdateKpiPeak(){
   }
   const peak=peakData.length?Math.max(...peakData.filter(v=>v!=null),0):0;
   const peakIdx=peakData.findIndex(v=>v===peak);
-  const peakTime=peakIdx>=0?((_w2dChart.data.labels||[])[peakIdx]||''):'';
+  let peakTime='';
+  if(_w2dRangeCtx&&peakIdx>=0){
+    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,showTime:_rs}=_w2dRangeCtx;
+    const _di=Math.floor(peakIdx/_rp),_ti=peakIdx%_rp;
+    const[,,_dd]=(_rd[_di]||'').split('-');
+    const[,,_md]=(_rd[_di]||'').split('-').map((_,i,a)=>a[i]);
+    const[_py,_pm,_pd]=(_rd[_di]||'').split('-');
+    peakTime=_pd?`${_pd}/${_pm}${_rs&&_rt[_ti]?' '+_rt[_ti]:''}`:(_rt[_ti]||'');
+  }else{
+    peakTime=peakIdx>=0?((_w2dChart.data.labels||[])[peakIdx]||''):'';
+  }
   const must=dashData?.must;
   const parkLabel=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'todos os parques';
   const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
@@ -7358,6 +7369,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const _pkLbl=_onC.length===0?'M1–M9 · Total':_onC.join('+');
     document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLbl}`;
     _w2dSubBase=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · ${intLabel}`;
+    _w2dRangeCtx={dates,DISP_TIMES,ptsPerDay,showTime:dates.length<=14};
     document.getElementById('w2dSub').textContent=_w2dSubBase;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
@@ -7423,6 +7435,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
 }
 
 function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
+  _w2dRangeCtx=null; // single-day: peakTime vem do label do chart (HH:MM)
   const aggMap=_W2D_BASE_AGG[baseInt]||_W2D_BASE_AGG['CincoMinutos'];
   const aggFactor=aggMap[intervalo]||1;
   const canvas=document.getElementById('cW2Dem');
