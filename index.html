@@ -6614,23 +6614,20 @@ function _w2dChip(btn,tipo){
   const parkChips=allChips.filter(b=>b.dataset.ufv!=='all');
   const todasBtn=allChips.find(b=>b.dataset.ufv==='all');
   if(ufv==='all'){
-    // Toggle Todas: liga/desliga tudo incluindo Total
+    // Todas: toggle independente — controla só a linha Total
     const ligar=!btn.classList.contains('on');
-    allChips.forEach(b=>b.classList.toggle('on',ligar));
-    if(_w2dChart){_w2dChart.data.datasets.forEach((_,i)=>_w2dChart.setDatasetVisibility(i,ligar));_w2dChart.update();}
+    btn.classList.toggle('on',ligar);
+    if(_w2dChart){
+      const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
+      if(ti>=0){_w2dChart.setDatasetVisibility(ti,ligar);_w2dChart.update();}
+    }
   }else{
-    // Toggle parque individual
+    // Parque individual: toggle completamente independente
     btn.classList.toggle('on');
     const isOn=btn.classList.contains('on');
-    const allParksOn=parkChips.every(b=>b.classList.contains('on'));
-    todasBtn?.classList.toggle('on',allParksOn);
     if(_w2dChart){
       const idx=_w2dChart.data.datasets.findIndex(ds=>ds.label===ufv);
-      if(idx>=0) _w2dChart.setDatasetVisibility(idx,isOn);
-      // Total visível apenas quando todos os parques estão on
-      const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
-      if(ti>=0) _w2dChart.setDatasetVisibility(ti,allParksOn);
-      _w2dChart.update();
+      if(idx>=0){_w2dChart.setDatasetVisibility(idx,isOn);_w2dChart.update();}
     }
   }
   filters.mustPark=ufv==='all'?'total':ufv;
