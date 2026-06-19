@@ -7338,17 +7338,39 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const avail=fetched.filter(r=>r.status==='fulfilled'&&r.value).length;
     const[fy,fm,fd]=from.split('-');const[ty,tm,td]=to.split('-');
     const intLabel={QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora'}[interval]||interval;
-    document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
-    document.getElementById('w2dSub').textContent=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · ${intLabel} intraday · ${avail}/${dates.length} dias · Way2`;
+    // Lê chips selecionados para título, KPI e subtítulo
+    const _onC=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
+      .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
+    const _pkLbl=_onC.length===0?'M1–M9 · Total':_onC.join('+');
+    document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLbl}`;
+    _w2dSubBase=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · ${intLabel}`;
+    document.getElementById('w2dSub').textContent=_w2dSubBase;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
-    _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},options:{
+    _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
+      plugins:[{id:'_cLbl',afterDraw(chart){
+        const xR=chart.chartArea?.right||chart.width-10;const ctx=chart.ctx;const usedY=[];
+        chart.data.datasets.forEach(ds=>{
+          if(!ds.label.startsWith('_contr')) return;
+          const val=ds.data[0];if(!val) return;
+          let yPx=chart.scales.y?.getPixelForValue(val)||0;
+          while(usedY.some(y=>Math.abs(y-yPx)<17)) yPx-=17;usedY.push(yPx);
+          const pkN=ds.label.replace(/^_contr_?/,'');
+          const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(val,2)}`:`MUST ${_w2dFmtMW(val,2)}`;
+          ctx.save();ctx.font='bold 10px system-ui,sans-serif';
+          const tw=ctx.measureText(lbl).width+12;
+          ctx.fillStyle='rgba(20,8,8,.78)';ctx.fillRect(xR-tw,yPx-17,tw,15);
+          ctx.fillStyle=ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
+          ctx.fillText(lbl,xR-4,yPx-10);ctx.restore();
+        });
+      }}],
+      options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',
         callbacks:{
-          title:items=>{const lbl=allLabels[items[0]?.dataIndex]||'';const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
-          label:ctx=>` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
+          title:items=>{const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
+          label:ctx=>ctx.dataset.label.startsWith('_')?null:` ${ctx.dataset.label}: ${_w2dFmtMW(ctx.parsed.y)}`
         }}},
       scales:{
         x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
@@ -7356,6 +7378,14 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
            grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
+    // Calcula KPI diretamente dos datasets do período completo (não depende de _w2dLastKpi prévio)
+    const _peakDs=_onC.length===0?(datasets.find(d=>d.label==='Total')?.data||[]):
+      _onC.length===1?(datasets.find(d=>d.label===_onC[0])?.data||[]):
+      (()=>{const _a=_onC.map(pk=>datasets.find(d=>d.label===pk)?.data||[]);const _l=Math.max(..._a.map(d=>d.length));return Array.from({length:_l},(_,i)=>{let s=0,ok=false;_a.forEach(d=>{if(d[i]!=null){s+=d[i];ok=true;}});return ok?+s.toFixed(3):null;})})();
+    const _pk=_peakDs.length?Math.max(..._peakDs.filter(v=>v!=null),0):0;
+    const _pkPl=_onC.length===0?'todos os parques':_onC.length===1?_onC[0]:_onC.join('+');
+    const _ct=_onC.length===1?num(dashData?.must?.contrat?.[_onC[0]]||0):num(dashData?.must?.contrat?.total||0);
+    _w2dLastKpi={peak:_pk,contr:_ct,margem:_ct-_pk,util:_ct>0?_pk/_ct*100:0,parkLabel:_pkPl,dataStr:to,intervalo:interval,peakTime:''};
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
