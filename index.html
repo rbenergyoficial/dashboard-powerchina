@@ -497,6 +497,10 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-month-chip{height:32px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-size:11px;font-weight:700;cursor:pointer;box-shadow:var(--shadow)}
 #page-must .must-month-chip.on{background:linear-gradient(180deg,rgba(107,139,245,.28),rgba(107,139,245,.18));border-color:rgba(107,139,245,.55);color:#fff}
 #page-must .must-month-chip:hover{border-color:rgba(107,139,245,.38);background:rgba(107,139,245,.12)}
+.w2d-park-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:4px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:var(--t3);font-size:10px;font-weight:700;cursor:pointer;transition:.18s;letter-spacing:.3px}
+.w2d-park-chip::before{content:'';flex-shrink:0;width:6px;height:14px;border-radius:2px;background:var(--pk-c,#6b8bf5)}
+.w2d-park-chip.on{background:var(--pk-bg,rgba(107,139,245,.18));border-color:var(--pk-c,#6b8bf5);color:#fff}
+.w2d-park-chip:not(.on):hover{border-color:var(--pk-c,#6b8bf5);background:var(--pk-bg,rgba(107,139,245,.10))}
 #page-must .must-day-nav{height:34px;min-width:34px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
 #page-must .must-day-nav:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.38)}
 #page-must .must-day-nav:disabled{opacity:.35;cursor:not-allowed}
@@ -1472,7 +1476,7 @@ function _themeCharts(light){
         DEMANDA INTRADIA · WAY2
         <div class="must-top-controls">
           <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
-          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="must-month-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')">Todas</button><button class="must-month-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')">M1</button><button class="must-month-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')">M2</button><button class="must-month-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')">M3</button><button class="must-month-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')">M4</button><button class="must-month-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')">M5</button><button class="must-month-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')">M6</button><button class="must-month-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')">M7</button><button class="must-month-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')">M8</button><button class="must-month-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')">M9</button></span></div>
+          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="w2d-park-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')" style="--pk-c:#2dd4bf;--pk-bg:rgba(45,212,191,.18)">M2</button><button class="w2d-park-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f5a623;--pk-bg:rgba(245,166,35,.18)">M3</button><button class="w2d-park-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')" style="--pk-c:#22c55e;--pk-bg:rgba(34,197,94,.18)">M6</button><button class="w2d-park-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')" style="--pk-c:#14b8a6;--pk-bg:rgba(20,184,166,.18)">M9</button></span></div>
           <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect" onchange="_w2dSyncToMust()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option></select></div>
           <div class="fg"><span class="fbar-label">Data</span><input type="date" class="fdate" id="w2dDatePicker" onchange="_w2dSyncToMust()"></div>
           <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
@@ -1482,6 +1486,7 @@ function _themeCharts(light){
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div><div class="cc-sub" id="w2dSub">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div></div>
+            <div class="toggle-grp" id="tg-w2d"><button class="toggle-btn on" data-t="line" onclick="_w2dToggleChart(this)">LINE</button><button class="toggle-btn" data-t="bar" onclick="_w2dToggleChart(this)">BAR</button></div>
           </div>
           <div class="cc-body">
             <canvas id="cW2Dem"></canvas>
@@ -6580,11 +6585,18 @@ const _W2D_GRANLABEL={
   DematDel:'DematDel — demanda canal Del',
   DematRec:'DematRec — demanda canal Rec'
 };
-const _w2dSt={gran:'Demat',ufv:'all'};
+const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
+
+function _w2dToggleChart(btn){
+  document.querySelectorAll('#tg-w2d .toggle-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  _w2dSt.chartType=btn.dataset.t;
+  if(_w2dChart) loadW2Demanda();
+}
 
 function _w2dChip(btn,tipo){
   const grp=document.getElementById(tipo==='gran'?'w2dGranGroup':'w2dUfvGroup');
-  if(grp) grp.querySelectorAll('.must-month-chip').forEach(b=>b.classList.remove('on'));
+  if(grp) grp.querySelectorAll('.must-month-chip,.w2d-park-chip').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(tipo==='gran') _w2dSt.gran=btn.dataset.gran;
   else{
@@ -6666,16 +6678,20 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
   const btn=document.getElementById('w2dBuscarBtn');
   try{
     const ref=new Date(refDateStr+'T12:00:00');
+    const pad=n=>String(n).padStart(2,'0');
+    const ymd=(y,m,d)=>`${y}-${pad(m+1)}-${pad(d)}`;
     const dates=[];
     if(intervalo==='Semana'){
       for(let i=6;i>=0;i--){const d=new Date(ref);d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
     }else if(intervalo==='Mes'){
-      for(let i=29;i>=0;i--){const d=new Date(ref);d.setDate(d.getDate()-i);dates.push(d.toISOString().slice(0,10));}
+      // Todos os dias do mês selecionado
+      const y=ref.getFullYear(),m=ref.getMonth();
+      const dias=new Date(y,m+1,0).getDate();
+      for(let d=1;d<=dias;d++) dates.push(ymd(y,m,d));
     }else{
-      for(let i=11;i>=0;i--){
-        const d=new Date(ref.getFullYear(),ref.getMonth()-i,1);
-        dates.push(d.toISOString().slice(0,10));
-      }
+      // Todos os meses do ano selecionado (usando dia 15 como representativo)
+      const y=ref.getFullYear();
+      for(let m=0;m<12;m++) dates.push(ymd(y,m,15));
     }
 
     const fetched=await Promise.allSettled(
@@ -6697,7 +6713,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
 
     const xLabels=dayData.map(({date})=>{
       const[y,m,d]=date.split('-');
-      return intervalo==='Ano'?`${m}/${y.slice(2)}`:`${d}/${m}`;
+      return intervalo==='Ano'?`${_MON_PT[+m-1]}/${y.slice(2)}`:`${d}/${m}`;
     });
 
     const datasets=parks.map(pk=>{
@@ -6723,12 +6739,18 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
     const[y,m,d]=refDateStr.split('-');
-    const rangeMap={Semana:'últimos 7 dias',Mes:'últimos 30 dias',Ano:'últimos 12 meses'};
+    const _MON_PT=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const _MON_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const rangeMap={
+      Semana:`${d}/${m}/${y} — 7 dias`,
+      Mes:`${_MON_FULL[ref.getMonth()]} ${ref.getFullYear()}`,
+      Ano:`Ano ${ref.getFullYear()}`
+    };
     const avail=dayData.filter(x=>x.raw).length;
     document.getElementById('w2dTitle').textContent=
       `${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
     document.getElementById('w2dSub').textContent=
-      `${rangeMap[intervalo]} · até ${d}/${m}/${y} · máx diário · ${avail}/${dayData.length} dias disponíveis · Way2`;
+      `${rangeMap[intervalo]} · máx diário · ${avail}/${dayData.length} disponíveis · Way2`;
 
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
@@ -6799,28 +6821,20 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
-  // Parâmetros visuais por granularidade
-  const isBar=aggFactor>=96; // UmDia: barras
-  const ptR=aggFactor<=1?0:aggFactor<=2?3:aggFactor<=4?4:5; // pontos maiores p/ 30min/1h
-  const tns=aggFactor>=4?0:.3; // sem interpolação suave para 1h+
+  // Parâmetros visuais por granularidade e tipo de gráfico
+  const forceBar=_w2dSt.chartType==='bar';
+  const isBar=forceBar||aggFactor>=96;
+  const ptR=aggFactor<=1?0:aggFactor<=2?3:aggFactor<=4?4:5;
+  const tns=aggFactor>=4?0:.3;
+
+  const _mkDs=(pk,agg,col)=>isBar
+    ?{label:pk,data:agg,type:'bar',backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true}
+    :{label:pk,data:agg,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:tns,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,4),pointBackgroundColor:col.c,spanGaps:true};
 
   const datasets=parks.map(pk=>{
-    const id=_W2D_IDS[pk];
-    const pdata=pm[id]||{};
-    const vals15=labels.map(t=>pdata[t]??null);
-    const col=_W2D_COLORS[pk];
-    const agg=_w2dAggregate(vals15,aggFactor);
-    if(isBar) return{
-      label:pk,data:agg,type:'bar',
-      backgroundColor:col.c+'99',borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true
-    };
-    return{
-      label:pk,data:agg,
-      borderColor:col.c,backgroundColor:col.bg,
-      fill:false,tension:tns,borderWidth:1.5,
-      pointRadius:ptR,pointHoverRadius:Math.max(ptR,4),
-      pointBackgroundColor:col.c,spanGaps:true
-    };
+    const pdata=pm[_W2D_IDS[pk]]||{};
+    const agg=_w2dAggregate(labels.map(t=>pdata[t]??null),aggFactor);
+    return _mkDs(pk,agg,_W2D_COLORS[pk]);
   });
 
   if(ufvSel==='all'){
