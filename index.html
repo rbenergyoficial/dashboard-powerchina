@@ -6609,6 +6609,7 @@ function _w2dChip(btn,tipo){
     filters.mustPark=btn.dataset.ufv==='all'?'total':btn.dataset.ufv;
     if(typeof renderPageMUST==='function') renderPageMUST();
   }
+  if(_w2dChart) loadW2Demanda();
 }
 
 function _w2dSyncToMust(){
