@@ -6846,6 +6846,28 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       }
     }
   });
+
+  // Atualiza KPI cards com os dados do gráfico Way2
+  const kEl=document.getElementById('mustKpis');
+  if(kEl){
+    const peakArr=ufvSel==='all'
+      ?(datasets.find(d=>d.label==='Total')?.data||[])
+      :(datasets[0]?.data||[]);
+    const peak=peakArr.length?Math.max(...peakArr.filter(v=>v!=null),0):0;
+    const must=dashData?.must;
+    const contr=ufvSel==='all'?num(must?.contrat?.total||0):num(must?.contrat?.[ufvSel]||0);
+    const margem=contr-peak;
+    const util=contr>0?peak/contr*100:0;
+    const f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+    const [yy,mm,dd]=dataStr.split('-');
+    const parkLabel=ufvSel==='all'?'todos os parques':ufvSel;
+    kEl.innerHTML=[
+      {c:'blue',  lab:'DEMANDA MÁXIMA',    val:f1(peak),   unit:'MW',sub:`Pico · ${parkLabel}`},
+      {c:'red',   lab:'DEMANDA CONTRATADA',val:f1(contr),  unit:'MW',sub:'Limite contratual · MUST'},
+      {c:'green', lab:'MARGEM DISPONÍVEL', val:f1(margem), unit:'MW',sub:margem>=0?'Folga até o contratado':'⚠ Acima do contratado',vc:margem>=0?'var(--green)':'var(--red)'},
+      {c:'purple',lab:'UTILIZAÇÃO MÁXIMA', val:f1(util),   unit:'%', sub:`Dia ${dd}/${mm}/${yy} · ${_W2D_INTLABEL[intervalo]||intervalo}`,vc:util>100?'var(--red)':'var(--green)'}
+    ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
+  }
 }
 
 // Inicializa datepicker com hoje ao carregar a página
