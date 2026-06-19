@@ -6637,6 +6637,7 @@ function _w2dChip(btn,tipo){
       if(idx>=0){_w2dChart.setDatasetVisibility(idx,isOn);_w2dChart.update();}
     }
   }
+  _w2dUpdateKpiPeak();
   filters.mustPark=ufv==='all'?'total':ufv;
   if(typeof renderPageMUST==='function') renderPageMUST();
 }
@@ -6721,6 +6722,28 @@ function _w2dAggregate(vals,factor){
 }
 // Formata MW em pt-BR: vírgula decimal, ponto milhar
 const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
+// Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
+function _w2dUpdateKpiPeak(){
+  if(!_w2dLastKpi||!_w2dChart) return;
+  const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
+    .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
+  let peakData;
+  if(onPks.length===0){
+    peakData=(_w2dChart.data.datasets.find(d=>d.label==='Total')?.data)||[];
+  }else if(onPks.length===1){
+    peakData=(_w2dChart.data.datasets.find(d=>d.label===onPks[0])?.data)||[];
+  }else{
+    const all=onPks.map(pk=>_w2dChart.data.datasets.find(d=>d.label===pk)?.data||[]);
+    const len=Math.max(...all.map(d=>d.length));
+    peakData=Array.from({length:len},(_,i)=>{let s=0,ok=false;all.forEach(d=>{if(d[i]!=null){s+=d[i];ok=true;}});return ok?+s.toFixed(3):null;});
+  }
+  const peak=peakData.length?Math.max(...peakData.filter(v=>v!=null),0):0;
+  const must=dashData?.must;
+  const parkLabel=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'todos os parques';
+  const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
+  const margem=contr-peak, util=contr>0?peak/contr*100:0;
+  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel});
+}
 // Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
 function _w2dRefreshKpi(){
   if(!_w2dLastKpi) return;
