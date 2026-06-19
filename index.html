@@ -6768,8 +6768,22 @@ function _w2dRenderSub(){
   if(!_w2dLastKpi||!(_w2dLastKpi.peak>0)){sEl.textContent=_w2dSubBase;return;}
   const {peak,util,peakTime}=_w2dLastKpi;
   const hi='color:#cdd0dc;font-weight:600';
+  const dim='color:#8890a0';
   const uc=util>100?'color:#ff7575;font-weight:600':'color:#7dda88;font-weight:600';
-  const tStr=peakTime?` às <span style="${hi}">${peakTime}</span>`:'';
+  // Formata peakTime: "HH:MM" → "às HH:MM" | "DD/MM" → "em DD/MM" | "DD/MM HH:MM" → "em DD/MM às HH:MM"
+  let tStr='';
+  if(peakTime){
+    const hasDate=peakTime.includes('/');
+    const hasTime=peakTime.includes(':');
+    if(hasDate&&hasTime){
+      const [dp,tp]=peakTime.split(' ');
+      tStr=` <span style="${dim}">em</span> <span style="${hi}">${dp}</span> <span style="${dim}">às</span> <span style="${hi}">${tp}</span>`;
+    }else if(hasDate){
+      tStr=` <span style="${dim}">em</span> <span style="${hi}">${peakTime}</span>`;
+    }else{
+      tStr=` <span style="${dim}">às</span> <span style="${hi}">${peakTime}</span>`;
+    }
+  }
   sEl.innerHTML=`${_w2dSubBase} &nbsp;·&nbsp; Pico <span style="${hi}">${_w2dFmtMW(peak,3)}</span>${tStr} &nbsp;·&nbsp; <span style="${uc}">${util.toFixed(1)}% do MUST</span>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
@@ -7391,7 +7405,9 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       const _dayIdx=Math.floor(_peakIdx/ptsPerDay);
       const _tIdx=_peakIdx%ptsPerDay;
       const[_pdy,_pdm,_pdd]=(dates[_dayIdx]||'').split('-');
-      _peakTime=_pdd?`${_pdd}/${_pdm} ${DISP_TIMES[_tIdx]||''}`:DISP_TIMES[_tIdx]||'';
+      // Mostra hora só se o eixo X tiver horários (≤14 dias); acima disso só data
+      const _showHr=dates.length<=14;
+      _peakTime=_pdd?`${_pdd}/${_pdm}${_showHr&&DISP_TIMES[_tIdx]?' '+DISP_TIMES[_tIdx]:''}`:DISP_TIMES[_tIdx]||'';
     }
     const _pkPl=_onC.length===0?'todos os parques':_onC.length===1?_onC[0]:_onC.join('+');
     const _ct=_onC.length===1?num(dashData?.must?.contrat?.[_onC[0]]||0):num(dashData?.must?.contrat?.total||0);
