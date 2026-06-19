@@ -6726,19 +6726,43 @@ function _w2dAggregate(vals,factor){
 }
 // Formata MW em pt-BR: vírgula decimal, ponto milhar
 const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
-// Atualiza a linha de referência de demanda contratada ao trocar chip de parque
+// Cria dataset de linha de referência contratada (cor por índice)
+function _makeContrDs(label,val,len,idx){
+  const cc=['rgba(255,90,90,.9)','rgba(255,170,50,.9)','rgba(100,220,100,.9)','rgba(100,180,255,.9)'];
+  return {label,data:Array(len).fill(val),borderColor:cc[idx%cc.length],backgroundColor:'transparent',
+    borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true};
+}
+// Atualiza linha(s) de referência: 1 linha por valor de contrato único entre parques selecionados
 function _w2dUpdateContrLine(){
   if(!_w2dChart) return;
-  const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')].filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
-  const cv=onPks.length===1?num(dashData?.must?.contrat?.[onPks[0]]||0):num(dashData?.must?.contrat?.total||0);
-  const ci=_w2dChart.data.datasets.findIndex(ds=>ds.label==='_contr');
-  if(ci>=0&&cv>0){_w2dChart.data.datasets[ci].data=new Array(_w2dChart.data.datasets[ci].data.length).fill(cv);_w2dChart.update('none');}
-  // Atualiza título e subtítulo com o parque/contrato atual
-  const pkLbl=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'M1–M9 · Total';
+  const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
+    .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
+  _w2dChart.data.datasets=_w2dChart.data.datasets.filter(ds=>!ds.label.startsWith('_contr'));
+  const len=_w2dChart.data.labels?.length||96;
+  let newDs=[],pkLbl='M1–M9 · Total',mustStr='';
+  if(onPks.length===0){
+    const cv=num(dashData?.must?.contrat?.total||0);
+    if(cv>0) newDs.push(_makeContrDs('_contr',cv,len,0));
+    mustStr=cv>0?` · MUST: ${_w2dFmtMW(cv,2)}`:'';
+  } else {
+    pkLbl=onPks.join('+');
+    const byVal={};
+    onPks.forEach(pk=>{
+      const v=+(num(dashData?.must?.contrat?.[pk]||0).toFixed(4));
+      if(!byVal[v]) byVal[v]={val:v,parks:[]};
+      byVal[v].parks.push(pk);
+    });
+    const entries=Object.values(byVal).filter(e=>e.val>0).sort((a,b)=>b.val-a.val);
+    entries.forEach((e,i)=>newDs.push(_makeContrDs('_contr_'+e.parks.join('+'),e.val,len,i)));
+    if(entries.length===1) mustStr=` · MUST: ${_w2dFmtMW(entries[0].val,2)}`;
+    else mustStr=` · MUST: `+entries.map(e=>`${e.parks.join('+')} ${_w2dFmtMW(e.val,2)}`).join(' / ');
+  }
+  _w2dChart.data.datasets.push(...newDs);
+  _w2dChart.update('none');
   const tEl=document.getElementById('w2dTitle');
   if(tEl) tEl.textContent=`Demanda Ativa vs Contratada (MUST) · ${pkLbl}`;
   const sEl=document.getElementById('w2dSub');
-  if(sEl&&_w2dSubBase) sEl.textContent=`${_w2dSubBase}${cv>0?' · MUST: '+_w2dFmtMW(cv,2):''}`;
+  if(sEl&&_w2dSubBase) sEl.textContent=`${_w2dSubBase}${mustStr}`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
@@ -7412,24 +7436,30 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
     plugins:[{id:'_cLbl',afterDraw(chart){
-      const ci=chart.data.datasets.findIndex(d=>d.label==='_contr');
-      if(ci<0) return;
-      const val=chart.data.datasets[ci].data[0];
-      if(!val) return;
-      const yPx=chart.scales.y?.getPixelForValue(val);
-      const xR=chart.chartArea?.right||chart.scales.x?.right||chart.width-10;
+      const xR=chart.chartArea?.right||chart.width-10;
       const ctx=chart.ctx;
-      ctx.save();
-      ctx.font='bold 10px system-ui,sans-serif';
-      const lbl=`MUST ${_w2dFmtMW(val,2)}`;
-      const tw=ctx.measureText(lbl).width+12;
-      ctx.fillStyle='rgba(40,10,10,.72)';
-      ctx.fillRect(xR-tw,yPx-17,tw,15);
-      ctx.fillStyle='rgba(255,110,110,.95)';
-      ctx.textAlign='right';
-      ctx.textBaseline='middle';
-      ctx.fillText(lbl,xR-4,yPx-10);
-      ctx.restore();
+      const usedY=[];
+      chart.data.datasets.forEach(ds=>{
+        if(!ds.label.startsWith('_contr')) return;
+        const val=ds.data[0];
+        if(!val) return;
+        let yPx=chart.scales.y?.getPixelForValue(val)||0;
+        // Evita sobreposição de labels quando dois parques têm o mesmo valor
+        while(usedY.some(y=>Math.abs(y-yPx)<17)) yPx-=17;
+        usedY.push(yPx);
+        const pkN=ds.label.replace(/^_contr_?/,'');
+        const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(val,2)}`:`MUST ${_w2dFmtMW(val,2)}`;
+        ctx.save();
+        ctx.font='bold 10px system-ui,sans-serif';
+        const tw=ctx.measureText(lbl).width+12;
+        ctx.fillStyle='rgba(20,8,8,.78)';
+        ctx.fillRect(xR-tw,yPx-17,tw,15);
+        ctx.fillStyle=ds.borderColor;
+        ctx.textAlign='right';
+        ctx.textBaseline='middle';
+        ctx.fillText(lbl,xR-4,yPx-10);
+        ctx.restore();
+      });
     }}],
     options:{
       responsive:true,maintainAspectRatio:false,animation:false,
