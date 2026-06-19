@@ -6732,7 +6732,7 @@ function _makeContrDs(label,val,len,idx){
   return {label,data:Array(len).fill(val),borderColor:cc[idx%cc.length],backgroundColor:'transparent',
     borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true};
 }
-// Atualiza linha(s) de referência: 1 linha por valor de contrato único entre parques selecionados
+// Atualiza linha(s) de referência: 1 linha por parque selecionado (nunca agrupa)
 function _w2dUpdateContrLine(){
   if(!_w2dChart) return;
   const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
@@ -6746,16 +6746,14 @@ function _w2dUpdateContrLine(){
     mustStr=cv>0?` · MUST: ${_w2dFmtMW(cv,2)}`:'';
   } else {
     pkLbl=onPks.join('+');
-    const byVal={};
+    let idx=0;
     onPks.forEach(pk=>{
-      const v=+(num(dashData?.must?.contrat?.[pk]||0).toFixed(4));
-      if(!byVal[v]) byVal[v]={val:v,parks:[]};
-      byVal[v].parks.push(pk);
+      const cv=num(dashData?.must?.contrat?.[pk]||0);
+      if(cv>0){newDs.push(_makeContrDs('_contr_'+pk,cv,len,idx));idx++;}
     });
-    const entries=Object.values(byVal).filter(e=>e.val>0).sort((a,b)=>b.val-a.val);
-    entries.forEach((e,i)=>newDs.push(_makeContrDs('_contr_'+e.parks.join('+'),e.val,len,i)));
-    if(entries.length===1) mustStr=` · MUST: ${_w2dFmtMW(entries[0].val,2)}`;
-    else mustStr=` · MUST: `+entries.map(e=>`${e.parks.join('+')} ${_w2dFmtMW(e.val,2)}`).join(' / ');
+    mustStr=newDs.length===0?'':newDs.length===1
+      ?` · MUST: ${_w2dFmtMW(newDs[0].data[0],2)}`
+      :` · MUST: `+newDs.map(d=>`${d.label.replace('_contr_','')} ${_w2dFmtMW(d.data[0],2)}`).join(' / ');
   }
   _w2dChart.data.datasets.push(...newDs);
   _w2dChart.update('none');
