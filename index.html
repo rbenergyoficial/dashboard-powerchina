@@ -7194,24 +7194,29 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const BASE_AGG=aggFactor<=1?BASE_15:BASE_15.filter((_,i)=>i%aggFactor===0);
     const DISP_TIMES=shiftMin>0?BASE_AGG.map(t=>shiftLbl(t,shiftMin)):BASE_AGG;
     const ptsPerDay=DISP_TIMES.length;
-    // Labels: "DD/MM" apenas no início de cada dia, "" nos demais
-    const allLabels=[];
-    dates.forEach(dt=>{
-      const[,mo,dd]=dt.split('-');
-      DISP_TIMES.forEach((t,ti)=>allLabels.push(ti===0?`${dd}/${mo}`:ti%Math.max(1,Math.floor(ptsPerDay/4))===0?t:''));
-    });
     const allPks=Object.keys(_W2D_IDS);
     const parks=ufv==='all'?allPks:[ufv];
     const pkVals={};
     allPks.forEach(pk=>{pkVals[pk]=[];});
+    const allLabels=[];
     dates.forEach((dt,di)=>{
       const raw=fetched[di].status==='fulfilled'?fetched[di].value:null;
+      const[,mo,dd]=dt.split('-');
+      // Mesmo padrão do _renderW2Demanda: pm[pontoId][tempo]=valor
+      const pm={};
+      for(const item of (raw?.dados||[])){
+        if(item.nomeGrandeza!==gran) continue;
+        pm[item.pontoId]={};
+        for(const v of (item.valores||[])){
+          if(v.valor==null) continue;
+          pm[item.pontoId][v.data.slice(11,16)]=+(v.valor/1000).toFixed(4);
+        }
+      }
       allPks.forEach(pk=>{
-        const item=raw?(raw.dados||[]).find(x=>x.pontoId===_W2D_IDS[pk]&&x.nomeGrandeza===gran):null;
-        const pdata={};
-        if(item)(item.valores||[]).forEach(v=>{if(v.data&&v.valor!=null)pdata[v.data.slice(11,16)]=+(v.valor/1000).toFixed(4);});
+        const pdata=pm[_W2D_IDS[pk]]||{};
         pkVals[pk].push(..._w2dAggregate(BASE_15.map(t=>pdata[t]??null),aggFactor));
       });
+      DISP_TIMES.forEach((t,ti)=>allLabels.push(ti===0?`${dd}/${mo}`:ti%Math.max(1,Math.floor(ptsPerDay/4))===0?t:''));
     });
     const isBar=_w2dSt.chartType==='bar';
     const datasets=parks.map(pk=>{
