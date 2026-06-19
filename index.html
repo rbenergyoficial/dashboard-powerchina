@@ -7237,7 +7237,10 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         tooltip:{
           backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
-          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`}
+          callbacks:{
+            title:items=>{const[y,m,d]=dataStr.split('-');return`📅  ${d}/${m}/${y}  ·  ${items[0]?.label||''}`;},
+            label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(3)+' MW':'—'}`
+          }
         }
       },
       scales:{
