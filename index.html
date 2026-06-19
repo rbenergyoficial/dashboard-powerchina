@@ -2312,7 +2312,20 @@ function setLanguage(lang){
   localStorage.setItem('mrd_lang', lang);
   applyTranslations();
   try{
-    if(dashData && Array.isArray(dashData.patamares) && dashData.patamares.length) renderAll();
+    if(dashData && Array.isArray(dashData.patamares) && dashData.patamares.length){
+      // Na página MUST com gráfico Way2 ativo, evita destroyAllCharts()+loadW2Demanda()
+      // pois os dados já estão no gráfico — só precisa traduzir textos e KPIs
+      const activePage=(document.querySelector('.page.active')?.id||'').replace('page-','');
+      if(activePage==='must' && typeof _w2dChart!=='undefined' && _w2dChart){
+        safeRender(()=>renderKPIs());
+        safeRender(()=>updateFooter());
+        safeRender(()=>updateHdrStats());
+        if(typeof _w2dRefreshKpi==='function') _w2dRefreshKpi();
+        requestAnimationFrame(applyTranslations);
+      } else {
+        renderAll();
+      }
+    }
   }catch(e){}
 }
 
