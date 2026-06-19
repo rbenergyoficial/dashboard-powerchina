@@ -6744,8 +6744,13 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
             callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}
         },
         scales:{
-          x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,
-              maxTicksLimit:intervalo==='Ano'?12:intervalo==='Mes'?15:7},
+          x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false,
+              callback:(val,idx)=>{
+                const n=xLabels.length;
+                if(idx===0||idx===n-1) return val; // sempre mostra primeiro e último
+                const step=intervalo==='Ano'?1:intervalo==='Mes'?2:1;
+                return idx%step===0?val:'';
+              }},
              grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
           y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
              grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
