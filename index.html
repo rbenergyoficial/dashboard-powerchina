@@ -6760,7 +6760,12 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
         responsive:true,maintainAspectRatio:false,animation:false,
         interaction:{mode:'index',intersect:false},
         plugins:{
-          legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,padding:8,usePointStyle:true}},
+          legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
+            generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
+              const vis=chart.isDatasetVisible(i);
+              const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
+              return{text:ds.label,fillStyle:vis?col:'rgba(255,255,255,.10)',strokeStyle:'transparent',lineWidth:0,fontColor:vis?'#b6bac8':'#454a5e',hidden:false,datasetIndex:i};
+            })}},
           tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
             titleColor:'#f2f3f8',bodyColor:'#b6bac8',
             callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y!=null?ctx.parsed.y.toFixed(2)+' MW':'—'}`}}
@@ -6867,7 +6872,12 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
-        legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,padding:8,usePointStyle:true}},
+        legend:{display:true,labels:{color:'#b6bac8',font:{size:10},boxWidth:10,boxHeight:10,padding:8,
+            generateLabels:chart=>chart.data.datasets.map((ds,i)=>{
+              const vis=chart.isDatasetVisible(i);
+              const col=typeof ds.borderColor==='string'?ds.borderColor:(ds.backgroundColor||'#fff');
+              return{text:ds.label,fillStyle:vis?col:'rgba(255,255,255,.10)',strokeStyle:'transparent',lineWidth:0,fontColor:vis?'#b6bac8':'#454a5e',hidden:false,datasetIndex:i};
+            })}},
         tooltip:{
           backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
           titleColor:'#f2f3f8',bodyColor:'#b6bac8',
