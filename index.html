@@ -6658,6 +6658,22 @@ function _w2dOnIntervalChange(){
   _w2dSyncToMust();
 }
 
+function _w2dApplyChipVisibility(){
+  if(!_w2dChart) return;
+  document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(btn=>{
+    const ufv=btn.dataset.ufv;
+    const isOn=btn.classList.contains('on');
+    if(ufv==='all'){
+      const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
+      if(ti>=0) _w2dChart.setDatasetVisibility(ti,isOn);
+    }else{
+      const idx=_w2dChart.data.datasets.findIndex(ds=>ds.label===ufv);
+      if(idx>=0) _w2dChart.setDatasetVisibility(idx,isOn);
+    }
+  });
+  _w2dChart.update();
+}
+
 function _w2dRenderDateUI(){
   const container=document.getElementById('w2dDateContainer');
   if(!container) return;
@@ -6866,7 +6882,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
         }
       }
     });
-    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
@@ -6943,7 +6959,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:15},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
-    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
@@ -7001,7 +7017,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
-    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
@@ -7066,7 +7082,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}});
-    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
@@ -7127,7 +7143,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
-    document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+    _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
@@ -7221,7 +7237,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         }
       },
       scales:{
-        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:24},
+        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false},
            grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
            grid:{color:'rgba(255,255,255,.04)'},border:{color:'rgba(255,255,255,.06)'},
@@ -7229,8 +7245,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       }
     }
   });
-  // Reseta chips UFV para "todos ligados" após recarga
-  document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(b=>b.classList.add('on'));
+  _w2dApplyChipVisibility();
 
   // Atualiza KPI cards com os dados do gráfico Way2
   const kEl=document.getElementById('mustKpis');
