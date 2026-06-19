@@ -2847,6 +2847,7 @@ function renderDashboardPage(page){
   }
   if(page==='must'){
     renderPageMUST();
+    loadW2Demanda();
     return;
   }
   renderPageWay();
@@ -6593,6 +6594,7 @@ const _W2D_GRANLABEL={
   DematRec:'DematRec — demanda canal Rec'
 };
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
+let _w2dAutoTimer=null;
 
 function _w2dToggleChart(btn){
   document.querySelectorAll('#tg-w2d .toggle-btn').forEach(b=>b.classList.remove('on'));
@@ -6607,7 +6609,7 @@ function _w2dChip(btn,tipo){
     if(grp) grp.querySelectorAll('.must-month-chip').forEach(b=>b.classList.remove('on'));
     btn.classList.add('on');
     _w2dSt.gran=btn.dataset.gran;
-    if(_w2dChart) loadW2Demanda();
+    loadW2Demanda();
     return;
   }
   // UFV: multi-toggle de visibilidade sem recarregar o gráfico
@@ -6642,6 +6644,8 @@ function _w2dSyncToMust(){
   const dp=document.getElementById('w2dDatePicker');
   if(dp&&dp.value) filters.mustDay=dp.value;
   if(typeof renderPageMUST==='function') renderPageMUST();
+  clearTimeout(_w2dAutoTimer);
+  _w2dAutoTimer=setTimeout(loadW2Demanda,400);
 }
 
 function _w2dOnIntervalChange(){
@@ -6690,7 +6694,7 @@ function _w2dRenderDateUI(){
     container.innerHTML=`<select class="fselect" id="w2dYearPicker" onchange="_w2dSyncToMust()">${yrs.map(y=>`<option value="${y}"${y===thisYear?' selected':''}>${y}</option>`).join('')}</select>`;
   }else if(iv==='Ano'){
     const yrs=[thisYear-2,thisYear-1,thisYear,thisYear+1].filter(y=>y>=2023);
-    container.innerHTML=yrs.map(y=>`<button class="w2d-park-chip${y>=thisYear-1?' on':''}" data-yr="${y}" onclick="this.classList.toggle('on')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">${y}</button>`).join('');
+    container.innerHTML=yrs.map(y=>`<button class="w2d-park-chip${y>=thisYear-1?' on':''}" data-yr="${y}" onclick="this.classList.toggle('on');clearTimeout(_w2dAutoTimer);_w2dAutoTimer=setTimeout(loadW2Demanda,400)" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">${y}</button>`).join('');
   }else{
     const oneMonthAgo=new Date();oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
     const fromDef=oneMonthAgo.toISOString().slice(0,10);
