@@ -7406,7 +7406,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const datasets=parks.map(pk=>{
       const col=_W2D_COLORS[pk];
       if(isBar) return{label:pk,data:pkVals[pk],type:'bar',backgroundColor:ctx=>gradFrom(ctx,col.c),borderColor:col.c,borderWidth:1,borderRadius:2,spanGaps:false};
-      return{label:pk,data:pkVals[pk],borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false};
+      return{label:pk,data:pkVals[pk],borderColor:col.c,backgroundColor:c=>_w2dAreaGrad(c,col.c),fill:'origin',tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false};
     });
     if(ufv==='all'){
       const total=Array.from({length:dates.length*ptsPerDay},(_,i)=>{
@@ -7535,7 +7535,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
 
   const _mkDs=(pk,agg,col)=>isBar
     ?{label:pk,data:agg,type:'bar',backgroundColor:ctx=>gradFrom(ctx,col.c),borderColor:col.c,borderWidth:1,borderRadius:4,spanGaps:true}
-    :{label:pk,data:agg,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:tns,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,8),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:col.c,spanGaps:true};
+    :{label:pk,data:agg,borderColor:col.c,backgroundColor:c=>_w2dAreaGrad(c,col.c),fill:'origin',tension:tns,borderWidth:1.5,pointRadius:ptR,pointHoverRadius:Math.max(ptR,8),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:col.c,spanGaps:true};
 
   const datasets=parks.map(pk=>{
     const pdata=pm[_W2D_IDS[pk]]||{};
