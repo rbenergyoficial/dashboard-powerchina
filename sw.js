@@ -5,7 +5,7 @@
  *  - CDNs e ícones -> stale-while-revalidate (rápido + funciona offline)
  * skipWaiting + clients.claim = novas versões assumem na hora (atualização automática).
  */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'pwc-mauriti-' + VERSION;
 const APP_SHELL = [
   '/',
@@ -16,7 +16,8 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  self.skipWaiting();
+  // Não chamamos skipWaiting() aqui: o SW novo fica "waiting" até o usuário
+  // confirmar no banner de atualização (envia SKIP_WAITING).
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP_SHELL).catch(() => {})));
 });
 
@@ -26,6 +27,13 @@ self.addEventListener('activate', e => {
     await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
   })());
+});
+
+// Recebe ordem da página para ativar imediatamente (clique em "Atualizar")
+self.addEventListener('message', e => {
+  if (e.data === 'SKIP_WAITING' || e.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', e => {

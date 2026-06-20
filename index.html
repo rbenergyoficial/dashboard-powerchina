@@ -33,18 +33,71 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ID Mauriti">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<style>
+/* Banner de atualização do PWA — aparece quando o SW novo está "waiting" */
+#pwaUpdate{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(20px);
+  z-index:99999;display:none;align-items:center;gap:10px;
+  padding:10px 12px 10px 14px;border-radius:14px;
+  background:rgba(8,11,22,.96);backdrop-filter:blur(14px);
+  border:1px solid rgba(107,139,245,.45);
+  box-shadow:0 12px 36px rgba(0,0,0,.55),0 0 0 1px rgba(107,139,245,.18);
+  color:#e8edff;font:600 12px/1.2 'Inter',system-ui,sans-serif;
+  max-width:calc(100vw - 24px);opacity:0;transition:opacity .25s,transform .25s;}
+#pwaUpdate.show{display:flex;opacity:1;transform:translateX(-50%) translateY(0);}
+#pwaUpdate svg{flex-shrink:0;color:#6b8bf5}
+#pwaUpdate .pwa-up-txt{display:flex;flex-direction:column;gap:1px;}
+#pwaUpdate .pwa-up-sub{font-weight:500;color:#8e95ad;font-size:10.5px;}
+#pwaUpdate .pwa-up-btn{margin-left:6px;padding:8px 14px;border:none;border-radius:10px;
+  background:linear-gradient(135deg,#5b7be5,#3a5fd6);color:#fff;
+  font:700 12px 'Inter',system-ui,sans-serif;cursor:pointer;
+  box-shadow:0 4px 14px rgba(91,123,229,.45);}
+#pwaUpdate .pwa-up-btn:hover{filter:brightness(1.08);}
+#pwaUpdate .pwa-up-close{background:transparent;border:none;color:#8e95ad;
+  cursor:pointer;padding:6px;border-radius:8px;font-size:18px;line-height:1;}
+#pwaUpdate .pwa-up-close:hover{color:#e8edff;background:rgba(255,255,255,.06);}
+</style>
+<div id="pwaUpdate" role="status" aria-live="polite">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+  <div class="pwa-up-txt"><span>Nova versão disponível</span><span class="pwa-up-sub">Toque para atualizar agora</span></div>
+  <button class="pwa-up-btn" id="pwaUpdateBtn">Atualizar</button>
+  <button class="pwa-up-close" id="pwaUpdateClose" aria-label="Fechar">×</button>
+</div>
 <script>
 if('serviceWorker' in navigator){
   window.addEventListener('load',async()=>{
     try{
       const hadController=!!navigator.serviceWorker.controller;
       const reg=await navigator.serviceWorker.register('/sw.js');
-      // checa atualização periodicamente (e quando o app volta ao foco)
-      setInterval(()=>reg.update().catch(()=>{}),60*60*1000);
+
+      const banner=document.getElementById('pwaUpdate');
+      const btn=document.getElementById('pwaUpdateBtn');
+      const closeBtn=document.getElementById('pwaUpdateClose');
+      const showBanner=sw=>{
+        if(!sw||!banner) return;
+        banner.classList.add('show');
+        btn.onclick=()=>{btn.disabled=true;btn.textContent='Atualizando…';sw.postMessage('SKIP_WAITING');};
+        closeBtn.onclick=()=>banner.classList.remove('show');
+      };
+
+      // Se já existe um SW novo aguardando (de uma checagem anterior), mostra na hora
+      if(reg.waiting&&navigator.serviceWorker.controller) showBanner(reg.waiting);
+
+      // Detecta quando um novo SW termina de instalar
+      reg.addEventListener('updatefound',()=>{
+        const nw=reg.installing; if(!nw) return;
+        nw.addEventListener('statechange',()=>{
+          if(nw.state==='installed'&&navigator.serviceWorker.controller) showBanner(nw);
+        });
+      });
+
+      // Checa atualização ao voltar foco e a cada 15 min
+      setInterval(()=>reg.update().catch(()=>{}),15*60*1000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reg.update().catch(()=>{});});
+
+      // Quando o SW novo assume, recarrega (exceto na 1ª instalação)
       let refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        if(refreshing||!hadController)return; // não recarrega na 1ª instalação
+        if(refreshing||!hadController)return;
         refreshing=true;window.location.reload();
       });
     }catch(e){console.warn('SW falhou:',e);}
