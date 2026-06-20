@@ -595,6 +595,10 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-row{grid-template-columns:72px minmax(0,1fr) 104px;gap:10px}
 #page-must .must-rank-pct{font-size:15px}
 #page-must .must-rank-side-meta{font-size:9px}
+/* ── Way2 + Ranking lado a lado ── */
+#page-must .must-w2d-rank-grid{display:grid;grid-template-columns:60% 1fr;gap:14px;align-items:stretch;margin-top:14px}
+#page-must .must-w2d-rank-grid>.section{display:flex;flex-direction:column;margin:0}
+#page-must #sec-must-ranking .cc-body{flex:1;min-height:0;height:0!important;max-height:none!important;overflow-y:auto;padding:2px 4px 0 0}
 /* ── Way2 Demanda Intradia ── */
 #page-must #sec-must-w2dem .cc-body{height:580px!important;max-height:580px!important;min-height:0!important;flex:none!important;position:relative;overflow:hidden}
 #page-must .w2d-overlay{display:none;position:absolute;inset:0;border-radius:12px;align-items:center;justify-content:center;background:rgba(8,8,13,.78)}
@@ -1470,63 +1474,66 @@ function _themeCharts(light){
       <div class="kpi-grid must-kpi-grid" id="mustKpis"></div>
     </div>
 
-    <!-- SEÇÃO: Demanda Intradia Way2 -->
-    <div class="section" id="sec-must-w2dem" style="margin-top:14px">
-      <div class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        DEMANDA INTRADIA · WAY2
-        <div class="must-top-controls">
-          <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
-          <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="w2d-park-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')" style="--pk-c:#2dd4bf;--pk-bg:rgba(45,212,191,.18)">M2</button><button class="w2d-park-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f5a623;--pk-bg:rgba(245,166,35,.18)">M3</button><button class="w2d-park-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')" style="--pk-c:#22c55e;--pk-bg:rgba(34,197,94,.18)">M6</button><button class="w2d-park-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')" style="--pk-c:#14b8a6;--pk-bg:rgba(20,184,166,.18)">M9</button></span></div>
-          <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect" onchange="_w2dOnIntervalChange()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option><option value="Personalizado">Personalizado</option></select></div>
-          <div class="fg" id="w2dDateFg"><span class="fbar-label" id="w2dDateLabel">Data</span><span id="w2dDateContainer" style="display:flex;align-items:center;gap:4px"></span></div>
-          <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
-        </div>
-      </div>
-      <div class="chart-row cols-1">
-        <div class="cc">
-          <div class="cc-head">
-            <div><div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div><div class="cc-sub" id="w2dSub">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div></div>
-            <div class="toggle-grp" id="tg-w2d"><button class="toggle-btn on" data-t="line" onclick="_w2dToggleChart(this)">LINE</button><button class="toggle-btn" data-t="bar" onclick="_w2dToggleChart(this)">BAR</button></div>
-          </div>
-          <div class="cc-body">
-            <canvas id="cW2Dem"></canvas>
-            <div class="w2d-overlay loading" id="w2dLoading"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>Consultando Way2…</div>
-            <div class="w2d-overlay error" id="w2dErr"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f0598c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="w2dErrMsg" style="font-size:11px;color:#f0598c;text-align:center;max-width:260px"></span><span style="font-size:9px;color:var(--t4)">Verifique o token Way2 nas Configurações</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="must-dual-grid">
-      <div class="section" id="page-must-main-chart">
+    <!-- Way2 (60%) + Ranking (40%) lado a lado -->
+    <div class="must-w2d-rank-grid">
+      <!-- SEÇÃO: Demanda Intradia Way2 -->
+      <div class="section" id="sec-must-w2dem">
         <div class="section-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="20" x2="6" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/></svg>
-          DEMANDA ATIVA × CONTRATADA
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          DEMANDA INTRADIA · WAY2
+          <div class="must-top-controls">
+            <div class="fg"><span class="fbar-label">Grandeza</span><span id="w2dGranGroup" style="display:flex;gap:4px"><button class="must-month-chip on" data-gran="Demat" onclick="_w2dChip(this,'gran')">Demat</button><button class="must-month-chip" data-gran="DematDel" onclick="_w2dChip(this,'gran')">DematDel</button><button class="must-month-chip" data-gran="DematRec" onclick="_w2dChip(this,'gran')">DematRec</button></span></div>
+            <div class="fg"><span class="fbar-label">UFV</span><span id="w2dUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap"><button class="w2d-park-chip on" data-ufv="all" onclick="_w2dChip(this,'ufv')" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-ufv="M1" onclick="_w2dChip(this,'ufv')" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-ufv="M2" onclick="_w2dChip(this,'ufv')" style="--pk-c:#2dd4bf;--pk-bg:rgba(45,212,191,.18)">M2</button><button class="w2d-park-chip" data-ufv="M3" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f5a623;--pk-bg:rgba(245,166,35,.18)">M3</button><button class="w2d-park-chip" data-ufv="M4" onclick="_w2dChip(this,'ufv')" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-ufv="M5" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-ufv="M6" onclick="_w2dChip(this,'ufv')" style="--pk-c:#22c55e;--pk-bg:rgba(34,197,94,.18)">M6</button><button class="w2d-park-chip" data-ufv="M7" onclick="_w2dChip(this,'ufv')" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-ufv="M8" onclick="_w2dChip(this,'ufv')" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-ufv="M9" onclick="_w2dChip(this,'ufv')" style="--pk-c:#14b8a6;--pk-bg:rgba(20,184,166,.18)">M9</button></span></div>
+            <div class="fg"><span class="fbar-label">Intervalo</span><select id="w2dIntervalSel" class="fselect" onchange="_w2dOnIntervalChange()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option><option value="Personalizado">Personalizado</option></select></div>
+            <div class="fg" id="w2dDateFg"><span class="fbar-label" id="w2dDateLabel">Data</span><span id="w2dDateContainer" style="display:flex;align-items:center;gap:4px"></span></div>
+            <button class="btn-refresh" id="w2dBuscarBtn" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
+          </div>
         </div>
-        <div class="chart-row cols-1">
-          <div class="cc">
+        <div class="chart-row cols-1" style="flex:1;min-height:0;display:flex;flex-direction:column">
+          <div class="cc" style="flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="cc-head">
-              <div><div class="cc-title">Demanda Ativa vs Contratada (MUST)</div><div class="cc-sub" id="mustMainSub">Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST · leitura temporal otimizada</div></div>
-              <div class="toggle-grp" id="tg-must"><button class="toggle-btn on" data-chart="must" data-t="bar">BAR</button><button class="toggle-btn" data-chart="must" data-t="line">LINE</button></div>
+              <div><div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div><div class="cc-sub" id="w2dSub">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div></div>
+              <div class="toggle-grp" id="tg-w2d"><button class="toggle-btn on" data-t="line" onclick="_w2dToggleChart(this)">LINE</button><button class="toggle-btn" data-t="bar" onclick="_w2dToggleChart(this)">BAR</button></div>
             </div>
-            <div class="cc-body must-main-compact"><canvas id="cMUST"></canvas></div>
+            <div class="cc-body">
+              <canvas id="cW2Dem"></canvas>
+              <div class="w2d-overlay loading" id="w2dLoading"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>Consultando Way2…</div>
+              <div class="w2d-overlay error" id="w2dErr"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f0598c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="w2dErrMsg" style="font-size:11px;color:#f0598c;text-align:center;max-width:260px"></span><span style="font-size:9px;color:var(--t4)">Verifique o token Way2 nas Configurações</span></div>
+            </div>
           </div>
         </div>
       </div>
 
+      <!-- SEÇÃO: Ranking (lateral 40%) -->
       <div class="section" id="sec-must-ranking">
         <div class="section-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>
           RANKING DE PICO POR PARQUE
         </div>
-        <div class="chart-row cols-1">
-          <div class="cc">
+        <div class="chart-row cols-1" style="flex:1;min-height:0;display:flex;flex-direction:column">
+          <div class="cc" style="flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="cc-head">
               <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
             </div>
             <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Demanda Ativa × Contratada (cMUST) — largura total -->
+    <div class="section" id="page-must-main-chart" style="margin-top:14px">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="20" x2="6" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="18" y1="20" x2="18" y2="14"/></svg>
+        DEMANDA ATIVA × CONTRATADA
+      </div>
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Demanda Ativa vs Contratada (MUST)</div><div class="cc-sub" id="mustMainSub">Filtro profissional por ano, mês, dia específico e intervalo com base na coluna Data da aba MUST · leitura temporal otimizada</div></div>
+            <div class="toggle-grp" id="tg-must"><button class="toggle-btn on" data-chart="must" data-t="bar">BAR</button><button class="toggle-btn" data-chart="must" data-t="line">LINE</button></div>
+          </div>
+          <div class="cc-body must-main-compact"><canvas id="cMUST"></canvas></div>
         </div>
       </div>
     </div>
