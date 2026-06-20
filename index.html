@@ -795,9 +795,17 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   #page-ppa .ppa-donut-shell{flex-direction:column!important;height:auto!important;gap:14px!important;padding:6px 4px!important;overflow:visible!important;}
   #page-ppa .ppa-donut-wrap{flex:0 0 240px!important;height:240px!important;width:100%!important;}
   #page-ppa .ppa-split-info{max-height:none!important;overflow:visible!important;flex:none!important;width:100%;}
-  #page-ppa #sec-ppa-performance .cc-body{height:auto!important;min-height:300px!important;max-height:none!important;}
 
-  /* ── UFVs Way2: o card "Geração por UFV" tem MUITA legenda — espaço maior ── */
+  /* PPA Performance (gráfico avanço): empilhar coluna, sem corte lateral */
+  #page-ppa #sec-ppa-performance .chart-row{flex-direction:column!important;align-items:stretch!important;gap:12px!important;}
+  #page-ppa #sec-ppa-performance .cc:first-child,
+  #page-ppa #sec-ppa-performance .cc{flex:1 1 auto!important;max-width:100%!important;min-width:0!important;}
+  #page-ppa #sec-ppa-performance .cc-body{height:300px!important;min-height:300px!important;max-height:300px!important;}
+
+  /* ── UFVs Way2: ranking — números à direita cabendo ── */
+  #page-way .rank-row{grid-template-columns:36px minmax(0,1fr) 64px!important;gap:8px!important;}
+  #page-way .rank-pct{font-size:13px!important;}
+  #page-way .rank-pct-sub{font-size:9px!important;}
   #page-way #cUFV1{min-height:180px;}
 
   /* Barra de filtros COLAPSADA por padrão no celular.
@@ -3204,6 +3212,27 @@ try{Chart.register(metaLinePlugin,stackTotalsPlugin);}catch(e){}
     // Eixos
     d.scale=d.scale||{};
     d.scale.ticks=Object.assign(d.scale.ticks||{},{font:{size:9}});
+
+    // Plugin global: no celular, força rotação 30° no eixo X em séries com
+    // muitos labels. Evita que o Chart.js "pule" meses (Set/Nov/Jan/Mar/Mai).
+    Chart.register({
+      id:'mobileXRotate',
+      beforeInit(chart){
+        try{
+          if(!window.matchMedia('(max-width:640px)').matches) return;
+          const sc=chart.options?.scales; if(!sc||!sc.x) return;
+          const labels=chart.data?.labels||[];
+          // só aplica se tem muitos labels e atualmente está 0°
+          if(labels.length<6) return;
+          sc.x.ticks=sc.x.ticks||{};
+          if((sc.x.ticks.maxRotation??0)<=0){
+            sc.x.ticks.maxRotation=35;
+            sc.x.ticks.minRotation=0;
+            sc.x.ticks.autoSkipPadding=2;
+          }
+        }catch(_){}
+      }
+    });
   }catch(_){}})();
 
 // Normaliza hex (remove alpha, expande #abc → #aabbcc)
