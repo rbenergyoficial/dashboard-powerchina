@@ -6824,10 +6824,10 @@ function _w2dRenderSub(){
     `<span style="${dim}">${_w2dSubBase}</span>`+
     sep+
     `<span style="color:#b0b8cc;font-size:10px">Pico</span>`+
-    `<span style="color:#fbbf24;font-weight:700;font-size:13px;margin:0 7px">${_w2dFmtMW(peak,3)}</span>`+
+    `<span style="color:#fbbf24;font-weight:700;font-size:13px;margin:0 7px">${_w2dFmtMW(peak,2)}</span>`+
     (tWhen?`<span style="color:#b0b8cc;font-size:10px">${tWhen}</span>`:'')+
     sep+
-    `<span style="color:${ucColor};font-weight:700;font-size:13px">${util.toFixed(1)}%</span>`+
+    `<span style="color:${ucColor};font-weight:700;font-size:13px">${util.toFixed(2)}%</span>`+
     `<span style="color:#b0b8cc;font-size:10px;margin-left:5px">do MUST</span>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
