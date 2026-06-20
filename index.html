@@ -7460,10 +7460,13 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
         return{label:pk,data:dayData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
           borderColor:col.c,backgroundColor:c=>_w2dAreaGrad(c,col.c),fill:'origin',tension:.3,borderWidth:1.5,pointRadius:3,pointHoverRadius:5,spanGaps:true};
       });
-    }else{ // Semana: agrupa de 7 em 7 dias
-      const weeks=[];
-      for(let i=0;i<dayData.length;i+=7) weeks.push(dayData.slice(i,i+7));
-      xLabels=weeks.map((_,i)=>`Sem ${i+1}`);
+    }else{ // Semana: agrupa pela semana ISO (numero real do calendario)
+      const _isoWeek=(dt)=>{const d=new Date(Date.UTC(dt.getFullYear(),dt.getMonth(),dt.getDate()));d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));const yS=new Date(Date.UTC(d.getUTCFullYear(),0,1));return Math.ceil((((d-yS)/86400000)+1)/7);};
+      const weekMap=new Map();
+      dayData.forEach(dd=>{const w=_isoWeek(new Date(dd.date+'T12:00:00'));if(!weekMap.has(w))weekMap.set(w,[]);weekMap.get(w).push(dd);});
+      const ordered=Array.from(weekMap.entries()).sort((a,b)=>a[0]-b[0]);
+      const weeks=ordered.map(([,arr])=>arr);
+      xLabels=ordered.map(([w])=>`Sem ${w}`);
       datasets=parks.map(pk=>{
         const col=_W2D_COLORS[pk];
         const data=weeks.map(wk=>{
