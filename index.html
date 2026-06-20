@@ -6598,7 +6598,6 @@ setInterval(()=>{
 // MUST DEMANDA INTRADIA · WAY2 (via Azure Blob / Power Automate)
 // ═══════════════════════════════════════════════════════════════════
 let _w2dChart=null;
-let _w2dAutoTimer=null; // timer de auto-refresh intradia (5 min) quando vendo o dia atual
 const _W2D_IDS={M1:6380,M2:6381,M3:6382,M4:6383,M5:6384,M6:6385,M7:6386,M8:6387,M9:6388};
 const _W2D_COLORS={
   M1:{c:'#a855f7',bg:'rgba(168,85,247,.13)'},
@@ -6627,6 +6626,7 @@ const _W2D_GRANLABEL={
 };
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
+let _w2dRefreshTimer=null; // timer periódico 5 min (separado do debounce _w2dAutoTimer)
 let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
 let _w2dSubBase='';     // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
 let _w2dRangeCtx=null; // {dates,DISP_TIMES,ptsPerDay,showTime} — contexto do range intraday para peakTime
@@ -6932,7 +6932,7 @@ function _w2dShowErr(e){
   console.error('[Way2]',e);
 }
 async function loadW2Demanda(){
-  if(_w2dAutoTimer){clearInterval(_w2dAutoTimer);_w2dAutoTimer=null;}
+  if(_w2dRefreshTimer){clearInterval(_w2dRefreshTimer);_w2dRefreshTimer=null;}
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
   const ufv=_w2dSt.ufv;
   const gran=_w2dSt.gran;
@@ -7684,7 +7684,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   // Auto-refresh a cada 5 min somente quando vendo o dia atual
   const _todayBR=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
   if(dataStr===_todayBR){
-    _w2dAutoTimer=setInterval(()=>loadW2Demanda().catch(()=>{}),5*60*1000);
+    _w2dRefreshTimer=setInterval(()=>loadW2Demanda().catch(()=>{}),5*60*1000);
   }
 }
 
