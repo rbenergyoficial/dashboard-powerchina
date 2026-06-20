@@ -7475,6 +7475,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       }}],
       options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
+      layout:{padding:{left:24,right:24}},
       plugins:{legend:{display:false},tooltip:{position:'nearest',caretPadding:16,backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',
         callbacks:{
@@ -7482,8 +7483,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           label:_w2dTTLabel
         }}},
       scales:{
-        x:{offset:true,
-           afterFit(s){if(s._offsets){s._offsets.start=Math.max(s._offsets.start,20);s._offsets.end=Math.max(s._offsets.end,20);}},
+        x:{offset:false,bounds:'data',
            ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
