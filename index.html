@@ -7392,11 +7392,9 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         .then(r=>r.ok?r.json():null).catch(()=>null))
     );
     const aggFactor=interval==='TrintaMinutos'?2:interval==='UmaHora'?4:1;
-    const shiftMin=aggFactor===2?15:aggFactor===4?45:0;
     const BASE_15=Array.from({length:96},(_,i)=>{const h=Math.floor(i*15/60),m=(i*15)%60;return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;});
-    const shiftLbl=(t,min)=>{const[h,m]=t.split(':').map(Number),tot=h*60+m+min;return`${String(Math.floor(tot/60)%24).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
     const BASE_AGG=aggFactor<=1?BASE_15:BASE_15.filter((_,i)=>i%aggFactor===0);
-    const DISP_TIMES=shiftMin>0?BASE_AGG.map(t=>shiftLbl(t,shiftMin)):BASE_AGG;
+    const DISP_TIMES=BASE_AGG;
     const ptsPerDay=DISP_TIMES.length;
     // Espaçamento adaptativo: menos ticks por dia quanto mais dias houver
     const timeTickStep=dates.length<=3?Math.floor(ptsPerDay/6):   // ~4h
@@ -7550,10 +7548,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   });
 
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
-  // Para 30min: desloca label +15min para mostrar fim do intervalo (ex: 00:30, 01:00, 01:30...)
-  const _shiftLabel=(t,min)=>{const[h,m]=t.split(':').map(Number),tot=h*60+m+min;return`${String(Math.floor(tot/60)%24).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;};
-  const _shiftMap={2:15,4:45};
-  const displayLabels=_shiftMap[aggFactor]?aggLabels.map(t=>_shiftLabel(t,_shiftMap[aggFactor])):aggLabels;
+  const displayLabels=aggLabels;
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
   // Parâmetros visuais por granularidade e tipo de gráfico
