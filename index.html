@@ -101,6 +101,22 @@ if('serviceWorker' in navigator){
         if(ev.data?.type==='CONTENT_UPDATED') showBanner(null);
       });
 
+      // Backup robusto: polling de ETag direto no servidor.
+      // Funciona independente do SW (não depende do app fazer fetch do HTML).
+      let _initialEtag=null;
+      async function _checkHtmlEtag(){
+        try{
+          const r=await fetch('/index.html?_e='+Date.now(),{cache:'no-store',method:'HEAD'});
+          const tag=r.headers.get('etag')||r.headers.get('last-modified')||r.headers.get('content-length');
+          if(!tag) return;
+          if(_initialEtag===null){_initialEtag=tag;return;}
+          if(tag!==_initialEtag) showBanner(null);
+        }catch(_){}
+      }
+      _checkHtmlEtag();                                 // baseline imediato
+      setInterval(_checkHtmlEtag,2*60*1000);            // checa a cada 2 min
+      document.addEventListener('visibilitychange',()=>{if(!document.hidden)_checkHtmlEtag();});
+
       // Checa atualização ao voltar foco e a cada 15 min
       setInterval(()=>reg.update().catch(()=>{}),15*60*1000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reg.update().catch(()=>{});});
