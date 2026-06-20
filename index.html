@@ -1493,9 +1493,12 @@ function _themeCharts(light){
       </div>
       <div class="chart-row cols-1">
         <div class="cc">
-          <div class="cc-head">
-            <div><div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div><div class="cc-sub" id="w2dSub">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div></div>
-            <div class="toggle-grp" id="tg-w2d"><button class="toggle-btn on" data-t="line" onclick="_w2dToggleChart(this)">LINE</button><button class="toggle-btn" data-t="bar" onclick="_w2dToggleChart(this)">BAR</button></div>
+          <div class="cc-head" style="flex-direction:column;gap:8px;padding-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="cc-title" id="w2dTitle">Demanda por UFV — Way2 PIM API</div>
+              <div class="toggle-grp" id="tg-w2d"><button class="toggle-btn on" data-t="line" onclick="_w2dToggleChart(this)">LINE</button><button class="toggle-btn" data-t="bar" onclick="_w2dToggleChart(this)">BAR</button></div>
+            </div>
+            <div id="w2dSub" style="text-align:center;font-size:11px;color:var(--t3);line-height:1.4">Selecione grandeza, UFV, intervalo e data · clique em Buscar para consultar a API Way2</div>
           </div>
           <div class="cc-body">
             <canvas id="cW2Dem"></canvas>
@@ -6798,26 +6801,43 @@ function _w2dUpdateContrLine(){
 function _w2dRenderSub(){
   const sEl=document.getElementById('w2dSub');
   if(!sEl||!_w2dSubBase) return;
-  if(!_w2dLastKpi||!(_w2dLastKpi.peak>0)){sEl.textContent=_w2dSubBase;return;}
+  if(!_w2dLastKpi||!(_w2dLastKpi.peak>0)){
+    sEl.innerHTML=`<span style="color:#6b7280;font-size:11px">${_w2dSubBase}</span>`;
+    return;
+  }
   const {peak,util,peakTime}=_w2dLastKpi;
-  const hi='color:#cdd0dc;font-weight:600';
-  const dim='color:#8890a0';
-  const uc=util>100?'color:#ff7575;font-weight:600':'color:#7dda88;font-weight:600';
-  // Formata peakTime: "HH:MM" → "às HH:MM" | "DD/MM" → "em DD/MM" | "DD/MM HH:MM" → "em DD/MM às HH:MM"
-  let tStr='';
+  const dim='color:#6b7280;font-size:10px';
+  const ucColor=util>100?'#ff7575':'#7dda88';
+  let tWhen='';
   if(peakTime){
     const hasDate=peakTime.includes('/');
     const hasTime=peakTime.includes(':');
     if(hasDate&&hasTime){
       const [dp,tp]=peakTime.split(' ');
-      tStr=` <span style="${dim}">em</span> <span style="${hi}">${dp}</span> <span style="${dim}">às</span> <span style="${hi}">${tp}</span>`;
+      tWhen=`em ${dp} às ${tp}`;
     }else if(hasDate){
-      tStr=` <span style="${dim}">em</span> <span style="${hi}">${peakTime}</span>`;
+      tWhen=`em ${peakTime}`;
     }else{
-      tStr=` <span style="${dim}">às</span> <span style="${hi}">${peakTime}</span>`;
+      tWhen=`às ${peakTime}`;
     }
   }
-  sEl.innerHTML=`${_w2dSubBase} &nbsp;·&nbsp; Pico <span style="${hi}">${_w2dFmtMW(peak,3)}</span>${tStr} &nbsp;·&nbsp; <span style="${uc}">${util.toFixed(1)}% do MUST</span>`;
+  sEl.innerHTML=
+    `<div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap">`+
+      `<span style="${dim}">${_w2dSubBase}</span>`+
+      `<span style="${dim}">·</span>`+
+      `<span style="display:inline-flex;align-items:center;gap:16px;padding:5px 18px;background:rgba(255,255,255,.04);border-radius:10px;border:1px solid rgba(255,255,255,.08)">`+
+        `<span style="display:flex;flex-direction:column;align-items:center;line-height:1.15">`+
+          `<span style="${dim};letter-spacing:.5px;text-transform:uppercase">Pico</span>`+
+          `<span style="color:#f5a623;font-size:17px;font-weight:800;letter-spacing:-.2px">${_w2dFmtMW(peak,3)}</span>`+
+          `<span style="${dim}">${tWhen}</span>`+
+        `</span>`+
+        `<span style="width:1px;height:34px;background:rgba(255,255,255,.08);flex-shrink:0"></span>`+
+        `<span style="display:flex;flex-direction:column;align-items:center;line-height:1.15">`+
+          `<span style="${dim};letter-spacing:.5px;text-transform:uppercase">% MUST</span>`+
+          `<span style="color:${ucColor};font-size:17px;font-weight:800;letter-spacing:-.2px">${util.toFixed(1)}%</span>`+
+        `</span>`+
+      `</span>`+
+    `</div>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
