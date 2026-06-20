@@ -6804,7 +6804,7 @@ function _w2dRenderSub(){
     return;
   }
   const {peak,util,peakTime}=_w2dLastKpi;
-  const dim='color:#9aa4b8;font-size:10px';
+  const dim='color:#9aa4b8;font-size:12px';
   const ucColor=util>100?'#ff7575':'#7dda88';
   let tWhen='';
   if(peakTime){
@@ -6823,12 +6823,12 @@ function _w2dRenderSub(){
   sEl.innerHTML=
     `<span style="${dim}">${_w2dSubBase}</span>`+
     sep+
-    `<span style="color:#b0b8cc;font-size:10px">Pico</span>`+
+    `<span style="color:#b0b8cc;font-size:12px">Pico</span>`+
     `<span style="color:#fbbf24;font-weight:700;font-size:13px;margin:0 7px">${_w2dFmtMW(peak,2)}</span>`+
-    (tWhen?`<span style="color:#b0b8cc;font-size:10px">${tWhen}</span>`:'')+
+    (tWhen?`<span style="color:#b0b8cc;font-size:12px">${tWhen}</span>`:'')+
     sep+
     `<span style="color:${ucColor};font-weight:700;font-size:13px">${util.toFixed(2)}%</span>`+
-    `<span style="color:#b0b8cc;font-size:10px;margin-left:5px">do MUST</span>`;
+    `<span style="color:#b0b8cc;font-size:12px;margin-left:5px">do MUST</span>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
