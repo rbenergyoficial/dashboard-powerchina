@@ -7442,6 +7442,14 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       if(isBar) datasets.push({label:'Total',data:total,type:'bar',backgroundColor:ctx=>gradFrom(ctx,_W2D_COLORS.Total.c),borderColor:_W2D_COLORS.Total.c,borderWidth:1,borderRadius:2,spanGaps:false});
       else datasets.push({label:'Total',data:total,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),fill:'origin',tension:.3,borderWidth:2,borderDash:[6,3],pointRadius:0,pointHoverRadius:9,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false});
     }
+    // Padding simétrico no eixo X: slots vazios no início/fim afastam o
+    // primeiro/último dado do eixo Y (offset:true é imperceptível com tantos pontos).
+    // Padroniza com copias nos datasets (pkVals fica intacto p/ KPI abaixo).
+    const _xPad=Math.max(2,Math.round(dates.length*ptsPerDay*0.01));
+    const _padN=Array(_xPad).fill(null);
+    const _padL=Array(_xPad).fill('');
+    datasets.forEach(ds=>{ds.data=[..._padN,...ds.data,..._padN];});
+    allLabels.unshift(..._padL);allLabels.push(..._padL);
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
     const avail=fetched.filter(r=>r.status==='fulfilled'&&r.value).length;
     const[fy,fm,fd]=from.split('-');const[ty,tm,td]=to.split('-');
@@ -7475,15 +7483,14 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       }}],
       options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
-      layout:{padding:{left:24,right:24}},
       plugins:{legend:{display:false},tooltip:{position:'nearest',caretPadding:16,backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',
         callbacks:{
-          title:items=>{const di=Math.floor((items[0]?.dataIndex||0)/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[(items[0]?.dataIndex||0)%ptsPerDay]||''}`;},
+          title:items=>{const _ri=(items[0]?.dataIndex||0)-_xPad;if(_ri<0||_ri>=dates.length*ptsPerDay)return'';const di=Math.floor(_ri/ptsPerDay);const dt=dates[di]||'';const[dy,dmo,ddd]=dt.split('-');return`📅  ${ddd}/${dmo}/${dy}  ·  ${DISP_TIMES[_ri%ptsPerDay]||''}`;},
           label:_w2dTTLabel
         }}},
       scales:{
-        x:{offset:false,bounds:'data',
+        x:{offset:false,
            ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
