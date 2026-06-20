@@ -6804,7 +6804,7 @@ function _w2dRenderSub(){
     return;
   }
   const {peak,util,peakTime}=_w2dLastKpi;
-  const dim='color:#6b7280;font-size:10px';
+  const dim='color:#9aa4b8;font-size:10px';
   const ucColor=util>100?'#ff7575':'#7dda88';
   let tWhen='';
   if(peakTime){
@@ -6819,17 +6819,16 @@ function _w2dRenderSub(){
       tWhen=`às ${peakTime}`;
     }
   }
-  const sep=`<span style="color:#3a3f4e;margin:0 6px">·</span>`;
-  const sp=`&thinsp;`;
+  const sep=`<span style="color:#5a6278;margin:0 6px">·</span>`;
   sEl.innerHTML=
     `<span style="${dim}">${_w2dSubBase}</span>`+
     sep+
-    `<span style="color:#8890a0;font-size:10px">Pico</span>`+
-    `<span style="color:#fbbf24;font-weight:700;font-size:13px;margin:0 6px">${_w2dFmtMW(peak,3)}</span>`+
-    (tWhen?`<span style="color:#8890a0;font-size:10px">${tWhen}</span>`:'')+
+    `<span style="color:#b0b8cc;font-size:10px">Pico</span>`+
+    `<span style="color:#fbbf24;font-weight:700;font-size:13px;margin:0 7px">${_w2dFmtMW(peak,3)}</span>`+
+    (tWhen?`<span style="color:#b0b8cc;font-size:10px">${tWhen}</span>`:'')+
     sep+
     `<span style="color:${ucColor};font-weight:700;font-size:13px">${util.toFixed(1)}%</span>`+
-    `<span style="color:#8890a0;font-size:10px;margin-left:4px">do MUST</span>`;
+    `<span style="color:#b0b8cc;font-size:10px;margin-left:5px">do MUST</span>`;
 }
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
@@ -7446,7 +7445,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
     // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
     const _peakDs=_onC.length===0?
@@ -7604,7 +7603,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
       }
     }
