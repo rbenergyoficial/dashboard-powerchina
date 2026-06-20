@@ -6533,6 +6533,13 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
   setWay2Status('ok',t);
   updateHeader();
   try{renderAll();}catch(e){console.error('renderAll após Way2:',e);}
+  // Auto-refresh intradia se usuário está vendo o dia atual
+  const _ivV=document.getElementById('w2dIntervalSel')?.value||'';
+  const _dpV=document.getElementById('w2dDatePicker')?.value||'';
+  const _todayBR=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(_ivV)&&_dpV===_todayBR){
+    loadW2Demanda().catch(()=>{});
+  }
 }
 
 // Carrega dados Way2 dos JSONs pré-processados no Azure Blob (caminho principal)
@@ -7580,6 +7587,10 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     }
   }
 
+  // Último índice com dado real (para mostrar "dados até HH:MM" no subtítulo)
+  const _lastIdx=datasets.reduce((mx,ds)=>{const l=ds.data.reduceRight((f,v,i)=>f>=0?f:(v!=null?i:-1),-1);return Math.max(mx,l);},-1);
+  const _lastTime=_lastIdx>=0?displayLabels[_lastIdx]:null;
+
   // Linha de referência: demanda contratada (atualizada por _w2dUpdateContrLine ao trocar chip)
   const _cBase=num(dashData?.must?.contrat?.total||0);
   if(_cBase>0) datasets.push({label:'_contr',type:'line',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
@@ -7587,9 +7598,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
   const [y,m,d]=dataStr.split('-');
-  const meta=raw.geradoEm?` · atualizado ${new Date(raw.geradoEm+'Z').toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})}`:'';
   const _pkLabel=ufvSel==='all'?'M1–M9 · Total':ufvSel;
-  _w2dSubBase=`${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo}${meta}`;
+  const _metaLast=_lastTime?` · dados até ${_lastTime}`:'';
+  _w2dSubBase=`${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo}${_metaLast}`;
   document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
   document.getElementById('w2dSub').textContent=_w2dSubBase;
 
