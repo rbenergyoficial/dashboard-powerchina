@@ -646,6 +646,49 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   #page-must .must-rank-side{align-items:flex-start;text-align:left}
 }
 
+/* ════════════ MOBILE / PWA — telas estreitas (celular) ════════════ */
+@media (max-width:640px){
+  /* clip (não 'hidden') preserva position:sticky e mata o overflow lateral */
+  html,body{overflow-x:clip;max-width:100%;}
+
+  /* HEADER: cabe em uma linha (mantém 54px p/ não quebrar o sticky top:54px) */
+  .hdr{padding:0 10px;gap:6px;}
+  .hdr-logo{gap:7px!important;min-width:0;flex-shrink:1;overflow:hidden;}
+  .hdr-logo-txt .l1{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .hdr-logo-txt .l2{display:none;}
+  .hdr-sep,.hdr-info,.hdr-date{display:none!important;}
+  .hdr-r{gap:5px;margin-left:auto;flex-shrink:0;}
+  /* pills e badge viram apenas o ponto de status (texto vai p/ o gráfico) */
+  #syncPill .sp-label,#way2Pill .sp-label{display:none;}
+  #syncPill,#way2Pill{padding:0;width:28px;height:28px;justify-content:center;}
+  .badge-status{display:none;}
+  .lang-switcher .lang-btn{padding:4px 7px;font-size:10px;}
+
+  /* CONTEÚDO */
+  .main{padding:12px 10px;gap:14px;}
+  #page-must .must-top-controls{gap:6px 8px;}
+  #page-must #sec-must-w2dem .section-title{overflow-x:visible;}
+  #page-must #sec-must-w2dem .cc{padding:12px 10px 10px;}
+
+  /* Cabeçalho do gráfico Way2: subtítulo deixa de ser absoluto/centralizado e empilha */
+  #sec-must-w2dem .cc-head{flex-wrap:wrap;align-items:flex-start!important;}
+  #w2dTitle{font-size:13px;white-space:normal!important;flex:1 1 auto;line-height:1.25;}
+  #w2dSub{position:static!important;left:auto!important;transform:none!important;
+          white-space:normal!important;width:100%;order:3;margin-top:5px;font-size:10.5px;text-align:left;}
+  #tg-w2d{margin-left:auto;flex-shrink:0;}
+
+  /* Alturas de gráfico adequadas ao celular */
+  #page-must #sec-must-w2dem .cc-body{height:340px!important;min-height:340px!important;max-height:340px!important;}
+  #page-must #page-must-main-chart .cc-body{height:300px!important;min-height:300px!important;max-height:300px!important;}
+
+  #page-must .must-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+}
+@media (max-width:400px){
+  .hdr-logo-txt .l1{font-size:11px;}
+  .lang-switcher{display:none;}            /* idioma fica nas Configurações em telas muito estreitas */
+  #page-must #sec-must-w2dem .cc-body{height:320px!important;min-height:320px!important;max-height:320px!important;}
+}
+
 /* ══ LIGHT THEME ═══════════════════════════════════════════════════════════
    Activated via  html[data-theme="light"]  (set by toggleTheme()).
    Overrides CSS variables and hardcoded-color elements.                   */
