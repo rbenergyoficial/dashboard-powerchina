@@ -5,7 +5,7 @@
  *  - CDNs e ícones -> stale-while-revalidate (rápido + funciona offline)
  * skipWaiting + clients.claim = novas versões assumem na hora (atualização automática).
  */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const CACHE = 'pwc-mauriti-' + VERSION;
 const APP_SHELL = [
   '/',
@@ -49,15 +49,26 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // 2) Navegação / documento -> network-first
+  // 2) Navegação / documento -> network-first + notifica páginas se mudou
   if (req.mode === 'navigate' || req.destination === 'document') {
-    e.respondWith(
-      fetch(req).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put('/index.html', copy)).catch(() => {});
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(req);
+        const cache = await caches.open(CACHE);
+        const cached = await cache.match('/index.html');
+        const newLen = res.headers.get('content-length') || res.headers.get('etag') || '';
+        const oldLen = cached ? (cached.headers.get('content-length') || cached.headers.get('etag') || '') : '';
+        // Só notifica se já tinha cache anterior E mudou (evita notificar na primeira carga)
+        if (cached && newLen && oldLen && newLen !== oldLen) {
+          const clients = await self.clients.matchAll({type:'window'});
+          clients.forEach(c => c.postMessage({type:'CONTENT_UPDATED'}));
+        }
+        cache.put('/index.html', res.clone()).catch(() => {});
         return res;
-      }).catch(() => caches.match('/index.html').then(r => r || caches.match('/')))
-    );
+      } catch (_) {
+        return (await caches.match('/index.html')) || (await caches.match('/'));
+      }
+    })());
     return;
   }
 

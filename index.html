@@ -72,22 +72,33 @@ if('serviceWorker' in navigator){
       const banner=document.getElementById('pwaUpdate');
       const btn=document.getElementById('pwaUpdateBtn');
       const closeBtn=document.getElementById('pwaUpdateClose');
-      const showBanner=sw=>{
-        if(!sw||!banner) return;
+      let bannerShown=false;
+      const showBanner=(sw)=>{
+        if(!banner||bannerShown) return;
+        bannerShown=true;
         banner.classList.add('show');
-        btn.onclick=()=>{btn.disabled=true;btn.textContent='Atualizando…';sw.postMessage('SKIP_WAITING');};
-        closeBtn.onclick=()=>banner.classList.remove('show');
+        btn.onclick=()=>{
+          btn.disabled=true;btn.textContent='Atualizando…';
+          if(sw) sw.postMessage('SKIP_WAITING');           // banner via SW novo waiting
+          else window.location.reload();                    // banner via CONTENT_UPDATED
+        };
+        closeBtn.onclick=()=>{banner.classList.remove('show');bannerShown=false;};
       };
 
       // Se já existe um SW novo aguardando (de uma checagem anterior), mostra na hora
       if(reg.waiting&&navigator.serviceWorker.controller) showBanner(reg.waiting);
 
-      // Detecta quando um novo SW termina de instalar
+      // Detecta quando um novo SW termina de instalar (mudança no sw.js)
       reg.addEventListener('updatefound',()=>{
         const nw=reg.installing; if(!nw) return;
         nw.addEventListener('statechange',()=>{
           if(nw.state==='installed'&&navigator.serviceWorker.controller) showBanner(nw);
         });
+      });
+
+      // Detecta mudança no HTML (sem mudar o SW) — mensagem CONTENT_UPDATED
+      navigator.serviceWorker.addEventListener('message',ev=>{
+        if(ev.data?.type==='CONTENT_UPDATED') showBanner(null);
       });
 
       // Checa atualização ao voltar foco e a cada 15 min
