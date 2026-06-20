@@ -746,6 +746,18 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   #page-pat .cc-head{flex-wrap:wrap;}
   #page-pat .cc-head .toggle-grp{margin-left:auto;}
   #page-pat .cc-body{height:240px!important;}
+
+  /* Barra de navegação entre painéis: sempre visível no celular,
+     mesmo nas páginas (MUST/PPA) que escondem a barra de filtros inteira.
+     Permite trocar de painel rolando na horizontal. */
+  body.page-must-active #fbar,
+  body.page-ppa-active #fbar{display:flex!important;padding:6px 8px;background:rgba(9,13,24,.97);border-bottom:1px solid var(--border2);min-height:0;}
+  body.page-must-active #fbar > *:not(.topbar-nav),
+  body.page-ppa-active #fbar > *:not(.topbar-nav){display:none!important;}
+  body.page-must-active #fbar > .topbar-nav,
+  body.page-ppa-active #fbar > .topbar-nav{display:flex!important;margin:0!important;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .topbar-nav .page-btn{flex-shrink:0;white-space:nowrap;}
+  .topbar-nav .page-btn svg{display:none;}  /* só texto no celular p/ caber mais */
 }
 @media (max-width:400px){
   .hdr-logo-txt .l1{font-size:11px;}
