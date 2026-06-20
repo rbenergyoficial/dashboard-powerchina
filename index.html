@@ -752,11 +752,25 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   .fbar{padding:7px 10px;gap:6px;}
   .fg{padding-right:8px;margin-right:2px;}
 
-  /* ── Painel de Controle (página inicial) ── */
-  #page-pat .cc{padding:14px 12px;gap:10px;}
+  /* ── Cards de gráficos (globais no celular — afeta todos os painéis) ── */
+  .cc{padding:12px 11px!important;gap:8px!important;border-radius:12px!important;
+      transform:none!important;}                                /* desativa lift de hover no mobile */
+  .cc:hover{transform:none!important;}
+  .cc-head{margin-bottom:2px;align-items:flex-start;}
+  .cc-title{font-size:12.5px;line-height:1.25;letter-spacing:-.1px;}
+  .cc-sub{display:none;}                                         /* sub fica para o desktop */
+  .cc-body{height:240px!important;}                             /* altura padrão p/ todos os gráficos */
+
+  /* Toggle BAR/LINE compacto */
+  .toggle-grp{padding:1px;border-radius:7px;flex-shrink:0;}
+  .toggle-btn{padding:3px 8px;font-size:9px;border-radius:5px;}
+
+  /* Section title menor */
+  .section-title{font-size:11px;letter-spacing:.8px;}
+
+  /* ── Painel de Controle ── */
   #page-pat .cc-head{flex-wrap:wrap;}
   #page-pat .cc-head .toggle-grp{margin-left:auto;}
-  #page-pat .cc-body{height:240px!important;}
 
   /* Barra de filtros COLAPSADA por padrão no celular.
      Mostra só: botão Filtros + barra de navegação entre painéis.
@@ -3137,6 +3151,32 @@ const stackTotalsPlugin={
   }
 };
 try{Chart.register(metaLinePlugin,stackTotalsPlugin);}catch(e){}
+
+// ── Chart.js defaults — versão compacta para celular ───────────────────
+// Aplicado uma vez no load (não altera código de cada gráfico, só os defaults).
+(function _chartMobileDefaults(){
+  try{
+    if(typeof Chart==='undefined') return;
+    if(!window.matchMedia('(max-width:640px)').matches) return;
+    const d=Chart.defaults;
+    d.font=d.font||{};
+    d.font.size=10;
+    d.plugins=d.plugins||{};
+    // Legenda compacta — 1 linha rolavel, sem caixas grandes
+    d.plugins.legend=d.plugins.legend||{};
+    d.plugins.legend.labels=Object.assign(d.plugins.legend.labels||{},{
+      boxWidth:10, boxHeight:8, padding:6, font:{size:10},
+    });
+    // Tooltip menor e que nao fica enorme
+    d.plugins.tooltip=Object.assign(d.plugins.tooltip||{},{
+      padding:6, caretSize:5, boxPadding:3, cornerRadius:8,
+      titleFont:{size:10,weight:'700'}, bodyFont:{size:10},
+      titleMarginBottom:4, displayColors:false
+    });
+    // Eixos
+    d.scale=d.scale||{};
+    d.scale.ticks=Object.assign(d.scale.ticks||{},{font:{size:9}});
+  }catch(_){}})();
 
 // Normaliza hex (remove alpha, expande #abc → #aabbcc)
 function solidHex(c){
