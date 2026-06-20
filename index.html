@@ -6727,10 +6727,13 @@ function _w2dRenderDateUI(){
   const today=new Date().toISOString().slice(0,10);
   const thisMonth=today.slice(0,7);
   const thisYear=new Date().getFullYear();
+  // Preserva data já selecionada ao trocar apenas o intervalo
+  const curDate=document.getElementById('w2dDatePicker')?.value||today;
+  const curMonth=document.getElementById('w2dMonthPicker')?.value||(curDate.slice(0,7)||thisMonth);
   if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(iv)){
-    container.innerHTML=`<input type="date" class="fdate" id="w2dDatePicker" value="${today}" onchange="_w2dSyncToMust()">`;
+    container.innerHTML=`<input type="date" class="fdate" id="w2dDatePicker" value="${curDate}" onchange="_w2dSyncToMust()">`;
   }else if(['UmDia','Semana'].includes(iv)){
-    container.innerHTML=`<input type="month" class="fdate" id="w2dMonthPicker" value="${thisMonth}" onchange="_w2dSyncToMust()">`;
+    container.innerHTML=`<input type="month" class="fdate" id="w2dMonthPicker" value="${curMonth}" onchange="_w2dSyncToMust()">`;
   }else if(iv==='Mes'){
     const yrs=[thisYear-2,thisYear-1,thisYear,thisYear+1].filter(y=>y>=2023);
     container.innerHTML=`<select class="fselect" id="w2dYearPicker" onchange="_w2dSyncToMust()">${yrs.map(y=>`<option value="${y}"${y===thisYear?' selected':''}>${y}</option>`).join('')}</select>`;
