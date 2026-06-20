@@ -7482,7 +7482,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           label:_w2dTTLabel
         }}},
       scales:{
-        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
+        x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
