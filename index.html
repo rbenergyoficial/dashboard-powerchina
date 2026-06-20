@@ -7021,8 +7021,8 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
         return ok?+s.toFixed(3):null;
       });
       datasets.push({label:'Total',data:totalData,
-        borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],
+        borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),
+        fill:'origin',tension:.3,borderWidth:2.5,borderDash:[6,3],
         pointRadius:3,pointHoverRadius:5,spanGaps:true});
     }
 
@@ -7062,7 +7062,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
                 return idx%step===0?val:'';
               }},
              grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-          y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
+          y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
              grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
              title:{display:true,text:'MW pico/dia',color:'#565b70',font:{size:10}}}
         }
@@ -7129,8 +7129,8 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
         allPks.forEach(pk=>{const v=datasets.find(d=>d.label===pk)?.data[xi];if(v!=null){s+=v;ok=true;}});
         return ok?+s.toFixed(3):null;
       });
-      datasets.push({label:'Total',data,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
+      datasets.push({label:'Total',data,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),
+        fill:'origin',tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
     }
     const isBar=_w2dSt.chartType==='bar';
     datasets.forEach(ds=>{
@@ -7147,7 +7147,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
       scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:15},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
@@ -7191,8 +7191,8 @@ async function _loadW2YearView(gran,ufv,year,btn){
         allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
         return ok?+s.toFixed(3):null;
       });
-      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),
+        fill:'origin',tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:3,pointHoverRadius:5,spanGaps:true});
     }
     const isBar=_w2dSt.chartType==='bar';
     datasets.forEach(ds=>{
@@ -7209,7 +7209,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
       scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
@@ -7261,8 +7261,8 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
         }).filter(v=>v!=null);
         return mxs.length?+Math.max(...mxs).toFixed(3):null;
       });
-      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:5,pointHoverRadius:7,spanGaps:true});
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),
+        fill:'origin',tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:5,pointHoverRadius:7,spanGaps:true});
     }
     const isBar=_w2dSt.chartType==='bar';
     datasets.forEach(ds=>{
@@ -7278,7 +7278,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
       scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
@@ -7324,8 +7324,8 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
         allPks.forEach(pk=>{const v=_dayMax(raw,_W2D_IDS[pk]);if(v!=null){s+=v;ok=true;}});
         return ok?+s.toFixed(3):null;
       });
-      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',
-        fill:false,tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:2,pointHoverRadius:5,spanGaps:true});
+      datasets.push({label:'Total',data:totalData,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),
+        fill:'origin',tension:.3,borderWidth:2.5,borderDash:[6,3],pointRadius:2,pointHoverRadius:5,spanGaps:true});
     }
     const isBar=_w2dSt.chartType==='bar';
     datasets.forEach(ds=>{
@@ -7343,7 +7343,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
       scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
@@ -7415,7 +7415,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         return ok?+s.toFixed(3):null;
       });
       if(isBar) datasets.push({label:'Total',data:total,type:'bar',backgroundColor:ctx=>gradFrom(ctx,_W2D_COLORS.Total.c),borderColor:_W2D_COLORS.Total.c,borderWidth:1,borderRadius:2,spanGaps:false});
-      else datasets.push({label:'Total',data:total,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:2,borderDash:[6,3],pointRadius:0,pointHoverRadius:9,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false});
+      else datasets.push({label:'Total',data:total,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),fill:'origin',tension:.3,borderWidth:2,borderDash:[6,3],pointRadius:0,pointHoverRadius:9,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',spanGaps:false});
     }
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
     const avail=fetched.filter(r=>r.status==='fulfilled'&&r.value).length;
@@ -7459,7 +7459,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
       scales:{
         x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},
+        y:{ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
     // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
@@ -7554,7 +7554,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     if(isBar){
       datasets.push({label:'Total',data:totAgg,type:'bar',backgroundColor:ctx=>gradFrom(ctx,_W2D_COLORS.Total.c),borderColor:_W2D_COLORS.Total.c,borderWidth:1.5,borderRadius:4,spanGaps:true});
     }else{
-      datasets.push({label:'Total',data:totAgg,borderColor:_W2D_COLORS.Total.c,backgroundColor:'transparent',fill:false,tension:tns,borderWidth:2.5,borderDash:[6,3],pointRadius:ptR,pointHoverRadius:Math.max(ptR,9),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:_W2D_COLORS.Total.c,spanGaps:true});
+      datasets.push({label:'Total',data:totAgg,borderColor:_W2D_COLORS.Total.c,backgroundColor:c=>_w2dAreaGrad(c,_W2D_COLORS.Total.c),fill:'origin',tension:tns,borderWidth:2.5,borderDash:[6,3],pointRadius:ptR,pointHoverRadius:Math.max(ptR,9),pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',pointBackgroundColor:_W2D_COLORS.Total.c,spanGaps:true});
     }
   }
 
