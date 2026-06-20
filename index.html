@@ -808,6 +808,18 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   #page-way .rank-pct-sub{font-size:9px!important;}
   #page-way #cUFV1{min-height:180px;}
 
+  /* Heatmap (PR e UFV): hint visual de scroll lateral */
+  .heatmap-wrap{position:relative;-webkit-overflow-scrolling:touch;
+    background:linear-gradient(to right,transparent calc(100% - 14px),rgba(107,139,245,.10)) no-repeat right;}
+  .heatmap-table{font-size:10px!important;}
+  .heatmap-table th,.heatmap-table td{padding:3px 6px!important;font-size:10px!important;}
+
+  /* ── PPA · cards de UFV (sec-ppa-gauges): 1 coluna + badge "Meta" embaixo ── */
+  #page-ppa [data-ppag-grid]{grid-template-columns:1fr!important;gap:10px!important;}
+  #page-ppa .ppag-card{padding:12px 10px!important;transform:none!important;}
+  /* Permite que o status "Meta será atingida" caia para uma linha embaixo (sem corte) */
+  #page-ppa .ppag-card [style*="display: flex"][style*="justify-content: space-between"]{flex-wrap:wrap;gap:6px;}
+
   /* Barra de filtros COLAPSADA por padrão no celular.
      Mostra só: botão Filtros + barra de navegação entre painéis.
      Clicar em "Filtros" expande o restante (toggle em body.fbar-open). */
@@ -3122,6 +3134,15 @@ function switchPage(page){
   var _mp=document.getElementById('mustCalPopup'),_mt=document.getElementById('mustCalTrigger');
   if(_mp){_mp.classList.remove('open');_mp.style.display='none';}
   if(_mt) _mt.classList.remove('open');
+  // Mobile: fecha tooltips ativos de qualquer Chart antes de trocar de pagina
+  // (sem isso o tooltip do donut PPA fica "preso" sobre outros paineis).
+  try{
+    if(typeof Chart!=='undefined'&&Chart.instances){
+      Object.values(Chart.instances).forEach(c=>{
+        try{c.tooltip?.setActiveElements?.([],{x:0,y:0});c.update?.('none');}catch(_){}
+      });
+    }
+  }catch(_){}
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const nextPage=document.getElementById('page-'+page);
   if(nextPage) nextPage.classList.add('active');
@@ -3213,8 +3234,9 @@ try{Chart.register(metaLinePlugin,stackTotalsPlugin);}catch(e){}
     d.scale=d.scale||{};
     d.scale.ticks=Object.assign(d.scale.ticks||{},{font:{size:9}});
 
-    // Plugin global: no celular, força rotação 30° no eixo X em séries com
-    // muitos labels. Evita que o Chart.js "pule" meses (Set/Nov/Jan/Mar/Mai).
+    // Plugin global: no celular, força rotação + autoSkip no eixo X.
+    // - Séries de até ~14 labels (meses): rotação 35° p/ caber todos.
+    // - Séries com 15+ labels (dias 1-30): liga autoSkip p/ não ficar amontoado.
     Chart.register({
       id:'mobileXRotate',
       beforeInit(chart){
@@ -3222,13 +3244,15 @@ try{Chart.register(metaLinePlugin,stackTotalsPlugin);}catch(e){}
           if(!window.matchMedia('(max-width:640px)').matches) return;
           const sc=chart.options?.scales; if(!sc||!sc.x) return;
           const labels=chart.data?.labels||[];
-          // só aplica se tem muitos labels e atualmente está 0°
           if(labels.length<6) return;
           sc.x.ticks=sc.x.ticks||{};
           if((sc.x.ticks.maxRotation??0)<=0){
-            sc.x.ticks.maxRotation=35;
-            sc.x.ticks.minRotation=0;
-            sc.x.ticks.autoSkipPadding=2;
+            sc.x.ticks.maxRotation=35; sc.x.ticks.minRotation=0; sc.x.ticks.autoSkipPadding=2;
+          }
+          // Eixos com muitos labels (dias do mês): forca autoSkip + limite
+          if(labels.length>=15){
+            sc.x.ticks.autoSkip=true;
+            sc.x.ticks.maxTicksLimit=Math.min(sc.x.ticks.maxTicksLimit||8,8);
           }
         }catch(_){}
       }
