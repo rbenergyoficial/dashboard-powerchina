@@ -5,7 +5,7 @@
  *  - CDNs e ícones -> stale-while-revalidate (rápido + funciona offline)
  * skipWaiting + clients.claim = novas versões assumem na hora (atualização automática).
  */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'pwc-mauriti-' + VERSION;
 const APP_SHELL = [
   '/',
