@@ -1501,7 +1501,7 @@ function _themeCharts(light){
           <div class="cc-body">
             <canvas id="cW2Dem"></canvas>
             <div class="w2d-overlay loading" id="w2dLoading"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>Consultando Way2…</div>
-            <div class="w2d-overlay error" id="w2dErr"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f0598c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="w2dErrMsg" style="font-size:11px;color:#f0598c;text-align:center;max-width:260px"></span><span style="font-size:9px;color:var(--t4)">Verifique o token Way2 nas Configurações</span></div>
+            <div class="w2d-overlay error" id="w2dErr"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#f0598c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span id="w2dErrMsg" style="font-size:11px;color:#f0598c;text-align:center;max-width:280px"></span><span id="w2dErrHint" style="font-size:9px;color:var(--t4);text-align:center;max-width:280px"></span></div>
           </div>
         </div>
       </div>
@@ -6897,6 +6897,32 @@ function _w2dRefreshKpi(){
   ].map(x=>`<div class="kpi-card ${x.c}"><div class="kpi-label">${x.lab}</div><div class="kpi-value" style="${x.vc?'color:'+x.vc:''}">${x.val}<span class="kpi-unit">${x.unit}</span></div><div class="kpi-sub">${x.sub}</div></div>`).join('');
 }
 
+function _w2dShowErr(e){
+  const m=e?.message||String(e);
+  let msg,hint;
+  if(e instanceof SyntaxError||/json|unexpected end|invalid json/i.test(m)){
+    msg='Arquivo incompleto — dado ainda sendo gravado pelo Power Automate.';
+    hint='Aguarde alguns minutos e clique Buscar novamente.';
+  }else if(/failed to fetch|network|net::/i.test(m)||e instanceof TypeError){
+    msg='Erro de rede ao acessar o armazenamento.';
+    hint='Verifique sua conexão com a internet.';
+  }else if(/404|indisponíveis/i.test(m)){
+    msg=m;
+    hint='O arquivo pode não ter sido gerado para esta data.';
+  }else if(/401|403|token|unauthorized/i.test(m)){
+    msg='Acesso negado ao armazenamento Way2.';
+    hint='Verifique o token Way2 nas Configurações.';
+  }else{
+    msg=m;
+    hint='Se o erro persistir, verifique as Configurações.';
+  }
+  const eEl=document.getElementById('w2dErrMsg');
+  const hEl=document.getElementById('w2dErrHint');
+  if(eEl) eEl.textContent=msg;
+  if(hEl) hEl.textContent=hint;
+  _w2dOverlay('w2dErr',true);
+  console.error('[Way2]',e);
+}
 async function loadW2Demanda(){
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
   const ufv=_w2dSt.ufv;
@@ -6921,9 +6947,7 @@ async function loadW2Demanda(){
       _renderW2Demanda(data,dataStr,intervalo,baseInt,ufv,gran);
     }catch(e){
       _w2dOverlay('w2dLoading',false);
-      document.getElementById('w2dErrMsg').textContent=e.message;
-      _w2dOverlay('w2dErr',true);
-      console.error('loadW2Demanda:',e);
+      _w2dShowErr(e);
     }finally{if(btn) btn.disabled=false;}
     return;
   }
@@ -7072,9 +7096,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
-    console.error('_loadW2MultiDay:',e);
+    _w2dShowErr(e);
   }finally{
     if(btn) btn.disabled=false;
   }
@@ -7153,8 +7175,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
+    _w2dShowErr(e);
     console.error('_loadW2MonthView:',e);
   }finally{if(btn) btn.disabled=false;}
 }
@@ -7215,8 +7236,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
+    _w2dShowErr(e);
     console.error('_loadW2YearView:',e);
   }finally{if(btn) btn.disabled=false;}
 }
@@ -7284,8 +7304,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
+    _w2dShowErr(e);
     console.error('_loadW2MultiYearView:',e);
   }finally{if(btn) btn.disabled=false;}
 }
@@ -7349,8 +7368,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
+    _w2dShowErr(e);
     console.error('_loadW2RangeView:',e);
   }finally{if(btn) btn.disabled=false;}
 }
@@ -7486,8 +7504,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     _w2dOverlay('w2dLoading',false);
   }catch(e){
     _w2dOverlay('w2dLoading',false);
-    document.getElementById('w2dErrMsg').textContent=e.message;
-    _w2dOverlay('w2dErr',true);
+    _w2dShowErr(e);
     console.error('_loadW2RangeIntraday:',e);
   }finally{if(btn) btn.disabled=false;}
 }
