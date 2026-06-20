@@ -6930,6 +6930,45 @@ const _W2D_COLORS={
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
 const _W2D_INTLABEL={CincoMinutos:'5 min',QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano',Personalizado:'personalizado'};
+
+// ── Cache em memoria dos blobs Way2 ────────────────────────────────────
+// Evita re-buscar o mesmo dia quando o usuario troca de intervalo/view.
+// Dia atual: TTL 2 min (para pegar atualizacoes do Power Automate).
+// Dias passados: cache permanente (ate reload da pagina).
+const _W2D_CACHE=new Map();         // key "baseInt:YYYY-MM-DD" -> {v, t}
+const _W2D_CACHE_MAX=400;           // ~1 ano de dias intradiarios
+const _W2D_TODAY_TTL=2*60*1000;     // 2 min para o dia atual
+async function _w2dFetchBlob(baseInt, dt, opts){
+  opts=opts||{};
+  const key=baseInt+':'+dt;
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  const isToday=(dt===today);
+  const cached=_W2D_CACHE.get(key);
+  if(cached && (!isToday || (Date.now()-cached.t)<_W2D_TODAY_TTL)){
+    if(cached.v===null && opts.throwOnNotFound) throw new Error('Dados indisponíveis para '+dt+'.');
+    return cached.v;
+  }
+  let v=null;
+  try{
+    // Para CincoMinutos o blob nao tem o baseInt no nome (legado da API).
+    // Demais usam o padrao "way2_must_intradia_${baseInt}_${dt}.json".
+    const fname = (baseInt==='CincoMinutos'||baseInt==='')
+      ? 'way2_must_intradia_'+dt+'.json'
+      : 'way2_must_intradia_'+baseInt+'_'+dt+'.json';
+    const r=await fetch(WAY2_BLOB_BASE+fname,{cache:'no-store'});
+    v = r.ok ? await r.json() : null;
+  }catch(e){
+    if(opts.throwOnNotFound) throw e;
+    v=null;
+  }
+  // LRU simples: remove a entrada mais antiga ao estourar o limite
+  if(_W2D_CACHE.size>=_W2D_CACHE_MAX){
+    _W2D_CACHE.delete(_W2D_CACHE.keys().next().value);
+  }
+  _W2D_CACHE.set(key,{v:v,t:Date.now()});
+  if(v===null && opts.throwOnNotFound) throw new Error('Dados indisponíveis para '+dt+'.');
+  return v;
+}
 const _W2D_BASE_AGG={
   CincoMinutos: {CincoMinutos:1,QuinzeMinutos:3,TrintaMinutos:6,UmaHora:12,UmDia:288},
   QuinzeMinutos:{QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96}
@@ -7264,13 +7303,8 @@ async function loadW2Demanda(){
   if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(intervalo)){
     const dataStr=document.getElementById('w2dDatePicker')?.value||new Date().toISOString().slice(0,10);
     try{
-      let blobName,baseInt;
-      if(intervalo==='CincoMinutos'){blobName=`way2_must_intradia_${dataStr}.json`;baseInt='CincoMinutos';}
-      else if(intervalo==='QuinzeMinutos'){blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`;baseInt='QuinzeMinutos';}
-      else{blobName=`way2_must_intradia_QuinzeMinutos_${dataStr}.json`;baseInt='QuinzeMinutos';}
-      const r=await fetch(`${WAY2_BLOB_BASE}${blobName}`,{cache:'no-store'});
-      if(!r.ok) throw new Error(`Dados indisponíveis para ${dataStr}.`);
-      const data=await r.json();
+      const baseInt = intervalo==='CincoMinutos' ? 'CincoMinutos' : 'QuinzeMinutos';
+      const data = await _w2dFetchBlob(baseInt,dataStr,{throwOnNotFound:true});
       _w2dOverlay('w2dLoading',false);
       _renderW2Demanda(data,dataStr,intervalo,baseInt,ufv,gran);
     }catch(e){
@@ -7335,8 +7369,7 @@ async function _loadW2MultiDay(gran,ufv,intervalo,refDateStr){
     }
 
     const fetched=await Promise.allSettled(
-      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      dates.map(dt=>_w2dFetchBlob('CincoMinutos',dt))
     );
     const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
 
@@ -7439,8 +7472,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
     const daysInMonth=new Date(ys,ms,0).getDate();
     const dates=Array.from({length:daysInMonth},(_,i)=>`${ys}-${pad(ms)}-${pad(i+1)}`);
     const fetched=await Promise.allSettled(
-      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      dates.map(dt=>_w2dFetchBlob('QuinzeMinutos',dt))
     );
     const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
     const _dayMax=(raw,pkId)=>{
@@ -7518,8 +7550,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
     const pad=n=>String(n).padStart(2,'0');
     const dates=Array.from({length:12},(_,m)=>`${year}-${pad(m+1)}-15`);
     const fetched=await Promise.allSettled(
-      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      dates.map(dt=>_w2dFetchBlob('QuinzeMinutos',dt))
     );
     const monthData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
     const _dayMax=(raw,pkId)=>{
@@ -7578,8 +7609,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
     const pad=n=>String(n).padStart(2,'0');
     const allDates=years.flatMap(y=>Array.from({length:12},(_,m)=>`${y}-${pad(m+1)}-15`));
     const fetched=await Promise.allSettled(
-      allDates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      allDates.map(dt=>_w2dFetchBlob('QuinzeMinutos',dt))
     );
     const yearData={};
     years.forEach((y,yi)=>{
@@ -7648,8 +7678,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
     while(d<=end){dates.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
     if(dates.length>92) throw new Error(`Período muito longo (${dates.length} dias). Máximo: 92 dias.`);
     const fetched=await Promise.allSettled(
-      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      dates.map(dt=>_w2dFetchBlob('QuinzeMinutos',dt))
     );
     const dayData=fetched.map((r,i)=>({date:dates[i],raw:r.status==='fulfilled'?r.value:null}));
     const _dayMax=(raw,pkId)=>{
@@ -7712,8 +7741,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     while(d<=end){dates.push(d.toISOString().slice(0,10));d.setDate(d.getDate()+1);}
     if(dates.length>60) throw new Error(`Período muito longo (${dates.length} dias). Máximo para intraday: 60 dias.`);
     const fetched=await Promise.allSettled(
-      dates.map(dt=>fetch(`${WAY2_BLOB_BASE}way2_must_intradia_QuinzeMinutos_${dt}.json`,{cache:'no-store'})
-        .then(r=>r.ok?r.json():null).catch(()=>null))
+      dates.map(dt=>_w2dFetchBlob('QuinzeMinutos',dt))
     );
     const aggFactor=interval==='TrintaMinutos'?2:interval==='UmaHora'?4:1;
     const BASE_15=Array.from({length:96},(_,i)=>{const h=Math.floor(i*15/60),m=(i*15)%60;return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;});
