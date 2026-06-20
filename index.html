@@ -747,17 +747,36 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   #page-pat .cc-head .toggle-grp{margin-left:auto;}
   #page-pat .cc-body{height:240px!important;}
 
-  /* Barra de navegação entre painéis: sempre visível no celular,
-     mesmo nas páginas (MUST/PPA) que escondem a barra de filtros inteira.
-     Permite trocar de painel rolando na horizontal. */
+  /* Barra de filtros COLAPSADA por padrão no celular.
+     Mostra só: botão Filtros + barra de navegação entre painéis.
+     Clicar em "Filtros" expande o restante (toggle em body.fbar-open). */
+  #fbar{padding:6px 8px;gap:6px;}
+  #fbar > .fg,
+  #fbar > .btn-clear{display:none!important;}
+  body.fbar-open #fbar > .fg{display:flex!important;}
+  body.fbar-open #fbar > .btn-clear{display:inline-flex!important;}
+
+  /* Botão "Filtros" — só visível no mobile */
+  .fbar-toggle{display:inline-flex;align-items:center;gap:6px;
+    padding:6px 12px;border-radius:8px;
+    border:1px solid var(--border3);background:var(--bg4);color:var(--t1);
+    font:700 11px 'Inter',system-ui,sans-serif;cursor:pointer;flex-shrink:0;}
+  body.fbar-open .fbar-toggle{background:linear-gradient(135deg,var(--blue2),var(--blue));border-color:transparent;color:#fff;}
+  .fbar-toggle svg{flex-shrink:0;}
+
+  /* Nas páginas MUST e PPA (que têm barra própria de filtros), oculta o botão */
+  body.page-must-active .fbar-toggle,
+  body.page-ppa-active .fbar-toggle{display:none!important;}
   body.page-must-active #fbar,
   body.page-ppa-active #fbar{display:flex!important;padding:6px 8px;background:rgba(9,13,24,.97);border-bottom:1px solid var(--border2);min-height:0;}
-  body.page-must-active #fbar > *:not(.topbar-nav),
-  body.page-ppa-active #fbar > *:not(.topbar-nav){display:none!important;}
-  body.page-must-active #fbar > .topbar-nav,
-  body.page-ppa-active #fbar > .topbar-nav{display:flex!important;margin:0!important;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+  /* topbar-nav: sempre visível, rolagem horizontal */
+  #fbar > .topbar-nav{display:flex!important;margin:0!important;flex:1;min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .topbar-nav .page-btn{flex-shrink:0;white-space:nowrap;}
-  .topbar-nav .page-btn svg{display:none;}  /* só texto no celular p/ caber mais */
+  .topbar-nav .page-btn svg{display:none;}   /* só texto no celular p/ caber mais */
+}
+@media (min-width:641px){
+  .fbar-toggle{display:none;}   /* botão só existe no celular */
 }
 @media (max-width:400px){
   .hdr-logo-txt .l1{font-size:11px;}
@@ -1144,6 +1163,10 @@ function _themeCharts(light){
 
 <!-- FILTER BAR -->
 <div class="fbar" id="fbar">
+  <button id="fbarToggle" class="fbar-toggle" type="button" onclick="document.body.classList.toggle('fbar-open')" aria-label="Mostrar/ocultar filtros">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+    <span>Filtros</span>
+  </button>
   <div class="fg">
     <span class="fbar-label">Granularidade</span>
     <button class="fbtn2" data-fg="15min">15min</button>
