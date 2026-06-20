@@ -7133,7 +7133,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
     const parks=ufv==='all'?allPks:[ufv];
     let xLabels,datasets;
     if(intervalo==='UmDia'){
-      xLabels=dayData.map(({date})=>date.slice(8)); // "01"…"31"
+      xLabels=dayData.map(({date})=>String(+date.slice(8))); // "1"…"31"
       datasets=parks.map(pk=>{
         const col=_W2D_COLORS[pk];
         return{label:pk,data:dayData.map(({raw})=>_dayMax(raw,_W2D_IDS[pk])),
@@ -7175,7 +7175,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
-      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:true,maxTicksLimit:15},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
+      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0,autoSkip:false},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
