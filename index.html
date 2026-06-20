@@ -6763,7 +6763,7 @@ const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).spl
 // Cria dataset de linha de referência contratada (cor por índice)
 function _makeContrDs(label,val,len,idx){
   const cc=['rgba(255,90,90,.9)','rgba(255,170,50,.9)','rgba(100,220,100,.9)','rgba(100,180,255,.9)'];
-  return {label,data:Array(len).fill(val),borderColor:cc[idx%cc.length],backgroundColor:'transparent',
+  return {label,type:'line',data:Array(len).fill(val),borderColor:cc[idx%cc.length],backgroundColor:'transparent',
     borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true};
 }
 // Atualiza linha(s) de referência: 1 linha por parque selecionado (nunca agrupa)
@@ -7545,7 +7545,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
 
   // Linha de referência: demanda contratada (atualizada por _w2dUpdateContrLine ao trocar chip)
   const _cBase=num(dashData?.must?.contrat?.total||0);
-  if(_cBase>0) datasets.push({label:'_contr',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
+  if(_cBase>0) datasets.push({label:'_contr',type:'line',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
 
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
