@@ -7249,7 +7249,7 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
         const vals=yearData[y].map(raw=>_dayMax(raw,_W2D_IDS[pk])).filter(v=>v!=null);
         return vals.length?+Math.max(...vals).toFixed(3):null;
       });
-      return{label:pk,data,borderColor:col.c,backgroundColor:col.bg,fill:false,tension:.3,borderWidth:2,pointRadius:5,pointHoverRadius:7,spanGaps:true};
+      return{label:pk,data,borderColor:col.c,backgroundColor:c=>_w2dAreaGrad(c,col.c),fill:'origin',tension:.3,borderWidth:2,pointRadius:5,pointHoverRadius:7,spanGaps:true};
     });
     if(ufv==='all'){
       const totalData=years.map(y=>{
@@ -7270,14 +7270,14 @@ async function _loadW2MultiYearView(gran,ufv,years,btn){
     });
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
     document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
-    document.getElementById('w2dSub').textContent=`${years.join(', ')} · pico anual · Way2`;
+    _w2dSubBase=`${years.join(', ')} · Ano`;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:years.map(String),datasets},options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
-      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
+      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:0},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(0)},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico anual',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
