@@ -3142,6 +3142,9 @@ function switchPage(page){
         try{c.tooltip?.setActiveElements?.([],{x:0,y:0});c.update?.('none');}catch(_){}
       });
     }
+    // Esconde tooltip externo customizado do donut PPA (div fixed no body)
+    const _dt=document.getElementById('_donutTip');
+    if(_dt){_dt.style.opacity='0';_dt.style.pointerEvents='none';}
   }catch(_){}
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   const nextPage=document.getElementById('page-'+page);
@@ -5617,6 +5620,18 @@ function renderPagePPA(type){
       const tip=document.getElementById('_donutTip');
       if(tip) tip.style.opacity='0';
     });
+    // MOBILE: tooltip externo nao tem "mouseleave" em telas touch — fecha
+    // ao tocar fora do donut, rolar, ou pagina sair de foco.
+    if(!window.__donutTipDismissers__){
+      window.__donutTipDismissers__=true;
+      const _hideTip=()=>{const t=document.getElementById('_donutTip');if(t)t.style.opacity='0';};
+      document.addEventListener('touchstart',(e)=>{
+        const c=document.getElementById('cPPAsplit');
+        if(c&&!c.contains(e.target)) _hideTip();
+      },{passive:true});
+      window.addEventListener('scroll',_hideTip,{passive:true});
+      document.addEventListener('visibilitychange',()=>{if(document.hidden)_hideTip();});
+    }
   }
   // ── Painel lateral do donut ──
   const _si=document.getElementById('ppaSplitInfo');
