@@ -7342,7 +7342,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
-      scales:{x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
+      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
@@ -7513,12 +7513,17 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     }
   }
 
-  const labels=[...allT].sort();
-  if(!labels.length){
+  if(!allT.size){
     document.getElementById('w2dErrMsg').textContent='Nenhum dado para esta grandeza. Verifique o Power Automate.';
     _w2dOverlay('w2dErr',true);
     return;
   }
+  // Gera slots completos de 24h independente dos dados disponíveis
+  const _baseMin=baseInt==='CincoMinutos'?5:15;
+  const labels=Array.from({length:Math.floor(24*60/_baseMin)},(_,i)=>{
+    const h=Math.floor(i*_baseMin/60),m=(i*_baseMin)%60;
+    return`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  });
 
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
   // Para 30min: desloca label +15min para mostrar fim do intervalo (ex: 00:30, 01:00, 01:30...)
@@ -7615,7 +7620,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         }
       },
       scales:{
-        x:{ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false},
+        x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
