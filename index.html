@@ -6815,8 +6815,12 @@ function _w2dRenderSub(){
       tWhen=`em ${dp} às ${tp}`;
     }else if(hasDate){
       tWhen=`em ${peakTime}`;
-    }else{
+    }else if(hasTime){
       tWhen=`às ${peakTime}`;
+    }else if(/^\d+$/.test(peakTime)){
+      tWhen=`dia ${peakTime}`;
+    }else{
+      tWhen=`em ${peakTime}`;
     }
   }
   const sep=`<span style="color:#5a6278;margin:0 6px">·</span>`;
@@ -7124,7 +7128,7 @@ async function _loadW2MonthView(gran,ufv,intervalo,monthStr,btn){
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
     const avail=dayData.filter(x=>x.raw).length;
     document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
-    document.getElementById('w2dSub').textContent=`${MON_FULL[ms-1]} ${ys} · ${intervalo==='Semana'?'máx semanal':'máx diário'} · ${avail}/${daysInMonth} dias disponíveis · Way2`;
+    _w2dSubBase=`${MON_FULL[ms-1].slice(0,3)} ${ys} · ${intervalo==='Semana'?'Semana':'Dia'}`;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:xLabels,datasets},options:{
@@ -7186,7 +7190,7 @@ async function _loadW2YearView(gran,ufv,year,btn){
     if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
     const avail=monthData.filter(x=>x.raw).length;
     document.getElementById('w2dTitle').textContent=`${_W2D_GRANLABEL[gran]||gran} · ${ufv==='all'?'M1–M9 · Total':ufv}`;
-    document.getElementById('w2dSub').textContent=`Ano ${year} · pico mensal · ${avail}/12 meses disponíveis · Way2`;
+    _w2dSubBase=`${year} · Mês`;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:MON_PT,datasets},options:{
