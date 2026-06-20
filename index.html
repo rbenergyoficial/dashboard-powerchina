@@ -7368,7 +7368,7 @@ async function _loadW2RangeView(gran,ufv,from,to,btn){
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(8,11,22,.95)',borderColor:'rgba(107,139,245,.28)',borderWidth:1,
         titleColor:'#f2f3f8',bodyColor:'#b6bac8',callbacks:{label:_w2dTTLabel}}},
-      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:true,maxTicksLimit:20},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
+      scales:{x:{offset:true,ticks:{color:'#565b70',font:{size:10},maxRotation:45,autoSkip:false},grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
           title:{display:true,text:'MW pico',color:'#565b70',font:{size:10}}}}}});
     _w2dApplyChipVisibility();
