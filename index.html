@@ -6235,7 +6235,7 @@ function mustInitFilter(){
   _mustFilterInit=true;
 }
 
-function renderMustPeakRanking(rows){
+function renderMustPeakRanking(rows, w2dPeaks){
   const must=dashData.must;
   const host=document.getElementById('mustRankList');
   if(!host) return;
@@ -6244,9 +6244,9 @@ function renderMustPeakRanking(rows){
     return;
   }
   const selected=filters.mustPark||'total';
-  const scopedRows=(rows||[]).slice();
+  const scopedRows=w2dPeaks?[]:(rows||[]).slice();
   const rank=(must.parks||[]).map(p=>{
-    const peak=scopedRows.reduce((mx,r)=>Math.max(mx,num(r[p])),0);
+    const peak=w2dPeaks?(num(w2dPeaks[p])||0):scopedRows.reduce((mx,r)=>Math.max(mx,num(r[p])),0);
     const contrat=num((must.contrat||{})[p]);
     const pct=contrat>0?(peak/contrat*100):0;
     const margem=contrat-peak;
@@ -6267,7 +6267,7 @@ function renderMustPeakRanking(rows){
   else if((filters.mustSelectedMonths||[]).length&&filters.mustYear){const _ms=(filters.mustSelectedMonths||[]).slice().sort();_rPeriodo=_ms.length>1?`${_rS[parseInt(_ms[0])]}–${_rS[parseInt(_ms[_ms.length-1])]} ${filters.mustYear}`:`${_rS[parseInt(_ms[0])]} ${filters.mustYear}`;}
   else if(filters.mustYear){_rPeriodo=String(filters.mustYear);}
   const _subEl=host.closest('.cc')?.querySelector('.cc-sub');
-  if(_subEl) _subEl.textContent=`Período em análise: ${_rPeriodo}`;
+  if(_subEl) _subEl.textContent=w2dPeaks?`Way2 · ${_w2dSubBase||'intradia'}`:`Período em análise: ${_rPeriodo}`;
   const maxPeak=Math.max(...rank.map(r=>r.peak),0)||1;
   const loc=getDateLocale();
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -7378,8 +7378,17 @@ function _w2dUpdateKpiPeak(){
   Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime,parkPeaks});
   _w2dRefreshKpi();
   _w2dRenderSub();
-  // Redesenha canvas para mostrar tabela de parques no canto direito
   if(parkPeaks&&_w2dChart) _w2dChart.update('none');
+  _w2dUpdateRanking();
+}
+function _w2dUpdateRanking(){
+  if(!_w2dChart||!_w2dLastKpi||!dashData?.must?.parks) return;
+  const w2dPeaks={};
+  (dashData.must.parks||[]).forEach(pk=>{
+    const ds=_w2dChart.data.datasets.find(d=>d.label===pk);
+    if(ds){const filt=ds.data.filter(v=>v!=null);w2dPeaks[pk]=filt.length?Math.max(...filt,0):0;}
+  });
+  renderMustPeakRanking(null,w2dPeaks);
 }
 // Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
 function _w2dRefreshKpi(){
