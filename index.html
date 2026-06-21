@@ -3142,6 +3142,11 @@ if(sessionStorage.getItem('mrd_auth')==='1'){
   document.getElementById('loginOverlay').style.display='none';
   _applyGearVisibility();
   requestAnimationFrame(()=>document.body.classList.add('revealed'));
+  // Se o reload foi disparado pelo botao "Atualizar" do PWA, pula o modal de
+  // sincronizacao (dados ja estao no localStorage, so o codigo HTML/JS mudou).
+  // A sincronizacao acontece em background silencioso (_arSilent=true).
+  const _isPwaUpdate=!!sessionStorage.getItem('_pwa_pending_update');
+  if(_isPwaUpdate) _arSilent=true;
   // Carrega dados automaticamente: prioriza OneDrive (autenticados, dados sempre frescos), depois URL pública
   if(localStorage.getItem('mrd_refresh_token')){ setTimeout(()=>{try{onRefreshClick();}catch(e){}},400); } else if(DATA_URL){ setTimeout(()=>{try{autoLoadFromUrl();}catch(e){}},400); }
 }
