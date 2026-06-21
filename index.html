@@ -55,6 +55,11 @@
 #pwaUpdate .pwa-up-close{background:transparent;border:none;color:#8e95ad;
   cursor:pointer;padding:4px;border-radius:6px;font-size:16px;line-height:1;}
 #pwaUpdate .pwa-up-close:hover{color:#e8edff;background:rgba(255,255,255,.06);}
+/* Estado "atualizando": icone girando + cor mais ativa */
+#pwaUpdate.is-updating .pwa-up-icon{animation:spin .9s linear infinite;color:#7ea4ff;}
+#pwaUpdate.is-updating .pwa-up-main{color:#cdd8fb;}
+#pwaUpdate.is-updating .pwa-up-btn{cursor:wait;opacity:.85;}
+#pwaUpdate.is-updating .pwa-up-close{display:none;}
 /* No celular: mantem centralizado embaixo (mais usavel com o polegar) */
 @media (max-width:640px){
   #pwaUpdate{top:auto;right:50%;bottom:18px;transform:translate(50%,12px);}
@@ -62,8 +67,8 @@
 }
 </style>
 <div id="pwaUpdate" role="status" aria-live="polite">
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
-  <div class="pwa-up-txt"><span>Nova versão disponível</span><span class="pwa-up-sub">Toque para atualizar agora</span></div>
+  <svg class="pwa-up-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+  <div class="pwa-up-txt"><span class="pwa-up-main">Nova versão disponível</span><span class="pwa-up-sub">Toque para atualizar agora</span></div>
   <button class="pwa-up-btn" id="pwaUpdateBtn">Atualizar</button>
   <button class="pwa-up-close" id="pwaUpdateClose" aria-label="Fechar">×</button>
 </div>
@@ -84,6 +89,12 @@ if('serviceWorker' in navigator){
         banner.classList.add('show');
         btn.onclick=()=>{
           btn.disabled=true;btn.textContent='Atualizando…';
+          // animacao: icone girando + textos atualizados enquanto recarrega
+          banner.classList.add('is-updating');
+          const main=banner.querySelector('.pwa-up-main');
+          const sub=banner.querySelector('.pwa-up-sub');
+          if(main) main.textContent='Atualizando';
+          if(sub) sub.textContent='Aguarde alguns instantes…';
           if(sw) sw.postMessage('SKIP_WAITING');           // banner via SW novo waiting
           else window.location.reload();                    // banner via CONTENT_UPDATED
         };
