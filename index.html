@@ -141,28 +141,45 @@ if('serviceWorker' in navigator){
         bannerShown=true;
         banner.classList.add('show');
         btn.onclick=()=>{
-          btn.disabled=true;btn.textContent='Atualizando…';
-          // animacao: icone girando + textos atualizados enquanto recarrega
+          btn.disabled=true;
           banner.classList.add('is-updating');
           const main=banner.querySelector('.pwa-up-main');
           const sub=banner.querySelector('.pwa-up-sub');
+          const icon=banner.querySelector('.pwa-up-icon');
+          const closeBtn=banner.querySelector('.pwa-up-close');
           if(main) main.textContent='Atualizando';
           if(sub) sub.textContent='Aguarde alguns instantes…';
-          // Preserva contexto (scroll + filtros Way2) para restaurar apos o reload,
-          // assim o usuario fica na mesma posicao sem voltar pra "tela inicial".
-          try{
-            const state={
-              ts:Date.now(),
-              scrollY:window.scrollY||0,
-              w2dDate:document.getElementById('w2dDatePicker')?.value||'',
-              w2dMonth:document.getElementById('w2dMonthPicker')?.value||'',
-              w2dInterval:document.getElementById('w2dIntervalSel')?.value||'',
-            };
-            sessionStorage.setItem('_pwa_pending_update', JSON.stringify(state));
-          }catch(_){}
-          if(sw) sw.postMessage('SKIP_WAITING');           // banner via SW novo waiting
-          else window.location.reload();                    // banner via CONTENT_UPDATED
+          if(closeBtn) closeBtn.style.display='none';
+
+          // Ativa o novo SW sem recarregar a pagina.
+          // O usuario fica na mesma tela com os mesmos dados.
+          // O novo codigo (HTML/JS/CSS) entra em vigor na proxima abertura natural.
+          if(sw){
+            // Flag que bloqueia o reload automatico do controllerchange global
+            window.__pwaUserUpdate__=true;
+            // Escuta quando o SW novo assume o controle (controllerchange)
+            navigator.serviceWorker.addEventListener('controllerchange',function onCC(){
+              navigator.serviceWorker.removeEventListener('controllerchange',onCC);
+              _showPwaSuccess(banner,icon,main,sub);
+            });
+            sw.postMessage('SKIP_WAITING');
+          } else {
+            // Sem SW waiting (mudanca via ETag): apenas mostra sucesso
+            // O novo conteudo ja foi baixado pelo polling; estara disponivel
+            // na proxima vez que o usuario abrir o app.
+            _showPwaSuccess(banner,icon,main,sub);
+          }
         };
+        function _showPwaSuccess(banner,icon,main,sub){
+          banner.classList.remove('is-updating');
+          banner.classList.add('is-success');
+          if(icon) icon.innerHTML='<polyline points="20 6 9 17 4 12"/>';
+          if(main) main.textContent='Atualizado';
+          if(sub) sub.textContent='Nova versão ativa na proxima abertura!';
+          const upBtn=banner.querySelector('.pwa-up-btn');
+          if(upBtn) upBtn.style.display='none';
+          setTimeout(()=>banner.classList.remove('show'),2500);
+        }
         closeBtn.onclick=()=>{banner.classList.remove('show');bannerShown=false;};
       };
 
@@ -202,10 +219,12 @@ if('serviceWorker' in navigator){
       setInterval(()=>reg.update().catch(()=>{}),15*60*1000);
       document.addEventListener('visibilitychange',()=>{if(!document.hidden)reg.update().catch(()=>{});});
 
-      // Quando o SW novo assume, recarrega (exceto na 1ª instalação)
+      // Quando o SW novo assume, recarrega — EXCETO se o usuario clicou
+      // no botao Atualizar do banner (nesse caso o onclick do botao ja
+      // ouve controllerchange e mostra "Atualizado" sem reload).
       let refreshing=false;
       navigator.serviceWorker.addEventListener('controllerchange',()=>{
-        if(refreshing||!hadController)return;
+        if(refreshing||!hadController||window.__pwaUserUpdate__)return;
         refreshing=true;window.location.reload();
       });
     }catch(e){console.warn('SW falhou:',e);}
@@ -3142,11 +3161,6 @@ if(sessionStorage.getItem('mrd_auth')==='1'){
   document.getElementById('loginOverlay').style.display='none';
   _applyGearVisibility();
   requestAnimationFrame(()=>document.body.classList.add('revealed'));
-  // Se o reload foi disparado pelo botao "Atualizar" do PWA, pula o modal de
-  // sincronizacao (dados ja estao no localStorage, so o codigo HTML/JS mudou).
-  // A sincronizacao acontece em background silencioso (_arSilent=true).
-  const _isPwaUpdate=!!sessionStorage.getItem('_pwa_pending_update');
-  if(_isPwaUpdate) _arSilent=true;
   // Carrega dados automaticamente: prioriza OneDrive (autenticados, dados sempre frescos), depois URL pública
   if(localStorage.getItem('mrd_refresh_token')){ setTimeout(()=>{try{onRefreshClick();}catch(e){}},400); } else if(DATA_URL){ setTimeout(()=>{try{autoLoadFromUrl();}catch(e){}},400); }
 }
