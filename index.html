@@ -692,17 +692,15 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 body.page-must-active #fbar,
 body.page-must-active #kpiGrid{display:none!important;}
 #page-must #sec-must-overview{position:sticky;top:54px;z-index:99;background:var(--bg);backdrop-filter:blur(12px);padding-bottom:8px;}
-/* Auto-collapse: esconde KPIs + título ao rolar, mantém toolbar Way2 */
-#sec-must-overview > .section-title:first-child,
-#sec-must-overview #mustKpis{
-  overflow:hidden;max-height:220px;opacity:1;
-  transition:max-height .32s ease,opacity .28s ease,padding .32s ease,margin .32s ease;
+/* Auto-collapse: grid 0fr trick — sem max-height fixo, sem clipping */
+.must-kpi-area{
+  display:grid;grid-template-rows:1fr;
+  transition:grid-template-rows .32s ease,opacity .28s ease;
+  opacity:1;
 }
-#sec-must-overview.kpis-collapsed > .section-title:first-child,
-#sec-must-overview.kpis-collapsed #mustKpis{
-  max-height:0!important;opacity:0;
-  padding-top:0!important;padding-bottom:0!important;
-  margin-top:0!important;margin-bottom:0!important;
+.must-kpi-inner{overflow:hidden;min-height:0;}
+#sec-must-overview.kpis-collapsed .must-kpi-area{
+  grid-template-rows:0fr;opacity:0;
 }
 #page-must #sec-must-overview .section-title{align-items:flex-start;gap:10px 14px;flex-wrap:wrap;padding-top:10px;padding-bottom:6px;}
 #page-must .must-top-controls{width:100%;margin-left:0;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;justify-content:flex-start;font-weight:500;text-transform:none;letter-spacing:0;}
@@ -1934,16 +1932,20 @@ function _themeCharts(light){
   <!-- ═══════════════ PÁGINA MUST (DEMANDA) ═══════════════ -->
   <div class="page" id="page-must">
     <div class="section" id="sec-must-overview">
-      <div class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
-        MUST · DEMANDA DE TRANSMISSÃO
-        <div class="must-top-controls" style="display:none" aria-hidden="true">
-          <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
-          <div style="display:none" aria-hidden="true"><input type="hidden" id="mustDay"><input type="hidden" id="mustPerIni"><input type="hidden" id="mustPerFim"><div id="mustCalPopup"><div id="mustPopupYears"></div><div id="mustMesExtra"></div><div id="mustMonthQuick"></div><div id="mustDaySection"><div id="mustDayLabel"></div><div id="mustDayGrid"></div></div><div id="mustRangeSection"></div><button id="mustApplyBtn" style="display:none"></button></div><span id="mustCalLabel"></span></div>
-          <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
+      <div class="must-kpi-area">
+        <div class="must-kpi-inner">
+          <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+            MUST · DEMANDA DE TRANSMISSÃO
+            <div class="must-top-controls" style="display:none" aria-hidden="true">
+              <div class="fg"><span class="fbar-label">Granularidade</span><span class="must-gran-group" id="mustGranFilter"></span></div>
+              <div style="display:none" aria-hidden="true"><input type="hidden" id="mustDay"><input type="hidden" id="mustPerIni"><input type="hidden" id="mustPerFim"><div id="mustCalPopup"><div id="mustPopupYears"></div><div id="mustMesExtra"></div><div id="mustMonthQuick"></div><div id="mustDaySection"><div id="mustDayLabel"></div><div id="mustDayGrid"></div></div><div id="mustRangeSection"></div><button id="mustApplyBtn" style="display:none"></button></div><span id="mustCalLabel"></span></div>
+              <div class="fg"><span class="fbar-label">Parque</span><span id="mustParkFilter" style="display:flex;gap:4px;flex-wrap:wrap;"></span></div>
+            </div>
+          </div>
+          <div class="kpi-grid must-kpi-grid" id="mustKpis"></div>
         </div>
       </div>
-      <div class="kpi-grid must-kpi-grid" id="mustKpis"></div>
       <!-- Toolbar Way2 dentro do bloco sticky: permanece visível ao rolar -->
       <div class="section-title" id="sec-must-w2dem-toolbar" style="gap:10px;flex-wrap:nowrap;overflow-x:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:10px;margin-top:4px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
@@ -6484,8 +6486,10 @@ window.addEventListener('scroll',function(){
   if(!mustPage||!mustPage.classList.contains('active')) return;
   const ov=document.getElementById('sec-must-overview');
   if(!ov) return;
-  const collapsed=window.scrollY>100;
-  if(ov.classList.toggle('kpis-collapsed',collapsed)) _mustSyncStickyTop();
+  const y=window.scrollY;
+  const was=ov.classList.contains('kpis-collapsed');
+  if(!was && y>120) ov.classList.add('kpis-collapsed');
+  else if(was && y<50) ov.classList.remove('kpis-collapsed');
 },{passive:true});
 
 function renderPageMUST(type){
