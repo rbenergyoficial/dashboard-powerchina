@@ -784,7 +784,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-name{font-size:12px;font-weight:800;color:#f3f6ff;font-family:var(--mono);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-must .must-rank-em-analise{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--park-color,#6b8bf5);margin-top:3px;opacity:.9}
 #page-must .must-rank-track{position:relative;height:30px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-#page-must .must-rank-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 8px 24px color-mix(in srgb,var(--park-color,#6b8bf5) 22%, transparent)}
+#page-must .must-rank-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 3px 14px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 28%, transparent)}
 #page-must .must-rank-fill-text{font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.32);letter-spacing:.12px}
 #page-must .must-rank-side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 #page-must .must-rank-pct{font-size:16px;line-height:1;font-weight:900;color:var(--park-color,#79f0c5);letter-spacing:-.2px}
@@ -1085,6 +1085,26 @@ html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25
 #page-must .cc::before{
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.65) 28%,rgba(45,212,191,.45) 72%,transparent 100%);
   height:2px;
+}
+
+/* MUST: viewport lock — só #page-must scrolla, body trava (desktop) */
+@media (min-width:601px){
+  body.page-must-active{overflow:hidden;}
+  body.page-must-active .main{
+    height:calc(100vh - 54px);
+    overflow:hidden;
+    box-sizing:border-box;
+  }
+  body.page-must-active #page-must{
+    overflow-y:auto;
+    overflow-x:hidden;
+    flex:1;
+    min-height:0;
+    scroll-behavior:smooth;
+  }
+  /* tops resetados: agora relativos ao scroll de #page-must (não do body) */
+  body.page-must-active #page-must #sec-must-overview{top:0!important;}
+  body.page-must-active #page-must #sec-must-w2dem .section-title{top:var(--must-overview-h,0px)!important;}
 }
 
 /* ═══════════════════════════════════════════════════ */
@@ -6335,14 +6355,14 @@ function renderMustPeakRanking(rows, w2dPeaks){
     host.innerHTML='<div class="no-data" style="height:140px"><span>—</span><span>Sem dados de MUST por parque</span></div>';
     return;
   }
-  // Em modo Way2: destaque só se EXATAMENTE 1 chip de parque estiver ativo
-  let selected;
+  // Parques selecionados: array — suporta 0, 1 ou vários chips ativos
+  let selectedPks=[];
   if(w2dPeaks){
-    const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
+    selectedPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
       .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
-    selected=onPks.length===1?onPks[0]:'total';
   }else{
-    selected=filters.mustPark||'total';
+    const sp=filters.mustPark||'total';
+    if(sp!=='total') selectedPks=[sp];
   }
   const scopedRows=w2dPeaks?[]:(rows||[]).slice();
   const rank=(must.parks||[]).map(p=>{
@@ -6350,7 +6370,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const contrat=num((must.contrat||{})[p]);
     const pct=contrat>0?(peak/contrat*100):0;
     const margem=contrat-peak;
-    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(2),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selected!=='total'&&selected===p};
+    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(2),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selectedPks.includes(p)};
   }).sort((a,b)=> (b.pct-a.pct) || (b.peak-a.peak) || a.park.localeCompare(b.park, 'pt-BR'));
   if(!rank.length){
     host.innerHTML='<div class="no-data" style="height:140px"><span>—</span><span>Sem dados no período selecionado</span></div>';
@@ -6370,7 +6390,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   if(_subEl) _subEl.textContent=w2dPeaks?`Way2 · ${_w2dSubBase||'intradia'}`:`Período em análise: ${_rPeriodo}`;
   const loc=getDateLocale();
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
-  const activeRank=rank.find(r=>r.selected)||null;
+  const activeRanks=rank.filter(r=>r.selected);
   host.innerHTML=rank.map(r=>{
     const width=Math.max(4,Math.min(100,r.pct));
     const color=r.color||'#6b8bf5';
@@ -6393,7 +6413,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
         ${r.selected?'<div class="must-rank-em-analise">▶ em análise</div>':''}
       </div>
     </div>`;
-  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRank?`<span><strong>Destaque:</strong> ${activeRank.park} · ${fmt1(activeRank.peak)} MW · ${fmt1(activeRank.pct)}%</span>`:''}</div>`;
+  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
 }
 
 function _mustSyncStickyTop(){
