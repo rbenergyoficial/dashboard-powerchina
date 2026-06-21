@@ -2704,6 +2704,7 @@ let charts = {};
 let cachedToken = null, tokenExpiry = 0;
 let _animKPIs = false, _kpiShown = false; // microanimação: count-up dos KPIs só na 1ª carga
 let _oauthCode = null;
+let _syncLastLoad=0, _arSilent=false, _arToastTimer=null;
 
 // ═══════════════════════════════════════════════════════════════════
 // DATE HELPERS
@@ -8228,9 +8229,6 @@ function progUpdate(title,msg,pct,detail=''){
   document.getElementById('progDetail').textContent=detail;
 }
 // ── Indicador de status de sincronização (planilha) ──
-let _syncLastLoad=0;
-let _arSilent=false;
-let _arToastTimer=null;
 function showAutoRefreshToast(msg,ms=4500){
   const t=document.getElementById('arToast');
   const m=document.getElementById('arToastMsg');
