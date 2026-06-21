@@ -6419,7 +6419,9 @@ function renderPageMUST(type){
       }
     }
   });
-  renderMustPeakRanking(rows);
+  // Ranking usa sempre dados Way2; se ainda não carregado, mostra aviso
+  if(_w2dChart&&_w2dLastKpi){_w2dUpdateRanking();}
+  else{const _rh=document.getElementById('mustRankList');if(_rh)_rh.innerHTML='<div class="no-data" style="height:80px"><span>📡</span><span>Clique em <strong>Buscar</strong> no painel Way2 acima para carregar os picos</span></div>';}
   requestAnimationFrame(_mustSyncStickyTop);
 }
 
