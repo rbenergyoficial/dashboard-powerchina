@@ -784,7 +784,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-dot{width:10px;height:10px;border-radius:999px;background:var(--park-color,#6b8bf5);box-shadow:0 0 0 3px color-mix(in srgb,var(--park-color,#6b8bf5) 24%, transparent)}
 #page-must .must-rank-name{font-size:12px;font-weight:800;color:#f3f6ff;font-family:var(--mono);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-must .must-rank-em-analise{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--park-color,#6b8bf5);margin-top:3px;opacity:.9}
-#page-must .must-rank-track{position:relative;height:30px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+#page-must .must-rank-track{position:relative;height:38px;border-radius:8px;background:rgba(255,255,255,.04);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 #page-must .must-rank-fill{position:relative;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 4px 18px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 38%, transparent)}
 #page-must .must-rank-fill::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.17) 0%,rgba(255,255,255,.04) 48%,rgba(0,0,0,.07) 100%)}
 #page-must .must-rank-fill-curr{position:relative;z-index:1;font-size:9px;font-weight:600;color:rgba(255,255,255,.78);flex-shrink:0}
@@ -6003,7 +6003,7 @@ function renderPagePPA(type){
 // ═══════════════════════════════════════════════════════════════════
 let _mustFilterInit=false;
 const MUST_MONTH_NAMES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const MUST_PARK_COLORS={M1:'#5B8FF9',M2:'#61DDAA',M3:'#65789B',M4:'#F6BD16',M5:'#7262FD',M6:'#78D3F8',M7:'#9661BC',M8:'#F6903D',M9:'#008685',total:'#6b8bf5'};
+const MUST_PARK_COLORS={M1:'#a855f7',M2:'#22d3ee',M3:'#fbbf24',M4:'#3b82f6',M5:'#ef4444',M6:'#34d399',M7:'#f97316',M8:'#ec4899',M9:'#a3e635',total:'#6b8bf5'};
 function mustParkColor(p){ return MUST_PARK_COLORS[p]||'#6b8bf5'; }
 function _mustFmtDateInput(d){
   if(!(d instanceof Date) || isNaN(d)) return '';
@@ -6411,7 +6411,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   host.innerHTML=rank.map(r=>{
     const width=Math.max(4,Math.min(100,r.pct));
     const color=r.color||'#6b8bf5';
-    const grad=`linear-gradient(90deg,${color}55 0%,${color}bb 35%,${color} 100%)`;
+    const grad=`linear-gradient(90deg,${color}28 0%,${color}88 42%,${color}cc 100%)`;
     const lv=showCurr?_w2dLastVals[r.park]:null;
     let sc,sl,pctCol;
     if(r.selected){sc='must-st-analise';sl='Em análise';pctCol='#c4b5fd';}
@@ -6448,7 +6448,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const tLv=showCurr?rank.reduce((s,r)=>s+(_w2dLastVals[r.park]||0),0):null;
     const tW=Math.max(4,Math.min(100,tPct));
     const tCol='#6b8bf5';
-    const tGrad=`linear-gradient(90deg,${tCol}44 0%,${tCol}99 35%,${tCol} 100%)`;
+    const tGrad=`linear-gradient(90deg,${tCol}28 0%,${tCol}88 42%,${tCol}cc 100%)`;
     let tSC,tSL,tPctCol;
     if(tPct>100){tSC='must-st-critico';tSL='Crítico';tPctCol='#f87171';}
     else if(tPct>98){tSC='must-st-alerta';tSL='Alerta';tPctCol='#fb923c';}
@@ -6465,7 +6465,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
         <div class="must-rank-fill" style="width:${tW.toFixed(2)}%;background:${tGrad}">${tFill}</div>
       </div>
       <div class="must-rank-side">
-        <div class="must-rank-pct" style="color:${tPctCol}">${fmt1(tPct)}%</div>
+        <div class="must-rank-pct">${fmt1(tPct)}%</div>
         <div class="must-rank-side-sub">da contratada</div>
         <div class="must-rank-side-meta">${fmt1(tContr)} MW</div>
       </div>
@@ -7279,14 +7279,14 @@ let _w2dChart=null;
 const _W2D_IDS={M1:6380,M2:6381,M3:6382,M4:6383,M5:6384,M6:6385,M7:6386,M8:6387,M9:6388};
 const _W2D_COLORS={
   M1:{c:'#a855f7',bg:'rgba(168,85,247,.13)'},
-  M2:{c:'#2dd4bf',bg:'rgba(45,212,191,.13)'},
-  M3:{c:'#f5a623',bg:'rgba(245,166,35,.13)'},
+  M2:{c:'#22d3ee',bg:'rgba(34,211,238,.13)'},
+  M3:{c:'#fbbf24',bg:'rgba(251,191,36,.13)'},
   M4:{c:'#3b82f6',bg:'rgba(59,130,246,.13)'},
   M5:{c:'#ef4444',bg:'rgba(239,68,68,.13)'},
-  M6:{c:'#22c55e',bg:'rgba(34,197,94,.13)'},
+  M6:{c:'#34d399',bg:'rgba(52,211,153,.13)'},
   M7:{c:'#f97316',bg:'rgba(249,115,22,.13)'},
   M8:{c:'#ec4899',bg:'rgba(236,72,153,.13)'},
-  M9:{c:'#14b8a6',bg:'rgba(20,184,166,.13)'},
+  M9:{c:'#a3e635',bg:'rgba(163,230,53,.13)'},
   Total:{c:'#6b8bf5',bg:'transparent'}
 };
 const _W2D_INTLABEL={CincoMinutos:'5 min',QuinzeMinutos:'15 min',TrintaMinutos:'30 min',UmaHora:'1 hora',UmDia:'dia',Semana:'semana',Mes:'mês',Ano:'ano',Personalizado:'personalizado'};
