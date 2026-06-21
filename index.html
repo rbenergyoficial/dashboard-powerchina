@@ -796,7 +796,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-foot strong{color:var(--t1);font-weight:700}
 /* Tabela de ranking */
 #page-must .must-rank-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}
-#page-must .must-rank-table th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);padding:6px 10px 8px;border-bottom:1px solid rgba(255,255,255,.09)}
+#page-must .must-rank-table th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);padding:8px 10px 10px;border-bottom:1px solid rgba(255,255,255,.12)}
 #page-must .must-rank-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--t2);transition:background .15s}
 #page-must .must-rank-table tr:nth-child(even) td{background:rgba(255,255,255,.022)}
 #page-must .must-rank-table tbody tr:hover td{background:rgba(107,139,245,.10);color:var(--t1)}
@@ -6418,7 +6418,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   + `<table class="must-rank-table"><thead><tr><th>Parque</th><th>Pico MW</th><th>Contratada</th><th>% MUST</th><th>Status</th></tr></thead><tbody>`
   + rank.map((r,i)=>{
       const col=r.color||'#6b8bf5';
-      const pctCol=r.pct>=90?'#f87171':r.pct>=70?'#fbbf24':r.pct>=45?'#4ade80':'#67e8f9';
+      const pctCol=r.pct>100?'#f87171':r.pct>98?'#fb923c':r.pct>95?'#fbbf24':'#4ade80';
       let sc,sl;
       if(r.selected){sc='must-st-analise';sl='Em análise';}
       else if(r.pct>100){sc='must-st-critico';sl='Crítico';}
