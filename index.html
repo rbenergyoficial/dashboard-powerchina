@@ -520,6 +520,8 @@ html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box
 html[data-theme="light"] .cc-move-handle{background-image:radial-gradient(circle,rgba(0,0,0,.38) 1.5px,transparent 1.5px)}
 .cc:hover{border-color:rgba(107,139,245,.42);transform:translateY(-16px)!important;
   box-shadow:0 28px 80px rgba(0,0,0,.94),0 10px 24px rgba(0,0,0,.66),0 0 56px rgba(107,139,245,.28),0 0 0 1px rgba(107,139,245,.32),0 0 28px rgba(45,212,191,.14),inset 0 1px 0 rgba(255,255,255,.16);}
+/* Cards com gráfico: mantém apenas brilho, sem levitar — evita desalinhamento */
+.cc:has(.cc-body canvas):hover{transform:translateY(-6px)!important;}
 .cc[draggable]{cursor:grab;}
 .cc[draggable]:active{cursor:grabbing;}
 .cc.cc-dragging{opacity:.32!important;transform:none!important;box-shadow:none!important;transition:none!important;}
