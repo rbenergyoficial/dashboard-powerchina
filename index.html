@@ -7179,6 +7179,17 @@ function _w2dUpdateContrLine(){
   _w2dRenderSub();
 }
 // Constrói e aplica o subtítulo do gráfico Way2 com pico destacado (sem repetir valor MUST)
+// Constroi a frase de "tempo" coerente para o subtitulo (em / às / dia)
+function _w2dFormatWhen(peakTime){
+  if(!peakTime) return '';
+  const hasDate=peakTime.includes('/');
+  const hasTime=peakTime.includes(':');
+  if(hasDate&&hasTime){ const[dp,tp]=peakTime.split(' '); return `em ${dp} às ${tp}`; }
+  if(hasDate) return `em ${peakTime}`;
+  if(hasTime) return `às ${peakTime}`;
+  if(/^\d+$/.test(peakTime)) return `dia ${peakTime}`;
+  return `em ${peakTime}`;
+}
 function _w2dRenderSub(){
   const sEl=document.getElementById('w2dSub');
   if(!sEl||!_w2dSubBase) return;
@@ -7186,27 +7197,34 @@ function _w2dRenderSub(){
     sEl.innerHTML=`<span style="color:#6b7280;font-size:11px">${_w2dSubBase}</span>`;
     return;
   }
-  const {peak,util,peakTime}=_w2dLastKpi;
+  const {peak,util,peakTime,parkPeaks}=_w2dLastKpi;
   const dim='color:#9aa4b8;font-size:12px';
-  const ucColor=util>100?'#ff7575':'#7dda88';
-  let tWhen='';
-  if(peakTime){
-    const hasDate=peakTime.includes('/');
-    const hasTime=peakTime.includes(':');
-    if(hasDate&&hasTime){
-      const [dp,tp]=peakTime.split(' ');
-      tWhen=`em ${dp} às ${tp}`;
-    }else if(hasDate){
-      tWhen=`em ${peakTime}`;
-    }else if(hasTime){
-      tWhen=`às ${peakTime}`;
-    }else if(/^\d+$/.test(peakTime)){
-      tWhen=`dia ${peakTime}`;
-    }else{
-      tWhen=`em ${peakTime}`;
-    }
-  }
   const sep=`<span style="color:#5a6278;margin:0 6px">·</span>`;
+
+  // ── 2+ parques: lista vertical com pico individual de cada um ──
+  if(parkPeaks && parkPeaks.length>=2){
+    const rows=parkPeaks.map(p=>{
+      const c=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
+      const uc=p.util>100?'#ff7575':'#7dda88';
+      const when=_w2dFormatWhen(p.peakTime);
+      return `<div style="display:flex;align-items:center;gap:8px;line-height:1.4;font-size:12px;white-space:nowrap">`
+        +`<span style="display:inline-block;width:7px;height:14px;border-radius:2px;background:${c};flex-shrink:0"></span>`
+        +`<span style="font-weight:700;color:#dfe6f5;min-width:26px">${p.pk}</span>`
+        +`<span style="color:#fbbf24;font-weight:700">${_w2dFmtMW(p.peak,2)}</span>`
+        +(when?`<span style="color:#9aa4b8">${when}</span>`:'')
+        +`<span style="color:${uc};font-weight:700">${p.util.toFixed(2)}%</span>`
+        +`<span style="color:#7a8499;font-size:11px">do MUST</span>`
+        +`</div>`;
+    }).join('');
+    sEl.innerHTML=
+      `<div style="${dim};margin-bottom:6px">${_w2dSubBase}</div>`
+      +`<div style="display:flex;flex-direction:column;gap:3px">${rows}</div>`;
+    return;
+  }
+
+  // ── 0 ou 1 parque: layout linear original ──
+  const ucColor=util>100?'#ff7575':'#7dda88';
+  const tWhen=_w2dFormatWhen(peakTime);
   sEl.innerHTML=
     `<span style="${dim}">${_w2dSubBase}</span>`+
     sep+
@@ -7217,11 +7235,37 @@ function _w2dRenderSub(){
     `<span style="color:${ucColor};font-weight:700;font-size:13px">${util.toFixed(2)}%</span>`+
     `<span style="color:#b0b8cc;font-size:12px;margin-left:5px">do MUST</span>`;
 }
+// Calcula label de tempo (hora ou data+hora) a partir de um indice da serie
+function _w2dIdxToTimeLabel(idx){
+  if(idx<0) return '';
+  if(_w2dRangeCtx){
+    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,showTime:_rs}=_w2dRangeCtx;
+    const _di=Math.floor(idx/_rp),_ti=idx%_rp;
+    const[_py,_pm,_pd]=(_rd[_di]||'').split('-');
+    return _pd?`${_pd}/${_pm}${_rs&&_rt[_ti]?' '+_rt[_ti]:''}`:(_rt[_ti]||'');
+  }
+  return (_w2dChart?.data?.labels||[])[idx]||'';
+}
 // Recalcula peak/contrato/margem a partir dos chips visíveis e atualiza _w2dLastKpi
 function _w2dUpdateKpiPeak(){
   if(!_w2dLastKpi||!_w2dChart) return;
   const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
     .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
+  const must=dashData?.must;
+  // ── 2+ parques: calcula pico INDIVIDUAL de cada um (nao mais o somatorio) ──
+  let parkPeaks=null;
+  if(onPks.length>=2){
+    parkPeaks=onPks.map(pk=>{
+      const dat=_w2dChart.data.datasets.find(d=>d.label===pk)?.data||[];
+      const filt=dat.filter(v=>v!=null);
+      const pk_v=filt.length?Math.max(...filt,0):0;
+      const pk_i=dat.findIndex(v=>v===pk_v);
+      const pk_t=_w2dIdxToTimeLabel(pk_i);
+      const pk_c=num(must?.contrat?.[pk]||0);
+      const pk_u=pk_c>0?pk_v/pk_c*100:0;
+      return {pk,peak:pk_v,peakIdx:pk_i,peakTime:pk_t,contr:pk_c,util:pk_u};
+    });
+  }
   let peakData;
   if(onPks.length===0){
     peakData=(_w2dChart.data.datasets.find(d=>d.label==='Total')?.data)||[];
@@ -7234,22 +7278,11 @@ function _w2dUpdateKpiPeak(){
   }
   const peak=peakData.length?Math.max(...peakData.filter(v=>v!=null),0):0;
   const peakIdx=peakData.findIndex(v=>v===peak);
-  let peakTime='';
-  if(_w2dRangeCtx&&peakIdx>=0){
-    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,showTime:_rs}=_w2dRangeCtx;
-    const _di=Math.floor(peakIdx/_rp),_ti=peakIdx%_rp;
-    const[,,_dd]=(_rd[_di]||'').split('-');
-    const[,,_md]=(_rd[_di]||'').split('-').map((_,i,a)=>a[i]);
-    const[_py,_pm,_pd]=(_rd[_di]||'').split('-');
-    peakTime=_pd?`${_pd}/${_pm}${_rs&&_rt[_ti]?' '+_rt[_ti]:''}`:(_rt[_ti]||'');
-  }else{
-    peakTime=peakIdx>=0?((_w2dChart.data.labels||[])[peakIdx]||''):'';
-  }
-  const must=dashData?.must;
+  const peakTime=_w2dIdxToTimeLabel(peakIdx);
   const parkLabel=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'todos os parques';
   const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
   const margem=contr-peak, util=contr>0?peak/contr*100:0;
-  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime});
+  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime,parkPeaks});
   _w2dRefreshKpi();
   _w2dRenderSub();
 }
