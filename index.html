@@ -776,7 +776,7 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must #page-must-main-chart .cc-body{padding:0;flex:1;height:0!important;min-height:0!important;max-height:none!important}#page-must #page-must-main-chart .must-main-compact{overflow:hidden}
 #page-must #sec-must-ranking .cc-body{height:auto!important;min-height:unset;padding:2px 0 0}
 #page-must .must-rank-list{display:flex;flex-direction:column;gap:9px}
-#page-must .must-rank-row{display:grid;grid-template-columns:78px minmax(0,1fr) 108px;gap:12px;align-items:center;border-radius:12px;padding:4px 6px;transition:transform .22s ease,box-shadow .22s ease,background .18s ease;}
+#page-must .must-rank-row{display:grid;grid-template-columns:78px minmax(0,1fr) 108px;gap:12px;align-items:center;border-radius:12px;padding:4px 6px;transition:transform .22s ease,box-shadow .22s ease,background .18s ease;cursor:pointer;}
 #page-must .must-rank-row:hover{transform:translateY(-3px);background:rgba(107,139,245,.06);box-shadow:0 6px 24px rgba(0,0,0,.35),0 0 0 1px rgba(107,139,245,.14);}
 html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139,245,.05);box-shadow:0 4px 16px rgba(0,0,0,.10),0 0 0 1px rgba(107,139,245,.16);}
 #page-must .must-rank-park{display:flex;align-items:center;gap:8px;min-width:0}
@@ -6284,7 +6284,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const color=r.color||'#6b8bf5';
     const grad=`linear-gradient(90deg, ${color}cc 0%, ${color} 100%)`;
     const meta=r.margem>=0 ? `Folga ${fmt1(r.margem)} MW` : `Excedente ${fmt1(Math.abs(r.margem))} MW`;
-    return `<div class="must-rank-row ${r.selected?'selected':''}" style="--park-color:${color}">
+    return `<div class="must-rank-row ${r.selected?'selected':''}" style="--park-color:${color}" onclick="_w2dRankClick('${r.park}')" title="Clique para selecionar/deselecionar ${r.park}">
       <div class="must-rank-park">
         <span class="must-rank-dot"></span>
         <span class="must-rank-name">${r.park}</span>
@@ -7389,6 +7389,10 @@ function _w2dUpdateKpiPeak(){
   _w2dRenderSub();
   if(parkPeaks&&_w2dChart) _w2dChart.update('none');
   _w2dUpdateRanking();
+}
+function _w2dRankClick(pk){
+  const chip=document.querySelector(`#w2dUfvGroup .w2d-park-chip[data-ufv="${pk}"]`);
+  if(chip) _w2dChip(chip,'ufv');
 }
 function _w2dUpdateRanking(){
   if(!_w2dChart||!_w2dLastKpi||!dashData?.must?.parks) return;
