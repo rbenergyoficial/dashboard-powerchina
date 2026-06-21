@@ -60,6 +60,11 @@
 #pwaUpdate.is-updating .pwa-up-main{color:#cdd8fb;}
 #pwaUpdate.is-updating .pwa-up-btn{cursor:wait;opacity:.85;}
 #pwaUpdate.is-updating .pwa-up-close{display:none;}
+/* Sub do grafico Way2: modo multi-linha (2+ parques selecionados).
+   Sai do position:absolute e ocupa linha propria abaixo do titulo,
+   evitando que o conteudo cresca por cima de outros elementos. */
+#sec-must-w2dem .cc-head{flex-wrap:wrap;}
+#w2dSub.is-multiline{position:static!important;left:auto!important;transform:none!important;white-space:normal!important;pointer-events:auto!important;width:100%;flex:1 0 100%;order:99;margin-top:6px;}
 /* No celular: mantem centralizado embaixo (mais usavel com o polegar) */
 @media (max-width:640px){
   #pwaUpdate{top:auto;right:50%;bottom:18px;transform:translate(50%,12px);}
@@ -7227,12 +7232,14 @@ function _w2dRenderSub(){
         +`<span style="color:#7a8499;font-size:11px">do MUST</span>`
         +`</div>`;
     }).join('');
+    sEl.classList.add('is-multiline');
     sEl.innerHTML=
-      `<div style="${dim};margin-bottom:6px">${_w2dSubBase}</div>`
-      +`<div style="display:flex;flex-direction:column;gap:3px">${rows}</div>`;
+      `<div style="${dim};margin-bottom:6px;text-align:center">${_w2dSubBase}</div>`
+      +`<div style="display:flex;flex-direction:column;gap:3px;align-items:center">${rows}</div>`;
     return;
   }
 
+  sEl.classList.remove('is-multiline');
   // ── 0 ou 1 parque: layout linear original ──
   const ucColor=util>100?'#ff7575':'#7dda88';
   const tWhen=_w2dFormatWhen(peakTime);
