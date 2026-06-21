@@ -785,7 +785,9 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-name{font-size:12px;font-weight:800;color:#f3f6ff;font-family:var(--mono);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-must .must-rank-em-analise{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--park-color,#6b8bf5);margin-top:3px;opacity:.9}
 #page-must .must-rank-track{position:relative;height:30px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-#page-must .must-rank-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 3px 14px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 28%, transparent)}
+#page-must .must-rank-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 3px 14px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 28%, transparent)}
+#page-must .must-rank-fill-curr{font-size:9px;font-weight:600;color:rgba(255,255,255,.72);flex-shrink:0}
+#page-must .must-rank-total{border-top:1px solid rgba(255,255,255,.09);margin-top:10px;padding-top:10px!important;opacity:.95}
 #page-must .must-rank-fill-text{font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.32);letter-spacing:.12px}
 #page-must .must-rank-side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 #page-must .must-rank-pct{font-size:16px;line-height:1;font-weight:900;color:var(--park-color,#79f0c5);letter-spacing:-.2px}
@@ -6396,20 +6398,23 @@ function renderMustPeakRanking(rows, w2dPeaks){
   const loc=getDateLocale();
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
   const activeRanks=rank.filter(r=>r.selected);
+  const showCurr=!!(w2dPeaks&&_w2dIsCurrentPeriod);
   host.innerHTML=rank.map(r=>{
     const width=Math.max(4,Math.min(100,r.pct));
     const color=r.color||'#6b8bf5';
     const grad=`linear-gradient(90deg, ${color}cc 0%, ${color} 100%)`;
     const meta=r.margem>=0 ? `Folga ${fmt1(r.margem)} MW` : `Excedente ${fmt1(Math.abs(r.margem))} MW`;
+    const lv=showCurr?_w2dLastVals[r.park]:null;
+    const fillInner=lv!=null
+      ?`<span class="must-rank-fill-curr">${fmt1(lv)} MW</span><span class="must-rank-fill-text">${fmt1(r.peak)} MW</span>`
+      :`<span class="must-rank-fill-text">${fmt1(r.peak)} MW</span>`;
     return `<div class="must-rank-row ${r.selected?'selected':''}" style="--park-color:${color}" onclick="_w2dRankClick('${r.park}')" title="Clique para selecionar/deselecionar ${r.park}">
       <div class="must-rank-park">
         <span class="must-rank-dot"></span>
         <span class="must-rank-name">${r.park}</span>
       </div>
       <div class="must-rank-track" title="${r.park} · Pico ${fmt1(r.peak)} MW · Contratada ${fmt1(r.contrat)} MW · ${fmt1(r.pct)}% · ${meta}">
-        <div class="must-rank-fill" style="width:${width.toFixed(2)}%;background:${grad}">
-          <span class="must-rank-fill-text">${fmt1(r.peak)} MW</span>
-        </div>
+        <div class="must-rank-fill" style="width:${width.toFixed(2)}%;background:${grad}">${fillInner}</div>
       </div>
       <div class="must-rank-side">
         <div class="must-rank-pct">${fmt1(r.pct)}%</div>
@@ -6418,7 +6423,34 @@ function renderMustPeakRanking(rows, w2dPeaks){
         ${r.selected?'<div class="must-rank-em-analise">▶ em análise</div>':''}
       </div>
     </div>`;
-  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
+  }).join('')
+  + (()=>{
+    // Barra de TOTAL (apenas com dados Way2)
+    if(!w2dPeaks) return '';
+    const tPeak=rank.reduce((s,r)=>s+r.peak,0);
+    const tContr=rank.reduce((s,r)=>s+r.contrat,0);
+    const tPct=tContr>0?(tPeak/tContr*100):0;
+    const tLv=showCurr?rank.reduce((s,r)=>s+(_w2dLastVals[r.park]||0),0):null;
+    const tW=Math.max(4,Math.min(100,tPct));
+    const tCol='#6b8bf5';
+    const tGrad=`linear-gradient(90deg,#6b8bf5aa 0%,#6b8bf5 100%)`;
+    let tPctCol=tPct>100?'#f87171':tPct>98?'#fb923c':tPct>95?'#fbbf24':'#4ade80';
+    const tFill=tLv!=null
+      ?`<span class="must-rank-fill-curr">${fmt1(tLv)} MW</span><span class="must-rank-fill-text">${fmt1(tPeak)} MW</span>`
+      :`<span class="must-rank-fill-text">${fmt1(tPeak)} MW</span>`;
+    return `<div class="must-rank-row must-rank-total" style="--park-color:${tCol}">
+      <div class="must-rank-park"><span class="must-rank-dot"></span><span class="must-rank-name" style="font-size:10px;letter-spacing:.06em">TOTAL</span></div>
+      <div class="must-rank-track" title="Total · Pico ${fmt1(tPeak)} MW · Contratada ${fmt1(tContr)} MW · ${fmt1(tPct)}%">
+        <div class="must-rank-fill" style="width:${tW.toFixed(2)}%;background:${tGrad}">${tFill}</div>
+      </div>
+      <div class="must-rank-side">
+        <div class="must-rank-pct" style="color:${tPctCol}">${fmt1(tPct)}%</div>
+        <div class="must-rank-side-sub">da contratada</div>
+        <div class="must-rank-side-meta">${fmt1(tContr)} MW</div>
+      </div>
+    </div>`;
+  })()
+  + `<div class="must-rank-foot"><span><strong>Leitura:</strong> esquerda = demanda atual · direita = pico do período · barra = % da contratada.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
   renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod);
 }
 
