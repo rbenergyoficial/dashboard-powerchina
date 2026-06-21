@@ -7956,19 +7956,26 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     if(!canvas) return;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
       plugins:[{id:'_cLbl',afterDraw(chart){
-        const xR=chart.chartArea?.right||chart.width-10;const ctx=chart.ctx;const usedY=[];
+        const xR=chart.chartArea?.right||chart.width-10;const ctx=chart.ctx;
+        // Coleta todos os datasets MUST contratado
+        const entries=[];
         chart.data.datasets.forEach(ds=>{
           if(!ds.label.startsWith('_contr')) return;
           const val=ds.data[0];if(!val) return;
-          let yPx=chart.scales.y?.getPixelForValue(val)||0;
-          while(usedY.some(y=>Math.abs(y-yPx)<17)) yPx-=17;usedY.push(yPx);
-          const pkN=ds.label.replace(/^_contr_?/,'');
-          const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(val,2)}`:`MUST ${_w2dFmtMW(val,2)}`;
+          entries.push({ds,val});
+        });
+        if(!entries.length) return;
+        const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+        const rowH=12;
+        entries.forEach((e,i)=>{
+          const yPx=yLine-(i*rowH+1); // empilha para cima tocando a linha contratada
+          const pkN=e.ds.label.replace(/^_contr_?/,'');
+          const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
           ctx.save();ctx.font='bold 10px system-ui,sans-serif';
-          const tw=ctx.measureText(lbl).width+12;
-          ctx.fillStyle='rgba(20,8,8,.78)';ctx.fillRect(xR-tw,yPx-17,tw,15);
-          ctx.fillStyle=ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
-          ctx.fillText(lbl,xR-4,yPx-10);ctx.restore();
+          const tw=ctx.measureText(lbl).width+10;
+          ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+          ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
+          ctx.fillText(lbl,xR-4,yPx-rowH/2+1);ctx.restore();
         });
       }}],
       options:{
@@ -7984,7 +7991,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
            ticks:{color:'#565b70',font:{size:_w2dIsMobile()?9:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'4%',
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
     // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
     const _peakDs=_onC.length===0?
@@ -8105,26 +8112,27 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     plugins:[{id:'_cLbl',afterDraw(chart){
       const xR=chart.chartArea?.right||chart.width-10;
       const ctx=chart.ctx;
-      const usedY=[];
+      const entries=[];
       chart.data.datasets.forEach(ds=>{
         if(!ds.label.startsWith('_contr')) return;
-        const val=ds.data[0];
-        if(!val) return;
-        let yPx=chart.scales.y?.getPixelForValue(val)||0;
-        // Evita sobreposição de labels quando dois parques têm o mesmo valor
-        while(usedY.some(y=>Math.abs(y-yPx)<17)) yPx-=17;
-        usedY.push(yPx);
-        const pkN=ds.label.replace(/^_contr_?/,'');
-        const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(val,2)}`:`MUST ${_w2dFmtMW(val,2)}`;
+        const val=ds.data[0];if(!val) return;
+        entries.push({ds,val});
+      });
+      if(!entries.length) return;
+      const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+      const rowH=12;
+      entries.forEach((e,i)=>{
+        const yPx=yLine-(i*rowH+1);
+        const pkN=e.ds.label.replace(/^_contr_?/,'');
+        const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
         ctx.save();
         ctx.font='bold 10px system-ui,sans-serif';
-        const tw=ctx.measureText(lbl).width+12;
-        ctx.fillStyle='rgba(20,8,8,.78)';
-        ctx.fillRect(xR-tw,yPx-17,tw,15);
-        ctx.fillStyle=ds.borderColor;
-        ctx.textAlign='right';
-        ctx.textBaseline='middle';
-        ctx.fillText(lbl,xR-4,yPx-10);
+        const tw=ctx.measureText(lbl).width+10;
+        ctx.fillStyle='rgba(10,6,18,.82)';
+        ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+        ctx.fillStyle=e.ds.borderColor;
+        ctx.textAlign='right';ctx.textBaseline='middle';
+        ctx.fillText(lbl,xR-4,yPx-rowH/2+1);
         ctx.restore();
       });
     }}],
@@ -8149,7 +8157,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            autoSkip:_w2dIsMobile(),maxTicksLimit:_w2dIsMobile()?7:undefined},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
         y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'15%',
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'4%',
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
       }
     }
