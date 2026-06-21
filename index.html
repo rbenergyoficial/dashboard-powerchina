@@ -8228,10 +8228,6 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     document.getElementById('w2dSub').textContent=_w2dSubBase;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
-    const _allVf1=[]; allPks.forEach(pk=>{(pkVals[pk]||[]).forEach(v=>{if(v!=null)_allVf1.push(v);});});
-    const _dataMx1=_allVf1.length?Math.max(..._allVf1,0):0;
-    const _ctrMx1=Math.max(...(dashData?.must?.parks||[]).map(p=>+num(dashData.must?.contrat?.[p]||0)),+num(dashData?.must?.contrat?.total||0),0);
-    const _yMx1=Math.max(Math.ceil(Math.max(_dataMx1,_ctrMx1)*1.08/5)*5,10);
     const _rPad1=12;
     const _tPad1=_onC.length>=2?(_onC.length*14+10):4;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
@@ -8292,7 +8288,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         x:{offset:false,
            ticks:{color:'#565b70',font:{size:_w2dIsMobile()?9:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{min:0,max:_yMx1,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+        y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}},
       layout:{padding:{right:_rPad1,top:_tPad1,bottom:4}}}});
@@ -8410,11 +8406,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
   document.getElementById('w2dSub').textContent=_w2dSubBase;
 
-  const _allVf2=[]; datasets.forEach(ds=>{if(!ds.label.startsWith('_'))(ds.data||[]).forEach(v=>{if(v!=null)_allVf2.push(+v);});});
-  const _dataMx2=_allVf2.length?Math.max(..._allVf2,0):0;
-  const _yMx2=Math.max(Math.ceil(Math.max(_dataMx2,_cBase)*1.08/5)*5,10);
+  const _onPks2=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')].filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all');
   const _rPad2=12;
-  const _tPad2=parks.length>=2?(parks.length*14+10):4;
+  const _tPad2=_onPks2.length>=2?(_onPks2.length*14+10):4;
 
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
@@ -8488,7 +8482,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            maxRotation:_w2dIsMobile()?0:45,minRotation:0,
            autoSkip:_w2dIsMobile(),maxTicksLimit:_w2dIsMobile()?7:undefined},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{min:0,max:_yMx2,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+        y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
       },
