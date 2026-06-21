@@ -8228,9 +8228,14 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     document.getElementById('w2dSub').textContent=_w2dSubBase;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
+    const _allVf1=[]; allPks.forEach(pk=>{(pkVals[pk]||[]).forEach(v=>{if(v!=null)_allVf1.push(v);});});
+    const _dataMx1=_allVf1.length?Math.max(..._allVf1,0):0;
+    const _ctrMx1=Math.max(...(dashData?.must?.parks||[]).map(p=>+num(dashData.must?.contrat?.[p]||0)),+num(dashData?.must?.contrat?.total||0),0);
+    const _yMx1=Math.max(Math.ceil(Math.max(_dataMx1,_ctrMx1)*1.08/5)*5,10);
+    const _rPad1=_onC.length>=2?270:20;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
       plugins:[{id:'_cLbl',afterDraw(chart){
-        const xR=chart.chartArea?.right||chart.width-10;const ctx=chart.ctx;
+        const xR=chart.width-8;const ctx=chart.ctx;
         const entries=[];
         chart.data.datasets.forEach(ds=>{
           if(!ds.label.startsWith('_contr')) return;
@@ -8260,14 +8265,14 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
             const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
             const uc=p.util>100?'#ff7575':'#7dda88';
-            const when=_w2dFormatWhen(p.peakTime);
-            ctx.fillStyle='rgba(8,10,20,0.72)';ctx.fillRect(xR-248,yy,248,rH);
-            ctx.fillStyle=col;ctx.fillRect(xR-244,yy+3,6,7);
-            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
-            ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
-            ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
-            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-50,yy+1);
-            ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
+            const when=((p.peakTime||'').split(' ')[0])||'—';
+            ctx.fillStyle='rgba(8,10,20,0.82)';ctx.fillRect(xR-260,yy,260,rH);
+            ctx.fillStyle=col;ctx.fillRect(xR-256,yy+3,6,7);
+            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-246,yy+1);
+            ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-162,yy+1);
+            ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-157,yy+1);
+            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-62,yy+1);
+            ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-57,yy+2);
             yy+=rH;
           });
           ctx.restore();
@@ -8285,9 +8290,10 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         x:{offset:false,
            ticks:{color:'#565b70',font:{size:_w2dIsMobile()?9:10},maxRotation:0,autoSkip:false},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'4%',
-           title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}}}});
+        y:{min:0,max:_yMx1,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
+           title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}},
+      layout:{padding:{right:_rPad1,top:4,bottom:4}}}});
     // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
     const _peakDs=_onC.length===0?
       (()=>{const _tot=Array.from({length:dates.length*ptsPerDay},(_,i)=>{let s=0,ok=false;allPks.forEach(pk=>{const v=pkVals[pk][i];if(v!=null){s+=v;ok=true;}});return ok?+s.toFixed(3):null;});return _tot;})():
@@ -8402,10 +8408,15 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
   document.getElementById('w2dSub').textContent=_w2dSubBase;
 
+  const _allVf2=[]; datasets.forEach(ds=>{if(!ds.label.startsWith('_'))(ds.data||[]).forEach(v=>{if(v!=null)_allVf2.push(+v);});});
+  const _dataMx2=_allVf2.length?Math.max(..._allVf2,0):0;
+  const _yMx2=Math.max(Math.ceil(Math.max(_dataMx2,_cBase)*1.08/5)*5,10);
+  const _rPad2=parks.length>=2?270:20;
+
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
     plugins:[{id:'_cLbl',afterDraw(chart){
-      const xR=chart.chartArea?.right||chart.width-10;
+      const xR=chart.width-8;
       const ctx=chart.ctx;
       const entries=[];
       chart.data.datasets.forEach(ds=>{
@@ -8440,14 +8451,14 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
           const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
           const uc=p.util>100?'#ff7575':'#7dda88';
-          const when=_w2dFormatWhen(p.peakTime);
-          ctx.fillStyle='rgba(8,10,20,0.72)';ctx.fillRect(xR-248,yy,248,rH);
-          ctx.fillStyle=col;ctx.fillRect(xR-244,yy+3,6,7);
-          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
-          ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
-          ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
-          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-50,yy+1);
-          ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
+          const when=((p.peakTime||'').split(' ')[0])||'—';
+          ctx.fillStyle='rgba(8,10,20,0.82)';ctx.fillRect(xR-260,yy,260,rH);
+          ctx.fillStyle=col;ctx.fillRect(xR-256,yy+3,6,7);
+          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-246,yy+1);
+          ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-162,yy+1);
+          ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-157,yy+1);
+          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-62,yy+1);
+          ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-57,yy+2);
           yy+=rH;
         });
         ctx.restore();
@@ -8473,10 +8484,11 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            maxRotation:_w2dIsMobile()?0:45,minRotation:0,
            autoSkip:_w2dIsMobile(),maxTicksLimit:_w2dIsMobile()?7:undefined},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'}},
-        y:{min:0,ticks:{color:'#565b70',font:{size:10},callback:v=>v.toFixed(2)},
-           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},grace:'4%',
+        y:{min:0,max:_yMx2,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+           grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
-      }
+      },
+      layout:{padding:{right:_rPad2,top:4,bottom:4}}
     }
   });
 
