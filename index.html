@@ -808,7 +808,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-side-meta{font-size:9px}
 /* ── Way2 Demanda Intradia (largura total) ── */
 #page-must #sec-must-w2dem{margin-top:14px}
-#page-must #sec-must-w2dem .section-title{overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:calc(54px + var(--must-overview-h,160px));z-index:97;background:var(--bg);backdrop-filter:blur(12px);padding-top:8px;margin-top:-8px;padding-bottom:8px;}
+/* toolbar movido para dentro de #sec-must-overview — sem sticky próprio */
 #page-must #sec-must-w2dem .cc-body{height:560px!important;flex:none!important;min-height:560px!important;max-height:560px!important;position:relative;overflow:hidden}
 /* ── Ranking (largura total, abaixo do Way2) ── */
 #page-must #sec-must-ranking{margin-top:14px}
@@ -853,7 +853,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
   /* CONTEÚDO */
   .main{padding:12px 10px;gap:14px;}
   #page-must .must-top-controls{gap:6px 8px;}
-  #page-must #sec-must-w2dem .section-title{overflow-x:visible;}
+  #page-must #sec-must-w2dem-toolbar{overflow-x:visible;}
   #page-must #sec-must-w2dem .cc{padding:12px 10px 10px;}
 
   /* Cabeçalho do gráfico Way2: subtítulo deixa de ser absoluto/centralizado e empilha */
@@ -1046,11 +1046,9 @@ html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25
 /* Sticky overview — borda inferior com glow sutil */
 #page-must #sec-must-overview{border-bottom:1px solid rgba(107,139,245,.15);}
 
-/* Linha Way2 sticky — top border mais brilhante */
-#page-must #sec-must-w2dem .section-title{
-  border-top:1px solid rgba(107,139,245,.10);
-  padding-top:10px;
-  margin-top:-10px;
+/* Toolbar Way2 (agora em #sec-must-overview) — borda superior sutil */
+#page-must #sec-must-w2dem-toolbar{
+  border-top:1px solid rgba(107,139,245,.18)!important;
 }
 
 /* Ranking card — linha superior mais pronunciada */
@@ -1087,24 +1085,10 @@ html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25
   height:2px;
 }
 
-/* MUST: viewport lock — só #page-must scrolla, body trava (desktop) */
-@media (min-width:601px){
-  body.page-must-active{overflow:hidden;}
-  body.page-must-active .main{
-    height:calc(100vh - 54px);
-    overflow:hidden;
-    box-sizing:border-box;
-  }
-  body.page-must-active #page-must{
-    overflow-y:auto;
-    overflow-x:hidden;
-    flex:1;
-    min-height:0;
-    scroll-behavior:smooth;
-  }
-  /* tops resetados: agora relativos ao scroll de #page-must (não do body) */
-  body.page-must-active #page-must #sec-must-overview{top:0!important;}
-  body.page-must-active #page-must #sec-must-w2dem .section-title{top:var(--must-overview-h,0px)!important;}
+/* Toolbar Way2 agora está dentro de #sec-must-overview (bloco sticky).
+   Não precisa de sticky próprio — fica colado junto com os KPI cards. */
+#page-must #sec-must-w2dem-toolbar{
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
 }
 
 /* ═══════════════════════════════════════════════════ */
@@ -1151,7 +1135,7 @@ html[data-theme="light"] #page-must .must-rank-row.selected{box-shadow:inset 0 0
 html[data-theme="light"] .rank-period-badge{background:rgba(0,0,0,.06)!important;border-color:rgba(0,0,0,.15)!important;}
 /* MUST filter controls — light mode */
 html[data-theme="light"] #page-must #sec-must-overview{background:rgba(244,245,251,.97);}
-html[data-theme="light"] #page-must #sec-must-w2dem .section-title{background:rgba(244,245,251,.97);}
+html[data-theme="light"] #page-must #sec-must-w2dem-toolbar{background:rgba(244,245,251,.97);}
 html[data-theme="light"] #page-must .must-top-controls .fg{background:rgba(255,255,255,.75);border-color:rgba(0,0,0,.10);}
 html[data-theme="light"] #page-must .must-cal-trigger{background:rgba(107,139,245,.10);border-color:rgba(107,139,245,.40);color:var(--t1);}
 html[data-theme="light"] #page-must .must-cal-trigger:hover,html[data-theme="light"] #page-must .must-cal-trigger.open{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.60);color:var(--t1);}
@@ -1934,11 +1918,8 @@ function _themeCharts(light){
         </div>
       </div>
       <div class="kpi-grid must-kpi-grid" id="mustKpis"></div>
-    </div>
-
-    <!-- SEÇÃO: Demanda Intradia Way2 — largura total -->
-    <div class="section" id="sec-must-w2dem">
-      <div class="section-title" style="gap:10px;flex-wrap:nowrap;overflow-x:auto">
+      <!-- Toolbar Way2 dentro do bloco sticky: permanece visível ao rolar -->
+      <div class="section-title" id="sec-must-w2dem-toolbar" style="gap:10px;flex-wrap:nowrap;overflow-x:auto;border-top:1px solid rgba(255,255,255,.07);padding-top:10px;margin-top:4px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         <span style="white-space:nowrap;flex-shrink:0">DEMANDA INTRADIA · WAY2</span>
         <span style="width:1px;height:16px;background:rgba(255,255,255,.12);flex-shrink:0"></span>
@@ -1950,6 +1931,10 @@ function _themeCharts(light){
         <span id="w2dDateContainer" style="display:flex;align-items:center;gap:4px;flex-shrink:0"></span>
         <button class="btn-refresh" id="w2dBuscarBtn" style="flex-shrink:0" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
       </div>
+    </div>
+
+    <!-- SEÇÃO: Demanda Intradia Way2 — gráfico (sem toolbar, agora no bloco sticky acima) -->
+    <div class="section" id="sec-must-w2dem">
       <div class="chart-row cols-1">
         <div class="cc">
           <div class="cc-head" style="align-items:center;position:relative">
