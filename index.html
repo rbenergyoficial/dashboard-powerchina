@@ -7944,15 +7944,15 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
       plugins:[{id:'_cLbl',afterDraw(chart){
         const xR=chart.chartArea?.right||chart.width-10;const ctx=chart.ctx;
-        // Coleta todos os datasets MUST contratado
         const entries=[];
         chart.data.datasets.forEach(ds=>{
           if(!ds.label.startsWith('_contr')) return;
           const val=ds.data[0];if(!val) return;
           entries.push({ds,val});
         });
+        let yLine=null;
         if(entries.length){
-          const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+          yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
           const rowH=12;
           entries.forEach((e,i)=>{
             const yPx=yLine-(i*rowH+1);
@@ -7965,12 +7965,11 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
             ctx.fillText(lbl,xR-4,yPx-rowH/2+1);ctx.restore();
           });
         }
-        // Tabela de picos por parque no canto superior direito (substitui subtítulo multiline)
+        // Tabela de picos: logo ABAIXO da linha contratada, crescendo para baixo
         const pp=_w2dLastKpi?.parkPeaks;
-        if(pp&&pp.length>=2){
+        if(pp&&pp.length>=2&&yLine!=null){
           ctx.save();
-          let yy=(chart.chartArea?.top||0)+3;const rH=13;
-          if(_w2dSubBase){ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#555c72';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(_w2dSubBase,xR-4,yy);yy+=rH;}
+          let yy=yLine+6;const rH=13;
           pp.forEach(p=>{
             const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
             const uc=p.util>100?'#ff7575':'#7dda88';
@@ -8127,8 +8126,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         const val=ds.data[0];if(!val) return;
         entries.push({ds,val});
       });
+      let yLine=null;
       if(entries.length){
-        const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+        yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
         const rowH=12;
         entries.forEach((e,i)=>{
           const yPx=yLine-(i*rowH+1);
@@ -8145,12 +8145,11 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
           ctx.restore();
         });
       }
-      // Tabela de picos por parque no canto superior direito (substitui subtítulo multiline)
+      // Tabela de picos: logo ABAIXO da linha contratada, crescendo para baixo
       const pp=_w2dLastKpi?.parkPeaks;
-      if(pp&&pp.length>=2){
+      if(pp&&pp.length>=2&&yLine!=null){
         ctx.save();
-        let yy=(chart.chartArea?.top||0)+3;const rH=13;
-        if(_w2dSubBase){ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#555c72';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(_w2dSubBase,xR-4,yy);yy+=rH;}
+        let yy=yLine+6;const rH=13;
         pp.forEach(p=>{
           const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
           const uc=p.util>100?'#ff7575':'#7dda88';
