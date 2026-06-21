@@ -7979,7 +7979,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
             ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
             ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
             ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
-            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2)+'%',xR-50,yy+1);
+            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-50,yy+1);
             ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
             yy+=rH;
           });
@@ -8150,7 +8150,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       if(pp&&pp.length>=2&&yLine!=null){
         ctx.save();
         let yy=yLine+6;const rH=13;
-        pp.forEach(p=>{
+        [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
           const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
           const uc=p.util>100?'#ff7575':'#7dda88';
           const when=_w2dFormatWhen(p.peakTime);
@@ -8159,7 +8159,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
           ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
           ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
           ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
-          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2)+'%',xR-50,yy+1);
+          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2).replace('.',',')+' %',xR-50,yy+1);
           ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
           yy+=rH;
         });
