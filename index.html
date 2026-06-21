@@ -513,7 +513,7 @@ html[data-theme="light"] .kpi-unit{opacity:.75;}
 .cc-resize-handle:hover{opacity:1!important}
 html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box-shadow:-6px 0 0 rgba(0,0,0,.38),0 -6px 0 rgba(0,0,0,.38),-6px -6px 0 rgba(0,0,0,.38)}
 .cc.cc-resizing{transform:none!important;transition:none!important;box-shadow:0 0 0 2px rgba(107,139,245,.55),0 8px 36px rgba(0,0,0,.72)!important}
-.cc-move-handle{width:14px;height:22px;cursor:grab;flex-shrink:0;opacity:0;transition:opacity .15s;align-self:center;margin-right:4px;background-image:radial-gradient(circle,rgba(255,255,255,.6) 1.5px,transparent 1.5px);background-size:4px 4px;background-repeat:repeat}
+.cc-move-handle{position:absolute;left:0;top:50%;transform:translateY(-50%);width:14px;height:22px;cursor:grab;opacity:0;transition:opacity .15s;background-image:radial-gradient(circle,rgba(255,255,255,.6) 1.5px,transparent 1.5px);background-size:4px 4px;background-repeat:repeat}
 .cc:hover .cc-move-handle{opacity:.5}
 .cc-move-handle:hover{opacity:1!important;cursor:grab}
 .cc.cc-dragging .cc-move-handle{cursor:grabbing}
@@ -524,7 +524,7 @@ html[data-theme="light"] .cc-move-handle{background-image:radial-gradient(circle
 .cc[draggable]:active{cursor:grabbing;}
 .cc.cc-dragging{opacity:.32!important;transform:none!important;box-shadow:none!important;transition:none!important;}
 .cc.cc-drag-over{outline:2px dashed rgba(107,139,245,.50)!important;outline-offset:3px;}
-.cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;position:relative;padding-left:20px;}
 .cc-title{font-size:13px;font-weight:700;color:#e4eaf8;letter-spacing:-.1px;font-family:var(--display);}
 .cc-sub{font-size:10px;color:#8b9dbe;margin-top:2px;letter-spacing:.01em;}
 .cc-body{position:relative;flex:1;min-height:0;}
@@ -6448,7 +6448,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   host.innerHTML=rank.map(r=>{
     const width=Math.max(4,Math.min(100,r.pct));
     const color=r.color||'#6b8bf5';
-    const grad=`linear-gradient(90deg,${color}28 0%,${color}88 42%,${color}cc 100%)`;
+    const grad=`linear-gradient(90deg,${color}14 0%,${color}44 42%,${color}77 100%)`;
     const lv=showCurr?_w2dLastVals[r.park]:null;
     let sc,sl,pctCol;
     if(r.selected){sc='must-st-analise';sl='Em análise';pctCol='#c4b5fd';}
@@ -6485,7 +6485,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const tLv=showCurr?rank.reduce((s,r)=>s+(_w2dLastVals[r.park]||0),0):null;
     const tW=Math.max(4,Math.min(100,tPct));
     const tCol='#6b8bf5';
-    const tGrad=`linear-gradient(90deg,${tCol}28 0%,${tCol}88 42%,${tCol}cc 100%)`;
+    const tGrad=`linear-gradient(90deg,${tCol}14 0%,${tCol}44 42%,${tCol}77 100%)`;
     let tSC,tSL,tPctCol;
     if(tPct>100){tSC='must-st-critico';tSL='Crítico';tPctCol='#f87171';}
     else if(tPct>98){tSC='must-st-alerta';tSL='Alerta';tPctCol='#fb923c';}
