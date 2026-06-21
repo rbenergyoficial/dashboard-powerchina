@@ -506,13 +506,18 @@ html[data-theme="light"] .kpi-unit{opacity:.75;}
   box-shadow:0 8px 36px rgba(0,0,0,.72),0 2px 6px rgba(0,0,0,.52),0 0 32px rgba(107,139,245,.12),0 0 0 1px rgba(107,139,245,.10),inset 0 1px 0 rgba(255,255,255,.08);}
 .cc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.52) 30%,rgba(45,212,191,.34) 70%,transparent 100%);}
-/* V46 resize handle */
+/* V46 resize + move handles */
 .cc-resize-handle{position:absolute;bottom:5px;right:5px;width:15px;height:15px;cursor:se-resize;z-index:6;opacity:0;transition:opacity .15s}
 .cc-resize-handle::after{content:'';position:absolute;bottom:0;right:0;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.6);box-shadow:-6px 0 0 rgba(255,255,255,.6),0 -6px 0 rgba(255,255,255,.6),-6px -6px 0 rgba(255,255,255,.6)}
 .cc:hover .cc-resize-handle{opacity:.55}
 .cc-resize-handle:hover{opacity:1!important}
 html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box-shadow:-6px 0 0 rgba(0,0,0,.38),0 -6px 0 rgba(0,0,0,.38),-6px -6px 0 rgba(0,0,0,.38)}
 .cc.cc-resizing{transform:none!important;transition:none!important;box-shadow:0 0 0 2px rgba(107,139,245,.55),0 8px 36px rgba(0,0,0,.72)!important}
+.cc-move-handle{width:14px;height:22px;cursor:grab;flex-shrink:0;opacity:0;transition:opacity .15s;align-self:center;margin-right:4px;background-image:radial-gradient(circle,rgba(255,255,255,.6) 1.5px,transparent 1.5px);background-size:4px 4px;background-repeat:repeat}
+.cc:hover .cc-move-handle{opacity:.5}
+.cc-move-handle:hover{opacity:1!important;cursor:grab}
+.cc.cc-dragging .cc-move-handle{cursor:grabbing}
+html[data-theme="light"] .cc-move-handle{background-image:radial-gradient(circle,rgba(0,0,0,.38) 1.5px,transparent 1.5px)}
 .cc:hover{border-color:rgba(107,139,245,.42);transform:translateY(-16px)!important;
   box-shadow:0 28px 80px rgba(0,0,0,.94),0 10px 24px rgba(0,0,0,.66),0 0 56px rgba(107,139,245,.28),0 0 0 1px rgba(107,139,245,.32),0 0 28px rgba(45,212,191,.14),inset 0 1px 0 rgba(255,255,255,.16);}
 .cc[draggable]{cursor:grab;}
@@ -15921,38 +15926,61 @@ window._ppaChartGet=function(id){return charts[id];};
     row.addEventListener('dragstart',function(e){
       var c=e.target.closest&&e.target.closest('.cc');
       if(!c||!row.contains(c)) return;
-      drag=c;
+      drag=c; window.__ccDragCard=c;
       setTimeout(function(){ c.classList.add('cc-dragging'); },0);
       e.dataTransfer.effectAllowed='move';
     });
 
     row.addEventListener('dragend',function(){
       clearStyles();
-      drag=null;
+      drag=null; window.__ccDragCard=null;
     });
 
     row.addEventListener('dragover',function(e){
       e.preventDefault();
       var c=e.target.closest&&e.target.closest('.cc');
-      if(!c||!row.contains(c)||c===drag) return;
-      getCC(row).forEach(function(x){ x.classList.remove('cc-drag-over'); });
-      c.classList.add('cc-drag-over');
+      /* highlight target card OR row itself (cross-row drop) */
+      document.querySelectorAll('.cc.cc-drag-over').forEach(function(x){x.classList.remove('cc-drag-over');});
+      if(c&&c!==drag) c.classList.add('cc-drag-over');
     });
 
     row.addEventListener('dragleave',function(e){
-      var c=e.target.closest&&e.target.closest('.cc');
-      if(c) c.classList.remove('cc-drag-over');
+      if(!row.contains(e.relatedTarget)){
+        document.querySelectorAll('.cc.cc-drag-over').forEach(function(x){x.classList.remove('cc-drag-over');});
+      }
     });
 
     row.addEventListener('drop',function(e){
       e.preventDefault();
+      if(!drag) return;
+      var srcRow=drag.parentElement;
       var c=e.target.closest&&e.target.closest('.cc');
-      if(!c||!row.contains(c)||!drag||c===drag) return;
-      var rect=c.getBoundingClientRect();
-      if(e.clientX<rect.left+rect.width/2) row.insertBefore(drag,c);
-      else{ var nx=c.nextSibling; if(nx) row.insertBefore(drag,nx); else row.appendChild(drag); }
+      if(c&&c!==drag){
+        var rect=c.getBoundingClientRect();
+        if(e.clientX<rect.left+rect.width/2) row.insertBefore(drag,c);
+        else{ var nx=c.nextElementSibling; if(nx) row.insertBefore(drag,nx); else row.appendChild(drag); }
+      } else if(!c){
+        /* dropped on empty area of row */
+        row.appendChild(drag);
+      } else { clearStyles(); return; }
+      /* cross-row: clear stale grid + resize state */
+      if(srcRow&&srcRow!==row){
+        srcRow.style.removeProperty('grid-template-columns');
+        row.style.removeProperty('grid-template-columns');
+        ['height','min-height','align-self'].forEach(function(p){drag.style.removeProperty(p);});
+        var db=drag.querySelector('.cc-body');
+        if(db)['height','min-height','max-height','flex'].forEach(function(p){db.style.removeProperty(p);});
+      }
       clearStyles();
       resizeCharts(drag);
+      /* resize all charts in both rows after move */
+      [srcRow,row].forEach(function(r){
+        if(!r) return;
+        r.querySelectorAll('canvas').forEach(function(cv){
+          var ch=typeof Chart!=='undefined'&&Chart.getChart?Chart.getChart(cv):null;
+          if(ch) setTimeout(function(){try{ch.resize();}catch(ex){}},120);
+        });
+      });
     });
   }
 
@@ -16117,11 +16145,20 @@ window._ppaChartGet=function(id){return charts[id];};
 
   function _init(){
     document.querySelectorAll('.cc').forEach(function(cc){
+      /* ── grip de mover (no cc-head) ── */
+      var head=cc.querySelector('.cc-head');
+      if(head&&!head.querySelector('.cc-move-handle')){
+        var mh=document.createElement('div');
+        mh.className='cc-move-handle';
+        mh.title='Arrastar para mover';
+        head.insertBefore(mh,head.firstChild);
+      }
+      /* ── grip de resize (canto inferior direito) ── */
       if(cc.querySelector('.cc-resize-handle')) return;
-      var h=document.createElement('div');
-      h.className='cc-resize-handle';
-      h.title='Arrastar para redimensionar · Duplo clique para redefinir';
-      cc.appendChild(h);
+      var rh=document.createElement('div');
+      rh.className='cc-resize-handle';
+      rh.title='Arrastar para redimensionar · Duplo clique para redefinir';
+      cc.appendChild(rh);
     });
     /* restaura tamanhos salvos */
     document.querySelectorAll('.cc').forEach(function(cc){
