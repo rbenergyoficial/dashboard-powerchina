@@ -60,11 +60,24 @@
 #pwaUpdate.is-updating .pwa-up-main{color:#cdd8fb;}
 #pwaUpdate.is-updating .pwa-up-btn{cursor:wait;opacity:.85;}
 #pwaUpdate.is-updating .pwa-up-close{display:none;}
+/* Estado "atualizado" — sucesso (verde, icone check, sem botoes) */
+#pwaUpdate.is-success{border-color:rgba(52,224,161,.55);box-shadow:0 10px 28px rgba(0,0,0,.55),0 0 0 1px rgba(52,224,161,.20);}
+#pwaUpdate.is-success .pwa-up-icon{color:#34e0a1;animation:none;}
+#pwaUpdate.is-success .pwa-up-main{color:#a3f5d1;}
 /* Sub do grafico Way2: modo multi-linha (2+ parques selecionados).
    Sai do position:absolute e ocupa linha propria abaixo do titulo,
    evitando que o conteudo cresca por cima de outros elementos. */
 #sec-must-w2dem .cc-head{flex-wrap:wrap;}
-#w2dSub.is-multiline{position:static!important;left:auto!important;transform:none!important;white-space:normal!important;pointer-events:auto!important;width:100%;flex:1 0 100%;order:99;margin-top:6px;}
+#w2dSub.is-multiline{position:static!important;left:auto!important;transform:none!important;white-space:normal!important;pointer-events:auto!important;width:100%;flex:1 0 100%;order:99;margin-top:4px;}
+/* Lista compacta de picos por parque (modo multi-linha) */
+.w2d-peak-list{display:flex;flex-direction:column;gap:1px;align-items:center;}
+.w2d-peak-row{display:grid;grid-template-columns:8px 28px 76px 78px 60px auto;column-gap:10px;align-items:center;line-height:1.35;font-size:12px;white-space:nowrap;}
+.w2d-pk-dot{width:7px;height:13px;border-radius:2px;}
+.w2d-pk-name{font-weight:700;color:#dfe6f5;}
+.w2d-pk-mw{color:#fbbf24;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;}
+.w2d-pk-time{color:#9aa4b8;font-variant-numeric:tabular-nums;}
+.w2d-pk-pct{font-weight:700;text-align:right;font-variant-numeric:tabular-nums;}
+.w2d-pk-must{color:#7a8499;font-size:11px;}
 /* No celular: mantem centralizado embaixo (mais usavel com o polegar) */
 @media (max-width:640px){
   #pwaUpdate{top:auto;right:50%;bottom:18px;transform:translate(50%,12px);}
@@ -78,6 +91,41 @@
   <button class="pwa-up-close" id="pwaUpdateClose" aria-label="Fechar">×</button>
 </div>
 <script>
+// Restaura contexto apos clique em "Atualizar" e mostra "Atualizado ✓"
+// (funciona com ou sem service worker)
+window.addEventListener('load',()=>{
+  let pending;
+  try{ pending=sessionStorage.getItem('_pwa_pending_update'); }catch(_){}
+  if(!pending) return;
+  try{ sessionStorage.removeItem('_pwa_pending_update'); }catch(_){}
+  let st={}; try{ st=JSON.parse(pending)||{}; }catch(_){}
+  // Restaura scroll e filtros Way2 (depois que o DOM hidratou)
+  setTimeout(()=>{
+    try{ if(+st.scrollY>0) window.scrollTo(0,+st.scrollY); }catch(_){}
+    const dp=document.getElementById('w2dDatePicker');
+    if(dp && st.w2dDate) dp.value=st.w2dDate;
+    const mp=document.getElementById('w2dMonthPicker');
+    if(mp && st.w2dMonth) mp.value=st.w2dMonth;
+    const ivl=document.getElementById('w2dIntervalSel');
+    if(ivl && st.w2dInterval) ivl.value=st.w2dInterval;
+  },300);
+  // Banner verde "Atualizado" por 2.2s
+  const banner=document.getElementById('pwaUpdate');
+  if(!banner) return;
+  const main=banner.querySelector('.pwa-up-main');
+  const sub=banner.querySelector('.pwa-up-sub');
+  const upBtn=banner.querySelector('.pwa-up-btn');
+  const closeBtn=banner.querySelector('.pwa-up-close');
+  const icon=banner.querySelector('.pwa-up-icon');
+  if(icon) icon.innerHTML='<polyline points="20 6 9 17 4 12"/>';
+  if(main) main.textContent='Atualizado';
+  if(sub) sub.textContent='Tudo pronto!';
+  if(upBtn) upBtn.style.display='none';
+  if(closeBtn) closeBtn.style.display='none';
+  banner.classList.remove('is-updating');
+  banner.classList.add('is-success','show');
+  setTimeout(()=>{banner.classList.remove('show');},2200);
+});
 if('serviceWorker' in navigator){
   window.addEventListener('load',async()=>{
     try{
@@ -100,6 +148,18 @@ if('serviceWorker' in navigator){
           const sub=banner.querySelector('.pwa-up-sub');
           if(main) main.textContent='Atualizando';
           if(sub) sub.textContent='Aguarde alguns instantes…';
+          // Preserva contexto (scroll + filtros Way2) para restaurar apos o reload,
+          // assim o usuario fica na mesma posicao sem voltar pra "tela inicial".
+          try{
+            const state={
+              ts:Date.now(),
+              scrollY:window.scrollY||0,
+              w2dDate:document.getElementById('w2dDatePicker')?.value||'',
+              w2dMonth:document.getElementById('w2dMonthPicker')?.value||'',
+              w2dInterval:document.getElementById('w2dIntervalSel')?.value||'',
+            };
+            sessionStorage.setItem('_pwa_pending_update', JSON.stringify(state));
+          }catch(_){}
           if(sw) sw.postMessage('SKIP_WAITING');           // banner via SW novo waiting
           else window.location.reload();                    // banner via CONTENT_UPDATED
         };
@@ -7219,23 +7279,25 @@ function _w2dRenderSub(){
 
   // ── 2+ parques: lista vertical com pico individual de cada um ──
   if(parkPeaks && parkPeaks.length>=2){
+    // Grid com colunas fixas (cor | nome | MW | hora | % | "do MUST")
+    // garante alinhamento perfeito independente do valor.
     const rows=parkPeaks.map(p=>{
       const c=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
       const uc=p.util>100?'#ff7575':'#7dda88';
       const when=_w2dFormatWhen(p.peakTime);
-      return `<div style="display:flex;align-items:center;gap:8px;line-height:1.4;font-size:12px;white-space:nowrap">`
-        +`<span style="display:inline-block;width:7px;height:14px;border-radius:2px;background:${c};flex-shrink:0"></span>`
-        +`<span style="font-weight:700;color:#dfe6f5;min-width:26px">${p.pk}</span>`
-        +`<span style="color:#fbbf24;font-weight:700">${_w2dFmtMW(p.peak,2)}</span>`
-        +(when?`<span style="color:#9aa4b8">${when}</span>`:'')
-        +`<span style="color:${uc};font-weight:700">${p.util.toFixed(2)}%</span>`
-        +`<span style="color:#7a8499;font-size:11px">do MUST</span>`
+      return `<div class="w2d-peak-row">`
+        +`<span class="w2d-pk-dot" style="background:${c}"></span>`
+        +`<span class="w2d-pk-name">${p.pk}</span>`
+        +`<span class="w2d-pk-mw">${_w2dFmtMW(p.peak,2)}</span>`
+        +`<span class="w2d-pk-time">${when||''}</span>`
+        +`<span class="w2d-pk-pct" style="color:${uc}">${p.util.toFixed(2)}%</span>`
+        +`<span class="w2d-pk-must">do MUST</span>`
         +`</div>`;
     }).join('');
     sEl.classList.add('is-multiline');
     sEl.innerHTML=
-      `<div style="${dim};margin-bottom:6px;text-align:center">${_w2dSubBase}</div>`
-      +`<div style="display:flex;flex-direction:column;gap:3px;align-items:center">${rows}</div>`;
+      `<div style="${dim};margin-bottom:3px;text-align:center;font-size:11px">${_w2dSubBase}</div>`
+      +`<div class="w2d-peak-list">${rows}</div>`;
     return;
   }
 
