@@ -15969,7 +15969,7 @@ window._ppaChartGet=function(id){return charts[id];};
       if(srcRow&&srcRow!==row){
         srcRow.style.removeProperty('grid-template-columns');
         row.style.removeProperty('grid-template-columns');
-        ['height','min-height','align-self'].forEach(function(p){drag.style.removeProperty(p);});
+        ['height','min-height','align-self','flex'].forEach(function(p){drag.style.removeProperty(p);});
         var db=drag.querySelector('.cc-body');
         if(db)['height','min-height','max-height','flex'].forEach(function(p){db.style.removeProperty(p);});
       }
@@ -16018,11 +16018,13 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
   function _applyH(rs,dh){
-    /* card cresce/encolhe: align-self:start desconecta do stretch do grid */
+    /* card cresce/encolhe: align-self:start desconecta do stretch do grid;
+       flex:none impede flex-grow:1 de ignorar a altura em layouts flex-column */
     var newCcH=Math.max(120,Math.round(rs.h0+dh));
     rs.cc.style.setProperty('height',newCcH+'px','important');
     rs.cc.style.setProperty('min-height',newCcH+'px','important');
     rs.cc.style.setProperty('align-self','start','important');
+    rs.cc.style.setProperty('flex','none','important');
     /* body = card - overhead fixo (head + padding + gap) */
     var newBH=Math.max(60,Math.round(rs.hb0+dh));
     rs.body.style.setProperty('height',newBH+'px','important');
@@ -16069,7 +16071,7 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── reset card + limpa grid se nenhum irmão resized ── */
   function _reset(cc,body){
-    ['height','min-height','align-self'].forEach(function(p){cc.style.removeProperty(p);});
+    ['height','min-height','align-self','flex'].forEach(function(p){cc.style.removeProperty(p);});
     ['height','min-height','max-height','flex'].forEach(function(p){body.style.removeProperty(p);});
     var cv=body.querySelector('canvas'),key=cv&&cv.id;
     if(key){try{localStorage.removeItem('cc-h-'+key);}catch(e){} try{localStorage.removeItem('cc-bh-'+key);}catch(e){}}
@@ -16170,7 +16172,7 @@ window._ppaChartGet=function(id){return charts[id];};
       if(!key||!body) return;
       var cH=(function(){try{return localStorage.getItem('cc-h-'+key);}catch(e){return null;}}());
       var bH=(function(){try{return localStorage.getItem('cc-bh-'+key);}catch(e){return null;}}());
-      if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.classList.add('cc-resized');}
+      if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');cc.classList.add('cc-resized');}
       if(bH){body.style.setProperty('height',bH,'important');body.style.setProperty('min-height',bH,'important');body.style.setProperty('max-height',bH,'important');body.style.setProperty('flex','none','important');}
     });
     document.querySelectorAll('.chart-row').forEach(function(row){
