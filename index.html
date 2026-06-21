@@ -810,6 +810,8 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-alerta  {background:rgba(249,115,22,.11); color:#fb923c;border:1px solid rgba(249,115,22,.22)}
 .must-st-critico {background:rgba(239,68,68,.11);  color:#f87171;border:1px solid rgba(239,68,68,.22)}
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
+/* Coluna Demanda Atual — oculta em períodos históricos */
+#page-must .must-rank-table.hide-current .col-current{display:none}
 #page-must .must-dual-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
 #page-must .must-dual-grid .section{margin:0;display:flex;flex-direction:column}
 #page-must .must-dual-grid .chart-row{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -1979,6 +1981,22 @@ function _themeCharts(light){
             <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
           </div>
           <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela detalhada independente por parque -->
+    <div class="section" id="sec-must-detail-table">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+        TABELA DETALHADA POR PARQUE
+      </div>
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
+          </div>
+          <div class="cc-body" style="height:auto!important;overflow:visible"><div id="mustDetailTable"></div></div>
         </div>
       </div>
     </div>
@@ -6414,25 +6432,54 @@ function renderMustPeakRanking(rows, w2dPeaks){
         ${r.selected?'<div class="must-rank-em-analise">▶ em análise</div>':''}
       </div>
     </div>`;
-  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`
-  + `<table class="must-rank-table"><thead><tr><th>Parque</th><th>Pico MW</th><th>Contratada</th><th>% MUST</th><th>Status</th></tr></thead><tbody>`
-  + rank.map((r,i)=>{
-      const col=r.color||'#6b8bf5';
-      let sc,sl,pctCol;
-      if(r.selected){sc='must-st-analise';sl='Em análise';pctCol='#c4b5fd';}
-      else if(r.pct>100){sc='must-st-critico';sl='Crítico';pctCol='#f87171';}
-      else if(r.pct>98){sc='must-st-alerta';sl='Alerta';pctCol='#fb923c';}
-      else if(r.pct>95){sc='must-st-ativo';sl='Atenção';pctCol='#fbbf24';}
-      else{sc='must-st-normal';sl='Normal';pctCol='#4ade80';}
-      return `<tr class="${r.selected?'tbl-selected':''}" style="--row-c:${col}" onclick="_w2dRankClick('${r.park}')">
-        <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:${col};box-shadow:0 0 0 2px color-mix(in srgb,${col} 25%,transparent)"></span>${r.park}</div></td>
-        <td style="color:#f3f6ff;font-weight:600">${fmt1(r.peak)} MW</td>
-        <td>${fmt1(r.contrat)} MW</td>
-        <td><span class="must-tbl-pct" style="color:${pctCol}">${fmt1(r.pct)}%</span></td>
-        <td><span class="must-st ${sc}">${sl}</span></td>
-      </tr>`;
-    }).join('')
-  + `</tbody></table>`;
+  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
+  renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod);
+}
+
+function renderMustDetailTable(rank, showCurrent){
+  const host=document.getElementById('mustDetailTable');
+  if(!host) return;
+  if(!rank||!rank.length){
+    host.innerHTML='<div class="no-data" style="height:100px"><span>—</span><span>Sem dados no período selecionado</span></div>';
+    return;
+  }
+  const loc=getDateLocale();
+  const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const sub=document.getElementById('mustDetailTableSub');
+  if(sub) sub.textContent=showCurrent?'Demanda Atual = último valor publicado pelo Way2':'Demanda Atual oculta — período histórico selecionado';
+  host.innerHTML=`<table class="must-rank-table ${showCurrent?'':'hide-current'}">
+    <thead><tr>
+      <th>Parque</th>
+      <th class="col-current">Demanda Atual</th>
+      <th>Pico</th>
+      <th>Contratada</th>
+      <th>Margem Disponível</th>
+      <th>% MUST</th>
+      <th>Status</th>
+    </tr></thead>
+    <tbody>`
+  +rank.map(r=>{
+    const col=r.color||'#6b8bf5';
+    const lv=_w2dLastVals[r.park];
+    let sc,sl,pctCol;
+    if(r.selected){sc='must-st-analise';sl='Em análise';pctCol='#c4b5fd';}
+    else if(r.pct>100){sc='must-st-critico';sl='Crítico';pctCol='#f87171';}
+    else if(r.pct>98){sc='must-st-alerta';sl='Alerta';pctCol='#fb923c';}
+    else if(r.pct>95){sc='must-st-ativo';sl='Atenção';pctCol='#fbbf24';}
+    else{sc='must-st-normal';sl='Normal';pctCol='#4ade80';}
+    const mCol=r.margem>=0?'#4ade80':'#f87171';
+    const mSign=r.margem>=0?'+':'';
+    return `<tr class="${r.selected?'tbl-selected':''}" style="--row-c:${col}" onclick="_w2dRankClick('${r.park}')">
+      <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:${col};box-shadow:0 0 0 2px color-mix(in srgb,${col} 25%,transparent)"></span>${r.park}</div></td>
+      <td class="col-current" style="color:#f3f6ff;font-weight:600">${lv!=null?fmt1(lv)+' MW':'—'}</td>
+      <td style="color:#f3f6ff;font-weight:600">${fmt1(r.peak)} MW</td>
+      <td style="color:var(--t2)">${fmt1(r.contrat)} MW</td>
+      <td style="color:${mCol};font-weight:600">${mSign}${fmt1(r.margem)} MW</td>
+      <td><span class="must-tbl-pct" style="color:${pctCol}">${fmt1(r.pct)}%</span></td>
+      <td><span class="must-st ${sc}">${sl}</span></td>
+    </tr>`;
+  }).join('')
+  +`</tbody></table>`;
 }
 
 function _mustSyncStickyTop(){
@@ -7236,6 +7283,8 @@ const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
 let _w2dRefreshTimer=null; // timer periódico 5 min (separado do debounce _w2dAutoTimer)
 let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
+let _w2dLastVals={};  // último valor publicado por parque (intraday only)
+let _w2dIsCurrentPeriod=false; // true quando o período exibido é hoje
 let _w2dSubBase='';     // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
 let _w2dRangeCtx=null; // {dates,DISP_TIMES,ptsPerDay,showTime} — contexto do range intraday para peakTime
 
@@ -7528,9 +7577,14 @@ function _w2dRankClick(pk){
 function _w2dUpdateRanking(){
   if(!_w2dChart||!_w2dLastKpi||!dashData?.must?.parks) return;
   const w2dPeaks={};
+  _w2dLastVals={};
   (dashData.must.parks||[]).forEach(pk=>{
     const ds=_w2dChart.data.datasets.find(d=>d.label===pk);
-    if(ds){const filt=ds.data.filter(v=>v!=null);w2dPeaks[pk]=filt.length?Math.max(...filt,0):0;}
+    if(ds){
+      const filt=ds.data.filter(v=>v!=null);
+      w2dPeaks[pk]=filt.length?Math.max(...filt,0):0;
+      for(let j=ds.data.length-1;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
+    }
   });
   renderMustPeakRanking(null,w2dPeaks);
 }
@@ -7579,6 +7633,7 @@ function _w2dShowErr(e){
 }
 async function loadW2Demanda(){
   if(_w2dRefreshTimer){clearInterval(_w2dRefreshTimer);_w2dRefreshTimer=null;}
+  _w2dIsCurrentPeriod=false; // resetado; intraday hoje reativa abaixo
   const intervalo=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
   const ufv=_w2dSt.ufv;
   const gran=_w2dSt.gran;
@@ -7589,7 +7644,9 @@ async function loadW2Demanda(){
 
   // INTRADAY: 15min / 30min / 1h / 5min — picker de dia específico
   if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(intervalo)){
-    const dataStr=document.getElementById('w2dDatePicker')?.value||new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+    const _todayStr=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+    const dataStr=document.getElementById('w2dDatePicker')?.value||_todayStr;
+    _w2dIsCurrentPeriod=(dataStr===_todayStr);
     try{
       const baseInt = intervalo==='CincoMinutos' ? 'CincoMinutos' : 'QuinzeMinutos';
       const data = await _w2dFetchBlob(baseInt,dataStr,{throwOnNotFound:true});
