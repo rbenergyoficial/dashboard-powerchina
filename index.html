@@ -512,6 +512,7 @@ html[data-theme="light"] .kpi-unit{opacity:.75;}
 .cc:hover .cc-resize-handle{opacity:.55}
 .cc-resize-handle:hover{opacity:1!important}
 html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box-shadow:-6px 0 0 rgba(0,0,0,.38),0 -6px 0 rgba(0,0,0,.38),-6px -6px 0 rgba(0,0,0,.38)}
+.cc.cc-resizing{transform:none!important;transition:none!important;box-shadow:0 0 0 2px rgba(107,139,245,.55),0 8px 36px rgba(0,0,0,.72)!important}
 .cc:hover{border-color:rgba(107,139,245,.42);transform:translateY(-16px)!important;
   box-shadow:0 28px 80px rgba(0,0,0,.94),0 10px 24px rgba(0,0,0,.66),0 0 56px rgba(107,139,245,.28),0 0 0 1px rgba(107,139,245,.32),0 0 28px rgba(45,212,191,.14),inset 0 1px 0 rgba(255,255,255,.16);}
 .cc[draggable]{cursor:grab;}
@@ -15972,104 +15973,182 @@ window._ppaChartGet=function(id){return charts[id];};
 })();
 </script>
 <script>
-/* V46 — resize handle for .cc cards */
+/* V46 — card resize: largura (grid-template-columns) + altura (cc-body) */
 (function(){
   if(window.__ccResizeV46__) return;
   window.__ccResizeV46__=true;
-  var _rsEl=null,_rsCc=null,_rsY0=0,_rsH0=0,_rsDrag=null;
+  var _rs=null,_rzAF=null;
 
-  function _rsApply(body,h){
-    var hp=Math.max(80,h)+'px';
+  /* ── stable key for a chart-row (uses nearest ancestor id + row index) ── */
+  function _rowKey(row){
+    var sec=row.closest('[id]');
+    var idx=0,c=row;
+    if(row.parentElement) for(c=row.parentElement.firstElementChild;c&&c!==row;c=c.nextElementSibling) idx++;
+    return (sec?sec.id:'pg')+'-r'+idx;
+  }
+
+  /* ── resize cc-body height ── */
+  function _applyH(body,h){
+    var hp=Math.max(80,Math.round(h))+'px';
     body.style.setProperty('height',hp,'important');
     body.style.setProperty('min-height',hp,'important');
     body.style.setProperty('max-height',hp,'important');
     body.style.setProperty('flex','none','important');
-    body.querySelectorAll('canvas').forEach(function(cv){
-      var ch=typeof Chart!=='undefined'&&Chart.getChart?Chart.getChart(cv):null;
-      if(ch) try{ch.resize();}catch(e){}
+  }
+
+  /* ── resize grid column of the card's row ── */
+  function _applyW(rs,dw){
+    if(rs.colCount<2) return;
+    var gap=12,minW=200;
+    var maxW=rs.rowW-minW*(rs.colCount-1)-gap*(rs.colCount-1);
+    var newW=Math.max(minW,Math.min(maxW,Math.round(rs.w0+dw)));
+    var cols=[];
+    for(var i=0;i<rs.colCount;i++) cols.push(i===rs.colIdx?newW+'px':'1fr');
+    rs.row.style.gridTemplateColumns=cols.join(' ');
+  }
+
+  /* ── resize all charts in a row (throttled via rAF) ── */
+  function _rzRow(row){
+    if(_rzAF) return;
+    _rzAF=requestAnimationFrame(function(){
+      _rzAF=null;
+      if(typeof Chart==='undefined') return;
+      row.querySelectorAll('canvas').forEach(function(cv){
+        var ch=Chart.getChart?Chart.getChart(cv):null;
+        if(ch) try{ch.resize();}catch(e){}
+      });
     });
   }
-  function _rsSave(body){
+
+  /* ── persist sizes ── */
+  function _save(rs){
+    var cv=rs.body.querySelector('canvas');
+    var key=cv&&cv.id;
+    if(key) try{localStorage.setItem('cc-h-'+key,rs.body.style.height);}catch(e){}
+    if(rs.row.style.gridTemplateColumns)
+      try{localStorage.setItem('cc-gtc-'+rs.rowKey,rs.row.style.gridTemplateColumns);}catch(e){}
+  }
+
+  /* ── reset a card + optionally its row ── */
+  function _reset(cc,body){
+    ['height','min-height','max-height','flex'].forEach(function(p){body.style.removeProperty(p);});
     var cv=body.querySelector('canvas');
     var key=cv&&cv.id;
-    if(key) try{localStorage.setItem('cc-h-'+key,body.style.height);}catch(e){}
+    if(key) try{localStorage.removeItem('cc-h-'+key);}catch(e){}
+    cc.classList.remove('cc-resized');
+    /* clear row grid only if no sibling is still resized */
+    var row=cc.parentElement;
+    var anyResized=false;
+    [].slice.call(row.querySelectorAll(':scope>.cc')).forEach(function(c){if(c!==cc&&c.classList.contains('cc-resized'))anyResized=true;});
+    if(!anyResized){
+      row.style.removeProperty('grid-template-columns');
+      try{localStorage.removeItem('cc-gtc-'+_rowKey(row));}catch(e){}
+    }
+    setTimeout(function(){_rzRow(row);},60);
   }
-  function _rsStart(e){
+
+  /* ── drag start ── */
+  function _onDown(e){
     var handle=e.target&&e.target.closest&&e.target.closest('.cc-resize-handle');
     if(!handle) return;
     var cc=handle.closest('.cc');
     var body=cc&&cc.querySelector('.cc-body');
     if(!body) return;
-    _rsEl=body; _rsCc=cc;
-    _rsDrag=cc.getAttribute('draggable');
+    var row=cc.parentElement;
+    var rowCCs=[].slice.call(row.querySelectorAll(':scope>.cc'));
+    var ccRect=cc.getBoundingClientRect();
+    var rowRect=row.getBoundingClientRect();
+    _rs={
+      body:body,cc:cc,row:row,
+      colIdx:rowCCs.indexOf(cc),colCount:rowCCs.length,
+      rowW:rowRect.width,rowKey:_rowKey(row),
+      drag:cc.getAttribute('draggable'),
+      y0:e.touches?e.touches[0].clientY:e.clientY,
+      x0:e.touches?e.touches[0].clientX:e.clientX,
+      hb0:body.getBoundingClientRect().height,
+      w0:ccRect.width
+    };
     cc.setAttribute('draggable','false');
-    _rsY0=e.touches?e.touches[0].clientY:e.clientY;
-    _rsH0=body.getBoundingClientRect().height;
+    cc.classList.add('cc-resizing');
     document.body.style.userSelect='none';
     document.body.style.webkitUserSelect='none';
     e.preventDefault(); e.stopPropagation();
   }
-  function _rsMove(e){
-    if(!_rsEl) return;
+
+  /* ── drag move ── */
+  function _onMove(e){
+    if(!_rs) return;
     var y=e.touches?e.touches[0].clientY:e.clientY;
-    _rsApply(_rsEl,_rsH0+(y-_rsY0));
+    var x=e.touches?e.touches[0].clientX:e.clientX;
+    _applyH(_rs.body,_rs.hb0+(y-_rs.y0));
+    _applyW(_rs,x-_rs.x0);
+    _rzRow(_rs.row);
     e.preventDefault();
   }
-  function _rsEnd(){
-    if(!_rsEl) return;
+
+  /* ── drag end ── */
+  function _onUp(){
+    if(!_rs) return;
     document.body.style.userSelect='';
     document.body.style.webkitUserSelect='';
-    if(_rsCc){
-      if(_rsDrag!==null) _rsCc.setAttribute('draggable',_rsDrag);
-      else _rsCc.removeAttribute('draggable');
-    }
-    _rsSave(_rsEl);
-    _rsEl=null; _rsCc=null;
+    _rs.cc.classList.remove('cc-resizing');
+    _rs.cc.classList.add('cc-resized');
+    if(_rs.drag!==null) _rs.cc.setAttribute('draggable',_rs.drag);
+    else _rs.cc.removeAttribute('draggable');
+    _save(_rs);
+    _rs=null;
   }
-  function _dblReset(e){
+
+  /* ── double-click resets ── */
+  function _onDbl(e){
     var handle=e.target&&e.target.closest&&e.target.closest('.cc-resize-handle');
     if(!handle) return;
     var cc=handle.closest('.cc');
     var body=cc&&cc.querySelector('.cc-body');
-    if(!body) return;
-    ['height','min-height','max-height','flex'].forEach(function(p){ body.style.removeProperty(p); });
-    var cv=body.querySelector('canvas');
-    if(cv&&cv.id) try{localStorage.removeItem('cc-h-'+cv.id);}catch(e){}
-    body.querySelectorAll('canvas').forEach(function(cv){
-      var ch=typeof Chart!=='undefined'&&Chart.getChart?Chart.getChart(cv):null;
-      if(ch) setTimeout(function(){ try{ch.resize();}catch(e){} },60);
-    });
+    if(body) _reset(cc,body);
   }
 
-  document.addEventListener('mousedown',_rsStart);
-  document.addEventListener('mousemove',_rsMove);
-  document.addEventListener('mouseup',_rsEnd);
-  document.addEventListener('touchstart',_rsStart,{passive:false});
-  document.addEventListener('touchmove',_rsMove,{passive:false});
-  document.addEventListener('touchend',_rsEnd);
-  document.addEventListener('dblclick',_dblReset);
+  document.addEventListener('mousedown',_onDown);
+  document.addEventListener('mousemove',_onMove);
+  document.addEventListener('mouseup',_onUp);
+  document.addEventListener('touchstart',_onDown,{passive:false});
+  document.addEventListener('touchmove',_onMove,{passive:false});
+  document.addEventListener('touchend',_onUp);
+  document.addEventListener('dblclick',_onDbl);
 
+  /* ── init: add handles + restore saved sizes ── */
   function _init(){
+    /* add handles to all .cc cards */
     document.querySelectorAll('.cc').forEach(function(cc){
       if(cc.querySelector('.cc-resize-handle')) return;
       var h=document.createElement('div');
       h.className='cc-resize-handle';
       h.title='Arrastar para redimensionar · Duplo clique para redefinir';
       cc.appendChild(h);
+    });
+    /* restore saved heights */
+    document.querySelectorAll('.cc').forEach(function(cc){
       var cv=cc.querySelector('canvas');
       var key=cv&&cv.id;
-      var saved=key&&(function(){ try{return localStorage.getItem('cc-h-'+key);}catch(e){return null;} }());
-      if(saved){
-        var body=cc.querySelector('.cc-body');
-        if(body){
-          body.style.setProperty('height',saved,'important');
-          body.style.setProperty('min-height',saved,'important');
-          body.style.setProperty('max-height',saved,'important');
-          body.style.setProperty('flex','none','important');
-        }
+      var body=cc.querySelector('.cc-body');
+      if(!key||!body) return;
+      var h=(function(){try{return localStorage.getItem('cc-h-'+key);}catch(e){return null;}}());
+      if(h){
+        body.style.setProperty('height',h,'important');
+        body.style.setProperty('min-height',h,'important');
+        body.style.setProperty('max-height',h,'important');
+        body.style.setProperty('flex','none','important');
+        cc.classList.add('cc-resized');
       }
     });
+    /* restore saved grid column templates */
+    document.querySelectorAll('.chart-row').forEach(function(row){
+      var rk=_rowKey(row);
+      var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+rk);}catch(e){return null;}}());
+      if(gtc) row.style.gridTemplateColumns=gtc;
+    });
   }
+
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',_init);
   else _init();
   setTimeout(_init,1500);
