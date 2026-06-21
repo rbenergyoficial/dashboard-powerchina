@@ -7094,9 +7094,11 @@ function _w2dRenderDateUI(){
   const container=document.getElementById('w2dDateContainer');
   if(!container) return;
   const iv=document.getElementById('w2dIntervalSel')?.value||'QuinzeMinutos';
-  const today=new Date().toISOString().slice(0,10);
+  // Data atual no fuso de Sao Paulo (toISOString retorna UTC e quebra
+  // a noite, mostrando o dia seguinte)
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
   const thisMonth=today.slice(0,7);
-  const thisYear=new Date().getFullYear();
+  const thisYear=+today.slice(0,4);
   // Preserva data já selecionada ao trocar apenas o intervalo
   const curDate=document.getElementById('w2dDatePicker')?.value||today;
   const curMonth=document.getElementById('w2dMonthPicker')?.value||(curDate.slice(0,7)||thisMonth);
@@ -7306,7 +7308,7 @@ async function loadW2Demanda(){
 
   // INTRADAY: 15min / 30min / 1h / 5min — picker de dia específico
   if(['QuinzeMinutos','TrintaMinutos','UmaHora','CincoMinutos'].includes(intervalo)){
-    const dataStr=document.getElementById('w2dDatePicker')?.value||new Date().toISOString().slice(0,10);
+    const dataStr=document.getElementById('w2dDatePicker')?.value||new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
     try{
       const baseInt = intervalo==='CincoMinutos' ? 'CincoMinutos' : 'QuinzeMinutos';
       const data = await _w2dFetchBlob(baseInt,dataStr,{throwOnNotFound:true});
