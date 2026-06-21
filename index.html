@@ -997,6 +997,98 @@ html[data-theme="light"] .side-panel{
   border-color:rgba(0,0,0,.06);
   background:linear-gradient(180deg,rgba(0,0,0,.025),rgba(0,0,0,.012));}
 html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25);}
+
+/* ═══════════════════════════════════════════════════
+   MUST PANEL — DARK PREMIUM VISUAL UPGRADE
+   ═══════════════════════════════════════════════════ */
+
+/* KPI cards no painel MUST: fundo diagonal + glow mais forte */
+#page-must .must-kpi-grid .kpi-card{
+  background:linear-gradient(145deg,rgba(107,139,245,.07) 0%,rgba(255,255,255,.018) 55%,rgba(0,0,0,.02) 100%);
+  transition:transform .25s,border-color .3s,box-shadow .3s,background .3s;
+}
+#page-must .kpi-card.blue::after  {background:radial-gradient(160% 140% at 100% 0%,rgba(107,139,245,.22),transparent 55%);}
+#page-must .kpi-card.orange::after{background:radial-gradient(160% 140% at 100% 0%,rgba(245,166,35,.20),transparent 55%);}
+#page-must .kpi-card.green::after {background:radial-gradient(160% 140% at 100% 0%,rgba(52,224,161,.20),transparent 55%);}
+#page-must .kpi-card.yellow::after{background:radial-gradient(160% 140% at 100% 0%,rgba(245,200,75,.20),transparent 55%);}
+#page-must .kpi-card.cyan::after  {background:radial-gradient(160% 140% at 100% 0%,rgba(45,212,191,.20),transparent 55%);}
+#page-must .kpi-card.red::after   {background:radial-gradient(160% 140% at 100% 0%,rgba(240,89,140,.20),transparent 55%);}
+#page-must .kpi-card.purple::after{background:radial-gradient(160% 140% at 100% 0%,rgba(168,85,247,.22),transparent 55%);}
+#page-must .kpi-card.blue2::after {background:radial-gradient(160% 140% at 100% 0%,rgba(147,180,248,.20),transparent 55%);}
+/* Borda colorida por tipo */
+#page-must .kpi-card.blue  {border-color:rgba(107,139,245,.32);}
+#page-must .kpi-card.orange{border-color:rgba(245,166,35,.28);}
+#page-must .kpi-card.green {border-color:rgba(52,224,161,.28);}
+#page-must .kpi-card.yellow{border-color:rgba(245,200,75,.26);}
+#page-must .kpi-card.cyan  {border-color:rgba(45,212,191,.28);}
+#page-must .kpi-card.red   {border-color:rgba(240,89,140,.28);}
+#page-must .kpi-card.purple{border-color:rgba(168,85,247,.30);}
+#page-must .kpi-card.blue2 {border-color:rgba(147,180,248,.28);}
+/* Brilho sutil nos valores KPI */
+#page-must .kpi-value{text-shadow:0 0 28px rgba(255,255,255,.10);}
+
+/* Chips Way2 ativos — glassmorphism com glow na cor do parque */
+.w2d-park-chip.on{
+  background:var(--pk-bg,rgba(107,139,245,.20));
+  border-color:var(--pk-c,#6b8bf5);
+  color:#fff;
+  box-shadow:0 0 16px -4px var(--pk-c,#6b8bf5),inset 0 1px 0 rgba(255,255,255,.14);
+  text-shadow:0 0 10px var(--pk-c,#6b8bf5);
+}
+.w2d-park-chip.on::before{
+  background:rgba(255,255,255,.55);
+  box-shadow:0 0 7px 1px var(--pk-c,#6b8bf5);
+}
+
+/* Section titles MUST — separador gradiente */
+#page-must .section-title{border-bottom-color:rgba(107,139,245,.22);}
+
+/* Sticky overview — borda inferior com glow sutil */
+#page-must #sec-must-overview{border-bottom:1px solid rgba(107,139,245,.15);}
+
+/* Linha Way2 sticky — top border mais brilhante */
+#page-must #sec-must-w2dem .section-title{
+  border-top:1px solid rgba(107,139,245,.10);
+  padding-top:10px;
+  margin-top:-10px;
+}
+
+/* Ranking card — linha superior mais pronunciada */
+#page-must #sec-must-ranking .cc::before{
+  background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.8) 22%,rgba(45,212,191,.55) 78%,transparent 100%);
+  height:2px;
+}
+
+/* Ranking: glow na barra ao hover da linha */
+#page-must .must-rank-row:hover .must-rank-fill{
+  filter:brightness(1.14) saturate(1.22);
+  box-shadow:0 0 22px -5px var(--park-color,#6b8bf5),inset 0 1px 0 rgba(255,255,255,.22);
+}
+/* Linha selecionada — glow extra */
+#page-must .must-rank-row.selected{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--park-color,#6b8bf5) 16%,transparent),transparent 68%);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--park-color,#6b8bf5) 42%,rgba(255,255,255,.05)),0 0 20px -8px var(--park-color,#6b8bf5);
+}
+/* Percentual da linha selecionada mais brilhante */
+#page-must .must-rank-row.selected .must-rank-pct{
+  text-shadow:0 0 14px color-mix(in srgb,var(--park-color,#6b8bf5) 80%,transparent);
+}
+
+/* Chart cards no MUST — hover glow mais suave (sem levitar tanto) */
+#page-must .cc:hover{
+  border-color:rgba(107,139,245,.40);
+  box-shadow:0 12px 50px rgba(0,0,0,.85),0 0 50px rgba(107,139,245,.22),0 0 0 1px rgba(107,139,245,.25),inset 0 1px 0 rgba(255,255,255,.12);
+  transform:translateY(-8px)!important;
+}
+
+/* Chart cards MUST — top line mais brilhante */
+#page-must .cc::before{
+  background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.65) 28%,rgba(45,212,191,.45) 72%,transparent 100%);
+  height:2px;
+}
+
+/* ═══════════════════════════════════════════════════ */
+
 /* Chart cards */
 html[data-theme="light"] .cc{
   background:#ffffff;
