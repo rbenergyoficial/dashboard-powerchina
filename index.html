@@ -794,6 +794,22 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-row.selected .must-rank-fill{filter:saturate(1.12) brightness(1.04)}
 #page-must .must-rank-foot{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--t3)}
 #page-must .must-rank-foot strong{color:var(--t1);font-weight:700}
+/* Tabela de ranking */
+#page-must .must-rank-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}
+#page-must .must-rank-table th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--t3);padding:6px 10px 8px;border-bottom:1px solid rgba(255,255,255,.09)}
+#page-must .must-rank-table td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--t2);transition:background .15s}
+#page-must .must-rank-table tr:nth-child(even) td{background:rgba(255,255,255,.022)}
+#page-must .must-rank-table tbody tr:hover td{background:rgba(107,139,245,.10);color:var(--t1)}
+#page-must .must-rank-table tr.tbl-selected td{background:linear-gradient(90deg,color-mix(in srgb,var(--row-c,#6b8bf5) 12%,transparent),rgba(255,255,255,.015) 70%)}
+#page-must .must-tbl-park{display:flex;align-items:center;gap:8px;font-weight:700;color:#f3f6ff;font-family:var(--mono)}
+#page-must .must-tbl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#page-must .must-tbl-pct{font-weight:800;letter-spacing:-.2px}
+.must-st{display:inline-block;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;letter-spacing:.04em;white-space:nowrap}
+.must-st-normal  {background:rgba(34,197,94,.11); color:#4ade80;border:1px solid rgba(34,197,94,.22)}
+.must-st-ativo   {background:rgba(251,191,36,.11); color:#fbbf24;border:1px solid rgba(251,191,36,.22)}
+.must-st-alerta  {background:rgba(249,115,22,.11); color:#fb923c;border:1px solid rgba(249,115,22,.22)}
+.must-st-critico {background:rgba(239,68,68,.11);  color:#f87171;border:1px solid rgba(239,68,68,.22)}
+.must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 #page-must .must-dual-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:stretch}
 #page-must .must-dual-grid .section{margin:0;display:flex;flex-direction:column}
 #page-must .must-dual-grid .chart-row{flex:1;min-height:0;display:flex;flex-direction:column}
@@ -6398,7 +6414,26 @@ function renderMustPeakRanking(rows, w2dPeaks){
         ${r.selected?'<div class="must-rank-em-analise">▶ em análise</div>':''}
       </div>
     </div>`;
-  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
+  }).join('') + `<div class="must-rank-foot"><span><strong>Leitura:</strong> ordenado pelo maior % da contratada no período; barra = pico do período selecionado.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`
+  + `<table class="must-rank-table"><thead><tr><th>Parque</th><th>Pico MW</th><th>Contratada</th><th>% MUST</th><th>Status</th></tr></thead><tbody>`
+  + rank.map((r,i)=>{
+      const col=r.color||'#6b8bf5';
+      const pctCol=r.pct>=90?'#f87171':r.pct>=70?'#fbbf24':r.pct>=45?'#4ade80':'#67e8f9';
+      let sc,sl;
+      if(r.selected){sc='must-st-analise';sl='Em análise';}
+      else if(r.pct>100){sc='must-st-critico';sl='Crítico';}
+      else if(r.pct>85){sc='must-st-alerta';sl='Alerta';}
+      else if(i===0){sc='must-st-ativo';sl='Ativo';}
+      else{sc='must-st-normal';sl='Normal';}
+      return `<tr class="${r.selected?'tbl-selected':''}" style="--row-c:${col}" onclick="_w2dRankClick('${r.park}')">
+        <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:${col};box-shadow:0 0 0 2px color-mix(in srgb,${col} 25%,transparent)"></span>${r.park}</div></td>
+        <td style="color:#f3f6ff;font-weight:600">${fmt1(r.peak)} MW</td>
+        <td>${fmt1(r.contrat)} MW</td>
+        <td><span class="must-tbl-pct" style="color:${pctCol}">${fmt1(r.pct)}%</span></td>
+        <td><span class="must-st ${sc}">${sl}</span></td>
+      </tr>`;
+    }).join('')
+  + `</tbody></table>`;
 }
 
 function _mustSyncStickyTop(){
