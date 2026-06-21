@@ -7299,27 +7299,10 @@ function _w2dRenderSub(){
   const dim='color:#9aa4b8;font-size:12px';
   const sep=`<span style="color:#5a6278;margin:0 6px">·</span>`;
 
-  // ── 2+ parques: lista vertical com pico individual de cada um ──
+  // ── 2+ parques: picos desenhados no canvas (canto direito); subtítulo mostra só a data ──
   if(parkPeaks && parkPeaks.length>=2){
-    // Grid com colunas fixas (cor | nome | MW | hora | % | "do MUST")
-    // garante alinhamento perfeito independente do valor.
-    const rows=parkPeaks.map(p=>{
-      const c=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
-      const uc=p.util>100?'#ff7575':'#7dda88';
-      const when=_w2dFormatWhen(p.peakTime);
-      return `<div class="w2d-peak-row">`
-        +`<span class="w2d-pk-dot" style="background:${c}"></span>`
-        +`<span class="w2d-pk-name">${p.pk}</span>`
-        +`<span class="w2d-pk-mw">${_w2dFmtMW(p.peak,2)}</span>`
-        +`<span class="w2d-pk-time">${when||''}</span>`
-        +`<span class="w2d-pk-pct" style="color:${uc}">${p.util.toFixed(2)}%</span>`
-        +`<span class="w2d-pk-must">do MUST</span>`
-        +`</div>`;
-    }).join('');
-    sEl.classList.add('is-multiline');
-    sEl.innerHTML=
-      `<div style="${dim};margin-bottom:3px;text-align:center;font-size:11px">${_w2dSubBase}</div>`
-      +`<div class="w2d-peak-list">${rows}</div>`;
+    sEl.classList.remove('is-multiline');
+    sEl.innerHTML=`<span style="color:#6b7280;font-size:11px">${_w2dSubBase}</span>`;
     return;
   }
 
@@ -7387,6 +7370,8 @@ function _w2dUpdateKpiPeak(){
   Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime,parkPeaks});
   _w2dRefreshKpi();
   _w2dRenderSub();
+  // Redesenha canvas para mostrar tabela de parques no canto direito
+  if(parkPeaks&&_w2dChart) _w2dChart.update('none');
 }
 // Reaplicar KPI cards Way2 após renderPageMUST() sobrescrever
 function _w2dRefreshKpi(){
@@ -7966,19 +7951,41 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           const val=ds.data[0];if(!val) return;
           entries.push({ds,val});
         });
-        if(!entries.length) return;
-        const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
-        const rowH=12;
-        entries.forEach((e,i)=>{
-          const yPx=yLine-(i*rowH+1); // empilha para cima tocando a linha contratada
-          const pkN=e.ds.label.replace(/^_contr_?/,'');
-          const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
-          ctx.save();ctx.font='bold 10px system-ui,sans-serif';
-          const tw=ctx.measureText(lbl).width+10;
-          ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
-          ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
-          ctx.fillText(lbl,xR-4,yPx-rowH/2+1);ctx.restore();
-        });
+        if(entries.length){
+          const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+          const rowH=12;
+          entries.forEach((e,i)=>{
+            const yPx=yLine-(i*rowH+1);
+            const pkN=e.ds.label.replace(/^_contr_?/,'');
+            const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
+            ctx.save();ctx.font='bold 10px system-ui,sans-serif';
+            const tw=ctx.measureText(lbl).width+10;
+            ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+            ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
+            ctx.fillText(lbl,xR-4,yPx-rowH/2+1);ctx.restore();
+          });
+        }
+        // Tabela de picos por parque no canto superior direito (substitui subtítulo multiline)
+        const pp=_w2dLastKpi?.parkPeaks;
+        if(pp&&pp.length>=2){
+          ctx.save();
+          let yy=(chart.chartArea?.top||0)+3;const rH=13;
+          if(_w2dSubBase){ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#555c72';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(_w2dSubBase,xR-4,yy);yy+=rH;}
+          pp.forEach(p=>{
+            const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
+            const uc=p.util>100?'#ff7575':'#7dda88';
+            const when=_w2dFormatWhen(p.peakTime);
+            ctx.fillStyle='rgba(8,10,20,0.72)';ctx.fillRect(xR-248,yy,248,rH);
+            ctx.fillStyle=col;ctx.fillRect(xR-244,yy+3,6,7);
+            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
+            ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
+            ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
+            ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2)+'%',xR-50,yy+1);
+            ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
+            yy+=rH;
+          });
+          ctx.restore();
+        }
       }}],
       options:{
       responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
@@ -8120,23 +8127,45 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         const val=ds.data[0];if(!val) return;
         entries.push({ds,val});
       });
-      if(!entries.length) return;
-      const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
-      const rowH=12;
-      entries.forEach((e,i)=>{
-        const yPx=yLine-(i*rowH+1);
-        const pkN=e.ds.label.replace(/^_contr_?/,'');
-        const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
+      if(entries.length){
+        const yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
+        const rowH=12;
+        entries.forEach((e,i)=>{
+          const yPx=yLine-(i*rowH+1);
+          const pkN=e.ds.label.replace(/^_contr_?/,'');
+          const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
+          ctx.save();
+          ctx.font='bold 10px system-ui,sans-serif';
+          const tw=ctx.measureText(lbl).width+10;
+          ctx.fillStyle='rgba(10,6,18,.82)';
+          ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+          ctx.fillStyle=e.ds.borderColor;
+          ctx.textAlign='right';ctx.textBaseline='middle';
+          ctx.fillText(lbl,xR-4,yPx-rowH/2+1);
+          ctx.restore();
+        });
+      }
+      // Tabela de picos por parque no canto superior direito (substitui subtítulo multiline)
+      const pp=_w2dLastKpi?.parkPeaks;
+      if(pp&&pp.length>=2){
         ctx.save();
-        ctx.font='bold 10px system-ui,sans-serif';
-        const tw=ctx.measureText(lbl).width+10;
-        ctx.fillStyle='rgba(10,6,18,.82)';
-        ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
-        ctx.fillStyle=e.ds.borderColor;
-        ctx.textAlign='right';ctx.textBaseline='middle';
-        ctx.fillText(lbl,xR-4,yPx-rowH/2+1);
+        let yy=(chart.chartArea?.top||0)+3;const rH=13;
+        if(_w2dSubBase){ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#555c72';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText(_w2dSubBase,xR-4,yy);yy+=rH;}
+        pp.forEach(p=>{
+          const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
+          const uc=p.util>100?'#ff7575':'#7dda88';
+          const when=_w2dFormatWhen(p.peakTime);
+          ctx.fillStyle='rgba(8,10,20,0.72)';ctx.fillRect(xR-248,yy,248,rH);
+          ctx.fillStyle=col;ctx.fillRect(xR-244,yy+3,6,7);
+          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle='#dfe6f5';ctx.textAlign='left';ctx.textBaseline='top';ctx.fillText(p.pk,xR-234,yy+1);
+          ctx.fillStyle='#fbbf24';ctx.textAlign='right';ctx.fillText(_w2dFmtMW(p.peak,2),xR-145,yy+1);
+          ctx.font='10px system-ui,sans-serif';ctx.fillStyle='#9aa4b8';ctx.textAlign='left';ctx.fillText(when,xR-140,yy+1);
+          ctx.font='bold 10px system-ui,sans-serif';ctx.fillStyle=uc;ctx.textAlign='right';ctx.fillText(p.util.toFixed(2)+'%',xR-50,yy+1);
+          ctx.font='9px system-ui,sans-serif';ctx.fillStyle='#6b7280';ctx.textAlign='left';ctx.fillText('do MUST',xR-45,yy+2);
+          yy+=rH;
+        });
         ctx.restore();
-      });
+      }
     }}],
     options:{
       responsive:true,maintainAspectRatio:false,animation:false,
