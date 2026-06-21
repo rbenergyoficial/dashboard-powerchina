@@ -8232,10 +8232,12 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const _dataMx1=_allVf1.length?Math.max(..._allVf1,0):0;
     const _ctrMx1=Math.max(...(dashData?.must?.parks||[]).map(p=>+num(dashData.must?.contrat?.[p]||0)),+num(dashData?.must?.contrat?.total||0),0);
     const _yMx1=Math.max(Math.ceil(Math.max(_dataMx1,_ctrMx1)*1.08/5)*5,10);
-    const _rPad1=_onC.length>=2?270:20;
+    const _rPad1=12;
+    const _tPad1=_onC.length>=2?(_onC.length*14+10):4;
     _w2dChart=new Chart(canvas,{type:isBar?'bar':'line',data:{labels:allLabels,datasets},
       plugins:[{id:'_cLbl',afterDraw(chart){
         const xR=chart.width-8;const ctx=chart.ctx;
+        const xCA=(chart.chartArea?.right||chart.width)-4;
         const entries=[];
         chart.data.datasets.forEach(ds=>{
           if(!ds.label.startsWith('_contr')) return;
@@ -8252,16 +8254,16 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
             const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
             ctx.save();ctx.font='bold 10px system-ui,sans-serif';
             const tw=ctx.measureText(lbl).width+10;
-            ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+            ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xCA-tw,yPx-rowH+1,tw,rowH-1);
             ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
-            ctx.fillText(lbl,xR-4,yPx-rowH/2+1);ctx.restore();
+            ctx.fillText(lbl,xCA,yPx-rowH/2+1);ctx.restore();
           });
         }
-        // Tabela de picos: logo ABAIXO da linha contratada, crescendo para baixo
+        // Tabela de picos: TOPO do canvas, margem direita (acima da área de dados)
         const pp=_w2dLastKpi?.parkPeaks;
-        if(pp&&pp.length>=2&&yLine!=null){
+        if(pp&&pp.length>=2){
           ctx.save();
-          let yy=yLine+6;const rH=13;
+          let yy=3;const rH=13;
           [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
             const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
             const uc=p.util>100?'#ff7575':'#7dda88';
@@ -8293,7 +8295,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         y:{min:0,max:_yMx1,ticks:{color:'#565b70',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}},
-      layout:{padding:{right:_rPad1,top:4,bottom:4}}}});
+      layout:{padding:{right:_rPad1,top:_tPad1,bottom:4}}}});
     // Calcula KPI diretamente dos pkVals do período completo (não depende de _w2dLastKpi prévio)
     const _peakDs=_onC.length===0?
       (()=>{const _tot=Array.from({length:dates.length*ptsPerDay},(_,i)=>{let s=0,ok=false;allPks.forEach(pk=>{const v=pkVals[pk][i];if(v!=null){s+=v;ok=true;}});return ok?+s.toFixed(3):null;});return _tot;})():
@@ -8411,13 +8413,15 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const _allVf2=[]; datasets.forEach(ds=>{if(!ds.label.startsWith('_'))(ds.data||[]).forEach(v=>{if(v!=null)_allVf2.push(+v);});});
   const _dataMx2=_allVf2.length?Math.max(..._allVf2,0):0;
   const _yMx2=Math.max(Math.ceil(Math.max(_dataMx2,_cBase)*1.08/5)*5,10);
-  const _rPad2=parks.length>=2?270:20;
+  const _rPad2=12;
+  const _tPad2=parks.length>=2?(parks.length*14+10):4;
 
   _w2dChart=new Chart(canvas,{
     type:'line',data:{labels:displayLabels,datasets},
     plugins:[{id:'_cLbl',afterDraw(chart){
       const xR=chart.width-8;
       const ctx=chart.ctx;
+      const xCA=(chart.chartArea?.right||chart.width)-4;
       const entries=[];
       chart.data.datasets.forEach(ds=>{
         if(!ds.label.startsWith('_contr')) return;
@@ -8436,18 +8440,18 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
           ctx.font='bold 10px system-ui,sans-serif';
           const tw=ctx.measureText(lbl).width+10;
           ctx.fillStyle='rgba(10,6,18,.82)';
-          ctx.fillRect(xR-tw,yPx-rowH+1,tw,rowH-1);
+          ctx.fillRect(xCA-tw,yPx-rowH+1,tw,rowH-1);
           ctx.fillStyle=e.ds.borderColor;
           ctx.textAlign='right';ctx.textBaseline='middle';
-          ctx.fillText(lbl,xR-4,yPx-rowH/2+1);
+          ctx.fillText(lbl,xCA,yPx-rowH/2+1);
           ctx.restore();
         });
       }
-      // Tabela de picos: logo ABAIXO da linha contratada, crescendo para baixo
+      // Tabela de picos: TOPO do canvas, margem direita (acima da área de dados)
       const pp=_w2dLastKpi?.parkPeaks;
-      if(pp&&pp.length>=2&&yLine!=null){
+      if(pp&&pp.length>=2){
         ctx.save();
-        let yy=yLine+6;const rH=13;
+        let yy=3;const rH=13;
         [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
           const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
           const uc=p.util>100?'#ff7575':'#7dda88';
@@ -8488,7 +8492,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            grid:{display:false},border:{color:'rgba(255,255,255,.04)'},
            title:{display:true,text:'MW',color:'#565b70',font:{size:10}}}
       },
-      layout:{padding:{right:_rPad2,top:4,bottom:4}}
+      layout:{padding:{right:_rPad2,top:_tPad2,bottom:4}}
     }
   });
 
