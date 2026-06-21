@@ -7970,7 +7970,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         if(pp&&pp.length>=2&&yLine!=null){
           ctx.save();
           let yy=yLine+6;const rH=13;
-          [...pp].sort((a,b)=>b.peak-a.peak).forEach(p=>{
+          [...pp].sort((a,b)=>b.util-a.util).forEach(p=>{
             const col=(_W2D_COLORS[p.pk]?.c)||'#6b8bf5';
             const uc=p.util>100?'#ff7575':'#7dda88';
             const when=_w2dFormatWhen(p.peakTime);
