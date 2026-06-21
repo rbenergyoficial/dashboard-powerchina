@@ -8272,15 +8272,18 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         const ctx=chart.ctx;
         const xCA=(chart.chartArea?.right||chart.width)-4;
         const entries=[];
-        chart.data.datasets.forEach(ds=>{
+        chart.data.datasets.forEach((ds,dsIdx)=>{
           if(!ds.label.startsWith('_contr')) return;
           const val=ds.data[0];if(!val) return;
-          entries.push({ds,val});
+          const meta=chart.getDatasetMeta(dsIdx);
+          if(!meta||meta.hidden) return;
+          const pts=meta.data;const pt=pts[pts.length-1];if(!pt) return;
+          entries.push({ds,val,yPx:pt.y});
         });
         if(entries.length){
           const rowH=12;
           entries.forEach(e=>{
-            const yV=chart.scales.y?.getPixelForValue(e.val)||0;
+            const yV=e.yPx;
             const pkN=e.ds.label.replace(/^_contr_?/,'');
             const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
             ctx.save();ctx.font='bold 10px system-ui,sans-serif';
@@ -8430,15 +8433,18 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
       const ctx=chart.ctx;
       const xCA=(chart.chartArea?.right||chart.width)-4;
       const entries=[];
-      chart.data.datasets.forEach(ds=>{
+      chart.data.datasets.forEach((ds,dsIdx)=>{
         if(!ds.label.startsWith('_contr')) return;
         const val=ds.data[0];if(!val) return;
-        entries.push({ds,val});
+        const meta=chart.getDatasetMeta(dsIdx);
+        if(!meta||meta.hidden) return;
+        const pts=meta.data;const pt=pts[pts.length-1];if(!pt) return;
+        entries.push({ds,val,yPx:pt.y});
       });
       if(entries.length){
         const rowH=12;
         entries.forEach(e=>{
-          const yV=chart.scales.y?.getPixelForValue(e.val)||0;
+          const yV=e.yPx;
           const pkN=e.ds.label.replace(/^_contr_?/,'');
           const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
           ctx.save();
