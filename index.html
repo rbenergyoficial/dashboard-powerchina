@@ -15973,33 +15973,38 @@ window._ppaChartGet=function(id){return charts[id];};
 })();
 </script>
 <script>
-/* V46 — card resize: largura (grid-template-columns) + altura (cc-body) */
+/* V46 — card resize completo: card+body altura · grid-template-columns largura */
 (function(){
   if(window.__ccResizeV46__) return;
   window.__ccResizeV46__=true;
   var _rs=null,_rzAF=null;
 
-  /* ── stable key for a chart-row (uses nearest ancestor id + row index) ── */
   function _rowKey(row){
     var sec=row.closest('[id]');
-    var idx=0,c=row;
-    if(row.parentElement) for(c=row.parentElement.firstElementChild;c&&c!==row;c=c.nextElementSibling) idx++;
+    var idx=0,c=row.parentElement&&row.parentElement.firstElementChild;
+    for(;c&&c!==row;c=c.nextElementSibling) idx++;
     return (sec?sec.id:'pg')+'-r'+idx;
   }
 
-  /* ── resize cc-body height ── */
-  function _applyH(body,h){
-    var hp=Math.max(80,Math.round(h))+'px';
-    body.style.setProperty('height',hp,'important');
-    body.style.setProperty('min-height',hp,'important');
-    body.style.setProperty('max-height',hp,'important');
-    body.style.setProperty('flex','none','important');
+  /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
+  function _applyH(rs,dh){
+    /* card cresce/encolhe: align-self:start desconecta do stretch do grid */
+    var newCcH=Math.max(120,Math.round(rs.h0+dh));
+    rs.cc.style.setProperty('height',newCcH+'px','important');
+    rs.cc.style.setProperty('min-height',newCcH+'px','important');
+    rs.cc.style.setProperty('align-self','start','important');
+    /* body = card - overhead fixo (head + padding + gap) */
+    var newBH=Math.max(60,Math.round(rs.hb0+dh));
+    rs.body.style.setProperty('height',newBH+'px','important');
+    rs.body.style.setProperty('min-height',newBH+'px','important');
+    rs.body.style.setProperty('max-height',newBH+'px','important');
+    rs.body.style.setProperty('flex','none','important');
   }
 
-  /* ── resize grid column of the card's row ── */
+  /* ── width: manipula grid-template-columns da linha ── */
   function _applyW(rs,dw){
     if(rs.colCount<2) return;
-    var gap=12,minW=200;
+    var minW=200,gap=12;
     var maxW=rs.rowW-minW*(rs.colCount-1)-gap*(rs.colCount-1);
     var newW=Math.max(minW,Math.min(maxW,Math.round(rs.w0+dw)));
     var cols=[];
@@ -16007,7 +16012,7 @@ window._ppaChartGet=function(id){return charts[id];};
     rs.row.style.gridTemplateColumns=cols.join(' ');
   }
 
-  /* ── resize all charts in a row (throttled via rAF) ── */
+  /* ── resize charts em toda a linha (throttle rAF) ── */
   function _rzRow(row){
     if(_rzAF) return;
     _rzAF=requestAnimationFrame(function(){
@@ -16020,34 +16025,31 @@ window._ppaChartGet=function(id){return charts[id];};
     });
   }
 
-  /* ── persist sizes ── */
+  /* ── salva card height + body height + grid cols ── */
   function _save(rs){
     var cv=rs.body.querySelector('canvas');
     var key=cv&&cv.id;
-    if(key) try{localStorage.setItem('cc-h-'+key,rs.body.style.height);}catch(e){}
+    if(key){
+      try{localStorage.setItem('cc-h-'+key,rs.cc.style.height);}catch(e){}
+      try{localStorage.setItem('cc-bh-'+key,rs.body.style.height);}catch(e){}
+    }
     if(rs.row.style.gridTemplateColumns)
       try{localStorage.setItem('cc-gtc-'+rs.rowKey,rs.row.style.gridTemplateColumns);}catch(e){}
   }
 
-  /* ── reset a card + optionally its row ── */
+  /* ── reset card + limpa grid se nenhum irmão resized ── */
   function _reset(cc,body){
+    ['height','min-height','align-self'].forEach(function(p){cc.style.removeProperty(p);});
     ['height','min-height','max-height','flex'].forEach(function(p){body.style.removeProperty(p);});
-    var cv=body.querySelector('canvas');
-    var key=cv&&cv.id;
-    if(key) try{localStorage.removeItem('cc-h-'+key);}catch(e){}
+    var cv=body.querySelector('canvas'),key=cv&&cv.id;
+    if(key){try{localStorage.removeItem('cc-h-'+key);}catch(e){} try{localStorage.removeItem('cc-bh-'+key);}catch(e){}}
     cc.classList.remove('cc-resized');
-    /* clear row grid only if no sibling is still resized */
     var row=cc.parentElement;
-    var anyResized=false;
-    [].slice.call(row.querySelectorAll(':scope>.cc')).forEach(function(c){if(c!==cc&&c.classList.contains('cc-resized'))anyResized=true;});
-    if(!anyResized){
-      row.style.removeProperty('grid-template-columns');
-      try{localStorage.removeItem('cc-gtc-'+_rowKey(row));}catch(e){}
-    }
+    var anyR=[].slice.call(row.querySelectorAll(':scope>.cc')).some(function(c){return c!==cc&&c.classList.contains('cc-resized');});
+    if(!anyR){row.style.removeProperty('grid-template-columns');try{localStorage.removeItem('cc-gtc-'+_rowKey(row));}catch(e){}}
     setTimeout(function(){_rzRow(row);},60);
   }
 
-  /* ── drag start ── */
   function _onDown(e){
     var handle=e.target&&e.target.closest&&e.target.closest('.cc-resize-handle');
     if(!handle) return;
@@ -16057,14 +16059,14 @@ window._ppaChartGet=function(id){return charts[id];};
     var row=cc.parentElement;
     var rowCCs=[].slice.call(row.querySelectorAll(':scope>.cc'));
     var ccRect=cc.getBoundingClientRect();
-    var rowRect=row.getBoundingClientRect();
     _rs={
       body:body,cc:cc,row:row,
       colIdx:rowCCs.indexOf(cc),colCount:rowCCs.length,
-      rowW:rowRect.width,rowKey:_rowKey(row),
+      rowW:row.getBoundingClientRect().width,rowKey:_rowKey(row),
       drag:cc.getAttribute('draggable'),
       y0:e.touches?e.touches[0].clientY:e.clientY,
       x0:e.touches?e.touches[0].clientX:e.clientX,
+      h0:ccRect.height,
       hb0:body.getBoundingClientRect().height,
       w0:ccRect.width
     };
@@ -16075,18 +16077,16 @@ window._ppaChartGet=function(id){return charts[id];};
     e.preventDefault(); e.stopPropagation();
   }
 
-  /* ── drag move ── */
   function _onMove(e){
     if(!_rs) return;
     var y=e.touches?e.touches[0].clientY:e.clientY;
     var x=e.touches?e.touches[0].clientX:e.clientX;
-    _applyH(_rs.body,_rs.hb0+(y-_rs.y0));
+    _applyH(_rs,y-_rs.y0);
     _applyW(_rs,x-_rs.x0);
     _rzRow(_rs.row);
     e.preventDefault();
   }
 
-  /* ── drag end ── */
   function _onUp(){
     if(!_rs) return;
     document.body.style.userSelect='';
@@ -16099,7 +16099,6 @@ window._ppaChartGet=function(id){return charts[id];};
     _rs=null;
   }
 
-  /* ── double-click resets ── */
   function _onDbl(e){
     var handle=e.target&&e.target.closest&&e.target.closest('.cc-resize-handle');
     if(!handle) return;
@@ -16116,9 +16115,7 @@ window._ppaChartGet=function(id){return charts[id];};
   document.addEventListener('touchend',_onUp);
   document.addEventListener('dblclick',_onDbl);
 
-  /* ── init: add handles + restore saved sizes ── */
   function _init(){
-    /* add handles to all .cc cards */
     document.querySelectorAll('.cc').forEach(function(cc){
       if(cc.querySelector('.cc-resize-handle')) return;
       var h=document.createElement('div');
@@ -16126,25 +16123,18 @@ window._ppaChartGet=function(id){return charts[id];};
       h.title='Arrastar para redimensionar · Duplo clique para redefinir';
       cc.appendChild(h);
     });
-    /* restore saved heights */
+    /* restaura tamanhos salvos */
     document.querySelectorAll('.cc').forEach(function(cc){
-      var cv=cc.querySelector('canvas');
-      var key=cv&&cv.id;
+      var cv=cc.querySelector('canvas'),key=cv&&cv.id;
       var body=cc.querySelector('.cc-body');
       if(!key||!body) return;
-      var h=(function(){try{return localStorage.getItem('cc-h-'+key);}catch(e){return null;}}());
-      if(h){
-        body.style.setProperty('height',h,'important');
-        body.style.setProperty('min-height',h,'important');
-        body.style.setProperty('max-height',h,'important');
-        body.style.setProperty('flex','none','important');
-        cc.classList.add('cc-resized');
-      }
+      var cH=(function(){try{return localStorage.getItem('cc-h-'+key);}catch(e){return null;}}());
+      var bH=(function(){try{return localStorage.getItem('cc-bh-'+key);}catch(e){return null;}}());
+      if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.classList.add('cc-resized');}
+      if(bH){body.style.setProperty('height',bH,'important');body.style.setProperty('min-height',bH,'important');body.style.setProperty('max-height',bH,'important');body.style.setProperty('flex','none','important');}
     });
-    /* restore saved grid column templates */
     document.querySelectorAll('.chart-row').forEach(function(row){
-      var rk=_rowKey(row);
-      var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+rk);}catch(e){return null;}}());
+      var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
     });
   }
