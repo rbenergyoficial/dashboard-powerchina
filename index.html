@@ -7545,11 +7545,14 @@ function _w2dUpdateContrLine(){
     mustStr=cv>0?` · MUST: ${_w2dFmtMW(cv,2)}`:'';
   } else {
     pkLbl=onPks.join('+');
-    let idx=0;
+    // Agrupa parques com mesma demanda contratada → uma linha tracejada por valor único
+    const _cgrps={};
     onPks.forEach(pk=>{
       const cv=num(dashData?.must?.contrat?.[pk]||0);
-      if(cv>0){newDs.push(_makeContrDs('_contr_'+pk,cv,len,idx));idx++;}
+      if(cv>0){const k=cv.toFixed(4);if(!_cgrps[k])_cgrps[k]={cv,pks:[]};_cgrps[k].pks.push(pk);}
     });
+    let idx=0;
+    Object.values(_cgrps).forEach(g=>{newDs.push(_makeContrDs('_contr_'+g.pks.join('-'),g.cv,len,idx++));});
     mustStr=newDs.length===0?'':newDs.length===1
       ?` · MUST: ${_w2dFmtMW(newDs[0].data[0],2)}`
       :` · MUST: `+newDs.map(d=>`${d.label.replace('_contr_','')} ${_w2dFmtMW(d.data[0],2)}`).join(' / ');
@@ -8274,19 +8277,17 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           const val=ds.data[0];if(!val) return;
           entries.push({ds,val});
         });
-        let yLine=null;
         if(entries.length){
-          yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
           const rowH=12;
-          entries.forEach((e,i)=>{
-            const yPx=yLine-(i*rowH+1);
+          entries.forEach(e=>{
+            const yV=chart.scales.y?.getPixelForValue(e.val)||0;
             const pkN=e.ds.label.replace(/^_contr_?/,'');
             const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
             ctx.save();ctx.font='bold 10px system-ui,sans-serif';
             const tw=ctx.measureText(lbl).width+10;
-            ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xCA-tw,yPx-rowH+1,tw,rowH-1);
+            ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xCA-tw,yV-rowH-1,tw,rowH);
             ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
-            ctx.fillText(lbl,xCA,yPx-rowH/2+1);ctx.restore();
+            ctx.fillText(lbl,xCA,yV-rowH/2-1);ctx.restore();
           });
         }
       }}],
@@ -8434,22 +8435,20 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         const val=ds.data[0];if(!val) return;
         entries.push({ds,val});
       });
-      let yLine=null;
       if(entries.length){
-        yLine=chart.scales.y?.getPixelForValue(entries[0].val)||0;
         const rowH=12;
-        entries.forEach((e,i)=>{
-          const yPx=yLine-(i*rowH+1);
+        entries.forEach(e=>{
+          const yV=chart.scales.y?.getPixelForValue(e.val)||0;
           const pkN=e.ds.label.replace(/^_contr_?/,'');
           const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
           ctx.save();
           ctx.font='bold 10px system-ui,sans-serif';
           const tw=ctx.measureText(lbl).width+10;
           ctx.fillStyle='rgba(10,6,18,.82)';
-          ctx.fillRect(xCA-tw,yPx-rowH+1,tw,rowH-1);
+          ctx.fillRect(xCA-tw,yV-rowH-1,tw,rowH);
           ctx.fillStyle=e.ds.borderColor;
           ctx.textAlign='right';ctx.textBaseline='middle';
-          ctx.fillText(lbl,xCA,yPx-rowH/2+1);
+          ctx.fillText(lbl,xCA,yV-rowH/2-1);
           ctx.restore();
         });
       }
