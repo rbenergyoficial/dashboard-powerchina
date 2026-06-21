@@ -785,10 +785,18 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-name{font-size:12px;font-weight:800;color:#f3f6ff;font-family:var(--mono);letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #page-must .must-rank-em-analise{font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--park-color,#6b8bf5);margin-top:3px;opacity:.9}
 #page-must .must-rank-track{position:relative;height:30px;border-radius:6px;background:rgba(255,255,255,.05);overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
-#page-must .must-rank-fill{height:100%;border-radius:6px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 3px 14px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 28%, transparent)}
-#page-must .must-rank-fill-curr{font-size:9px;font-weight:600;color:rgba(255,255,255,.72);flex-shrink:0}
+#page-must .must-rank-fill{position:relative;height:100%;border-radius:6px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;white-space:nowrap;overflow:hidden;min-width:60px;max-width:100%;transition:width .45s ease,filter .2s ease;box-shadow:0 4px 18px -4px color-mix(in srgb,var(--park-color,#6b8bf5) 38%, transparent)}
+#page-must .must-rank-fill::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.17) 0%,rgba(255,255,255,.04) 48%,rgba(0,0,0,.07) 100%)}
+#page-must .must-rank-fill-curr{position:relative;z-index:1;font-size:9px;font-weight:600;color:rgba(255,255,255,.78);flex-shrink:0}
+#page-must .must-rank-fill-text{position:relative;z-index:1;font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.32);letter-spacing:.12px}
 #page-must .must-rank-total{border-top:1px solid rgba(255,255,255,.09);margin-top:10px;padding-top:10px!important;opacity:.95}
-#page-must .must-rank-fill-text{font-size:11px;font-weight:800;color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.32);letter-spacing:.12px}
+/* Tooltip */
+#mustRankTip{position:fixed;z-index:9999;display:none;background:rgba(9,9,18,.97);backdrop-filter:blur(18px);border:1px solid rgba(107,139,245,.22);border-radius:14px;padding:14px 16px;min-width:215px;box-shadow:0 12px 40px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.05);pointer-events:none}
+.mrt-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:#f3f6ff;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.07);margin-bottom:9px}
+.mrt-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.mrt-row{display:flex;align-items:center;gap:7px;font-size:11px;color:rgba(255,255,255,.5);padding:3px 0}
+.mrt-row span:last-child{margin-left:auto;color:#f3f6ff;font-weight:600;font-size:11px}
+.mrt-row svg{flex-shrink:0}
 #page-must .must-rank-side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 #page-must .must-rank-pct{font-size:16px;line-height:1;font-weight:900;color:var(--park-color,#79f0c5);letter-spacing:-.2px}
 #page-must .must-rank-side-sub{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.65px}
@@ -6399,21 +6407,28 @@ function renderMustPeakRanking(rows, w2dPeaks){
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
   const activeRanks=rank.filter(r=>r.selected);
   const showCurr=!!(w2dPeaks&&_w2dIsCurrentPeriod);
+  _mustTipData={};
   host.innerHTML=rank.map(r=>{
     const width=Math.max(4,Math.min(100,r.pct));
     const color=r.color||'#6b8bf5';
-    const grad=`linear-gradient(90deg, ${color}cc 0%, ${color} 100%)`;
-    const meta=r.margem>=0 ? `Folga ${fmt1(r.margem)} MW` : `Excedente ${fmt1(Math.abs(r.margem))} MW`;
+    const grad=`linear-gradient(90deg,${color}55 0%,${color}bb 35%,${color} 100%)`;
     const lv=showCurr?_w2dLastVals[r.park]:null;
+    let sc,sl,pctCol;
+    if(r.selected){sc='must-st-analise';sl='Em análise';pctCol='#c4b5fd';}
+    else if(r.pct>100){sc='must-st-critico';sl='Crítico';pctCol='#f87171';}
+    else if(r.pct>98){sc='must-st-alerta';sl='Alerta';pctCol='#fb923c';}
+    else if(r.pct>95){sc='must-st-ativo';sl='Atenção';pctCol='#fbbf24';}
+    else{sc='must-st-normal';sl='Normal';pctCol='#4ade80';}
+    _mustTipData[r.park]={park:r.park,peak:r.peak,contrat:r.contrat,pct:r.pct,margem:r.margem,color,lv,sc,sl,pctCol};
     const fillInner=lv!=null
       ?`<span class="must-rank-fill-curr">${fmt1(lv)} MW</span><span class="must-rank-fill-text">${fmt1(r.peak)} MW</span>`
       :`<span class="must-rank-fill-text">${fmt1(r.peak)} MW</span>`;
-    return `<div class="must-rank-row ${r.selected?'selected':''}" style="--park-color:${color}" onclick="_w2dRankClick('${r.park}')" title="Clique para selecionar/deselecionar ${r.park}">
+    return `<div class="must-rank-row ${r.selected?'selected':''}" style="--park-color:${color}" onclick="_w2dRankClick('${r.park}')" onmouseenter="_mustTipShow(event,'${r.park}')" onmouseleave="_mustTipHide()">
       <div class="must-rank-park">
         <span class="must-rank-dot"></span>
         <span class="must-rank-name">${r.park}</span>
       </div>
-      <div class="must-rank-track" title="${r.park} · Pico ${fmt1(r.peak)} MW · Contratada ${fmt1(r.contrat)} MW · ${fmt1(r.pct)}% · ${meta}">
+      <div class="must-rank-track">
         <div class="must-rank-fill" style="width:${width.toFixed(2)}%;background:${grad}">${fillInner}</div>
       </div>
       <div class="must-rank-side">
@@ -6433,14 +6448,20 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const tLv=showCurr?rank.reduce((s,r)=>s+(_w2dLastVals[r.park]||0),0):null;
     const tW=Math.max(4,Math.min(100,tPct));
     const tCol='#6b8bf5';
-    const tGrad=`linear-gradient(90deg,#6b8bf5aa 0%,#6b8bf5 100%)`;
-    let tPctCol=tPct>100?'#f87171':tPct>98?'#fb923c':tPct>95?'#fbbf24':'#4ade80';
+    const tGrad=`linear-gradient(90deg,${tCol}44 0%,${tCol}99 35%,${tCol} 100%)`;
+    let tSC,tSL,tPctCol;
+    if(tPct>100){tSC='must-st-critico';tSL='Crítico';tPctCol='#f87171';}
+    else if(tPct>98){tSC='must-st-alerta';tSL='Alerta';tPctCol='#fb923c';}
+    else if(tPct>95){tSC='must-st-ativo';tSL='Atenção';tPctCol='#fbbf24';}
+    else{tSC='must-st-normal';tSL='Normal';tPctCol='#4ade80';}
+    const tMargem=+(tContr-tPeak).toFixed(2);
+    _mustTipData['TOTAL']={park:'TOTAL',peak:+tPeak.toFixed(2),contrat:+tContr.toFixed(2),pct:+tPct.toFixed(2),margem:tMargem,color:tCol,lv:tLv!=null?+tLv.toFixed(2):null,sc:tSC,sl:tSL,pctCol:tPctCol};
     const tFill=tLv!=null
       ?`<span class="must-rank-fill-curr">${fmt1(tLv)} MW</span><span class="must-rank-fill-text">${fmt1(tPeak)} MW</span>`
       :`<span class="must-rank-fill-text">${fmt1(tPeak)} MW</span>`;
-    return `<div class="must-rank-row must-rank-total" style="--park-color:${tCol}">
+    return `<div class="must-rank-row must-rank-total" style="--park-color:${tCol}" onmouseenter="_mustTipShow(event,'TOTAL')" onmouseleave="_mustTipHide()">
       <div class="must-rank-park"><span class="must-rank-dot"></span><span class="must-rank-name" style="font-size:10px;letter-spacing:.06em">TOTAL</span></div>
-      <div class="must-rank-track" title="Total · Pico ${fmt1(tPeak)} MW · Contratada ${fmt1(tContr)} MW · ${fmt1(tPct)}%">
+      <div class="must-rank-track">
         <div class="must-rank-fill" style="width:${tW.toFixed(2)}%;background:${tGrad}">${tFill}</div>
       </div>
       <div class="must-rank-side">
@@ -6505,6 +6526,29 @@ function _mustSyncStickyTop(){
   if(ov) document.documentElement.style.setProperty('--must-overview-h', ov.offsetHeight+'px');
 }
 window.addEventListener('resize',_mustSyncStickyTop);
+let _mustTipData={};
+function _mustTipShow(e,pk){
+  const d=_mustTipData[pk];if(!d)return;
+  let tip=document.getElementById('mustRankTip');
+  if(!tip){tip=document.createElement('div');tip.id='mustRankTip';document.body.appendChild(tip);}
+  const f1=v=>num(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+  const ic=(p,c)=>`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${c||'currentColor'}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  const mCol=d.margem>=0?'#4ade80':'#f87171';
+  const rows=[
+    d.lv!=null?`<div class="mrt-row">${ic('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>','#fbbf24')}<span>Demanda Atual</span><span>${f1(d.lv)} MW</span></div>`:'',
+    `<div class="mrt-row">${ic('<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/>','#60a5fa')}<span>Pico</span><span>${f1(d.peak)} MW</span></div>`,
+    `<div class="mrt-row">${ic('<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>','#a78bfa')}<span>Contratada</span><span>${f1(d.contrat)} MW</span></div>`,
+    `<div class="mrt-row">${ic('<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>','#34d399')}<span>% MUST</span><span style="color:${d.pctCol}">${f1(d.pct)}%</span></div>`,
+    `<div class="mrt-row">${ic(d.margem>=0?'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>':'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',mCol)}<span>Margem</span><span style="color:${mCol}">${d.margem>=0?'+':''}${f1(d.margem)} MW</span></div>`,
+    `<div class="mrt-row">${ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>','rgba(255,255,255,.4)')}<span>Status</span><span><span class="must-st ${d.sc}" style="font-size:9px;padding:2px 7px">${d.sl}</span></span></div>`,
+  ].join('');
+  tip.innerHTML=`<div class="mrt-title"><span class="mrt-dot" style="background:${d.color};box-shadow:0 0 0 3px color-mix(in srgb,${d.color} 25%,transparent)"></span>${d.park==='TOTAL'?'<span style="letter-spacing:.06em;font-size:11px">TOTAL</span>':d.park}</div>${rows}`;
+  const x=e.clientX+16,y=e.clientY+12;
+  tip.style.left=Math.min(x,window.innerWidth-235)+'px';
+  tip.style.top=Math.max(8,Math.min(y,window.innerHeight-220))+'px';
+  tip.style.display='block';
+}
+function _mustTipHide(){const t=document.getElementById('mustRankTip');if(t)t.style.display='none';}
 
 function renderPageMUST(type){
   type=(type==='line'||type==='bar')?type:getToggle('must');
