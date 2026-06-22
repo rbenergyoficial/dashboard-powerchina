@@ -2112,6 +2112,24 @@ function _themeCharts(light){
     <input class="modal-input" id="way2TokenInput" type="password" placeholder="Cole aqui o token Way2 para usar DEMANDA INTRADIA" spellcheck="false" autocomplete="off">
     <div style="font-size:10px;color:var(--t4);margin-top:3px">Usado apenas para a seção Demanda Intradia · Way2 na página MUST. Os dados de geração e MUST mensais continuam via Power Automate.</div>
 
+    <!-- Alertas MUST -->
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0 10px">
+      <div style="flex:1;height:1px;background:rgba(239,68,68,.2)"></div>
+      <span style="font-size:10px;color:var(--t3);white-space:nowrap">🔔 Alertas MUST</span>
+      <div style="flex:1;height:1px;background:rgba(239,68,68,.2)"></div>
+    </div>
+    <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 12px;font-size:11px;line-height:1.55;color:var(--t2)">
+      <span style="color:#f87171;font-weight:700">🔔 Alerta de ultrapassagem MUST</span><br>
+      Quando qualquer parque ultrapassar 100% do MUST no período atual, o dashboard envia automaticamente um POST ao webhook do seu flow no Power Automate. Cooldown de 1 hora por parque evita spam.
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--t3);margin-bottom:4px">URL do webhook Power Automate (gatilho HTTP)</div>
+    <input class="modal-input" id="mustAlertWebhookInput" placeholder="https://prod-XX.brazilsouth.logic.azure.com/workflows/..." spellcheck="false" autocomplete="off">
+    <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <button class="modal-btn secondary" style="padding:5px 12px;font-size:11px" onclick="_testMustAlertWebhook()">Testar webhook</button>
+      <span id="mustAlertTestResult" style="font-size:10px;display:none"></span>
+    </div>
+    <div style="font-size:10px;color:var(--t4);margin-top:4px">Payload enviado: parque · pico MW · % MUST · margem · timestamp ISO.</div>
+
     <div class="modal-saved" id="cidSaved"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>Configurações salvas!</div>
     <div class="modal-btns" style="margin-top:14px">
       <button class="modal-btn primary" onclick="saveCid()">Salvar</button>
@@ -6418,6 +6436,56 @@ function mustInitFilter(){
   _mustFilterInit=true;
 }
 
+/* ─── MUST ALERT via Power Automate webhook ─── */
+var _MUST_ALERT_CD=60*60*1000; /* 1 hora de cooldown por parque */
+
+function _fireMustAlert(rank,isCurrent){
+  if(!isCurrent) return;
+  var url=localStorage.getItem('must_alert_webhook')||'';
+  if(!url) return;
+  var now=Date.now();
+  var criticos=rank.filter(function(r){return r.pct>100;}).filter(function(r){
+    var last=0;try{last=parseInt(localStorage.getItem('must_alert_ts_'+r.park))||0;}catch(e){}
+    return now-last>=_MUST_ALERT_CD;
+  });
+  if(!criticos.length) return;
+  criticos.forEach(function(r){try{localStorage.setItem('must_alert_ts_'+r.park,String(now));}catch(e){}});
+  var payload={
+    parques_criticos:criticos.map(function(r){
+      return {parque:r.park,pico_mw:r.peak,contratada_mw:r.contrat,pct_must:r.pct,margem_mw:r.margem,status:'Crítico'};
+    }),
+    timestamp_iso:new Date().toISOString(),
+    dashboard_url:'https://powerchina.rbenergy.com.br'
+  };
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(res){
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      console.log('[MUST Alert] Enviado:',payload.parques_criticos.map(function(p){return p.parque+' '+p.pct_must+'%';}).join(', '));
+    })
+    .catch(function(err){
+      console.warn('[MUST Alert] Falha no webhook:',err.message);
+      criticos.forEach(function(r){try{localStorage.removeItem('must_alert_ts_'+r.park);}catch(e){}});
+    });
+}
+
+function _testMustAlertWebhook(){
+  var url=document.getElementById('mustAlertWebhookInput').value.trim();
+  var res=document.getElementById('mustAlertTestResult');
+  if(!url){res.style.display='inline';res.style.color='#f87171';res.textContent='Cole a URL antes de testar.';return;}
+  res.style.display='inline';res.style.color='var(--t3)';res.textContent='Enviando…';
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    parques_criticos:[{parque:'TESTE',pico_mw:49.5,contratada_mw:49.11,pct_must:100.8,margem_mw:-0.39,status:'Crítico (TESTE)'}],
+    timestamp_iso:new Date().toISOString(),
+    dashboard_url:'https://powerchina.rbenergy.com.br',
+    is_test:true
+  })}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    res.style.color='#4ade80';res.textContent='✓ Webhook OK — verifique o email!';
+  }).catch(function(err){
+    res.style.color='#f87171';res.textContent='✗ '+err.message;
+  });
+}
+
 function renderMustPeakRanking(rows, w2dPeaks){
   const must=dashData.must;
   const host=document.getElementById('mustRankList');
@@ -6529,6 +6597,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   })()
   + `<div class="must-rank-foot"><span><strong>Leitura:</strong> esquerda = demanda atual · direita = pico do período · barra = % da contratada.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
   renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod);
+  _fireMustAlert(rank, !!(w2dPeaks && _w2dIsCurrentPeriod));
 }
 
 function _equalizeDetailTableRows(){
@@ -8589,6 +8658,8 @@ function saveCid(){
   if(v) localStorage.setItem('mrd_cid',v);
   const tok=document.getElementById('way2TokenInput')?.value?.trim();
   if(tok) localStorage.setItem(WAY2_TOKEN_KEY,tok);
+  const wh=document.getElementById('mustAlertWebhookInput')?.value?.trim();
+  if(wh) localStorage.setItem('must_alert_webhook',wh); else localStorage.removeItem('must_alert_webhook');
   document.getElementById('cidSaved').style.display='block';
   setTimeout(()=>{
     closeSetup();
@@ -8599,6 +8670,8 @@ function closeSetup(){document.getElementById('setupModal').classList.remove('op
 function openSetup(){
   const s=getCid(); if(s) document.getElementById('cidInput').value=s;
   const t=getWay2Token(); const ti=document.getElementById('way2TokenInput'); if(t&&ti) ti.value=t;
+  const wh=localStorage.getItem('must_alert_webhook')||''; const wi=document.getElementById('mustAlertWebhookInput'); if(wi) wi.value=wh;
+  const tr=document.getElementById('mustAlertTestResult'); if(tr){tr.style.display='none';tr.textContent='';}
   // Atualizar status do blob Way2 no modal
   const pill=document.getElementById('way2Pill');
   const bs=document.getElementById('way2BlobStatus');
