@@ -507,9 +507,9 @@ html[data-theme="light"] .kpi-unit{opacity:.75;}
 .cc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.52) 30%,rgba(45,212,191,.34) 70%,transparent 100%);}
 /* V46 resize + move handles */
-.cc-resize-handle{position:absolute;bottom:5px;right:5px;width:15px;height:15px;cursor:se-resize;z-index:6;opacity:0;transition:opacity .15s}
-.cc-resize-handle::after{content:'';position:absolute;bottom:0;right:0;width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.6);box-shadow:-6px 0 0 rgba(255,255,255,.6),0 -6px 0 rgba(255,255,255,.6),-6px -6px 0 rgba(255,255,255,.6)}
-.cc:hover .cc-resize-handle{opacity:.55}
+.cc-resize-handle{position:absolute;bottom:4px;right:4px;width:22px;height:22px;cursor:se-resize;z-index:10;opacity:.18;transition:opacity .15s}
+.cc-resize-handle::after{content:'';position:absolute;bottom:2px;right:2px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.65);box-shadow:-7px 0 0 rgba(255,255,255,.65),0 -7px 0 rgba(255,255,255,.65),-7px -7px 0 rgba(255,255,255,.65)}
+.cc:hover .cc-resize-handle{opacity:.65}
 .cc-resize-handle:hover{opacity:1!important}
 html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box-shadow:-6px 0 0 rgba(0,0,0,.38),0 -6px 0 rgba(0,0,0,.38),-6px -6px 0 rgba(0,0,0,.38)}
 .cc.cc-resizing{transform:none!important;transition:none!important;box-shadow:0 0 0 2px rgba(107,139,245,.55),0 8px 36px rgba(0,0,0,.72)!important}
@@ -16042,8 +16042,15 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── width: manipula grid-template-columns da linha ── */
   function _applyW(rs,dw){
-    if(rs.colCount<2) return;
-    var minW=200,gap=12;
+    var gap=12;
+    if(rs.colCount<2){
+      /* cols-1: redimensiona largura do card diretamente via grid */
+      var newW=Math.max(280,Math.round(rs.w0+dw));
+      if(newW>=rs.rowW-8){rs.row.style.removeProperty('grid-template-columns');}
+      else{rs.row.style.gridTemplateColumns=newW+'px';}
+      return;
+    }
+    var minW=200;
     var maxW=rs.rowW-minW*(rs.colCount-1)-gap*(rs.colCount-1);
     var newW=Math.max(minW,Math.min(maxW,Math.round(rs.w0+dw)));
     var cols=[];
