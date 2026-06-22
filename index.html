@@ -845,7 +845,8 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-dual-grid .section{margin:0;display:flex;flex-direction:column}
 #page-must .must-dual-grid .chart-row{flex:1;min-height:0;display:flex;flex-direction:column}
 #page-must .must-dual-grid .chart-row .cc{flex:1;min-height:0;height:auto!important}
-#page-must #sec-must-ranking .section-title{margin-bottom:10px}
+#page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
+#page-must .cc-section-hdr svg{width:13px;height:13px;opacity:.6;flex-shrink:0}
 #page-must #sec-must-ranking .cc-body{height:0!important;min-height:0!important;max-height:none!important;overflow:auto;padding:2px 2px 0 0;flex:1}
 #page-must .must-rank-list{min-height:100%;padding-right:4px}
 #page-must .must-rank-row{grid-template-columns:72px minmax(0,1fr) 104px;gap:10px}
@@ -2022,13 +2023,10 @@ function _themeCharts(light){
 
     <!-- SEÇÃO: Ranking de Pico por Parque — largura total -->
     <div class="section" id="sec-must-ranking">
-      <div class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>
-        RANKING DE PICO POR PARQUE
-      </div>
       <div class="chart-row cols-1">
         <div class="cc">
           <div class="cc-head">
+            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>RANKING DE PICO POR PARQUE</div>
             <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
           </div>
           <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
@@ -2038,13 +2036,10 @@ function _themeCharts(light){
 
     <!-- Tabela detalhada independente por parque -->
     <div class="section" id="sec-must-detail-table">
-      <div class="section-title">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
-        TABELA DETALHADA POR PARQUE
-      </div>
       <div class="chart-row cols-1">
         <div class="cc">
           <div class="cc-head">
+            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>TABELA DETALHADA POR PARQUE</div>
             <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
           </div>
           <div class="cc-body" style="height:auto!important;overflow:visible"><div id="mustDetailTable"></div></div>
@@ -15956,26 +15951,6 @@ window._ppaChartGet=function(id){return charts[id];};
       e.preventDefault();
       if(!drag) return;
       var srcRow=drag.parentElement;
-
-      /* se o card é o único .cc da sua .section com título, move a SEÇÃO inteira */
-      var srcSection=drag.closest('.section');
-      var isSoleSection=srcSection&&srcSection.querySelectorAll('.cc').length===1&&srcSection.querySelector('.section-title');
-      if(isSoleSection){
-        var tgtSection=e.target.closest&&e.target.closest('.section');
-        if(!tgtSection||tgtSection===srcSection){clearStyles();return;}
-        var page=srcSection.parentElement;
-        if(!page){clearStyles();return;}
-        var tRect=tgtSection.getBoundingClientRect();
-        if(e.clientY<tRect.top+tRect.height/2){page.insertBefore(srcSection,tgtSection);}
-        else{var tn=tgtSection.nextElementSibling;tn?page.insertBefore(srcSection,tn):page.appendChild(srcSection);}
-        clearStyles();resizeCharts(drag);
-        drag.querySelectorAll('canvas').forEach(function(cv){
-          var ch=typeof Chart!=='undefined'&&Chart.getChart?Chart.getChart(cv):null;
-          if(ch) setTimeout(function(){try{ch.resize();}catch(ex){}},120);
-        });
-        return;
-      }
-
       var c=e.target.closest&&e.target.closest('.cc');
       if(c&&c!==drag){
         var rect=c.getBoundingClientRect();
