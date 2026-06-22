@@ -879,6 +879,24 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
 #page-must .w2d-overlay.loading{gap:10px;font-size:12px;color:var(--t3)}
 #page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
+/* tabela proporcional ao tamanho do card via container queries */
+#page-must #sec-must-detail-table .cc{container-type:inline-size;container-name:must-tbl}
+@container must-tbl (max-width:700px){
+  .must-rank-table{font-size:11px!important}
+  .must-rank-table th{font-size:10px!important;padding:7px 8px 9px!important}
+  .must-rank-table td{padding:8px!important}
+}
+@container must-tbl (max-width:540px){
+  .must-rank-table{font-size:10px!important}
+  .must-rank-table th{font-size:9px!important;padding:6px 6px 8px!important;letter-spacing:.04em!important}
+  .must-rank-table td{padding:7px 6px!important}
+}
+@container must-tbl (max-width:420px){
+  .must-rank-table{font-size:9px!important}
+  .must-rank-table th{font-size:8px!important;padding:5px 4px 7px!important;letter-spacing:.02em!important}
+  .must-rank-table td{padding:6px 4px!important}
+  .must-rank-table .col-current{display:none!important}
+}
 @media (max-width: 1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:12px}#page-must #sec-must-ranking .cc-body{height:auto!important;min-height:unset!important;max-height:none!important;overflow:visible;flex:none}}
 @media (max-width: 1100px){
   #page-must .must-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
