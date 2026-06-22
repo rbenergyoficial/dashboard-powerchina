@@ -822,8 +822,8 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #page-must .must-rank-foot{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:10px;color:var(--t3)}
 #page-must .must-rank-foot strong{color:var(--t1);font-weight:700}
 /* Tabela de ranking */
-#page-must .must-rank-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px}
-#page-must .must-rank-table{table-layout:fixed}
+#page-must .must-rank-table{width:100%;border-collapse:collapse;margin-top:18px;font-size:12px;table-layout:auto}
+#mustDetailTable{overflow-x:auto}
 #page-must .must-rank-table th{text-align:center;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.55);padding:8px 10px 10px;border-bottom:1px solid rgba(255,255,255,.12);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #page-must .must-rank-table td{text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:var(--t2);transition:background .15s}
 #page-must .must-tbl-park{justify-content:center}
@@ -6527,13 +6527,13 @@ function renderMustDetailTable(rank, showCurrent){
   if(sub) sub.textContent=showCurrent?'Demanda Atual = último valor publicado pelo Way2':'Demanda Atual oculta — período histórico selecionado';
   host.innerHTML=`<table class="must-rank-table ${showCurrent?'':'hide-current'}">
     <thead><tr>
-      <th style="width:10%">Parque</th>
-      <th class="col-current" style="width:15%">Demanda Atual</th>
-      <th style="width:14%">Pico</th>
-      <th style="width:14%">Contratada</th>
-      <th style="width:18%">Margem Disponível</th>
-      <th style="width:14%">% MUST</th>
-      <th style="width:15%">Status</th>
+      <th style="min-width:72px;width:9%">Parque</th>
+      <th class="col-current" style="min-width:100px;width:14%">Demanda Atual</th>
+      <th style="min-width:80px">Pico</th>
+      <th style="min-width:80px">Contratada</th>
+      <th style="min-width:110px">Margem Disponível</th>
+      <th style="min-width:68px;width:9%">% MUST</th>
+      <th style="min-width:82px;width:10%">Status</th>
     </tr></thead>
     <tbody>`
   +rank.map(r=>{
@@ -15956,6 +15956,26 @@ window._ppaChartGet=function(id){return charts[id];};
       e.preventDefault();
       if(!drag) return;
       var srcRow=drag.parentElement;
+
+      /* se o card é o único .cc da sua .section com título, move a SEÇÃO inteira */
+      var srcSection=drag.closest('.section');
+      var isSoleSection=srcSection&&srcSection.querySelectorAll('.cc').length===1&&srcSection.querySelector('.section-title');
+      if(isSoleSection){
+        var tgtSection=e.target.closest&&e.target.closest('.section');
+        if(!tgtSection||tgtSection===srcSection){clearStyles();return;}
+        var page=srcSection.parentElement;
+        if(!page){clearStyles();return;}
+        var tRect=tgtSection.getBoundingClientRect();
+        if(e.clientY<tRect.top+tRect.height/2){page.insertBefore(srcSection,tgtSection);}
+        else{var tn=tgtSection.nextElementSibling;tn?page.insertBefore(srcSection,tn):page.appendChild(srcSection);}
+        clearStyles();resizeCharts(drag);
+        drag.querySelectorAll('canvas').forEach(function(cv){
+          var ch=typeof Chart!=='undefined'&&Chart.getChart?Chart.getChart(cv):null;
+          if(ch) setTimeout(function(){try{ch.resize();}catch(ex){}},120);
+        });
+        return;
+      }
+
       var c=e.target.closest&&e.target.closest('.cc');
       if(c&&c!==drag){
         var rect=c.getBoundingClientRect();
