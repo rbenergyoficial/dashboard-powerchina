@@ -881,8 +881,8 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
 /* tabela preenche altura do card e distribui linhas uniformemente */
 #page-must #sec-must-detail-table .cc-body{overflow:hidden!important;display:flex!important;flex-direction:column}
-#mustDetailTable{flex:1;overflow-x:auto;overflow-y:hidden;min-height:0}
-#page-must .must-rank-table{height:100%;border-collapse:collapse}
+#mustDetailTable{flex:1;overflow-x:auto;overflow-y:auto;min-height:0}
+#page-must .must-rank-table{border-collapse:collapse}
 /* tabela proporcional ao tamanho do card via container queries */
 #page-must #sec-must-detail-table .cc{container-type:inline-size;container-name:must-tbl}
 @container must-tbl (max-width:700px){
@@ -6531,6 +6531,22 @@ function renderMustPeakRanking(rows, w2dPeaks){
   renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod);
 }
 
+function _equalizeDetailTableRows(){
+  var host=document.getElementById('mustDetailTable');
+  if(!host) return;
+  var tbl=host.querySelector('.must-rank-table');
+  if(!tbl) return;
+  var rows=tbl.querySelectorAll('tbody tr');
+  if(!rows.length) return;
+  var thead=tbl.querySelector('thead');
+  var theadH=thead?thead.offsetHeight:0;
+  var mt=parseInt(window.getComputedStyle(tbl).marginTop)||0;
+  var avail=host.clientHeight-theadH-mt;
+  if(avail<rows.length*28) return; /* card too short, let natural size take over */
+  var rh=Math.floor(avail/rows.length);
+  rows.forEach(function(r){r.style.height=rh+'px';});
+}
+
 function renderMustDetailTable(rank, showCurrent){
   const host=document.getElementById('mustDetailTable');
   if(!host) return;
@@ -6575,6 +6591,14 @@ function renderMustDetailTable(rank, showCurrent){
     </tr>`;
   }).join('')
   +`</tbody></table>`;
+  /* equalize row heights to fill card; setup ResizeObserver for live resize */
+  setTimeout(function(){
+    _equalizeDetailTableRows();
+    if(!host._roEq&&window.ResizeObserver){
+      host._roEq=new ResizeObserver(_equalizeDetailTableRows);
+      host._roEq.observe(host);
+    }
+  },30);
 }
 
 function _mustSyncStickyTop(){
