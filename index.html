@@ -2069,6 +2069,18 @@ function _themeCharts(light){
       </div>
     </div>
 
+    <div class="section" id="sec-must-log">
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head">
+            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>HISTÓRICO DE ULTRAPASSAGENS</div>
+            <div><div class="cc-title">Registro de eventos de ultrapassagem MUST</div><div class="cc-sub" id="mustLogSub">Carregando...</div></div>
+          </div>
+          <div class="cc-body"><div id="mustLogTable"></div></div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- end page-must -->
 
 </div><!-- end main -->
@@ -3419,6 +3431,7 @@ function renderDashboardPage(page){
   if(page==='must'){
     renderPageMUST();
     loadW2Demanda();
+    _loadMustLog();
     return;
   }
   renderPageWay();
@@ -6438,6 +6451,47 @@ function mustInitFilter(){
 
 /* ─── MUST ALERT via Power Automate webhook ─── */
 var _MUST_ALERT_CD=60*60*1000; /* 1 hora de cooldown por parque */
+
+async function _loadMustLog(){
+  const host=document.getElementById('mustLogTable');
+  if(!host) return;
+  const sub=document.getElementById('mustLogSub');
+  const yyyymm=new Date().toISOString().slice(0,7);
+  host.innerHTML='<div class="no-data" style="height:60px"><span style="font-size:18px">⏳</span><span>Carregando histórico...</span></div>';
+  try{
+    const r=await fetch(WAY2_BLOB_BASE+'must_log_'+yyyymm+'.json',{cache:'no-store'});
+    if(!r.ok){
+      host.innerHTML='<div class="no-data" style="height:60px"><span>✅</span><span>Nenhuma ultrapassagem registrada em '+yyyymm.replace('-','/')+'</span></div>';
+      if(sub) sub.textContent='Sem eventos · '+yyyymm.replace('-','/');
+      return;
+    }
+    const eventos=await r.json();
+    if(!eventos||!eventos.length){
+      host.innerHTML='<div class="no-data" style="height:60px"><span>✅</span><span>Nenhuma ultrapassagem registrada em '+yyyymm.replace('-','/')+'</span></div>';
+      if(sub) sub.textContent='Sem eventos · '+yyyymm.replace('-','/');
+      return;
+    }
+    eventos.sort(function(a,b){return b.ts.localeCompare(a.ts);});
+    if(sub) sub.textContent=eventos.length+' evento(s) registrado(s) · '+yyyymm.replace('-','/');
+    const rows=eventos.map(function(e){
+      const pct=parseFloat(e.pct)||0;
+      var sc='must-st-critico',sl='Crítico';
+      if(pct<=100){sc='must-st-normal';sl='Normal';}
+      else if(pct<=103){sc='must-st-alerta';sl='Alerta';}
+      const dt=new Date(e.ts);
+      const dtStr=isNaN(dt)?e.ts:dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return '<tr><td>'+dtStr+'</td><td style="font-weight:700">'+e.parque+'</td>'
+        +'<td>'+parseFloat(e.pico_mw).toFixed(2)+'</td>'
+        +'<td>'+parseFloat(e.contrat_mw).toFixed(2)+'</td>'
+        +'<td><span class="must-st '+sc+'">'+pct.toFixed(1)+'%</span></td></tr>';
+    }).join('');
+    host.innerHTML='<table class="must-rank-table" style="width:100%">'
+      +'<thead><tr><th>Data/Hora</th><th>Parque</th><th>Pico MW</th><th>Contratada MW</th><th>% MUST</th></tr></thead>'
+      +'<tbody>'+rows+'</tbody></table>';
+  }catch(e){
+    host.innerHTML='<div class="no-data" style="height:60px"><span>⚠️</span><span>Erro ao carregar histórico</span></div>';
+  }
+}
 
 function _fireMustAlert(rank,isCurrent){
   if(!isCurrent) return;
