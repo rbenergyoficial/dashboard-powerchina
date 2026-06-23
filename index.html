@@ -6459,7 +6459,7 @@ async function _loadMustLog(){
   const yyyymm=new Date().toISOString().slice(0,7);
   host.innerHTML='<div class="no-data" style="height:60px"><span style="font-size:18px">⏳</span><span>Carregando histórico...</span></div>';
   try{
-    const r=await fetch(WAY2_BLOB_BASE+'must_log_'+yyyymm+'.json',{cache:'no-store'});
+    const r=await fetch(WAY2_BLOB_BASE+'picos_log_'+yyyymm+'.json',{cache:'no-store'});
     if(!r.ok){
       host.innerHTML='<div class="no-data" style="height:60px"><span>✅</span><span>Nenhum pico registrado em '+yyyymm.replace('-','/')+'</span></div>';
       if(sub) sub.textContent='Sem registros · '+yyyymm.replace('-','/');
