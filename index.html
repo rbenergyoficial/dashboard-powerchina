@@ -7433,7 +7433,8 @@ async function loadWay2FromBlob(){
     const _j=async r=>{
       if(r.status===404) throw new Error('arquivo não encontrado no Blob (Power Automate ainda não rodou?)');
       if(!r.ok) throw new Error('HTTP '+r.status);
-      return r.json();
+      const txt=await r.text();
+      try{return JSON.parse(txt);}catch(_){throw new Error('resposta inválida do Azure Blob (aguarde próximo ciclo)');}
     };
     const _t='?t='+Date.now();
     const [eMes,eMesAnt,eMust]=await Promise.all([
