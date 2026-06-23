@@ -841,10 +841,9 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
-#page-must .must-dual-grid{display:flex;gap:14px;align-items:flex-start}
-#page-must .must-dual-grid>.section{flex:1;min-width:0;margin:0}
-#must-ranking-table-grid #sec-must-detail-table .cc-body{display:block!important;overflow:auto!important;height:auto!important;flex:none!important;min-height:unset!important;max-height:600px}
-#must-ranking-table-grid #mustDetailTable{flex:none!important;min-height:unset!important;overflow-x:auto}
+#page-must .must-dual-grid{display:flex;gap:14px;align-items:stretch}
+#page-must .must-dual-grid>.section{flex:1;min-width:0;margin:0;display:flex!important;flex-direction:column}
+#page-must .must-dual-grid .chart-row{display:flex!important;flex-direction:column!important;flex:1}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
 #page-must .cc-section-hdr svg{width:13px;height:13px;opacity:.6;flex-shrink:0}
 #page-must #sec-must-ranking .cc-body{height:0!important;min-height:0!important;max-height:none!important;overflow:auto;padding:2px 2px 0 0;flex:1}
@@ -879,8 +878,8 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
 #page-must .w2d-overlay.loading{gap:10px;font-size:12px;color:var(--t3)}
 #page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
-/* tabela preenche altura do card e distribui linhas uniformemente */
-#page-must #sec-must-detail-table .cc-body{overflow:hidden!important;display:flex!important;flex-direction:column}
+/* tabela preenche altura do card */
+#page-must #sec-must-detail-table .cc-body{overflow:auto!important;display:flex!important;flex-direction:column;flex:1!important;min-height:0!important}
 #mustDetailTable{flex:1;overflow-x:auto;overflow-y:auto;min-height:0}
 #page-must .must-rank-table{border-collapse:collapse}
 /* tabela proporcional ao tamanho do card via container queries */
