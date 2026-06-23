@@ -2043,28 +2043,29 @@ function _themeCharts(light){
       </div>
     </div>
 
-    <!-- SEÇÃO: Ranking de Pico por Parque — largura total -->
-    <div class="section" id="sec-must-ranking">
-      <div class="chart-row cols-1">
-        <div class="cc">
-          <div class="cc-head">
-            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>RANKING DE PICO POR PARQUE</div>
-            <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
+    <!-- Ranking + Tabela lado a lado -->
+    <div class="must-dual-grid" id="must-ranking-table-grid">
+      <div class="section" id="sec-must-ranking">
+        <div class="chart-row cols-1">
+          <div class="cc">
+            <div class="cc-head">
+              <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>RANKING DE PICO POR PARQUE</div>
+              <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
+            </div>
+            <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
           </div>
-          <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
         </div>
       </div>
-    </div>
 
-    <!-- Tabela detalhada independente por parque -->
-    <div class="section" id="sec-must-detail-table">
-      <div class="chart-row cols-1">
-        <div class="cc">
-          <div class="cc-head">
-            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>TABELA DETALHADA POR PARQUE</div>
-            <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
+      <div class="section" id="sec-must-detail-table">
+        <div class="chart-row cols-1">
+          <div class="cc">
+            <div class="cc-head">
+              <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>TABELA DETALHADA POR PARQUE</div>
+              <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
+            </div>
+            <div class="cc-body"><div id="mustDetailTable"></div></div>
           </div>
-          <div class="cc-body"><div id="mustDetailTable"></div></div>
         </div>
       </div>
     </div>
