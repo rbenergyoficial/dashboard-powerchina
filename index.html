@@ -879,7 +879,7 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
 #page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
 /* tabela: block sem flex para evitar colapso de altura */
-#page-must #sec-must-detail-table .cc-body{overflow:visible!important;display:block!important;height:auto!important;flex:none!important;min-height:unset!important}
+#page-must #sec-must-detail-table .cc-body{overflow:auto!important;display:block!important;height:auto!important;flex:none!important;min-height:unset!important}
 #mustDetailTable{display:block;overflow-x:auto;width:100%}
 #page-must .must-rank-table{border-collapse:collapse}
 /* tabela proporcional ao tamanho do card via container queries */
@@ -16231,6 +16231,22 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── width: manipula grid-template-columns da linha ── */
   function _applyW(rs,dw){
+    /* dual-grid (display:flex): ajusta flex-basis das duas sections */
+    var dualGrid=rs.cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
+      if(secs.length===2){
+        var totalW=dualGrid.getBoundingClientRect().width;
+        var gap14=14;
+        var available=totalW-gap14;
+        var thisSection=rs.cc.closest('.section');
+        var isFirst=secs[0]===thisSection;
+        var newW=Math.max(220,Math.min(available-220,Math.round(rs.w0+dw)));
+        secs[isFirst?0:1].style.setProperty('flex','0 0 '+newW+'px','important');
+        secs[isFirst?1:0].style.setProperty('flex','0 0 '+(available-newW)+'px','important');
+      }
+      return;
+    }
     var gap=12;
     if(rs.colCount<2){
       /* cols-1: redimensiona largura do card diretamente via grid */
@@ -16265,6 +16281,15 @@ window._ppaChartGet=function(id){return charts[id];};
     var key=_ccKey(rs.cc);
     try{localStorage.setItem('cc-h-'+key,rs.cc.style.height);}catch(e){}
     try{localStorage.setItem('cc-bh-'+key,rs.body.style.height);}catch(e){}
+    var dualGrid=rs.cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
+      if(secs.length===2&&secs[0].style.flex){
+        var dgKey=dualGrid.id||'must-dg';
+        try{localStorage.setItem('cc-dg-'+dgKey,secs[0].style.flex+'|'+secs[1].style.flex);}catch(e){}
+      }
+      return;
+    }
     if(rs.row.style.gridTemplateColumns)
       try{localStorage.setItem('cc-gtc-'+rs.rowKey,rs.row.style.gridTemplateColumns);}catch(e){}
   }
@@ -16276,6 +16301,14 @@ window._ppaChartGet=function(id){return charts[id];};
     var key=_ccKey(cc);
     try{localStorage.removeItem('cc-h-'+key);}catch(e){} try{localStorage.removeItem('cc-bh-'+key);}catch(e){}
     cc.classList.remove('cc-resized');
+    var dualGrid=cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
+      secs.forEach(function(s){s.style.removeProperty('flex');});
+      var dgKey=dualGrid.id||'must-dg';
+      try{localStorage.removeItem('cc-dg-'+dgKey);}catch(e){}
+      return;
+    }
     var row=cc.parentElement;
     var anyR=[].slice.call(row.querySelectorAll(':scope>.cc')).some(function(c){return c!==cc&&c.classList.contains('cc-resized');});
     if(!anyR){row.style.removeProperty('grid-template-columns');try{localStorage.removeItem('cc-gtc-'+_rowKey(row));}catch(e){}}
@@ -16377,6 +16410,18 @@ window._ppaChartGet=function(id){return charts[id];};
     document.querySelectorAll('.chart-row').forEach(function(row){
       var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
+    });
+    /* restaura flex widths do dual-grid */
+    document.querySelectorAll('.must-dual-grid').forEach(function(dg){
+      var dgKey=dg.id||'must-dg';
+      var saved=(function(){try{return localStorage.getItem('cc-dg-'+dgKey);}catch(e){return null;}}());
+      if(!saved) return;
+      var parts=saved.split('|');
+      if(parts.length!==2) return;
+      var secs=[].slice.call(dg.querySelectorAll(':scope>.section'));
+      if(secs.length!==2) return;
+      secs[0].style.setProperty('flex',parts[0],'important');
+      secs[1].style.setProperty('flex',parts[1],'important');
     });
   }
 
