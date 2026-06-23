@@ -7859,14 +7859,29 @@ function _w2dRankClick(pk){
   const chip=document.querySelector(`#w2dUfvGroup .w2d-park-chip[data-ufv="${pk}"]`);
   if(chip) _w2dChip(chip,'ufv');
 }
+// CCEE: último intervalo de 15 min com os 3 sub-intervalos publicados (buffer 3 min)
+// Convenção: intervalo :15 = sub-intervalos :05 :10 :15 — completo somente após :15+3min
+function _w2dCutLabel15(){
+  const n=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+  const m=n.getHours()*60+n.getMinutes();
+  const c=Math.floor((m-3)/15)*15;
+  return String(Math.floor(c/60)).padStart(2,'0')+':'+String(c%60).padStart(2,'0');
+}
 function _w2dUpdateRanking(){
   if(!_w2dChart||!_w2dLastKpi||!dashData?.must?.parks) return;
+  const labels=_w2dChart.data.labels||[];
+  // Aplica corte CCEE apenas para dados de hoje em intervalo de 15 min
+  let cutIdx=labels.length-1;
+  if(_w2dIsCurrentPeriod&&_w2dLastKpi.intervalo==='QuinzeMinutos'){
+    const idx=labels.lastIndexOf(_w2dCutLabel15());
+    if(idx>=0) cutIdx=idx;
+  }
   const w2dPeaks={};
   _w2dLastVals={};
   (dashData.must.parks||[]).forEach(pk=>{
     const ds=_w2dChart.data.datasets.find(d=>d.label===pk);
     if(ds){
-      const filt=ds.data.filter(v=>v!=null);
+      const filt=ds.data.slice(0,cutIdx+1).filter(v=>v!=null);
       w2dPeaks[pk]=filt.length?Math.max(...filt,0):0;
       for(let j=ds.data.length-1;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
     }
@@ -8669,9 +8684,14 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   // Atualiza KPI cards com os dados do gráfico Way2 (total, base para _w2dUpdateKpiPeak corrigir)
   const kEl=document.getElementById('mustKpis');
   if(kEl){
-    const peakArr=ufvSel==='all'
+    let peakArr=ufvSel==='all'
       ?(datasets.find(d=>d.label==='Total')?.data||[])
       :(datasets[0]?.data||[]);
+    // Corte CCEE: ignora intervalo corrente ainda em andamento (dados de hoje, 15 min)
+    if(_w2dIsCurrentPeriod&&intervalo==='QuinzeMinutos'){
+      const ci=displayLabels.lastIndexOf(_w2dCutLabel15());
+      if(ci>=0) peakArr=peakArr.slice(0,ci+1);
+    }
     const peak=peakArr.length?Math.max(...peakArr.filter(v=>v!=null),0):0;
     const peakIdx=peakArr.findIndex(v=>v===peak);
     const peakTime=peakIdx>=0?(displayLabels[peakIdx]||''):'';
