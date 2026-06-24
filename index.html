@@ -7918,7 +7918,7 @@ function _w2dUpdateRanking(){
       const filt=sliced.filter(v=>v!=null);
       const maxVal=filt.length?Math.max(...filt,0):0;
       w2dPeaks[pk]=maxVal;
-      if(filt.length&&maxVal>0){const pi=sliced.lastIndexOf(maxVal);_w2dPeakTimes[pk]=pi>=0?(labels[pi]||''):'';} else{_w2dPeakTimes[pk]='';}
+      if(filt.length&&maxVal>0){const pi=sliced.lastIndexOf(maxVal);_w2dPeakTimes[pk]=pi>=0?_w2dIdxToTimeLabel(pi):'';} else{_w2dPeakTimes[pk]='';}
       for(let j=ds.data.length-1;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
     }
   });
