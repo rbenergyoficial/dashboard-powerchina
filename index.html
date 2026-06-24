@@ -16216,6 +16216,13 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
   function _applyH(rs,dh){
+    /* dual-grid: controla altura via grid-auto-rows do wrapper (mantém ambos iguais) */
+    var dualGrid=rs.cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var newH=Math.max(120,Math.round(rs.h0+dh));
+      dualGrid.style.gridAutoRows=newH+'px';
+      return;
+    }
     /* card cresce/encolhe: align-self:start desconecta do stretch do grid;
        flex:none impede flex-grow:1 de ignorar a altura em layouts flex-column */
     var newCcH=Math.max(120,Math.round(rs.h0+dh));
@@ -16233,6 +16240,28 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── width: manipula grid-template-columns da linha ── */
   function _applyW(rs,dw){
+    /* dual-grid: splitter bidirecional — muda grid-template-columns do wrapper */
+    var dualGrid=rs.cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var dgW=dualGrid.getBoundingClientRect().width;
+      var dgGap=20;
+      var available=dgW-dgGap;
+      var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
+      var thisSection=rs.cc.closest('.section');
+      var isFirst=secs.length>=1&&secs[0]===thisSection;
+      var minW=200;
+      var newFirstW;
+      if(isFirst){
+        /* handle esquerdo: arrastar direita = coluna esq cresce */
+        newFirstW=Math.max(minW,Math.min(available-minW,Math.round(rs.w0+dw)));
+      }else{
+        /* handle direito: arrastar direita = coluna esq cresce (dir encolhe) */
+        var initFirstW=available-rs.w0;
+        newFirstW=Math.max(minW,Math.min(available-minW,Math.round(initFirstW+dw)));
+      }
+      dualGrid.style.gridTemplateColumns=newFirstW+'px '+(available-newFirstW)+'px';
+      return;
+    }
     var gap=12;
     if(rs.colCount<2){
       /* cols-1: redimensiona largura do card diretamente via grid */
@@ -16264,6 +16293,15 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── salva card height + body height + grid cols ── */
   function _save(rs){
+    var dualGrid=rs.cc.closest('.must-dual-grid');
+    if(dualGrid){
+      var dgKey=dualGrid.id||'must-dg';
+      if(dualGrid.style.gridTemplateColumns)
+        try{localStorage.setItem('cc-dg-gtc-'+dgKey,dualGrid.style.gridTemplateColumns);}catch(e){}
+      if(dualGrid.style.gridAutoRows)
+        try{localStorage.setItem('cc-dg-gar-'+dgKey,dualGrid.style.gridAutoRows);}catch(e){}
+      return;
+    }
     var key=_ccKey(rs.cc);
     try{localStorage.setItem('cc-h-'+key,rs.cc.style.height);}catch(e){}
     try{localStorage.setItem('cc-bh-'+key,rs.body.style.height);}catch(e){}
@@ -16273,6 +16311,16 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── reset card + limpa grid se nenhum irmão resized ── */
   function _reset(cc,body){
+    var dualGrid=cc.closest('.must-dual-grid');
+    if(dualGrid){
+      dualGrid.style.removeProperty('grid-template-columns');
+      dualGrid.style.removeProperty('grid-auto-rows');
+      var dgKey=dualGrid.id||'must-dg';
+      try{localStorage.removeItem('cc-dg-gtc-'+dgKey);}catch(e){}
+      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){}
+      dualGrid.querySelectorAll('.cc').forEach(function(c){c.classList.remove('cc-resized');});
+      return;
+    }
     ['height','min-height','align-self','flex'].forEach(function(p){cc.style.removeProperty(p);});
     ['height','min-height','max-height','flex'].forEach(function(p){body.style.removeProperty(p);});
     var key=_ccKey(cc);
@@ -16368,6 +16416,7 @@ window._ppaChartGet=function(id){return charts[id];};
     });
     /* restaura tamanhos salvos — inclui W2D e cards sem canvas (ranking etc.) */
     document.querySelectorAll('.cc').forEach(function(cc){
+      if(cc.closest('.must-dual-grid')) return; /* dual-grid restaurado separadamente */
       var body=cc.querySelector('.cc-body');
       if(!body) return;
       var key=_ccKey(cc);
@@ -16379,6 +16428,14 @@ window._ppaChartGet=function(id){return charts[id];};
     document.querySelectorAll('.chart-row').forEach(function(row){
       var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
+    });
+    /* restaura grid-template-columns e grid-auto-rows do dual-grid */
+    document.querySelectorAll('.must-dual-grid').forEach(function(dg){
+      var dgKey=dg.id||'must-dg';
+      var gtc=(function(){try{return localStorage.getItem('cc-dg-gtc-'+dgKey);}catch(e){return null;}}());
+      if(gtc) dg.style.gridTemplateColumns=gtc;
+      var gar=(function(){try{return localStorage.getItem('cc-dg-gar-'+dgKey);}catch(e){return null;}}());
+      if(gar) dg.style.gridAutoRows=gar;
     });
   }
 
