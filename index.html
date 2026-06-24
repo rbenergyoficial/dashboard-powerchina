@@ -841,6 +841,11 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
+/* Linha TOTAL */
+#page-must .must-tbl-total td{border-top:1px solid rgba(107,139,245,.30)!important;border-bottom:none;background:rgba(107,139,245,.06)}
+#page-must .must-tbl-total .must-tbl-park{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+/* Coluna Horário Pico — colapsa em cards muito estreitos */
+@container must-tbl (max-width:420px){.col-peak-time{display:none}}
 #page-must #sec-must-ranking-table{margin-top:14px}
 #page-must #sec-must-ranking-table .chart-row{align-items:start}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -6552,7 +6557,10 @@ function renderMustPeakRanking(rows, w2dPeaks){
     const contrat=num((must.contrat||{})[p]);
     const pct=contrat>0?(peak/contrat*100):0;
     const margem=contrat-peak;
-    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(2),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selectedPks.includes(p)};
+    let peakTime='';
+    if(w2dPeaks){peakTime=_w2dPeakTimes[p]||'';}
+    else{let pr=null;scopedRows.forEach(r=>{if(pr===null||num(r[p])>num(pr[p]))pr=r;});peakTime=pr?_fmtMustDate(pr.data,scopedRows):'';}
+    return {park:p,peak:+peak.toFixed(2),contrat:+contrat.toFixed(2),pct:+pct.toFixed(2),margem:+margem.toFixed(2),color:mustParkColor(p),selected:selectedPks.includes(p),peakTime};
   }).sort((a,b)=> (b.pct-a.pct) || (b.peak-a.peak) || a.park.localeCompare(b.park, 'pt-BR'));
   if(!rank.length){
     host.innerHTML='<div class="no-data" style="height:140px"><span>—</span><span>Sem dados no período selecionado</span></div>';
@@ -6639,7 +6647,21 @@ function renderMustPeakRanking(rows, w2dPeaks){
     </div>`;
   })()
   + `<div class="must-rank-foot"><span><strong>Leitura:</strong> esquerda = demanda atual · direita = pico do período · barra = % da contratada.</span>${activeRanks.length?`<span><strong>Em análise:</strong> ${activeRanks.map(r=>`${r.park} ${fmt1(r.pct)}%`).join(' · ')}</span>`:''}</div>`;
-  renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod);
+  /* ── Linha TOTAL para a tabela detalhada ── */
+  const _tt_peak=rank.reduce((s,r)=>s+r.peak,0);
+  const _tt_cont=rank.reduce((s,r)=>s+r.contrat,0);
+  const _tt_pct=_tt_cont>0?(_tt_peak/_tt_cont*100):0;
+  const _tt_marg=_tt_cont-_tt_peak;
+  let _tt_sc,_tt_sl;
+  if(_tt_pct>100){_tt_sc='must-st-critico';_tt_sl='Crítico';}
+  else if(_tt_pct>98){_tt_sc='must-st-alerta';_tt_sl='Alerta';}
+  else if(_tt_pct>95){_tt_sc='must-st-ativo';_tt_sl='Atenção';}
+  else{_tt_sc='must-st-normal';_tt_sl='Normal';}
+  let _tt_time='';
+  if(w2dPeaks){_tt_time=(_w2dLastKpi&&_w2dLastKpi.peakTime)||'';}
+  else{let tr=null;scopedRows.forEach(r=>{if(tr===null||num(r.total)>num((tr||{}).total))tr=r;});_tt_time=tr?_fmtMustDate(tr.data,scopedRows):'';}
+  const _tbl_totalRow={peak:+_tt_peak.toFixed(2),contrat:+_tt_cont.toFixed(2),pct:+_tt_pct.toFixed(2),margem:+_tt_marg.toFixed(2),sc:_tt_sc,sl:_tt_sl,peakTime:_tt_time};
+  renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod, _tbl_totalRow);
   _fireMustAlert(rank, !!(w2dPeaks && _w2dIsCurrentPeriod));
 }
 
@@ -6661,7 +6683,7 @@ function _equalizeDetailTableRows(){
   rows.forEach(function(r){r.style.height=rh+'px';});
 }
 
-function renderMustDetailTable(rank, showCurrent){
+function renderMustDetailTable(rank, showCurrent, totalRow){
   const host=document.getElementById('mustDetailTable');
   if(!host) return;
   if(!rank||!rank.length){
@@ -6672,15 +6694,17 @@ function renderMustDetailTable(rank, showCurrent){
   const fmt1=v=>num(v).toLocaleString(loc,{minimumFractionDigits:2,maximumFractionDigits:2});
   const sub=document.getElementById('mustDetailTableSub');
   if(sub) sub.textContent=showCurrent?'Demanda Atual = último valor publicado pelo Way2':'Demanda Atual oculta — período histórico selecionado';
+  const totalLv=showCurrent?rank.reduce((s,r)=>{const v=_w2dLastVals[r.park];return s+(v!=null?v:0);},0):null;
   host.innerHTML=`<table class="must-rank-table ${showCurrent?'':'hide-current'}">
     <thead><tr>
-      <th style="width:12%">Parque</th>
-      <th class="col-current" style="width:16%">Demanda Atual</th>
-      <th style="width:14%">Pico</th>
-      <th style="width:14%">Contratada</th>
-      <th style="width:18%">Margem Disponível</th>
-      <th style="width:12%">% MUST</th>
-      <th style="width:14%">Status</th>
+      <th style="width:10%">Parque</th>
+      <th class="col-current" style="width:13%">Demanda Atual</th>
+      <th style="width:11%">Pico</th>
+      <th class="col-peak-time" style="width:13%">Horário Pico</th>
+      <th style="width:11%">Contratada</th>
+      <th style="width:16%">Margem Disponível</th>
+      <th style="width:11%">% MUST</th>
+      <th style="width:15%">Status</th>
     </tr></thead>
     <tbody>`
   +rank.map(r=>{
@@ -6698,12 +6722,23 @@ function renderMustDetailTable(rank, showCurrent){
       <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:${col};box-shadow:0 0 0 2px color-mix(in srgb,${col} 25%,transparent)"></span>${r.park}</div></td>
       <td class="col-current" style="color:#f3f6ff;font-weight:600">${lv!=null?fmt1(lv)+' MW':'—'}</td>
       <td style="color:#f3f6ff;font-weight:600">${fmt1(r.peak)} MW</td>
+      <td class="col-peak-time" style="color:var(--t3);font-size:10px">${r.peakTime||'—'}</td>
       <td style="color:var(--t2)">${fmt1(r.contrat)} MW</td>
       <td style="color:${mCol};font-weight:600">${mSign}${fmt1(r.margem)} MW</td>
       <td><span class="must-tbl-pct" style="color:${pctCol}">${fmt1(r.pct)}%</span></td>
       <td><span class="must-st ${sc}">${sl}</span></td>
     </tr>`;
   }).join('')
+  +(totalRow?`<tr class="must-tbl-total">
+      <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:#6b8bf5;box-shadow:0 0 0 2px rgba(107,139,245,.25)"></span>TOTAL</div></td>
+      <td class="col-current" style="color:#f3f6ff;font-weight:700">${totalLv!=null?fmt1(totalLv)+' MW':'—'}</td>
+      <td style="color:#f3f6ff;font-weight:700">${fmt1(totalRow.peak)} MW</td>
+      <td class="col-peak-time" style="color:var(--t3);font-size:10px">${totalRow.peakTime||'—'}</td>
+      <td style="color:var(--t2);font-weight:700">${fmt1(totalRow.contrat)} MW</td>
+      <td style="color:${totalRow.margem>=0?'#4ade80':'#f87171'};font-weight:700">${totalRow.margem>=0?'+':''}${fmt1(totalRow.margem)} MW</td>
+      <td><span class="must-tbl-pct" style="color:${totalRow.pct>100?'#f87171':totalRow.pct>98?'#fb923c':totalRow.pct>95?'#fbbf24':'#4ade80'}">${fmt1(totalRow.pct)}%</span></td>
+      <td><span class="must-st ${totalRow.sc}">${totalRow.sl}</span></td>
+    </tr>`:'')
   +`</tbody></table>`;
   /* equalize row heights to fill card; setup ResizeObserver for live resize */
   setTimeout(function(){
@@ -7540,7 +7575,8 @@ const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
 let _w2dRefreshTimer=null; // timer periódico 5 min (separado do debounce _w2dAutoTimer)
 let _w2dLastKpi=null; // último peak Way2 calculado, para sobrescrever KPIs após renderPageMUST
-let _w2dLastVals={};  // último valor publicado por parque (intraday only)
+let _w2dLastVals={};     // último valor publicado por parque (intraday only)
+let _w2dPeakTimes={};    // horário do pico por parque (Way2 intraday)
 let _w2dIsCurrentPeriod=false; // true quando o período exibido é hoje
 let _w2dSubBase='';     // "DD/MM/AAAA · intervalo [· atualizado HH:MM]" para reconstruir sub ao trocar chip
 let _w2dRangeCtx=null; // {dates,DISP_TIMES,ptsPerDay,showTime} — contexto do range intraday para peakTime
@@ -7745,6 +7781,13 @@ function _w2dFormatWhen(peakTime){
   if(/^\d+$/.test(peakTime)) return `dia ${peakTime}`;
   return `em ${peakTime}`;
 }
+function _fmtMustDate(d,rows){
+  if(!d||!(d instanceof Date)) return '';
+  const hm=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+  const multi=rows&&rows.some(r=>r.data instanceof Date&&r.data.toDateString()!==d.toDateString());
+  if(multi){const dd=d.getDate().toString().padStart(2,'0'),mm=(d.getMonth()+1).toString().padStart(2,'0');return dd+'/'+mm+' '+hm;}
+  return hm;
+}
 function _w2dRenderSub(){
   const sEl=document.getElementById('w2dSub');
   if(!sEl||!_w2dSubBase) return;
@@ -7869,11 +7912,15 @@ function _w2dUpdateRanking(){
   }
   const w2dPeaks={};
   _w2dLastVals={};
+  _w2dPeakTimes={};
   (dashData.must.parks||[]).forEach(pk=>{
     const ds=_w2dChart.data.datasets.find(d=>d.label===pk);
     if(ds){
-      const filt=ds.data.slice(0,cutIdx+1).filter(v=>v!=null);
-      w2dPeaks[pk]=filt.length?Math.max(...filt,0):0;
+      const sliced=ds.data.slice(0,cutIdx+1);
+      const filt=sliced.filter(v=>v!=null);
+      const maxVal=filt.length?Math.max(...filt,0):0;
+      w2dPeaks[pk]=maxVal;
+      if(filt.length&&maxVal>0){const pi=sliced.lastIndexOf(maxVal);_w2dPeakTimes[pk]=pi>=0?(labels[pi]||''):'';} else{_w2dPeakTimes[pk]='';}
       for(let j=ds.data.length-1;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
     }
   });
