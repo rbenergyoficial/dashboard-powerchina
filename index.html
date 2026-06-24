@@ -842,7 +842,7 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
 #page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-#page-must .must-dual-grid>.section{margin:0;min-width:0}
+#page-must .must-dual-grid>.section{margin:0;min-width:350px}
 #page-must .must-dual-grid .cc{height:500px}
 @media(max-width:1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:20px}}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -16260,7 +16260,7 @@ window._ppaChartGet=function(id){return charts[id];};
       var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
       var thisSection=rs.cc.closest('.section');
       var isFirst=secs.length>=1&&secs[0]===thisSection;
-      var minW=200;
+      var minW=350;
       var newFirstW;
       if(isFirst){
         /* handle esquerdo: arrastar direita = coluna esq cresce */
@@ -16457,7 +16457,13 @@ window._ppaChartGet=function(id){return charts[id];};
       try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){} /* limpa legado grid-auto-rows */
       dg.style.removeProperty('grid-auto-rows');
       var gtc=(function(){try{return localStorage.getItem('cc-dg-gtc-'+dgKey);}catch(e){return null;}}());
-      if(gtc) dg.style.gridTemplateColumns=gtc;
+      if(gtc){
+        /* valida: rejeita se qualquer coluna < 350px (valor corrompido) */
+        var gtcParts=gtc.match(/(\d+(?:\.\d+)?)px/g)||[];
+        var gtcValid=gtcParts.length>=2&&gtcParts.every(function(p){return parseFloat(p)>=350;});
+        if(gtcValid){dg.style.gridTemplateColumns=gtc;}
+        else{try{localStorage.removeItem('cc-dg-gtc-'+dgKey);}catch(e){}}
+      }
       var cH=(function(){try{return localStorage.getItem('cc-dg-h-'+dgKey);}catch(e){return null;}}());
       var bH=(function(){try{return localStorage.getItem('cc-dg-bh-'+dgKey);}catch(e){return null;}}());
       if(cH){
