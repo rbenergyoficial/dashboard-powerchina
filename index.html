@@ -16313,8 +16313,7 @@ window._ppaChartGet=function(id){return charts[id];};
         try{localStorage.setItem('cc-dg-h-'+dgKey,firstCC.style.height);}catch(e){}
       if(firstBody&&firstBody.style.height)
         try{localStorage.setItem('cc-dg-bh-'+dgKey,firstBody.style.height);}catch(e){}
-      if(dualGrid.style.gridTemplateColumns)
-        try{localStorage.setItem('cc-dg-gtc-'+dgKey,dualGrid.style.gridTemplateColumns);}catch(e){}
+      /* largura de colunas NÃO é persistida: sempre 1fr 1fr no reload */
       return;
     }
     var key=_ccKey(rs.cc);
@@ -16451,19 +16450,13 @@ window._ppaChartGet=function(id){return charts[id];};
       var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
     });
-    /* restaura dual-grid: largura das colunas + altura dos cards */
+    /* restaura dual-grid: limpa qualquer largura salva e restaura só alturas */
     document.querySelectorAll('.must-dual-grid').forEach(function(dg){
       var dgKey=dg.id||'must-dg';
-      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){} /* limpa legado grid-auto-rows */
+      /* limpa TODOS os legados de colunas — sempre começa 1fr 1fr via CSS */
+      ['cc-dg-gar-','cc-dg-gtc-'].forEach(function(p){try{localStorage.removeItem(p+dgKey);}catch(e){}});
       dg.style.removeProperty('grid-auto-rows');
-      var gtc=(function(){try{return localStorage.getItem('cc-dg-gtc-'+dgKey);}catch(e){return null;}}());
-      if(gtc){
-        /* valida: rejeita se qualquer coluna < 350px (valor corrompido) */
-        var gtcParts=gtc.match(/(\d+(?:\.\d+)?)px/g)||[];
-        var gtcValid=gtcParts.length>=2&&gtcParts.every(function(p){return parseFloat(p)>=350;});
-        if(gtcValid){dg.style.gridTemplateColumns=gtc;}
-        else{try{localStorage.removeItem('cc-dg-gtc-'+dgKey);}catch(e){}}
-      }
+      dg.style.removeProperty('grid-template-columns');
       var cH=(function(){try{return localStorage.getItem('cc-dg-h-'+dgKey);}catch(e){return null;}}());
       var bH=(function(){try{return localStorage.getItem('cc-dg-bh-'+dgKey);}catch(e){return null;}}());
       if(cH){
