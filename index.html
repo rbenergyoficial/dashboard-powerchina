@@ -7855,8 +7855,9 @@ function _w2dRenderSub(){
 function _w2dIdxToTimeLabel(idx){
   if(idx<0) return '';
   if(_w2dRangeCtx){
-    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,showTime:_rs}=_w2dRangeCtx;
-    const _di=Math.floor(idx/_rp),_ti=idx%_rp;
+    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,showTime:_rs,xPad:_xp=0}=_w2dRangeCtx;
+    const _i=idx-_xp; if(_i<0) return '';
+    const _di=Math.floor(_i/_rp),_ti=_i%_rp;
     const[_py,_pm,_pd]=(_rd[_di]||'').split('-');
     return _pd?`${_pd}/${_pm}${_rs&&_rt[_ti]?' '+_rt[_ti]:''}`:(_rt[_ti]||'');
   }
@@ -7866,8 +7867,9 @@ function _w2dIdxToTimeLabel(idx){
 function _w2dIdxToFullLabel(idx){
   if(idx<0) return '';
   if(_w2dRangeCtx){
-    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp}=_w2dRangeCtx;
-    const _di=Math.floor(idx/_rp),_ti=idx%_rp;
+    const {dates:_rd,DISP_TIMES:_rt,ptsPerDay:_rp,xPad:_xp=0}=_w2dRangeCtx;
+    const _i=idx-_xp; if(_i<0) return '';
+    const _di=Math.floor(_i/_rp),_ti=_i%_rp;
     const[,_pm,_pd]=(_rd[_di]||'').split('-');
     if(_pd) return `${_pd}/${_pm}${_rt[_ti]?' '+_rt[_ti]:''}`;
     return _rt[_ti]||'';
@@ -8537,7 +8539,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     const _pkLbl=_onC.length===0?'M1–M9 · Total':_onC.join('+');
     document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLbl}`;
     _w2dSubBase=`${fd}/${fm}/${fy} → ${td}/${tm}/${ty} · ${intLabel}`;
-    _w2dRangeCtx={dates,DISP_TIMES,ptsPerDay,showTime:dates.length<=14};
+    _w2dRangeCtx={dates,DISP_TIMES,ptsPerDay,showTime:dates.length<=14,xPad:_xPad};
     document.getElementById('w2dSub').textContent=_w2dSubBase;
     const canvas=document.getElementById('cW2Dem');
     if(!canvas) return;
