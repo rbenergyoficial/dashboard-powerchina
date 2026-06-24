@@ -841,10 +841,9 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
-#page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}
+#page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
 #page-must .must-dual-grid>.section{margin:0;min-width:0}
-#page-must .must-dual-grid>.section>.chart-row{height:100%}
-#page-must .must-dual-grid>.section>.chart-row>.cc{height:100%}
+#page-must .must-dual-grid .cc{height:500px}
 @media(max-width:1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:20px}}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
 #page-must .cc-section-hdr svg{width:13px;height:13px;opacity:.6;flex-shrink:0}
@@ -16216,11 +16215,23 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
   function _applyH(rs,dh){
-    /* dual-grid: controla altura via grid-auto-rows do wrapper (mantém ambos iguais) */
+    /* dual-grid: mesma altura explícita nos dois cards */
     var dualGrid=rs.cc.closest('.must-dual-grid');
     if(dualGrid){
-      var newH=Math.max(120,Math.round(rs.h0+dh));
-      dualGrid.style.gridAutoRows=newH+'px';
+      var newH=Math.max(250,Math.round(rs.h0+dh));
+      var overhead=rs.h0-rs.hb0;
+      var newBH=Math.max(140,newH-overhead);
+      [].slice.call(dualGrid.querySelectorAll('.cc')).forEach(function(c){
+        c.style.setProperty('height',newH+'px','important');
+        c.style.setProperty('min-height',newH+'px','important');
+        var b=c.querySelector('.cc-body');
+        if(b){
+          b.style.setProperty('height',newBH+'px','important');
+          b.style.setProperty('min-height',newBH+'px','important');
+          b.style.setProperty('max-height',newBH+'px','important');
+          b.style.setProperty('flex','none','important');
+        }
+      });
       return;
     }
     /* card cresce/encolhe: align-self:start desconecta do stretch do grid;
@@ -16296,10 +16307,14 @@ window._ppaChartGet=function(id){return charts[id];};
     var dualGrid=rs.cc.closest('.must-dual-grid');
     if(dualGrid){
       var dgKey=dualGrid.id||'must-dg';
+      var firstCC=dualGrid.querySelector('.cc');
+      var firstBody=dualGrid.querySelector('.cc-body');
+      if(firstCC&&firstCC.style.height)
+        try{localStorage.setItem('cc-dg-h-'+dgKey,firstCC.style.height);}catch(e){}
+      if(firstBody&&firstBody.style.height)
+        try{localStorage.setItem('cc-dg-bh-'+dgKey,firstBody.style.height);}catch(e){}
       if(dualGrid.style.gridTemplateColumns)
         try{localStorage.setItem('cc-dg-gtc-'+dgKey,dualGrid.style.gridTemplateColumns);}catch(e){}
-      if(dualGrid.style.gridAutoRows)
-        try{localStorage.setItem('cc-dg-gar-'+dgKey,dualGrid.style.gridAutoRows);}catch(e){}
       return;
     }
     var key=_ccKey(rs.cc);
@@ -16316,9 +16331,16 @@ window._ppaChartGet=function(id){return charts[id];};
       dualGrid.style.removeProperty('grid-template-columns');
       dualGrid.style.removeProperty('grid-auto-rows');
       var dgKey=dualGrid.id||'must-dg';
+      try{localStorage.removeItem('cc-dg-h-'+dgKey);}catch(e){}
+      try{localStorage.removeItem('cc-dg-bh-'+dgKey);}catch(e){}
       try{localStorage.removeItem('cc-dg-gtc-'+dgKey);}catch(e){}
-      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){}
-      dualGrid.querySelectorAll('.cc').forEach(function(c){c.classList.remove('cc-resized');});
+      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){} /* limpa legado */
+      [].slice.call(dualGrid.querySelectorAll('.cc')).forEach(function(c){
+        ['height','min-height'].forEach(function(p){c.style.removeProperty(p);});
+        c.classList.remove('cc-resized');
+        var b=c.querySelector('.cc-body');
+        if(b) ['height','min-height','max-height','flex'].forEach(function(p){b.style.removeProperty(p);});
+      });
       return;
     }
     ['height','min-height','align-self','flex'].forEach(function(p){cc.style.removeProperty(p);});
@@ -16429,13 +16451,30 @@ window._ppaChartGet=function(id){return charts[id];};
       var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
     });
-    /* restaura grid-template-columns e grid-auto-rows do dual-grid */
+    /* restaura dual-grid: largura das colunas + altura dos cards */
     document.querySelectorAll('.must-dual-grid').forEach(function(dg){
       var dgKey=dg.id||'must-dg';
+      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){} /* limpa legado grid-auto-rows */
+      dg.style.removeProperty('grid-auto-rows');
       var gtc=(function(){try{return localStorage.getItem('cc-dg-gtc-'+dgKey);}catch(e){return null;}}());
       if(gtc) dg.style.gridTemplateColumns=gtc;
-      var gar=(function(){try{return localStorage.getItem('cc-dg-gar-'+dgKey);}catch(e){return null;}}());
-      if(gar) dg.style.gridAutoRows=gar;
+      var cH=(function(){try{return localStorage.getItem('cc-dg-h-'+dgKey);}catch(e){return null;}}());
+      var bH=(function(){try{return localStorage.getItem('cc-dg-bh-'+dgKey);}catch(e){return null;}}());
+      if(cH){
+        [].slice.call(dg.querySelectorAll('.cc')).forEach(function(c){
+          c.style.setProperty('height',cH,'important');
+          c.style.setProperty('min-height',cH,'important');
+          c.classList.add('cc-resized');
+        });
+      }
+      if(bH){
+        [].slice.call(dg.querySelectorAll('.cc-body')).forEach(function(b){
+          b.style.setProperty('height',bH,'important');
+          b.style.setProperty('min-height',bH,'important');
+          b.style.setProperty('max-height',bH,'important');
+          b.style.setProperty('flex','none','important');
+        });
+      }
     });
   }
 
