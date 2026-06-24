@@ -8494,7 +8494,8 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         pm[item.pontoId]={};
         for(const v of (item.valores||[])){
           if(v.valor==null) continue;
-          pm[item.pontoId][v.data.slice(11,16)]=+(v.valor/1000).toFixed(4);
+          const _vd=new Date((v.data.endsWith('Z')?v.data:v.data+'Z'));_vd.setUTCHours(_vd.getUTCHours()-3);
+          pm[item.pontoId][String(_vd.getUTCHours()).padStart(2,'0')+':'+String(_vd.getUTCMinutes()).padStart(2,'0')]=+(v.valor/1000).toFixed(4);
         }
       }
       allPks.forEach(pk=>{
@@ -8629,7 +8630,8 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     pm[id]={};
     for(const v of (item.valores||[])){
       if(v.valor==null) continue;
-      const t=v.data.slice(11,16);
+      const _sd=new Date((v.data.endsWith('Z')?v.data:v.data+'Z'));_sd.setUTCHours(_sd.getUTCHours()-3);
+      const t=String(_sd.getUTCHours()).padStart(2,'0')+':'+String(_sd.getUTCMinutes()).padStart(2,'0');
       pm[id][t]=+(v.valor/1000).toFixed(4); // kW→MW
       allT.add(t);
     }
