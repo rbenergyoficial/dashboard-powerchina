@@ -6722,7 +6722,7 @@ function renderMustDetailTable(rank, showCurrent, totalRow){
       <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:${col};box-shadow:0 0 0 2px color-mix(in srgb,${col} 25%,transparent)"></span>${r.park}</div></td>
       <td class="col-current" style="color:#f3f6ff;font-weight:600">${lv!=null?fmt1(lv)+' MW':'—'}</td>
       <td style="color:#f3f6ff;font-weight:600">${fmt1(r.peak)} MW</td>
-      <td class="col-peak-time" style="color:var(--t3);font-size:10px">${r.peakTime||'—'}</td>
+      <td class="col-peak-time" style="color:var(--t3)">${r.peakTime||'—'}</td>
       <td style="color:var(--t2)">${fmt1(r.contrat)} MW</td>
       <td style="color:${mCol};font-weight:600">${mSign}${fmt1(r.margem)} MW</td>
       <td><span class="must-tbl-pct" style="color:${pctCol}">${fmt1(r.pct)}%</span></td>
@@ -6733,7 +6733,7 @@ function renderMustDetailTable(rank, showCurrent, totalRow){
       <td><div class="must-tbl-park"><span class="must-tbl-dot" style="background:#6b8bf5;box-shadow:0 0 0 2px rgba(107,139,245,.25)"></span>TOTAL</div></td>
       <td class="col-current" style="color:#f3f6ff;font-weight:700">${totalLv!=null?fmt1(totalLv)+' MW':'—'}</td>
       <td style="color:#f3f6ff;font-weight:700">${fmt1(totalRow.peak)} MW</td>
-      <td class="col-peak-time" style="color:var(--t3);font-size:10px">${totalRow.peakTime||'—'}</td>
+      <td class="col-peak-time" style="color:var(--t3)">${totalRow.peakTime||'—'}</td>
       <td style="color:var(--t2);font-weight:700">${fmt1(totalRow.contrat)} MW</td>
       <td style="color:${totalRow.margem>=0?'#4ade80':'#f87171'};font-weight:700">${totalRow.margem>=0?'+':''}${fmt1(totalRow.margem)} MW</td>
       <td><span class="must-tbl-pct" style="color:${totalRow.pct>100?'#f87171':totalRow.pct>98?'#fb923c':totalRow.pct>95?'#fbbf24':'#4ade80'}">${fmt1(totalRow.pct)}%</span></td>
