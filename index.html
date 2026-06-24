@@ -2066,7 +2066,14 @@ function _themeCharts(light){
         <div class="cc">
           <div class="cc-head">
             <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>PICOS DE DEMANDA MONITORADOS</div>
-            <div><div class="cc-title">Picos de Demanda Monitorados</div><div class="cc-sub" id="mustLogSub">Leituras intradia · não representa penalização ONS</div></div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div><div class="cc-title">Picos de Demanda Monitorados</div><div class="cc-sub" id="mustLogSub">Leituras intradia · não representa penalização ONS</div></div>
+              <div style="display:flex;align-items:center;gap:5px;margin-left:8px">
+                <button id="mustLogPrev" class="must-day-nav" onclick="_mustLogNav(-1)" title="Mês anterior" style="font-size:15px;padding:0 9px">‹</button>
+                <span id="mustLogMonthLabel" style="font-size:11px;font-weight:700;color:var(--t2);min-width:54px;text-align:center;letter-spacing:.02em">—</span>
+                <button id="mustLogNext" class="must-day-nav" onclick="_mustLogNav(1)" title="Próximo mês" style="font-size:15px;padding:0 9px">›</button>
+              </div>
+            </div>
           </div>
           <div class="cc-body"><div id="mustLogTable"></div></div>
         </div>
@@ -6442,13 +6449,39 @@ function mustInitFilter(){
 }
 
 /* ─── MUST ALERT via Power Automate webhook ─── */
-var _MUST_ALERT_CD=60*60*1000; /* 1 hora de cooldown por parque */
+var _MUST_ALERT_CD=5*60*1000; /* 5 minutos de cooldown por parque */
+var _mustLogCurrentYYYYMM='';
+var _MUST_LOG_MIN='2025-09'; /* histórico disponível a partir de Set/2025 */
 
-async function _loadMustLog(){
+function _mustLogNav(delta){
+  var p=_mustLogCurrentYYYYMM.split('-');
+  var y=parseInt(p[0]),m=parseInt(p[1]);
+  m+=delta; if(m<1){m=12;y--;} if(m>12){m=1;y++;}
+  var next=y+'-'+String(m).padStart(2,'0');
+  var nowYM=new Date().toISOString().slice(0,7);
+  if(next<_MUST_LOG_MIN||next>nowYM) return;
+  _loadMustLog(next);
+}
+
+function _mustLogUpdateNav(yyyymm){
+  var ms=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+  var p=yyyymm.split('-');
+  var lbl=document.getElementById('mustLogMonthLabel');
+  var prev=document.getElementById('mustLogPrev');
+  var next=document.getElementById('mustLogNext');
+  var nowYM=new Date().toISOString().slice(0,7);
+  if(lbl) lbl.textContent=ms[parseInt(p[1])-1]+'/'+p[0].slice(2);
+  if(prev) prev.disabled=(yyyymm<=_MUST_LOG_MIN);
+  if(next) next.disabled=(yyyymm>=nowYM);
+}
+
+async function _loadMustLog(yyyymm){
+  if(!yyyymm) yyyymm=new Date().toISOString().slice(0,7);
+  _mustLogCurrentYYYYMM=yyyymm;
+  _mustLogUpdateNav(yyyymm);
   const host=document.getElementById('mustLogTable');
   if(!host) return;
   const sub=document.getElementById('mustLogSub');
-  const yyyymm=new Date().toISOString().slice(0,7);
   host.innerHTML='<div class="no-data" style="height:60px"><span style="font-size:18px">⏳</span><span>Carregando histórico...</span></div>';
   try{
     const r=await fetch(WAY2_BLOB_BASE+'picos_log_'+yyyymm+'.json',{cache:'no-store'});
