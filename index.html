@@ -6656,7 +6656,7 @@ function renderMustPeakRanking(rows, w2dPeaks){
   else if(_tt_pct>95){_tt_sc='must-st-ativo';_tt_sl='Atenção';}
   else{_tt_sc='must-st-normal';_tt_sl='Normal';}
   let _tt_time='';
-  if(w2dPeaks){_tt_time=(_w2dLastKpi&&_w2dLastKpi.peakTime)||'';}
+  if(w2dPeaks){const _ki=_w2dLastKpi;_tt_time=_ki?(_w2dIdxToFullLabel(_ki.peakIdx>=0?_ki.peakIdx:-1)||_ki.peakTime||''):'';}
   else{let tr=null;scopedRows.forEach(r=>{if(tr===null||num(r.total)>num((tr||{}).total))tr=r;});_tt_time=tr?_fmtMustDate(tr.data,scopedRows):'';}
   const _tbl_totalRow={peak:+_tt_peak.toFixed(2),contrat:+_tt_cont.toFixed(2),pct:+_tt_pct.toFixed(2),margem:+_tt_marg.toFixed(2),sc:_tt_sc,sl:_tt_sl,peakTime:_tt_time};
   renderMustDetailTable(rank, !!w2dPeaks && _w2dIsCurrentPeriod, _tbl_totalRow);
@@ -7877,7 +7877,7 @@ function _w2dUpdateKpiPeak(){
   const parkLabel=onPks.length===1?onPks[0]:onPks.length>1?onPks.join('+'):'todos os parques';
   const contr=onPks.length===1?num(must?.contrat?.[onPks[0]]||0):num(must?.contrat?.total||0);
   const margem=contr-peak, util=contr>0?peak/contr*100:0;
-  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime,parkPeaks});
+  Object.assign(_w2dLastKpi,{peak,contr,margem,util,parkLabel,peakTime,peakIdx,parkPeaks});
   _w2dRefreshKpi();
   _w2dRenderSub();
   _w2dUpdateRanking();
@@ -8571,7 +8571,7 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
     }
     const _pkPl=_onC.length===0?'todos os parques':_onC.length===1?_onC[0]:_onC.join('+');
     const _ct=_onC.length===1?num(dashData?.must?.contrat?.[_onC[0]]||0):num(dashData?.must?.contrat?.total||0);
-    _w2dLastKpi={peak:_pk,contr:_ct,margem:_ct-_pk,util:_ct>0?_pk/_ct*100:0,parkLabel:_pkPl,dataStr:to,intervalo:interval,peakTime:_peakTime};
+    _w2dLastKpi={peak:_pk,contr:_ct,margem:_ct-_pk,util:_ct>0?_pk/_ct*100:0,parkLabel:_pkPl,dataStr:to,intervalo:interval,peakTime:_peakTime,peakIdx:_peakIdx};
     _w2dApplyChipVisibility();
     _w2dOverlay('w2dLoading',false);
   }catch(e){
@@ -8750,7 +8750,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     const f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
     const [yy,mm,dd]=dataStr.split('-');
     const parkLabel=ufvSel==='all'?'todos os parques':ufvSel;
-    _w2dLastKpi={peak,contr,margem,util,parkLabel,dataStr,intervalo,peakTime};
+    _w2dLastKpi={peak,contr,margem,util,parkLabel,dataStr,intervalo,peakTime,peakIdx};
     kEl.innerHTML=[
       {c:'blue',  lab:'DEMANDA MÁXIMA',    val:f1(peak),   unit:'MW',sub:`Pico · ${parkLabel}`},
       {c:'red',   lab:'DEMANDA CONTRATADA',val:f1(contr),  unit:'MW',sub:'Limite contratual · MUST'},
