@@ -7734,7 +7734,7 @@ function _w2dRenderDateUI(){
   }else{
     const oneMonthAgo=new Date();oneMonthAgo.setMonth(oneMonthAgo.getMonth()-1);
     const fromDef=oneMonthAgo.toISOString().slice(0,10);
-    container.innerHTML=`<select class="fselect" id="w2dRangeInterval" style="min-width:88px" onchange="_w2dSyncToMust()"><option value="diario">Pico/dia</option><option value="QuinzeMinutos">15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option></select><input type="date" class="fdate" id="w2dFrom" value="${fromDef}" style="min-width:110px" onchange="_w2dSyncToMust()"><span style="color:var(--t4);font-size:10px;padding:0 4px">até</span><input type="date" class="fdate" id="w2dTo" value="${today}" style="min-width:110px" onchange="_w2dSyncToMust()">`;
+    container.innerHTML=`<select class="fselect" id="w2dRangeInterval" style="min-width:88px" onchange="_w2dSyncToMust()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="diario">Pico/dia</option></select><input type="date" class="fdate" id="w2dFrom" value="${fromDef}" style="min-width:110px" onchange="_w2dSyncToMust()"><span style="color:var(--t4);font-size:10px;padding:0 4px">até</span><input type="date" class="fdate" id="w2dTo" value="${today}" style="min-width:110px" onchange="_w2dSyncToMust()">`;
   }
 }
 
