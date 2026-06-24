@@ -789,9 +789,9 @@ body.page-must-active #kpiGrid{display:none!important;}
 #page-must .must-kpi-grid .kpi-value{font-size:20px;line-height:1}
 #page-must .must-kpi-grid .kpi-unit{font-size:10px}
 #page-must .must-kpi-grid .kpi-sub{font-size:9px;margin-top:3px}
-#page-must #sec-must-ranking .cc{padding:14px 14px 12px}
+#page-must #sec-must-ranking{padding:14px 14px 12px}
 #page-must #sec-must-ranking .cc-head{margin-bottom:8px}
-#page-must #sec-must-ranking .cc-body{height:auto!important;min-height:unset;padding:2px 0 0}
+#page-must #sec-must-ranking .cc-body{height:440px;flex:none;overflow-y:auto;padding:2px 6px 0 0}
 #page-must .must-rank-list{display:flex;flex-direction:column;gap:9px}
 #page-must .must-rank-row{display:grid;grid-template-columns:78px minmax(0,1fr) 108px;gap:12px;align-items:center;border-radius:12px;padding:4px 6px;transition:transform .22s ease,box-shadow .22s ease,background .18s ease;cursor:pointer;}
 #page-must .must-rank-row:hover{transform:translateY(-3px);background:rgba(107,139,245,.06);box-shadow:0 6px 24px rgba(0,0,0,.35),0 0 0 1px rgba(107,139,245,.14);}
@@ -841,14 +841,11 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
-#page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
-#page-must .must-dual-grid>.section{margin:0;min-width:350px}
-#page-must .must-dual-grid .cc{height:500px}
-@media(max-width:1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:20px}}
+#page-must #sec-must-ranking-table{margin-top:14px}
+#page-must #sec-must-ranking-table .chart-row{align-items:start}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
 #page-must .cc-section-hdr svg{width:13px;height:13px;opacity:.6;flex-shrink:0}
-#page-must #sec-must-ranking .cc-body{height:0!important;min-height:0!important;max-height:none!important;overflow:auto;padding:2px 2px 0 0;flex:1}
-#page-must .must-rank-list{min-height:100%;padding-right:4px}
+#page-must .must-rank-list{padding-right:4px}
 #page-must .must-rank-row{grid-template-columns:72px minmax(0,1fr) 104px;gap:10px}
 #page-must .must-rank-pct{font-size:15px}
 #page-must .must-rank-side-meta{font-size:9px}
@@ -871,20 +868,17 @@ html[data-theme="light"] #w2dPeakPanel{border-left-color:rgba(0,0,0,.09);backgro
 html[data-theme="light"] #w2dPeakPanel .wpp-hdr{color:rgba(0,0,0,.4);border-bottom-color:rgba(0,0,0,.07)}
 html[data-theme="light"] #w2dPeakPanel .wpp-nm{color:#1a1f2e}
 html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
-/* ── Ranking (largura total, abaixo do Way2) ── */
-#page-must #sec-must-ranking{margin-top:14px}
-#page-must #sec-must-ranking .cc-body{max-height:420px;overflow-y:auto;padding:2px 4px 0 0}
+/* ── Ranking + Tabela: altura/scroll definidos nas regras acima ── */
 #page-must .w2d-overlay{display:none;position:absolute;inset:0;border-radius:12px;align-items:center;justify-content:center;background:rgba(8,8,13,.78)}
 #page-must .w2d-overlay.show{display:flex}
 #page-must .w2d-overlay.loading{gap:10px;font-size:12px;color:var(--t3)}
 #page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
-/* tabela: block sem flex para evitar colapso de altura */
-#page-must #sec-must-detail-table .cc-body{overflow:auto!important;display:flex!important;flex-direction:column;flex:1!important;min-height:0!important}
+#page-must #sec-must-detail-table .cc-body{height:440px;flex:none;overflow:auto}
 #mustDetailTable{display:block;overflow-x:auto;width:100%}
 #page-must .must-rank-table{border-collapse:collapse}
 /* tabela proporcional ao tamanho do card via container queries */
-#page-must #sec-must-detail-table .cc{container-type:inline-size;container-name:must-tbl}
+#page-must #sec-must-detail-table{container-type:inline-size;container-name:must-tbl}
 @container must-tbl (max-width:700px){
   .must-rank-table{font-size:11px!important}
   .must-rank-table th{font-size:10px!important;padding:7px 8px 9px!important}
@@ -901,7 +895,6 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
   .must-rank-table td{padding:6px 4px!important}
   .must-rank-table .col-current{display:none!important}
 }
-@media (max-width: 1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:12px}#page-must #sec-must-ranking .cc-body{height:auto!important;min-height:unset!important;max-height:none!important;overflow:visible;flex:none}}
 @media (max-width: 1100px){
   #page-must .must-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   #page-must .must-rank-row{grid-template-columns:64px minmax(0,1fr) 88px;gap:8px}
@@ -1132,7 +1125,7 @@ html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25
 }
 
 /* Ranking card — linha superior mais pronunciada */
-#page-must #sec-must-ranking .cc::before{
+#page-must #sec-must-ranking::before{
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.8) 22%,rgba(45,212,191,.55) 78%,transparent 100%);
   height:2px;
 }
@@ -2043,29 +2036,22 @@ function _themeCharts(light){
       </div>
     </div>
 
-    <!-- Ranking + Tabela lado a lado -->
-    <div class="must-dual-grid" id="must-ranking-table-grid">
-      <div class="section" id="sec-must-ranking">
-        <div class="chart-row cols-1">
-          <div class="cc">
-            <div class="cc-head">
-              <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>RANKING DE PICO POR PARQUE</div>
-              <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
-            </div>
-            <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
+    <!-- Ranking + Tabela lado a lado (chart-row cols-2 padrão — resize igual aos demais painéis) -->
+    <div class="section" id="sec-must-ranking-table">
+      <div class="chart-row cols-2">
+        <div class="cc" id="sec-must-ranking">
+          <div class="cc-head">
+            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18"/><path d="M7 16V8"/><path d="M12 16V4"/><path d="M17 16v-6"/></svg>RANKING DE PICO POR PARQUE</div>
+            <div><div class="cc-title">Demanda máxima pico por parque</div><div class="cc-sub">Ranking por % da demanda contratada e pico do período selecionado</div></div>
           </div>
+          <div class="cc-body"><div class="must-rank-list" id="mustRankList"></div></div>
         </div>
-      </div>
-
-      <div class="section" id="sec-must-detail-table">
-        <div class="chart-row cols-1">
-          <div class="cc">
-            <div class="cc-head">
-              <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>TABELA DETALHADA POR PARQUE</div>
-              <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
-            </div>
-            <div class="cc-body"><div id="mustDetailTable"></div></div>
+        <div class="cc" id="sec-must-detail-table">
+          <div class="cc-head">
+            <div class="cc-section-hdr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>TABELA DETALHADA POR PARQUE</div>
+            <div><div class="cc-title">Situação por parque</div><div class="cc-sub" id="mustDetailTableSub">Parque · Demanda Atual · Pico · Contratada · Margem · % MUST · Status</div></div>
           </div>
+          <div class="cc-body"><div id="mustDetailTable"></div></div>
         </div>
       </div>
     </div>
@@ -16215,25 +16201,6 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
   function _applyH(rs,dh){
-    /* dual-grid: mesma altura explícita nos dois cards */
-    var dualGrid=rs.cc.closest('.must-dual-grid');
-    if(dualGrid){
-      var newH=Math.max(250,Math.round(rs.h0+dh));
-      var overhead=rs.h0-rs.hb0;
-      var newBH=Math.max(140,newH-overhead);
-      [].slice.call(dualGrid.querySelectorAll('.cc')).forEach(function(c){
-        c.style.setProperty('height',newH+'px','important');
-        c.style.setProperty('min-height',newH+'px','important');
-        var b=c.querySelector('.cc-body');
-        if(b){
-          b.style.setProperty('height',newBH+'px','important');
-          b.style.setProperty('min-height',newBH+'px','important');
-          b.style.setProperty('max-height',newBH+'px','important');
-          b.style.setProperty('flex','none','important');
-        }
-      });
-      return;
-    }
     /* card cresce/encolhe: align-self:start desconecta do stretch do grid;
        flex:none impede flex-grow:1 de ignorar a altura em layouts flex-column */
     var newCcH=Math.max(120,Math.round(rs.h0+dh));
@@ -16251,28 +16218,6 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── width: manipula grid-template-columns da linha ── */
   function _applyW(rs,dw){
-    /* dual-grid: splitter bidirecional — muda grid-template-columns do wrapper */
-    var dualGrid=rs.cc.closest('.must-dual-grid');
-    if(dualGrid){
-      var dgW=dualGrid.getBoundingClientRect().width;
-      var dgGap=20;
-      var available=dgW-dgGap;
-      var secs=[].slice.call(dualGrid.querySelectorAll(':scope>.section'));
-      var thisSection=rs.cc.closest('.section');
-      var isFirst=secs.length>=1&&secs[0]===thisSection;
-      var minW=350;
-      var newFirstW;
-      if(isFirst){
-        /* handle esquerdo: arrastar direita = coluna esq cresce */
-        newFirstW=Math.max(minW,Math.min(available-minW,Math.round(rs.w0+dw)));
-      }else{
-        /* handle direito: arrastar direita = coluna esq cresce (dir encolhe) */
-        var initFirstW=available-rs.w0;
-        newFirstW=Math.max(minW,Math.min(available-minW,Math.round(initFirstW+dw)));
-      }
-      dualGrid.style.gridTemplateColumns=newFirstW+'px '+(available-newFirstW)+'px';
-      return;
-    }
     var gap=12;
     if(rs.colCount<2){
       /* cols-1: redimensiona largura do card diretamente via grid */
@@ -16304,18 +16249,6 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── salva card height + body height + grid cols ── */
   function _save(rs){
-    var dualGrid=rs.cc.closest('.must-dual-grid');
-    if(dualGrid){
-      var dgKey=dualGrid.id||'must-dg';
-      var firstCC=dualGrid.querySelector('.cc');
-      var firstBody=dualGrid.querySelector('.cc-body');
-      if(firstCC&&firstCC.style.height)
-        try{localStorage.setItem('cc-dg-h-'+dgKey,firstCC.style.height);}catch(e){}
-      if(firstBody&&firstBody.style.height)
-        try{localStorage.setItem('cc-dg-bh-'+dgKey,firstBody.style.height);}catch(e){}
-      /* largura de colunas NÃO é persistida: sempre 1fr 1fr no reload */
-      return;
-    }
     var key=_ccKey(rs.cc);
     try{localStorage.setItem('cc-h-'+key,rs.cc.style.height);}catch(e){}
     try{localStorage.setItem('cc-bh-'+key,rs.body.style.height);}catch(e){}
@@ -16325,23 +16258,6 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── reset card + limpa grid se nenhum irmão resized ── */
   function _reset(cc,body){
-    var dualGrid=cc.closest('.must-dual-grid');
-    if(dualGrid){
-      dualGrid.style.removeProperty('grid-template-columns');
-      dualGrid.style.removeProperty('grid-auto-rows');
-      var dgKey=dualGrid.id||'must-dg';
-      try{localStorage.removeItem('cc-dg-h-'+dgKey);}catch(e){}
-      try{localStorage.removeItem('cc-dg-bh-'+dgKey);}catch(e){}
-      try{localStorage.removeItem('cc-dg-gtc-'+dgKey);}catch(e){}
-      try{localStorage.removeItem('cc-dg-gar-'+dgKey);}catch(e){} /* limpa legado */
-      [].slice.call(dualGrid.querySelectorAll('.cc')).forEach(function(c){
-        ['height','min-height'].forEach(function(p){c.style.removeProperty(p);});
-        c.classList.remove('cc-resized');
-        var b=c.querySelector('.cc-body');
-        if(b) ['height','min-height','max-height','flex'].forEach(function(p){b.style.removeProperty(p);});
-      });
-      return;
-    }
     ['height','min-height','align-self','flex'].forEach(function(p){cc.style.removeProperty(p);});
     ['height','min-height','max-height','flex'].forEach(function(p){body.style.removeProperty(p);});
     var key=_ccKey(cc);
@@ -16435,9 +16351,10 @@ window._ppaChartGet=function(id){return charts[id];};
       rh.title='Arrastar para redimensionar · Duplo clique para redefinir';
       cc.appendChild(rh);
     });
+    /* limpa chaves legadas do antigo dual-grid (uma vez) */
+    ['cc-dg-h-must-ranking-table-grid','cc-dg-bh-must-ranking-table-grid','cc-dg-gtc-must-ranking-table-grid','cc-dg-gar-must-ranking-table-grid','cc-dg-h-must-dg','cc-dg-bh-must-dg','cc-dg-gtc-must-dg','cc-dg-gar-must-dg'].forEach(function(k){try{localStorage.removeItem(k);}catch(e){}});
     /* restaura tamanhos salvos — inclui W2D e cards sem canvas (ranking etc.) */
     document.querySelectorAll('.cc').forEach(function(cc){
-      if(cc.closest('.must-dual-grid')) return; /* dual-grid restaurado separadamente */
       var body=cc.querySelector('.cc-body');
       if(!body) return;
       var key=_ccKey(cc);
@@ -16449,31 +16366,6 @@ window._ppaChartGet=function(id){return charts[id];};
     document.querySelectorAll('.chart-row').forEach(function(row){
       var gtc=(function(){try{return localStorage.getItem('cc-gtc-'+_rowKey(row));}catch(e){return null;}}());
       if(gtc) row.style.gridTemplateColumns=gtc;
-    });
-    /* restaura dual-grid: limpa qualquer largura salva e restaura só alturas */
-    document.querySelectorAll('.must-dual-grid').forEach(function(dg){
-      var dgKey=dg.id||'must-dg';
-      /* limpa TODOS os legados de colunas — sempre começa 1fr 1fr via CSS */
-      ['cc-dg-gar-','cc-dg-gtc-'].forEach(function(p){try{localStorage.removeItem(p+dgKey);}catch(e){}});
-      dg.style.removeProperty('grid-auto-rows');
-      dg.style.removeProperty('grid-template-columns');
-      var cH=(function(){try{return localStorage.getItem('cc-dg-h-'+dgKey);}catch(e){return null;}}());
-      var bH=(function(){try{return localStorage.getItem('cc-dg-bh-'+dgKey);}catch(e){return null;}}());
-      if(cH){
-        [].slice.call(dg.querySelectorAll('.cc')).forEach(function(c){
-          c.style.setProperty('height',cH,'important');
-          c.style.setProperty('min-height',cH,'important');
-          c.classList.add('cc-resized');
-        });
-      }
-      if(bH){
-        [].slice.call(dg.querySelectorAll('.cc-body')).forEach(function(b){
-          b.style.setProperty('height',bH,'important');
-          b.style.setProperty('min-height',bH,'important');
-          b.style.setProperty('max-height',bH,'important');
-          b.style.setProperty('flex','none','important');
-        });
-      }
     });
   }
 
