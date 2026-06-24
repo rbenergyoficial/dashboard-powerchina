@@ -1145,14 +1145,14 @@ html[data-theme="light"] .side-panel.is-current{border-color:rgba(79,212,255,.25
   text-shadow:0 0 14px color-mix(in srgb,var(--park-color,#6b8bf5) 80%,transparent);
 }
 
-/* Chart cards no MUST — hover só com glow, sem levitar */
+/* Chart cards no MUST — sem elevação base nem movimento no hover */
+#page-must .cc{transform:none;}
 #page-must .cc:hover{
   border-color:rgba(107,139,245,.40);
   box-shadow:0 12px 50px rgba(0,0,0,.85),0 0 50px rgba(107,139,245,.22),0 0 0 1px rgba(107,139,245,.25),inset 0 1px 0 rgba(255,255,255,.12);
   transform:none!important;
 }
-/* tema claro no MUST: mantém o -6px base no hover (sem movimento) */
-html[data-theme="light"] #page-must .cc:hover{transform:translateY(-6px)!important;}
+html[data-theme="light"] #page-must .cc:hover{transform:none!important;}
 
 /* Chart cards MUST — top line mais brilhante */
 #page-must .cc::before{
@@ -6650,11 +6650,13 @@ function _equalizeDetailTableRows(){
   if(!tbl) return;
   var rows=tbl.querySelectorAll('tbody tr');
   if(!rows.length) return;
+  var ccBody=host.closest('.cc-body');
   var thead=tbl.querySelector('thead');
   var theadH=thead?thead.offsetHeight:0;
   var mt=parseInt(window.getComputedStyle(tbl).marginTop)||0;
-  var avail=host.clientHeight-theadH-mt;
-  if(avail<rows.length*28) return; /* card too short, let natural size take over */
+  var containerH=ccBody?ccBody.clientHeight:host.clientHeight;
+  var avail=containerH-theadH-mt;
+  if(avail<rows.length*28) return;
   var rh=Math.floor(avail/rows.length);
   rows.forEach(function(r){r.style.height=rh+'px';});
 }
