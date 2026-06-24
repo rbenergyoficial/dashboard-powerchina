@@ -841,8 +841,10 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 .must-st-analise {background:rgba(139,92,246,.13); color:#c4b5fd;border:1px solid rgba(139,92,246,.28)}
 /* Coluna Demanda Atual — oculta em períodos históricos */
 #page-must .must-rank-table.hide-current .col-current{display:none}
-#page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+#page-must .must-dual-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch}
 #page-must .must-dual-grid>.section{margin:0;min-width:0}
+#page-must .must-dual-grid>.section>.chart-row{height:100%}
+#page-must .must-dual-grid>.section>.chart-row>.cc{height:100%}
 @media(max-width:1280px){#page-must .must-dual-grid{grid-template-columns:1fr;gap:20px}}
 #page-must .cc-section-hdr{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.42);margin-bottom:10px;padding-bottom:9px;border-bottom:1px solid rgba(255,255,255,.06)}
 #page-must .cc-section-hdr svg{width:13px;height:13px;opacity:.6;flex-shrink:0}
@@ -879,7 +881,7 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
 #page-must .w2d-overlay.loading svg{animation:spin .8s linear infinite}
 #page-must .w2d-overlay.error{flex-direction:column;gap:8px}
 /* tabela: block sem flex para evitar colapso de altura */
-#page-must #sec-must-detail-table .cc-body{overflow:auto!important;display:block!important;height:auto!important;flex:none!important;min-height:unset!important}
+#page-must #sec-must-detail-table .cc-body{overflow:auto!important;display:flex!important;flex-direction:column;flex:1!important;min-height:0!important}
 #mustDetailTable{display:block;overflow-x:auto;width:100%}
 #page-must .must-rank-table{border-collapse:collapse}
 /* tabela proporcional ao tamanho do card via container queries */
