@@ -8552,8 +8552,11 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
         pm[item.pontoId]={};
         for(const v of (item.valores||[])){
           if(v.valor==null) continue;
-          const _vd=new Date((v.data.endsWith('Z')?v.data:v.data+'Z'));_vd.setUTCHours(_vd.getUTCHours()-3);
-          pm[item.pontoId][String(_vd.getUTCHours()).padStart(2,'0')+':'+String(_vd.getUTCMinutes()).padStart(2,'0')]=+(v.valor/1000).toFixed(4);
+          const _tt=v.data.endsWith('Z')
+            ?(()=>{const _vd=new Date(v.data);_vd.setUTCHours(_vd.getUTCHours()-3);return String(_vd.getUTCHours()).padStart(2,'0')+':'+String(_vd.getUTCMinutes()).padStart(2,'0')})()
+            :v.data.length>=16?v.data.slice(11,16):null;
+          if(!_tt) continue;
+          pm[item.pontoId][_tt]=+(v.valor/1000).toFixed(4);
         }
       }
       allPks.forEach(pk=>{
@@ -8688,8 +8691,10 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
     pm[id]={};
     for(const v of (item.valores||[])){
       if(v.valor==null) continue;
-      const _sd=new Date((v.data.endsWith('Z')?v.data:v.data+'Z'));_sd.setUTCHours(_sd.getUTCHours()-3);
-      const t=String(_sd.getUTCHours()).padStart(2,'0')+':'+String(_sd.getUTCMinutes()).padStart(2,'0');
+      const t=v.data.endsWith('Z')
+        ?(()=>{const _sd=new Date(v.data);_sd.setUTCHours(_sd.getUTCHours()-3);return String(_sd.getUTCHours()).padStart(2,'0')+':'+String(_sd.getUTCMinutes()).padStart(2,'0')})()
+        :v.data.length>=16?v.data.slice(11,16):null;
+      if(!t) continue;
       pm[id][t]=+(v.valor/1000).toFixed(4); // kW→MW
       allT.add(t);
     }
