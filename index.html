@@ -7755,7 +7755,7 @@ function _w2dOnIntervalChange(){
   _w2dSyncToMust();
 }
 
-function _w2dYMax(ufv){const c=ufv==='all'?num(dashData?.must?.contrat?.total||0):num(dashData?.must?.contrat?.[ufv]||0);return c>0?c*1.2:undefined;}
+function _w2dYMax(ufv){const c=ufv==='all'?num(dashData?.must?.contrat?.total||0):num(dashData?.must?.contrat?.[ufv]||0);return c>0?c*1.15:undefined;}
 function _w2dQuickFilter(p,btn){
   document.querySelectorAll('#w2dQuickGroup .must-month-chip').forEach(b=>b.classList.remove('on'));
   if(btn) btn.classList.add('on');
