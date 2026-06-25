@@ -6496,23 +6496,79 @@ async function _loadMustLog(yyyymm){
       if(sub) sub.textContent='Sem registros · '+yyyymm.replace('-','/');
       return;
     }
-    eventos.sort(function(a,b){return b.ts.localeCompare(a.ts);});
-    if(sub) sub.textContent=eventos.length+' pico(s) monitorado(s) · '+yyyymm.replace('-','/');
-    const rows=eventos.map(function(e){
-      const pct=parseFloat(e.pct)||0;
-      var sc='must-st-critico',sl='Crítico';
-      if(pct<=100){sc='must-st-normal';sl='Normal';}
-      else if(pct<=103){sc='must-st-alerta';sl='Alerta';}
-      const dt=new Date(e.ts);
-      const dtStr=isNaN(dt)?e.ts:dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-      return '<tr><td>'+dtStr+'</td><td style="font-weight:700">'+e.parque+'</td>'
-        +'<td>'+parseFloat(e.pico_mw).toFixed(2)+'</td>'
-        +'<td>'+parseFloat(e.contrat_mw).toFixed(2)+'</td>'
-        +'<td><span class="must-st '+sc+'">'+pct.toFixed(1)+'%</span></td></tr>';
+
+    /* ── Formato novo: {ts, M1..M9, total} — agrupado por dia ── */
+    const isNew=eventos[0]&&eventos[0].M1!==undefined;
+    const contrat=dashData?.must?.contrat||{};
+    const parks=dashData?.must?.parks||['M1','M2','M3','M4','M5','M6','M7','M8','M9'];
+    const totContr=parseFloat(contrat.total)||parks.reduce(function(s,p){return s+(parseFloat(contrat[p])||0);},0);
+
+    function _stCls(pct){
+      if(pct>=100) return 'must-st-critico';
+      if(pct>=98)  return 'must-st-alerta';
+      if(pct>=95)  return 'must-st-ativo';
+      return 'must-st-normal';
+    }
+
+    if(!isNew){
+      /* ── Formato legado: {ts, parque, pico_mw, contrat_mw, pct} ── */
+      eventos.sort(function(a,b){return b.ts.localeCompare(a.ts);});
+      if(sub) sub.textContent=eventos.length+' registro(s) · '+yyyymm.replace('-','/');
+      const rows=eventos.map(function(e){
+        const pct=parseFloat(e.pct)||0;
+        const dt=new Date(e.ts);
+        const dtStr=isNaN(dt)?e.ts:dt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+        return '<tr><td>'+dtStr+'</td><td style="font-weight:700">'+e.parque+'</td>'
+          +'<td>'+parseFloat(e.pico_mw).toFixed(2)+'</td>'
+          +'<td>'+parseFloat(e.contrat_mw).toFixed(2)+'</td>'
+          +'<td><span class="must-st '+_stCls(pct)+'">'+pct.toFixed(1)+'%</span></td></tr>';
+      }).join('');
+      host.innerHTML='<table class="must-rank-table" style="width:100%">'
+        +'<thead><tr><th>Data/Hora</th><th>Parque</th><th>Pico MW</th><th>Contratada</th><th>% MUST</th></tr></thead>'
+        +'<tbody>'+rows+'</tbody></table>';
+      return;
+    }
+
+    /* ── Novo formato: agrupar por dia → pico diário por parque ── */
+    const byDate={};
+    eventos.forEach(function(e){
+      const d=e.ts.slice(0,10);
+      if(!byDate[d]) byDate[d]={};
+      parks.forEach(function(pk){
+        const v=parseFloat(e[pk])||0;
+        if(v>(byDate[d][pk]||0)) byDate[d][pk]=v;
+      });
+      const tot=parseFloat(e.total)||0;
+      if(tot>(byDate[d]._tot||0)) byDate[d]._tot=tot;
+    });
+
+    const days=Object.keys(byDate).sort().reverse();
+    if(sub) sub.textContent=days.length+' dia(s) com registro · '+yyyymm.replace('-','/');
+
+    const thPks=parks.map(function(pk){return '<th style="text-align:center;padding:6px 4px">'+pk+'</th>';}).join('');
+    const rows=days.map(function(date){
+      const p=date.split('-'),dd=p[2],mm=p[1];
+      const cells=parks.map(function(pk){
+        const val=byDate[date][pk]||0;
+        const contr=parseFloat(contrat[pk])||0;
+        const pct=contr>0?val/contr*100:0;
+        return '<td style="text-align:center" title="'+val.toFixed(2)+' MW · '+pct.toFixed(1)+'%">'
+          +'<span class="must-st '+_stCls(pct)+'">'+pct.toFixed(0)+'%</span></td>';
+      }).join('');
+      const tot=byDate[date]._tot||0;
+      const totPct=totContr>0?tot/totContr*100:0;
+      return '<tr>'
+        +'<td style="font-weight:700;white-space:nowrap">'+dd+'/'+mm+'</td>'
+        +cells
+        +'<td style="text-align:center" title="'+tot.toFixed(1)+' MW · '+totPct.toFixed(1)+'%">'
+        +'<span class="must-st '+_stCls(totPct)+'">'+tot.toFixed(0)+' MW</span></td>'
+        +'</tr>';
     }).join('');
-    host.innerHTML='<table class="must-rank-table" style="width:100%">'
-      +'<thead><tr><th>Data/Hora</th><th>Parque</th><th>Pico MW</th><th>Contratada MW</th><th>% MUST</th></tr></thead>'
+
+    host.innerHTML='<table class="must-rank-table" style="width:100%;font-size:11px">'
+      +'<thead><tr><th>Dia</th>'+thPks+'<th style="text-align:center">Total</th></tr></thead>'
       +'<tbody>'+rows+'</tbody></table>';
+
   }catch(e){
     host.innerHTML='<div class="no-data" style="height:60px"><span>⚠️</span><span>Erro ao carregar histórico</span></div>';
   }
@@ -7966,7 +8022,7 @@ function _w2dUpdateRanking(){
       const maxVal=filt.length?Math.max(...filt,0):0;
       w2dPeaks[pk]=maxVal;
       if(filt.length&&maxVal>0){const pi=sliced.lastIndexOf(maxVal);_w2dPeakTimes[pk]=pi>=0?_w2dIdxToFullLabel(pi):'';} else{_w2dPeakTimes[pk]='';}
-      for(let j=ds.data.length-1;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
+      for(let j=cutIdx;j>=0;j--){if(ds.data[j]!=null){_w2dLastVals[pk]=ds.data[j];break;}}
     }
   });
   renderMustPeakRanking(null,w2dPeaks);
@@ -8652,7 +8708,13 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   });
 
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
-  const displayLabels=aggLabels;
+  let displayLabels=aggLabels;
+  if(_w2dIsCurrentPeriod){
+    const _brDate=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
+    const _brNow=`${String(_brDate.getHours()).padStart(2,'0')}:${String(_brDate.getMinutes()).padStart(2,'0')}`;
+    const cutIdx=aggLabels.reduce((best,lbl,i)=>lbl<=_brNow?i:best,-1);
+    if(cutIdx>=0) displayLabels=aggLabels.slice(0,cutIdx+1);
+  }
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
   // Parâmetros visuais por granularidade e tipo de gráfico
