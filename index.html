@@ -8797,6 +8797,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
 
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
+  const _contrForY=ufvSel==='all'?num(dashData?.must?.contrat?.total||0):num(dashData?.must?.contrat?.[ufvSel]||0);
+  const _yMax=_contrForY>0?_contrForY*1.2:undefined;
+
   const [y,m,d]=dataStr.split('-');
   const _pkLabel=ufvSel==='all'?'M1–M9 · Total':ufvSel;
   const _metaLast=_lastTime?` · dados até ${_lastTime}`:'';
@@ -8859,7 +8862,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            maxRotation:_w2dIsMobile()?0:45,minRotation:0,
            autoSkip:_w2dIsMobile(),maxTicksLimit:_w2dIsMobile()?7:undefined},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'}},
-        y:{min:0,ticks:{color:'rgba(255,255,255,.45)',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
+        y:{min:0,suggestedMax:_yMax,ticks:{color:'rgba(255,255,255,.45)',font:{size:10},callback:v=>Number.isInteger(v)?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'},
            title:{display:true,text:'MW',color:'rgba(255,255,255,.35)',font:{size:10}}}
       },
