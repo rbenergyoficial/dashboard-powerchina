@@ -2016,6 +2016,14 @@ function _themeCharts(light){
           <select id="w2dIntervalSel" class="fselect" style="flex-shrink:0" onchange="_w2dOnIntervalChange()"><option value="QuinzeMinutos" selected>15 min</option><option value="TrintaMinutos">30 min</option><option value="UmaHora">1 hora</option><option value="UmDia">Dia</option><option value="Semana">Semana</option><option value="Mes">Mês</option><option value="Ano">Ano</option><option value="Personalizado">Personalizado</option></select>
           <span id="w2dDateContainer" style="display:flex;align-items:center;gap:4px;flex-shrink:0"></span>
           <button class="btn-refresh" id="w2dBuscarBtn" style="flex-shrink:0" onclick="loadW2Demanda()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
+          <span style="width:1px;height:16px;background:rgba(255,255,255,.12);flex-shrink:0"></span>
+          <span style="display:flex;gap:4px;flex-shrink:0">
+            <button class="must-month-chip" onclick="_w2dQuickFilter('hoje')">Hoje</button>
+            <button class="must-month-chip" onclick="_w2dQuickFilter('ontem')">Ontem</button>
+            <button class="must-month-chip" onclick="_w2dQuickFilter('7d')">7d</button>
+            <button class="must-month-chip" onclick="_w2dQuickFilter('30d')">30d</button>
+            <button class="must-month-chip" onclick="_w2dQuickFilter('60d')">60d</button>
+          </span>
         </div>
       </div>
     </div>
@@ -7747,6 +7755,30 @@ function _w2dOnIntervalChange(){
   _w2dSyncToMust();
 }
 
+function _w2dQuickFilter(p){
+  const _brToday=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  const _ago=n=>{const d=new Date(_brToday+'T12:00:00');d.setDate(d.getDate()-n);return d.toISOString().slice(0,10);};
+  const iv=document.getElementById('w2dIntervalSel');
+  if(!iv) return;
+  if(p==='hoje'||p==='ontem'){
+    iv.value='QuinzeMinutos';
+    _w2dOnIntervalChange();
+    clearTimeout(_w2dAutoTimer);
+    const dp=document.getElementById('w2dDatePicker');
+    if(dp) dp.value=(p==='hoje'?_brToday:_ago(1));
+    loadW2Demanda();
+  }else{
+    const n=p==='7d'?6:p==='30d'?29:59;
+    iv.value='Personalizado';
+    _w2dOnIntervalChange();
+    clearTimeout(_w2dAutoTimer);
+    const f=document.getElementById('w2dFrom'),t=document.getElementById('w2dTo'),r=document.getElementById('w2dRangeInterval');
+    if(f) f.value=_ago(n);
+    if(t) t.value=_brToday;
+    if(r) r.value='diario';
+    loadW2Demanda();
+  }
+}
 function _w2dApplyChipVisibility(){
   if(!_w2dChart) return;
   document.querySelectorAll('#w2dUfvGroup .w2d-park-chip').forEach(btn=>{
