@@ -1550,8 +1550,14 @@ function _themeCharts(light){
     <span>Filtros</span>
   </button>
   <div class="fg">
+    <span class="fbar-label">Demanda</span>
+    <button class="fbtn2 on" data-fgrandeza="Demat">Demat</button>
+    <button class="fbtn2" data-fgrandeza="DematDel">DematDel</button>
+    <button class="fbtn2" data-fgrandeza="DematRec">DematRec</button>
+  </div>
+  <div class="fg">
     <span class="fbar-label">Energia</span>
-    <button class="fbtn2 on" data-fgrandeza="Eneat">Eneat</button>
+    <button class="fbtn2" data-fgrandeza="Eneat">Eneat</button>
     <button class="fbtn2" data-fgrandeza="EneatDel">EneatDel</button>
     <button class="fbtn2" data-fgrandeza="EneatRec">EneatRec</button>
     <button class="fbtn2" data-fgrandeza="Enere">Enere</button>
@@ -7260,7 +7266,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
 });
 
 function clearFilters(){
-  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Eneat',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
+  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Demat',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
   clearFilterCache();
   syncFilterUI();
   // Reseta seleção de parque UFV + intervalo/data do gráfico Way2
@@ -7276,7 +7282,7 @@ function syncFilterUI(){
   document.querySelectorAll('[data-fa]').forEach(b=>b.classList.toggle('on',b.dataset.fa===filters.ano));
   document.getElementById('selMes').value=filters.mes;
   document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',b.dataset.fufv===(filters.ufv||'todas')));
-  document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Eneat')));
+  document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Demat')));
   const pi=document.getElementById('selPerIni'), pf=document.getElementById('selPerFim');
   if(pi) pi.value=filters.perIni||''; if(pf) pf.value=filters.perFim||'';
   document.querySelectorAll('[data-fr]').forEach(b=>b.classList.toggle('on',b.dataset.fr===filters.razao));
