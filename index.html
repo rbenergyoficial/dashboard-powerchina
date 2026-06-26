@@ -8917,13 +8917,8 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   });
 
   const aggLabels=aggFactor<=1?labels:labels.filter((_,i)=>i%aggFactor===0);
-  let displayLabels=aggLabels;
-  if(_w2dIsCurrentPeriod){
-    const _brDate=new Date(new Date().toLocaleString('en-US',{timeZone:'America/Sao_Paulo'}));
-    const _brNow=`${String(_brDate.getHours()).padStart(2,'0')}:${String(_brDate.getMinutes()).padStart(2,'0')}`;
-    const cutIdx=aggLabels.reduce((best,lbl,i)=>lbl<=_brNow?i:best,-1);
-    if(cutIdx>=0) displayLabels=aggLabels.slice(0,cutIdx+1);
-  }
+  // Always use the full day on the X-axis; future slots render as null (no line drawn)
+  const displayLabels=aggLabels;
   const parks=ufvSel==='all'?Object.keys(_W2D_IDS):[ufvSel];
 
   // Parâmetros visuais por granularidade e tipo de gráfico
@@ -9027,9 +9022,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         }
       },
       scales:{
-        x:{offset:true,ticks:{color:'rgba(255,255,255,.78)',font:{size:_w2dIsMobile()?10:11},
-           maxRotation:_w2dIsMobile()?0:45,minRotation:0,
-           autoSkip:_w2dIsMobile(),maxTicksLimit:_w2dIsMobile()?7:undefined},
+        x:{offset:false,ticks:{color:'rgba(255,255,255,.78)',font:{size:_w2dIsMobile()?10:11},
+           maxRotation:0,minRotation:0,
+           autoSkip:true,maxTicksLimit:_w2dIsMobile()?7:25},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'}},
         y:{min:0,max:_yMax,ticks:{color:'rgba(255,255,255,.78)',font:{size:11},stepSize:_w2dYStep(_yMax),callback:v=>v%(_w2dYStep(_yMax)||50)===0?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'},
