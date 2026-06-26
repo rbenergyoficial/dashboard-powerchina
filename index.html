@@ -3959,14 +3959,31 @@ function renderGer1(type='bar'){
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(glMap)])].sort();
   if(!allKeys.length){showNoData('cGer1');return;}
 
-  const labels=allKeys.map(k=>{
+  // Fbar period filter — show only months within the selected date range
+  const _inRange=k=>{
+    if(!filters.fbarPerIni&&!filters.fbarPerFim&&!filters.fbarDate) return true;
+    const[ky,km]=k.split('-').map(Number);
+    const mS=new Date(ky,km-1,1), mE=new Date(ky,km,0);
+    if(filters.fbarPerIni&&filters.fbarPerFim)
+      return mE>=new Date(filters.fbarPerIni)&&mS<=new Date(filters.fbarPerFim);
+    if(filters.fbarDate){
+      const dt=new Date(filters.fbarDate);
+      const cutFrom=new Date(dt.getFullYear()-1,dt.getMonth()+1,1);
+      return mS>=cutFrom&&mS<=new Date(dt.getFullYear(),dt.getMonth(),1);
+    }
+    return true;
+  };
+  const visibleKeys=allKeys.filter(_inRange);
+  if(!visibleKeys.length){showNoData('cGer1');return;}
+
+  const labels=visibleKeys.map(k=>{
     const[y,m]=k.split('-');
     const lbl=MNS[+m]; const yr=parseInt(y);
     return yr!==new Date().getFullYear()?[lbl,y]:lbl;
   });
-  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
-  const glData=allKeys.map(k=>+((glMap[k]||0)/1000).toFixed(3));
-  const irrData=allKeys.map(k=>{const v=irrMap[k];return v&&v.n?+(v.s/v.n).toFixed(1):null;});
+  const gvData=visibleKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
+  const glData=visibleKeys.map(k=>+((glMap[k]||0)/1000).toFixed(3));
+  const irrData=visibleKeys.map(k=>{const v=irrMap[k];return v&&v.n?+(v.s/v.n).toFixed(1):null;});
 
   const fGWh=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:3,maximumFractionDigits:3});
   const fIrr=v=>v!=null?v.toLocaleString(getDateLocale(),{maximumFractionDigits:0}):null;
@@ -7305,9 +7322,9 @@ function _fbarQuick(p,btn){
 function _fbarBuscar(){
   const iv=document.getElementById('fbarIntervalSel')?.value;
   const dt=document.getElementById('fbarDatePicker')?.value;
-  if(iv){const w=document.getElementById('w2dIntervalSel');if(w){w.value=iv;if(typeof _w2dOnIntervalChange==='function')_w2dOnIntervalChange();}}
-  if(dt){const w=document.getElementById('w2dDatePicker');if(w){w.value=dt;if(typeof _w2dSyncToMust==='function')_w2dSyncToMust();}}
-  if(typeof loadW2Demanda==='function')loadW2Demanda();
+  if(iv) filters.interval=iv;
+  if(dt) filters.fbarDate=dt;
+  renderAll();
 }
 document.querySelectorAll('[data-fr]').forEach(btn=>{
   btn.addEventListener('click',()=>{
