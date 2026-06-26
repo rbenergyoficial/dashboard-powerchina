@@ -1568,6 +1568,28 @@ function _themeCharts(light){
     <span class="fbar-label">UFV</span>
     <span id="fbarUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="w2d-park-chip on" data-fufv="todas" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-fufv="M1" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-fufv="M2" style="--pk-c:#22d3ee;--pk-bg:rgba(34,211,238,.18)">M2</button><button class="w2d-park-chip" data-fufv="M3" style="--pk-c:#fbbf24;--pk-bg:rgba(251,191,36,.18)">M3</button><button class="w2d-park-chip" data-fufv="M4" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-fufv="M5" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-fufv="M6" style="--pk-c:#34d399;--pk-bg:rgba(52,211,153,.18)">M6</button><button class="w2d-park-chip" data-fufv="M7" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-fufv="M8" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-fufv="M9" style="--pk-c:#a3e635;--pk-bg:rgba(163,230,53,.18)">M9</button></span>
   </div>
+  <div class="fg" style="gap:6px;">
+    <select id="fbarIntervalSel" class="fselect" style="flex-shrink:0" onchange="filters.interval=this.value">
+      <option value="QuinzeMinutos" selected>15 min</option>
+      <option value="TrintaMinutos">30 min</option>
+      <option value="UmaHora">1 hora</option>
+      <option value="UmDia">Dia</option>
+      <option value="Semana">Semana</option>
+      <option value="Mes">Mês</option>
+      <option value="Ano">Ano</option>
+    </select>
+    <input type="date" class="fdate" id="fbarDatePicker" style="flex-shrink:0" onchange="filters.fbarDate=this.value">
+  </div>
+  <div class="fg">
+    <span id="fbarQuickGroup" style="display:flex;gap:4px;flex-shrink:0">
+      <button class="fbtn2" data-fq="hoje" onclick="_fbarQuick('hoje',this)">Hoje</button>
+      <button class="fbtn2" data-fq="ontem" onclick="_fbarQuick('ontem',this)">Ontem</button>
+      <button class="fbtn2" data-fq="7d" onclick="_fbarQuick('7d',this)">7d</button>
+      <button class="fbtn2" data-fq="30d" onclick="_fbarQuick('30d',this)">30d</button>
+      <button class="fbtn2" data-fq="60d" onclick="_fbarQuick('60d',this)">60d</button>
+    </span>
+  </div>
+  <button class="btn-refresh" id="fbarBuscarBtn" style="flex-shrink:0;padding:5px 12px;font-size:11px;border-radius:8px;gap:5px;" onclick="_fbarBuscar()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.31"/></svg>Buscar</button>
   <div class="page-nav topbar-nav" id="topNavPaineis" style="margin-left:auto;margin-right:8px">
     <button class="page-btn on" data-page="pat" onclick="switchPage('pat')"><svg viewBox="0 0 24 24"><line x1="3" y1="20" x2="21" y2="20"/><rect x="5" y="11" width="3" height="7"/><rect x="11" y="6" width="3" height="12"/><rect x="17" y="9" width="3" height="9"/></svg>Painel de Controle</button>
     <button class="page-btn" data-page="pr" onclick="switchPage('pr')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>PR</button>
@@ -7220,6 +7242,25 @@ document.querySelectorAll('[data-fgrandeza]').forEach(btn=>{
     filters.grandeza=btn.dataset.fgrandeza;
   });
 });
+// Fbar: inicializa data com hoje
+(function(){const dp=document.getElementById('fbarDatePicker');if(dp&&!dp.value){const t=new Date();const s=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');dp.value=s;filters.fbarDate=s;}})();
+function _fbarQuick(p,btn){
+  document.querySelectorAll('#fbarQuickGroup [data-fq]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const dp=document.getElementById('fbarDatePicker');
+  const now=new Date();
+  const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(p==='hoje'){const s=fmt(now);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';if(dp)dp.value=s;}
+  else if(p==='ontem'){const d=new Date(now);d.setDate(d.getDate()-1);const s=fmt(d);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';if(dp)dp.value=s;}
+  else{const days=parseInt(p);const end=fmt(now);const start=new Date(now);start.setDate(start.getDate()-days);filters.fbarPerIni=fmt(start);filters.fbarPerFim=end;filters.fbarDate='';if(dp)dp.value=end;}
+}
+function _fbarBuscar(){
+  const iv=document.getElementById('fbarIntervalSel')?.value;
+  const dt=document.getElementById('fbarDatePicker')?.value;
+  if(iv){const w=document.getElementById('w2dIntervalSel');if(w){w.value=iv;if(typeof _w2dOnIntervalChange==='function')_w2dOnIntervalChange();}}
+  if(dt){const w=document.getElementById('w2dDatePicker');if(w){w.value=dt;if(typeof _w2dSyncToMust==='function')_w2dSyncToMust();}}
+  if(typeof loadW2Demanda==='function')loadW2Demanda();
+}
 document.querySelectorAll('[data-fr]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('[data-fr]').forEach(b=>b.classList.remove('on'));
@@ -7266,7 +7307,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
 });
 
 function clearFilters(){
-  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Demat',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
+  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Demat',interval:'QuinzeMinutos',fbarDate:'',fbarPerIni:'',fbarPerFim:'',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
   clearFilterCache();
   syncFilterUI();
   // Reseta seleção de parque UFV + intervalo/data do gráfico Way2
@@ -7283,6 +7324,9 @@ function syncFilterUI(){
   document.getElementById('selMes').value=filters.mes;
   document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',b.dataset.fufv===(filters.ufv||'todas')));
   document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Demat')));
+  const fbarIv=document.getElementById('fbarIntervalSel');if(fbarIv)fbarIv.value=filters.interval||'QuinzeMinutos';
+  const fbarDp=document.getElementById('fbarDatePicker');if(fbarDp&&filters.fbarDate)fbarDp.value=filters.fbarDate;
+  document.querySelectorAll('#fbarQuickGroup [data-fq]').forEach(b=>b.classList.remove('on'));
   const pi=document.getElementById('selPerIni'), pf=document.getElementById('selPerFim');
   if(pi) pi.value=filters.perIni||''; if(pf) pf.value=filters.perFim||'';
   document.querySelectorAll('[data-fr]').forEach(b=>b.classList.toggle('on',b.dataset.fr===filters.razao));
