@@ -358,6 +358,17 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
 .btn-clear{background:transparent;border:1px solid var(--border2);color:var(--t3);
   padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:auto;transition:all .15s;font-family:var(--font);}
 .btn-clear:hover{border-color:var(--red);color:var(--red);}
+/* fbar: visual unificado com estilo MUST */
+#fbar{gap:8px;}
+#fbar .fg{padding:6px 10px;border:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03);backdrop-filter:blur(8px);margin-right:0;gap:6px;}
+#fbar .fbar-label{font-size:10px;letter-spacing:.08em;text-transform:none;margin:0;white-space:nowrap;}
+#fbar .fbtn2{height:28px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-size:11px;font-weight:700;}
+#fbar .fbtn2.on{background:linear-gradient(180deg,rgba(107,139,245,.28),rgba(107,139,245,.18));border-color:rgba(107,139,245,.55);color:#fff;box-shadow:none;}
+#fbar .fbtn2:hover{border-color:rgba(107,139,245,.38);background:rgba(107,139,245,.12);color:#fff;}
+#fbar .fselect{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);color:#dfe8ff;padding:4px 10px;border-radius:8px;}
+#fbar .fdate{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.10);color:#dfe8ff;}
+#fbar .w2d-park-chip{padding:3px 10px;font-size:11px;gap:5px;border-radius:999px;}
+#fbar .w2d-park-chip::before{width:5px;height:14px;}
 
 /* PAGE NAV */
 .page-nav{display:flex;gap:2px;background:var(--bg4);border:1px solid var(--border3);border-radius:10px;padding:3px;}
@@ -1063,6 +1074,11 @@ html[data-theme="light"] .hdr{
   box-shadow:0 2px 16px rgba(0,0,0,.08);
 }
 html[data-theme="light"] .fbar{background:rgba(248,249,253,.97);}
+html[data-theme="light"] #fbar .fg{background:rgba(255,255,255,.75);border-color:rgba(0,0,0,.10);}
+html[data-theme="light"] #fbar .fbtn2{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.10);color:#334;}
+html[data-theme="light"] #fbar .fbtn2.on{background:linear-gradient(180deg,rgba(107,139,245,.28),rgba(107,139,245,.18));border-color:rgba(107,139,245,.55);color:#1a2460;}
+html[data-theme="light"] #fbar .fbar-label{color:rgba(0,0,0,.5);}
+html[data-theme="light"] #fbar .fselect,html[data-theme="light"] #fbar .fdate{background:rgba(255,255,255,.75);border-color:rgba(0,0,0,.15);color:#1a2460;}
 html[data-theme="light"] .dash-sidebar{
   background:linear-gradient(180deg,rgba(248,249,253,.99),rgba(244,245,251,.97));
 }
@@ -1554,12 +1570,7 @@ function _themeCharts(light){
   </div>
   <div class="fg">
     <span class="fbar-label">UFV</span>
-    <select class="fselect" id="selUFV">
-      <option value="todas">Todas</option>
-      <option value="M1">M1</option><option value="M2">M2</option><option value="M3">M3</option>
-      <option value="M4">M4</option><option value="M5">M5</option><option value="M6">M6</option>
-      <option value="M7">M7</option><option value="M8">M8</option><option value="M9">M9</option>
-    </select>
+    <span id="fbarUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="w2d-park-chip on" data-fufv="todas" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)">Todas</button><button class="w2d-park-chip" data-fufv="M1" style="--pk-c:#a855f7;--pk-bg:rgba(168,85,247,.18)">M1</button><button class="w2d-park-chip" data-fufv="M2" style="--pk-c:#22d3ee;--pk-bg:rgba(34,211,238,.18)">M2</button><button class="w2d-park-chip" data-fufv="M3" style="--pk-c:#fbbf24;--pk-bg:rgba(251,191,36,.18)">M3</button><button class="w2d-park-chip" data-fufv="M4" style="--pk-c:#3b82f6;--pk-bg:rgba(59,130,246,.18)">M4</button><button class="w2d-park-chip" data-fufv="M5" style="--pk-c:#ef4444;--pk-bg:rgba(239,68,68,.18)">M5</button><button class="w2d-park-chip" data-fufv="M6" style="--pk-c:#34d399;--pk-bg:rgba(52,211,153,.18)">M6</button><button class="w2d-park-chip" data-fufv="M7" style="--pk-c:#f97316;--pk-bg:rgba(249,115,22,.18)">M7</button><button class="w2d-park-chip" data-fufv="M8" style="--pk-c:#ec4899;--pk-bg:rgba(236,72,153,.18)">M8</button><button class="w2d-park-chip" data-fufv="M9" style="--pk-c:#a3e635;--pk-bg:rgba(163,230,53,.18)">M9</button></span>
   </div>
   <div class="fg">
     <span class="fbar-label">Restrição</span>
@@ -7167,7 +7178,14 @@ function onPeriodoChange(){
 }
 document.getElementById('selPerIni').addEventListener('change',onPeriodoChange);
 document.getElementById('selPerFim').addEventListener('change',onPeriodoChange);
-document.getElementById('selUFV').addEventListener('change',e=>{filters.ufv=e.target.value;renderAll();});
+document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    filters.ufv=btn.dataset.fufv;
+    renderAll();
+  });
+});
 document.querySelectorAll('[data-fr]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('[data-fr]').forEach(b=>b.classList.remove('on'));
@@ -7229,7 +7247,7 @@ function syncFilterUI(){
   document.querySelectorAll('[data-fg]').forEach(b=>b.classList.toggle('on',b.dataset.fg===filters.gran));
   document.querySelectorAll('[data-fa]').forEach(b=>b.classList.toggle('on',b.dataset.fa===filters.ano));
   document.getElementById('selMes').value=filters.mes;
-  document.getElementById('selUFV').value=filters.ufv;
+  document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',b.dataset.fufv===(filters.ufv||'todas')));
   const pi=document.getElementById('selPerIni'), pf=document.getElementById('selPerFim');
   if(pi) pi.value=filters.perIni||''; if(pf) pf.value=filters.perFim||'';
   document.querySelectorAll('[data-fr]').forEach(b=>b.classList.toggle('on',b.dataset.fr===filters.razao));
