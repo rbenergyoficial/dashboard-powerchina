@@ -862,13 +862,13 @@ html[data-theme="light"] #page-must .must-rank-row:hover{background:rgba(107,139
 #w2dChartWrap canvas{width:100%!important;height:100%!important;display:block}
 #w2dPeakPanel{display:none;width:232px;flex-shrink:0;border-left:1px solid rgba(255,255,255,.07);overflow-y:auto;padding:10px 6px 8px 12px}
 #w2dPeakPanel .wpp-hdr{font-size:10px;color:rgba(255,255,255,.6);font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid rgba(255,255,255,.08)}
-#w2dPeakPanel .wpp-row{display:grid;grid-template-columns:8px 26px 1fr 36px 46px 28px;align-items:center;column-gap:5px;padding:3px 0}
+#w2dPeakPanel .wpp-row{display:grid;grid-template-columns:8px 28px 1fr 44px 56px;align-items:center;column-gap:6px;padding:3.5px 0}
 #w2dPeakPanel .wpp-dot{width:8px;height:8px;border-radius:50%;background:var(--c);display:inline-block}
 #w2dPeakPanel .wpp-nm{color:#f0f4ff;font-weight:700;font-size:11px}
 #w2dPeakPanel .wpp-mw{color:#fbbf24;font-weight:700;font-size:12px;text-align:right;white-space:nowrap}
-#w2dPeakPanel .wpp-wh{color:#94a3b8;font-size:10px;text-align:right;white-space:nowrap}
+#w2dPeakPanel .wpp-wh{color:#c8d8f0;font-size:10px;font-weight:600;text-align:right;white-space:nowrap}
 #w2dPeakPanel .wpp-pct{font-weight:700;font-size:11px;text-align:right;white-space:nowrap}
-#w2dPeakPanel .wpp-lbl{color:rgba(255,255,255,.55);font-size:9px}
+#w2dPeakPanel .wpp-lbl{display:none}
 html[data-theme="light"] #w2dPeakPanel{border-left-color:rgba(0,0,0,.09);background:transparent}
 html[data-theme="light"] #w2dPeakPanel .wpp-hdr{color:rgba(0,0,0,.4);border-bottom-color:rgba(0,0,0,.07)}
 html[data-theme="light"] #w2dPeakPanel .wpp-nm{color:#1a1f2e}
@@ -8660,12 +8660,12 @@ async function _loadW2RangeIntraday(gran,ufv,from,to,interval,btn){
           entries.push({ds,val,yPx:pt.y});
         });
         if(entries.length){
-          const rowH=12;
+          const rowH=16;
           entries.forEach(e=>{
             const yV=e.yPx;
             const pkN=e.ds.label.replace(/^_contr_?/,'');
             const lbl=pkN?`MUST ${pkN}: ${_w2dFmtMW(e.val,2)}`:`MUST ${_w2dFmtMW(e.val,2)}`;
-            ctx.save();ctx.font='bold 10px system-ui,sans-serif';
+            ctx.save();ctx.font='bold 12px system-ui,sans-serif';
             const tw=ctx.measureText(lbl).width+10;
             ctx.fillStyle='rgba(10,6,18,.82)';ctx.fillRect(xCA-tw,yV-rowH-1,tw,rowH);
             ctx.fillStyle=e.ds.borderColor;ctx.textAlign='right';ctx.textBaseline='middle';
