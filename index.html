@@ -7887,6 +7887,12 @@ function _w2dUpdateContrLine(){
       :` · MUST: `+newDs.map(d=>`${d.label.replace('_contr_','')} ${_w2dFmtMW(d.data[0],2)}`).join(' / ');
   }
   _w2dChart.data.datasets.push(...newDs);
+  // Dynamic Y-axis: scale to visible datasets + contracted limit for selection
+  {const _vD=_w2dChart.data.datasets.reduce((a,ds,i)=>{if(!ds.label.startsWith('_contr')&&_w2dChart.isDatasetVisible(i))a.push(ds);return a;},[]);
+  const _vPk=_vD.reduce((mx,ds)=>(ds.data||[]).reduce((m,v)=>v!=null?Math.max(m,v):m,mx),0);
+  const _cPk=newDs.reduce((mx,ds)=>Math.max(mx,ds.data[0]||0),0);
+  const _rm=Math.max(_vPk,_cPk);
+  if(_rm>0&&_w2dChart?.options?.scales?.y){const _ym=Math.ceil(_rm*1.2/10)*10;const _st=_w2dYStep(_ym);_w2dChart.options.scales.y.max=_ym;_w2dChart.options.scales.y.ticks.stepSize=_st;_w2dChart.options.scales.y.ticks.callback=v=>v%_st===0?v:null;}}
   _w2dChart.update('none');
   const tEl=document.getElementById('w2dTitle');
   if(tEl) tEl.textContent=`Demanda Ativa vs Contratada (MUST) · ${pkLbl}`;
