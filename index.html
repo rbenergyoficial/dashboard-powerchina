@@ -710,9 +710,9 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa .ppa-split-info::-webkit-scrollbar{width:3px}
 #page-ppa .ppa-split-info::-webkit-scrollbar-track{background:transparent}
 #page-ppa .ppa-split-info::-webkit-scrollbar-thumb{background:rgba(107,139,245,.30);border-radius:99px}
-#page-ppa #sec-ppa-analysis .cc-body{height:300px!important;max-height:300px!important;overflow:hidden}
-#page-ppa #sec-ppa-analysis .cc-body.ppa-comp-body{height:300px!important;max-height:300px!important;overflow:hidden}
-#page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:300px!important}
+#page-ppa #sec-ppa-analysis .cc-body{height:360px!important;max-height:360px!important;overflow:hidden}
+#page-ppa #sec-ppa-analysis .cc-body.ppa-comp-body{height:360px!important;max-height:360px!important;overflow:hidden}
+#page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:360px!important}
 #page-ppa .ppa-card-zone{margin-top:-4px}
 #page-ppa #sec-ppa-performance .chart-row{display:flex;flex-direction:row;gap:14px;align-items:stretch}
 #page-ppa #sec-ppa-performance .cc:first-child{flex:0 0 70%;max-width:70%;min-width:0;box-sizing:border-box}
@@ -1008,7 +1008,7 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
   #page-ppa #sec-ppa-performance .chart-row{flex-direction:column!important;align-items:stretch!important;gap:12px!important;}
   #page-ppa #sec-ppa-performance .cc:first-child,
   #page-ppa #sec-ppa-performance .cc{flex:1 1 auto!important;max-width:100%!important;min-width:0!important;}
-  #page-ppa #sec-ppa-performance .cc-body{height:300px!important;min-height:300px!important;max-height:300px!important;}
+  #page-ppa #sec-ppa-performance .cc-body{height:360px!important;min-height:360px!important;max-height:360px!important;}
 
   /* ── UFVs Way2: ranking — números à direita cabendo ── */
   #page-way .rank-row{grid-template-columns:36px minmax(0,1fr) 64px!important;gap:8px!important;}
@@ -1676,14 +1676,14 @@ function _themeCharts(light){
             <div><div class="cc-title">Geração por Período</div><div class="cc-sub">Eneat (Way2) · Energia Limitada (col D) · Irradiância</div></div>
             <div class="toggle-grp" id="tg-ger1"><button class="toggle-btn on" data-chart="ger1" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ger1" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cGer1"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cGer1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Energia Produzida vs Referência + Média</div><div class="cc-sub">Empilhado + última barra = média Produzida e Frustrada</div></div>
             <div class="toggle-grp" id="tg-ger2"><button class="toggle-btn on" data-chart="ger2" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ger2" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cGer2"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cGer2"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1692,14 +1692,14 @@ function _themeCharts(light){
             <div><div class="cc-title">Energia Frustrada por Período</div><div class="cc-sub">Energia perdida por restrições ONS</div></div>
             <div class="toggle-grp" id="tg-gf1"><button class="toggle-btn on" data-chart="gf1" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="gf1" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cGF1"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cGF1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Disponibilidade Aproveitada</div><div class="cc-sub">GV + GF + Capacidade ociosa</div></div>
             <div class="toggle-grp" id="tg-ger3"><button class="toggle-btn on" data-chart="ger3" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ger3" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cGer3"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cGer3"></canvas></div>
         </div>
       </div>
     </div>
@@ -1717,13 +1717,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Energia Bruta vs Líquida</div><div class="cc-sub">Energia produzida (líquida) × bruta · perdas técnicas</div></div>
             <div class="toggle-grp" id="tg-ufvliq"><button class="toggle-btn on" data-chart="ufvliq" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ufvliq" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cUFVliq"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cUFVliq"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">% Perdas Técnicas ao Longo do Tempo</div><div class="cc-sub">Eficiência de conversão Bruta → Líquida</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cUFVperdas"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cUFVperdas"></canvas></div>
         </div>
       </div>
     </div>
@@ -1745,13 +1745,13 @@ function _themeCharts(light){
             <div><div class="cc-title">PR ao Longo do Tempo</div><div class="cc-sub">PR = (GV+GF)/(GV+GF+GRef) · meta 90%</div></div>
             <div class="toggle-grp" id="tg-pr1"><button class="toggle-btn on" data-chart="pr1" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="pr1" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cPR1"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cPR1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Distribuição de PR (Histograma)</div><div class="cc-sub">Frequência dos valores diários de PR</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cPR3"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cPR3"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1766,7 +1766,7 @@ function _themeCharts(light){
             <div><div class="cc-title">PR Mensal × Meta 90%</div><div class="cc-sub">Evolução do PR vs meta por mês</div></div>
             <div class="toggle-grp" id="tg-pr2"><button class="toggle-btn on" data-chart="pr2" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="pr2" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cPR2"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cPR2"></canvas></div>
         </div>
       </div>
     </div>
@@ -1831,13 +1831,13 @@ function _themeCharts(light){
           <div class="cc-head">
             <div><div class="cc-title">Energia Frustrada por Tipo</div><div class="cc-sub">GWh perdidos — ENE / CNF / REL</div></div>
           </div>
-          <div id="dRest1" style="position:relative;height:300px;width:100%;cursor:pointer;"></div>
+          <div id="dRest1" style="position:relative;height:360px;width:100%;cursor:pointer;"></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Eventos por Razão e Origem</div><div class="cc-sub">Distribuição ENE / CNF / REL × SIS / LOC</div></div>
           </div>
-          <div id="dRest2" style="position:relative;height:300px;width:100%;cursor:pointer;"></div>
+          <div id="dRest2" style="position:relative;height:360px;width:100%;cursor:pointer;"></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1846,7 +1846,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Horas de Restrição por Período</div><div class="cc-sub">Total de horas limitadas + potência média</div></div>
             <div class="toggle-grp" id="tg-rest3"><button class="toggle-btn on" data-chart="rest3" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="rest3" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cRest3"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cRest3"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -1872,14 +1872,14 @@ function _themeCharts(light){
             <div><div class="cc-title">Sazonalidade Detalhada por Mês</div><div class="cc-sub">GV acumulado mês a mês por ano</div></div>
             <div class="toggle-grp" id="tg-adv4"><button class="toggle-btn on" data-chart="adv4" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="adv4" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cAdv4"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cAdv4"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Sazonalidade: 2025 vs 2026</div><div class="cc-sub">Comparativo de GV mensal entre anos</div></div>
             <div class="toggle-grp" id="tg-adv2"><button class="toggle-btn on" data-chart="adv2" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="adv2" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cAdv2"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cAdv2"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-1">
@@ -1887,7 +1887,7 @@ function _themeCharts(light){
           <div class="cc-head">
             <div><div class="cc-title">Análise Complementar de Perdas</div><div class="cc-sub">Capacidade → Disponibilidade → E. Referência → E. Produzida</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cAdv3"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cAdv3"></canvas></div>
         </div>
       </div>
     </div>
@@ -1908,13 +1908,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Irradiância × Energia Produzida (Líquida)</div><div class="cc-sub">Correlação solar · eixo duplo</div></div>
             <div class="toggle-grp" id="tg-irr1"><button class="toggle-btn on" data-chart="irr1" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="irr1" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cIrr1"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cIrr1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Scatter: Irradiância vs GV</div><div class="cc-sub">Cada ponto = 1 dia · linha de tendência</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cIrr2"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cIrr2"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1923,13 +1923,13 @@ function _themeCharts(light){
             <div><div class="cc-title">Irradiância por UFV (M1–M9)</div><div class="cc-sub">Comparativo entre estações meteorológicas</div></div>
             <div class="toggle-grp" id="tg-irr3"><button class="toggle-btn on" data-chart="irr3" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="irr3" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cIrr3"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cIrr3"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">PR × Irradiância (Benchmark)</div><div class="cc-sub">Scatter por dia · tendência</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cAdv1b"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cAdv1b"></canvas></div>
         </div>
       </div>
     </div>
@@ -1950,7 +1950,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Geração por UFV (Comparativo)</div><div class="cc-sub">M1 a M9 + Somatório</div></div>
             <div class="toggle-grp" id="tg-ufv1"><button class="toggle-btn on" data-chart="ufv1" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ufv1" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cUFV1"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cUFV1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -1965,7 +1965,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Evolução Temporal por UFV</div><div class="cc-sub">Geração individual ao longo do tempo</div></div>
             <div class="toggle-grp" id="tg-ufv2"><button class="toggle-btn on" data-chart="ufv2" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="ufv2" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cUFV2"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cUFV2"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -2018,11 +2018,11 @@ function _themeCharts(light){
       <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Evolução da Geração PPA/ML</div><div class="cc-sub">Energia dos parques PPA e ML · visão complementar por mês vigente</div></div><div class="toggle-grp" id="tg-ppaevo"><button class="toggle-btn on" data-chart="ppaevo" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="ppaevo" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div></div>
-          <div class="cc-body" style="height:300px"><canvas id="cPPAevo"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cPPAevo"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Meta vs Realizado por Parque</div><div class="cc-sub">Valor garantido × energia gerada (MWh)</div></div><div class="toggle-grp" id="tg-ppameta"><button class="toggle-btn on" data-chart="ppameta" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ppameta" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
-          <div class="cc-body" style="height:300px"><canvas id="cPPAmeta"></canvas></div>
+          <div class="cc-body" style="height:360px"><canvas id="cPPAmeta"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -2032,7 +2032,7 @@ function _themeCharts(light){
         </div>
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Taxa de Conclusão por Parque</div><div class="cc-sub">% atingido da meta contratada</div></div><div class="toggle-grp" id="tg-ppacomp"><button class="toggle-btn on" data-chart="ppacomp" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ppacomp" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
-          <div class="cc-body ppa-comp-body" style="height:300px"><canvas id="cPPAcomp"></canvas></div>
+          <div class="cc-body ppa-comp-body" style="height:360px"><canvas id="cPPAcomp"></canvas></div>
         </div>
       </div>
     </div>
@@ -3791,7 +3791,7 @@ const CHART_DEFAULTS={
         callback:function(v){return (typeof v==='number')?v.toLocaleString(getDateLocale(),{maximumFractionDigits:2}):v;}},
       border:{display:false,color:'rgba(255,255,255,.07)'}}
   },
-  datasets:{bar:{maxBarThickness:48,borderRadius:7,borderSkipped:false,barPercentage:0.92,categoryPercentage:0.88}},
+  datasets:{bar:{maxBarThickness:48,borderRadius:14,borderSkipped:false,barPercentage:0.88,categoryPercentage:0.88}},
   layout:{padding:{left:20,right:20,top:4,bottom:0}}
 };
 // Persistência de visibilidade das séries por chart
@@ -4367,7 +4367,7 @@ function renderRest1(){
   const totCNF=pat.filter(r=>r.razao==='CNF').reduce((s,r)=>s+r.gf,0)/1000;
   const totREL=pat.filter(r=>r.razao==='REL').reduce((s,r)=>s+r.gf,0)/1000;
   const total=totENE+totCNF+totREL;
-  if(!pat.length||total<=0){wrap.innerHTML='<div class="no-data" style="height:300px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
+  if(!pat.length||total<=0){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
   if(charts['dRest1c']) charts['dRest1c'].destroy();
   wrap.innerHTML='<canvas id="cRest1d"></canvas>';
   const ctx=document.getElementById('cRest1d');
@@ -4458,7 +4458,7 @@ function renderRest2(){
   const rest=applyRestFilters(dashData.restricoes);
   const wrap=document.getElementById('dRest2');
   if(!wrap) return;
-  if(!rest.length){wrap.innerHTML='<div class="no-data" style="height:300px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
+  if(!rest.length){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
   if(charts['dRest2c']) charts['dRest2c'].destroy();
   const ENE=rest.filter(r=>r.razao==='ENE').length;
   const CNF=rest.filter(r=>r.razao==='CNF').length;
