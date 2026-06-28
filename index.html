@@ -9022,9 +9022,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
         }
       },
       scales:{
-        x:{offset:false,ticks:{color:'rgba(255,255,255,.78)',font:{size:_w2dIsMobile()?10:11},
-           maxRotation:0,minRotation:0,
-           autoSkip:true,maxTicksLimit:_w2dIsMobile()?7:25},
+        x:{offset:false,ticks:{color:'rgba(255,255,255,.78)',font:{size:_w2dIsMobile()?10:10},
+           maxRotation:45,minRotation:0,
+           autoSkip:true,maxTicksLimit:_w2dIsMobile()?7:97},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'}},
         y:{min:0,max:_yMax,ticks:{color:'rgba(255,255,255,.78)',font:{size:11},stepSize:_w2dYStep(_yMax),callback:v=>v%(_w2dYStep(_yMax)||50)===0?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'},
