@@ -3924,74 +3924,94 @@ function xAxisWithTitle(extra){
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SEÇÃO 1 — GERAÇÃO
+// HELPERS — fbar date/granularity (usados pelos 4 gráficos do PAT)
 // ═══════════════════════════════════════════════════════════════════
-function renderGer1(type='bar'){
-  // ─── Data sources ───────────────────────────────────────────────
-  // Energia Produzida → Way2 Eneat (dashData.way2, per park or total)
-  // Energia Limitada  → Planilha col D (dashData.patamares, field gl)
-  // Irradiância       → Planilha (dashData.patamares, field irr_media)
-  // Multi-select: filters.ufv pode ser 'todas', 'M1', 'M1,M2', etc.
+function _fbarGranKey(d){
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
+  const iv=filters.interval||'QuinzeMinutos';
+  if(iv==='UmDia') return y+'-'+m+'-'+dd;
+  if(iv==='Semana'){
+    const dt=new Date(d);dt.setHours(0,0,0,0);const dow=dt.getDay()||7;dt.setDate(dt.getDate()+4-dow);
+    const y1=dt.getFullYear(),wk=Math.ceil((dt-new Date(y1,0,1))/(7*86400000));
+    return y1+'-W'+String(wk).padStart(2,'0');
+  }
+  if(iv==='Ano') return String(y);
+  return y+'-'+m; // 15min/30min/1h/Mes/Personalizado → mensal
+}
+function _fbarDateOk(d){
+  if(!filters.fbarPerIni&&!filters.fbarPerFim&&!filters.fbarDate) return true;
+  if(filters.fbarPerIni&&filters.fbarPerFim)
+    return d>=new Date(filters.fbarPerIni)&&d<=new Date(filters.fbarPerFim+'T23:59:59');
+  if(filters.fbarDate){
+    const dt=new Date(filters.fbarDate);
+    return d>=new Date(dt.getFullYear()-1,dt.getMonth()+1,1)&&d<=dt;
+  }
+  return true;
+}
+function _fbarKeyLbl(k){
+  const iv=filters.interval||'QuinzeMinutos';
+  if(iv==='Ano') return k;
+  if(iv==='Semana') return k.replace('-W',' S');
+  if(iv==='UmDia'){const[y,m,d]=k.split('-');return +y!==new Date().getFullYear()?[d+'/'+m,String(y)]:d+'/'+m;}
+  const[y,m]=k.split('-');return +y!==new Date().getFullYear()?[MNS[+m],String(y)]:MNS[+m];
+}
+function _fbarW2Map(pkFields){
+  const map={};
+  if(dashData.way2&&dashData.way2.length){
+    for(const r of dashData.way2){
+      const d=r.data;if(!d||!_fbarDateOk(d))continue;
+      const k=_fbarGranKey(d);if(!map[k])map[k]=0;
+      for(const pf of pkFields)map[k]+=num(r[pf]);
+    }
+  }
+  return map;
+}
+function _fbarPatMap(fields){
+  const maps={};fields.forEach(f=>{maps[f]={};});
+  if(dashData.patamares&&dashData.patamares.length){
+    for(const r of dashData.patamares){
+      const d=r.data;if(!d||!_fbarDateOk(d))continue;
+      const k=_fbarGranKey(d);
+      fields.forEach(f=>{if(!maps[f][k])maps[f][k]=0;maps[f][k]+=num(r[f]);});
+    }
+  }
+  return maps;
+}
+function _fbarUfvPkFields(){
   const ufvSet=new Set((filters.ufv||'todas').split(',').filter(Boolean));
   const useTotal=ufvSet.has('todas')||ufvSet.size===0;
   const selParks=[...ufvSet].filter(p=>p!=='todas');
-  const pkFields=useTotal?['total']:selParks.map(p=>p.toLowerCase());
-  const prodC=useTotal?'#A855F7':(selParks.length===1?(_W2D_COLORS[selParks[0]]?.c||'#A855F7'):'#A855F7');
-  const prodC2=useTotal?'#3b0d6e':prodC+'33';
-  const ufvLabel=useTotal?'Complexo':selParks.join('+');
+  return{
+    pkFields:useTotal?['total']:selParks.map(p=>p.toLowerCase()),
+    useTotal,selParks,
+    prodC:useTotal?'#A855F7':(selParks.length===1?(_W2D_COLORS[selParks[0]]?.c||'#A855F7'):'#A855F7'),
+    prodC2:useTotal?'#3b0d6e':(selParks.length===1?(_W2D_COLORS[selParks[0]]?.c||'#A855F7')+'33':'#3b0d6e'),
+    label:useTotal?'Complexo':selParks.join('+')
+  };
+}
 
-  // Monthly aggregation – Way2 Eneat (soma os campos dos parques selecionados)
-  const w2Map={};
-  if(dashData.way2&&dashData.way2.length){
-    for(const r of dashData.way2){
-      const d=r.data; if(!d) continue;
-      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if(!w2Map[k]) w2Map[k]=0;
-      for(const pf of pkFields) w2Map[k]+=num(r[pf]);
-    }
-  }
-
-  // Monthly aggregation – GL (col D) + Irradiância
-  const glMap={}, irrMap={};
+// ═══════════════════════════════════════════════════════════════════
+// SEÇÃO 1 — GERAÇÃO
+// ═══════════════════════════════════════════════════════════════════
+function renderGer1(type='bar'){
+  const{pkFields,prodC,prodC2,label:ufvLabel}=_fbarUfvPkFields();
+  const w2Map=_fbarW2Map(pkFields);
+  const glMap={},irrMap={};
   if(dashData.patamares&&dashData.patamares.length){
     for(const r of dashData.patamares){
-      const d=r.data; if(!d) continue;
-      const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      if(!glMap[k]) glMap[k]=0;
-      glMap[k]+=num(r.gl);
-      if(!irrMap[k]) irrMap[k]={s:0,n:0};
-      if(r.irr_media>0){irrMap[k].s+=r.irr_media; irrMap[k].n++;}
+      const d=r.data;if(!d||!_fbarDateOk(d))continue;
+      const k=_fbarGranKey(d);
+      if(!glMap[k])glMap[k]=0;glMap[k]+=num(r.gl);
+      if(!irrMap[k])irrMap[k]={s:0,n:0};
+      if(r.irr_media>0){irrMap[k].s+=r.irr_media;irrMap[k].n++;}
     }
   }
-
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(glMap)])].sort();
   if(!allKeys.length){showNoData('cGer1');return;}
-
-  // Fbar period filter — show only months within the selected date range
-  const _inRange=k=>{
-    if(!filters.fbarPerIni&&!filters.fbarPerFim&&!filters.fbarDate) return true;
-    const[ky,km]=k.split('-').map(Number);
-    const mS=new Date(ky,km-1,1), mE=new Date(ky,km,0);
-    if(filters.fbarPerIni&&filters.fbarPerFim)
-      return mE>=new Date(filters.fbarPerIni)&&mS<=new Date(filters.fbarPerFim);
-    if(filters.fbarDate){
-      const dt=new Date(filters.fbarDate);
-      const cutFrom=new Date(dt.getFullYear()-1,dt.getMonth()+1,1);
-      return mS>=cutFrom&&mS<=new Date(dt.getFullYear(),dt.getMonth(),1);
-    }
-    return true;
-  };
-  const visibleKeys=allKeys.filter(_inRange);
-  if(!visibleKeys.length){showNoData('cGer1');return;}
-
-  const labels=visibleKeys.map(k=>{
-    const[y,m]=k.split('-');
-    const lbl=MNS[+m]; const yr=parseInt(y);
-    return yr!==new Date().getFullYear()?[lbl,y]:lbl;
-  });
-  const gvData=visibleKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
-  const glData=visibleKeys.map(k=>+((glMap[k]||0)/1000).toFixed(3));
-  const irrData=visibleKeys.map(k=>{const v=irrMap[k];return v&&v.n?+(v.s/v.n).toFixed(1):null;});
+  const labels=allKeys.map(_fbarKeyLbl);
+  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
+  const glData=allKeys.map(k=>+((glMap[k]||0)/1000).toFixed(3));
+  const irrData=allKeys.map(k=>{const v=irrMap[k];return v&&v.n?+(v.s/v.n).toFixed(1):null;});
 
   const fGWh=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:3,maximumFractionDigits:3});
   const fIrr=v=>v!=null?v.toLocaleString(getDateLocale(),{maximumFractionDigits:0}):null;
@@ -4074,17 +4094,17 @@ function renderGer1(type='bar'){
 }
 
 function renderGer2(type='bar'){
-  const pat=applyFilters(dashData.patamares);
-  if(!pat.length){showNoData('cGer2');return;}
-  const g=agrupar(pat,'data',['gv','gf']);
-  const labels=getLabels(g);
-  const gvData=g.map(r=>+(r.gv/1000).toFixed(3));
-  const gfData=g.map(r=>+(r.gf/1000).toFixed(3));
-  // Média histórica de todos os períodos
-  const allG=agrupar(pat,'data',['gv','gf']);
-  const nP=allG.length||1;
-  const avgGV=+(allG.reduce((s,r)=>s+r.gv,0)/nP/1000).toFixed(3);
-  const avgGF=+(allG.reduce((s,r)=>s+r.gf,0)/nP/1000).toFixed(3);
+  const{pkFields}=_fbarUfvPkFields();
+  const w2Map=_fbarW2Map(pkFields);
+  const{gf:gfMap}=_fbarPatMap(['gf']);
+  const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
+  if(!allKeys.length){showNoData('cGer2');return;}
+  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
+  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
+  const nP=allKeys.length||1;
+  const avgGV=+(gvData.reduce((s,v)=>s+v,0)/nP).toFixed(3);
+  const avgGF=+(gfData.reduce((s,v)=>s+v,0)/nP).toFixed(3);
+  const labels=allKeys.map(_fbarKeyLbl);
 
   if(type==='line'){
     // Modo linha: sem barra de média, só séries temporais
@@ -4160,13 +4180,15 @@ function renderGer2(type='bar'){
 }
 
 function renderGer3(type='bar'){
-  const pat=applyFilters(dashData.patamares);
-  if(!pat.length){showNoData('cGer3');return;}
-  const g=agrupar(pat,'data',['gv','gf','disp_mwh']);
-  const labels=getLabels(g);
-  const gvData=g.map(r=>+(r.gv/1000).toFixed(3));
-  const gfData=g.map(r=>+(r.gf/1000).toFixed(3));
-  const ociData=g.map((r,i)=>Math.max(0,+(r.disp_mwh/1000).toFixed(3)-gvData[i]-gfData[i]));
+  const{pkFields}=_fbarUfvPkFields();
+  const w2Map=_fbarW2Map(pkFields);
+  const{gf:gfMap,disp_mwh:dispMap}=_fbarPatMap(['gf','disp_mwh']);
+  const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
+  if(!allKeys.length){showNoData('cGer3');return;}
+  const labels=allKeys.map(_fbarKeyLbl);
+  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
+  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
+  const ociData=allKeys.map((k,i)=>Math.max(0,+((dispMap[k]||0)/1000).toFixed(3)-gvData[i]-gfData[i]));
 
   mkChart('cGer3',{type:type==='line'?'line':'bar',data:{labels,datasets:[
     {label:_T('Energia Produzida (GWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):(c=>_w2dAreaGrad(c,'#A855F7')),borderColor:'#A855F7',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
@@ -4944,11 +4966,11 @@ function renderAdv3(){
 // RENDER ALL
 // ═══════════════════════════════════════════════════════════════════
 function renderGF1(type='bar'){
-  const pat=applyFilters(dashData.patamares);
-  if(!pat.length){showNoData('cGF1');return;}
-  const g=agrupar(pat,'data',['gf']);
-  const labels=getLabels(g);
-  const gfData=g.map(r=>+(r.gf/1000).toFixed(3));
+  const{gf:gfMap}=_fbarPatMap(['gf']);
+  const allKeys=Object.keys(gfMap).sort();
+  if(!allKeys.length){showNoData('cGF1');return;}
+  const labels=allKeys.map(_fbarKeyLbl);
+  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
   const avgGF=gfData.reduce((s,v)=>s+v,0)/(gfData.length||1);
   mkChart('cGF1',{type,data:{labels,datasets:[
     {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':false,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?2:1.5},
@@ -7322,11 +7344,12 @@ document.querySelectorAll('[data-fgrandeza]').forEach(btn=>{
     document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.remove('on'));
     btn.classList.add('on');
     filters.grandeza=btn.dataset.fgrandeza;
+    renderAll();
   });
 });
 // Fbar: inicializa data com hoje
-(function(){const t=new Date();const s=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');if(!filters.fbarDate)filters.fbarDate=s;_fbarOnIntervalChange();})();
-function _fbarOnIntervalChange(){
+(function(){const t=new Date();const s=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');if(!filters.fbarDate)filters.fbarDate=s;_fbarOnIntervalChange(true);})();
+function _fbarOnIntervalChange(noRender){
   const iv=document.getElementById('fbarIntervalSel')?.value||'QuinzeMinutos';
   filters.interval=iv;
   const wrap=document.getElementById('fbarDateWrap');
@@ -7336,11 +7359,12 @@ function _fbarOnIntervalChange(){
   if(iv==='Personalizado'){
     const fromDef=filters.fbarPerIni||fmt(new Date(Date.now()-30*86400000));
     const toDef=filters.fbarPerFim||today;
-    wrap.innerHTML=`<input type="date" class="fdate" id="fbarFrom" value="${fromDef}" style="flex-shrink:0" onchange="filters.fbarPerIni=this.value"><span style="color:var(--t4);font-size:10px;padding:0 3px">até</span><input type="date" class="fdate" id="fbarTo" value="${toDef}" style="flex-shrink:0" onchange="filters.fbarPerFim=this.value">`;
+    wrap.innerHTML=`<input type="date" class="fdate" id="fbarFrom" value="${fromDef}" style="flex-shrink:0" onchange="filters.fbarPerIni=this.value;renderAll()"><span style="color:var(--t4);font-size:10px;padding:0 3px">até</span><input type="date" class="fdate" id="fbarTo" value="${toDef}" style="flex-shrink:0" onchange="filters.fbarPerFim=this.value;renderAll()">`;
   } else {
     const curDate=filters.fbarDate||today;
-    wrap.innerHTML=`<input type="date" class="fdate" id="fbarDatePicker" style="flex-shrink:0" value="${curDate}" onchange="filters.fbarDate=this.value">`;
+    wrap.innerHTML=`<input type="date" class="fdate" id="fbarDatePicker" style="flex-shrink:0" value="${curDate}" onchange="filters.fbarDate=this.value;renderAll()">`;
   }
+  if(!noRender) renderAll();
 }
 function _fbarQuick(p,btn){
   document.querySelectorAll('#fbarQuickGroup [data-fq]').forEach(b=>b.classList.remove('on'));
@@ -7352,8 +7376,9 @@ function _fbarQuick(p,btn){
   else{const days=parseInt(p);const end=fmt(now);const start=new Date(now);start.setDate(start.getDate()-days);filters.fbarPerIni=fmt(start);filters.fbarPerFim=end;filters.fbarDate='';}
   // Se estiver no modo Personalizado, atualiza os campos visíveis
   const iv=document.getElementById('fbarIntervalSel')?.value;
-  if(iv==='Personalizado') _fbarOnIntervalChange();
+  if(iv==='Personalizado') _fbarOnIntervalChange(true);
   else{const dp=document.getElementById('fbarDatePicker');if(dp) dp.value=filters.fbarDate||fmt(now);}
+  renderAll();
 }
 function _fbarBuscar(){
   const iv=document.getElementById('fbarIntervalSel')?.value;
@@ -7434,7 +7459,7 @@ function syncFilterUI(){
   const _ufvA=new Set((filters.ufv||'todas').split(',').filter(Boolean));
   document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',_ufvA.has(b.dataset.fufv)));
   document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Demat')));
-  const fbarIv=document.getElementById('fbarIntervalSel');if(fbarIv){fbarIv.value=filters.interval||'QuinzeMinutos';_fbarOnIntervalChange();}
+  const fbarIv=document.getElementById('fbarIntervalSel');if(fbarIv){fbarIv.value=filters.interval||'QuinzeMinutos';_fbarOnIntervalChange(true);}
 
   document.querySelectorAll('#fbarQuickGroup [data-fq]').forEach(b=>b.classList.remove('on'));
   const pi=document.getElementById('selPerIni'), pf=document.getElementById('selPerFim');
