@@ -3931,19 +3931,23 @@ function renderGer1(type='bar'){
   // Energia Produzida → Way2 Eneat (dashData.way2, per park or total)
   // Energia Limitada  → Planilha col D (dashData.patamares, field gl)
   // Irradiância       → Planilha (dashData.patamares, field irr_media)
-  const ufv = filters.ufv||'todas';
-  const pkField = ufv==='todas' ? 'total' : ufv.toLowerCase();
-  const prodC = ufv==='todas' ? '#A855F7' : (_W2D_COLORS[ufv]?.c||'#A855F7');
-  const prodC2 = ufv==='todas' ? '#3b0d6e' : (prodC+'33');
+  // Multi-select: filters.ufv pode ser 'todas', 'M1', 'M1,M2', etc.
+  const ufvSet=new Set((filters.ufv||'todas').split(',').filter(Boolean));
+  const useTotal=ufvSet.has('todas')||ufvSet.size===0;
+  const selParks=[...ufvSet].filter(p=>p!=='todas');
+  const pkFields=useTotal?['total']:selParks.map(p=>p.toLowerCase());
+  const prodC=useTotal?'#A855F7':(selParks.length===1?(_W2D_COLORS[selParks[0]]?.c||'#A855F7'):'#A855F7');
+  const prodC2=useTotal?'#3b0d6e':prodC+'33';
+  const ufvLabel=useTotal?'Complexo':selParks.join('+');
 
-  // Monthly aggregation – Way2 Eneat
+  // Monthly aggregation – Way2 Eneat (soma os campos dos parques selecionados)
   const w2Map={};
   if(dashData.way2&&dashData.way2.length){
     for(const r of dashData.way2){
       const d=r.data; if(!d) continue;
       const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
       if(!w2Map[k]) w2Map[k]=0;
-      w2Map[k]+=num(r[pkField]);
+      for(const pf of pkFields) w2Map[k]+=num(r[pf]);
     }
   }
 
@@ -3997,23 +4001,21 @@ function renderGer1(type='bar'){
     type:type==='line'?'line':'bar',
     data:{labels,datasets:[
       {label:'Energia Produzida (GWh)',data:gvData,
-        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,prodC2,prodC)):(prodC+'55'),
-        borderColor:prodC,borderWidth:type==='bar'?0:2.2,
+        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,prodC2,prodC)):(c=>_w2dAreaGrad(c,prodC)),
+        borderColor:prodC,borderWidth:type==='bar'?0:1.5,
         grouped:true,barPercentage:0.72,categoryPercentage:0.88,
         borderRadius:type==='bar'?{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0}:0,
         fill:type==='line'?'origin':false,tension:0.3,order:2,
         type:type==='line'?'line':'bar',
-        pointRadius:type==='line'?3.5:0,pointBackgroundColor:prodC,
-        pointBorderColor:prodC,pointHoverRadius:6},
+        pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55'},
       {label:'Energia Limitada (GWh)',data:glData,
-        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,'#78340f',limitC)):(limitC+'55'),
-        borderColor:limitC,borderWidth:type==='bar'?0:2.2,
+        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,'#78340f',limitC)):(c=>_w2dAreaGrad(c,limitC)),
+        borderColor:limitC,borderWidth:type==='bar'?0:1.5,
         grouped:true,barPercentage:0.72,categoryPercentage:0.88,
         borderRadius:type==='bar'?{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0}:0,
         fill:type==='line'?'origin':false,tension:0.3,order:3,
         type:type==='line'?'line':'bar',
-        pointRadius:type==='line'?3.5:0,pointBackgroundColor:limitC,
-        pointBorderColor:limitC,pointHoverRadius:6},
+        pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55'},
       {label:'Irradiância (kWh/m²)',data:irrData,
         borderColor:'rgba(253,224,71,0.85)',backgroundColor:'rgba(253,224,71,0.06)',
         type:'line',fill:false,tension:0.35,
@@ -4027,7 +4029,7 @@ function renderGer1(type='bar'){
         x:{...xAxisWithTitle()},
         y:{...CHART_DEFAULTS.scales.y,
           title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},
-          grid:{color:'rgba(255,255,255,0.04)',drawBorder:false}},
+          grid:{display:false}},
         y2:{type:'linear',position:'right',min:0,grid:{display:false},
           ticks:{color:'rgba(253,224,71,0.7)',font:{size:9},maxTicksLimit:5},
           title:{display:true,text:'kWh/m²',color:'rgba(253,224,71,0.7)',font:{size:9}}}
@@ -4054,7 +4056,7 @@ function renderGer1(type='bar'){
                   const gv=gvData[i]||0, gl=glData[i]||0;
                   const tot=gv+gl;
                   const pct=tot>0?((gl/tot)*100).toFixed(1):0;
-                  const parkLabel=ufv==='todas'?'Complexo':ufv;
+                  const parkLabel=ufvLabel;
                   return [
                     `  ⚡ ${parkLabel} · Produzida: ${fGWh(gv)} GWh`,
                     `  🚫 Limitada: ${fGWh(gl)} GWh`,
@@ -4087,17 +4089,17 @@ function renderGer2(type='bar'){
   if(type==='line'){
     // Modo linha: sem barra de média, só séries temporais
     mkChart('cGer2',{type:'line',data:{labels,datasets:[
-      {label:_T('Energia Produzida (GWh)'),data:gvData,borderColor:'#A855F7',backgroundColor:'#A855F722',
-        fill:true,tension:0,pointRadius:3,pointBackgroundColor:'#A855F7',borderWidth:2.5},
-      {label:_T('Energia Frustrada (GWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:'#F5A62322',
-        fill:true,tension:0,pointRadius:3,pointBackgroundColor:'#F5A623',borderWidth:2.5},
+      {label:_T('Energia Produzida (GWh)'),data:gvData,borderColor:'#A855F7',backgroundColor:c=>_w2dAreaGrad(c,'#A855F7'),
+        fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
+      {label:_T('Energia Frustrada (GWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:c=>_w2dAreaGrad(c,'#F5A623'),
+        fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
       {label:_T('Méd. GV'),data:gvData.map(()=>avgGV),borderColor:'#c084fc88',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false},
       {label:_T('Méd. GF'),data:gfData.map(()=>avgGF),borderColor:'#F5A62344',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false}
     ]},options:{...CHART_DEFAULTS,
       scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,
-        title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}}}});
+        title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},grid:{display:false}}}}});
     return;
   }
 
@@ -4130,7 +4132,7 @@ function renderGer2(type='bar'){
       scales:{
         x:{...xAxisWithTitle(),stacked:true},
         y:{...CHART_DEFAULTS.scales.y,stacked:true,
-          title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}
+          title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},grid:{display:false}}
       },
       plugins:{...CHART_DEFAULTS.plugins,
         tooltip:{...CHART_DEFAULTS.plugins.tooltip,
@@ -4167,10 +4169,10 @@ function renderGer3(type='bar'){
   const ociData=g.map((r,i)=>Math.max(0,+(r.disp_mwh/1000).toFixed(3)-gvData[i]-gfData[i]));
 
   mkChart('cGer3',{type:type==='line'?'line':'bar',data:{labels,datasets:[
-    {label:_T('Energia Produzida (GWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):'#A855F744',borderColor:'#A855F7',fill:true,tension:0},
-    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A62350',borderColor:'#F5A623',fill:true,tension:0},
-    {label:_T('Ociosa (GWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):'#6b7a9a28',borderColor:'#6b7a9a',fill:true,tension:0}
-  ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:true},y:{...CHART_DEFAULTS.scales.y,stacked:true}}}});
+    {label:_T('Energia Produzida (GWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):(c=>_w2dAreaGrad(c,'#A855F7')),borderColor:'#A855F7',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
+    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
+    {label:_T('Ociosa (GWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):(c=>_w2dAreaGrad(c,'#6b7a9a')),borderColor:'#6b7a9a',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5}
+  ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',grid:{display:false}}}}});
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4949,9 +4951,9 @@ function renderGF1(type='bar'){
   const gfData=g.map(r=>+(r.gf/1000).toFixed(3));
   const avgGF=gfData.reduce((s,v)=>s+v,0)/(gfData.length||1);
   mkChart('cGF1',{type,data:{labels,datasets:[
-    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623',borderColor:'#F5A623',fill:false,tension:0,borderWidth:2},
+    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':false,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?2:1.5},
     {label:_T('Méd. GF'),data:gfData.map(()=>+avgGF.toFixed(3)),borderColor:'#8d6e6380',borderDash:[5,3],borderWidth:1,pointRadius:0,type:'line'}
-  ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:10}}}}}});
+  ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:10}},grid:{display:false}}}}});
 }
 
 function renderAdv4(type='bar'){
@@ -7298,9 +7300,20 @@ document.getElementById('selPerIni').addEventListener('change',onPeriodoChange);
 document.getElementById('selPerFim').addEventListener('change',onPeriodoChange);
 document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.remove('on'));
-    btn.classList.add('on');
-    filters.ufv=btn.dataset.fufv;
+    const pk=btn.dataset.fufv;
+    const cur=new Set((filters.ufv||'todas').split(',').filter(Boolean));
+    const allChips=document.querySelectorAll('#fbarUfvGroup .w2d-park-chip');
+    if(pk==='todas'){
+      // Todas: ativa Todas e desmarca parques individuais
+      filters.ufv='todas';
+      allChips.forEach(b=>b.classList.toggle('on',b.dataset.fufv==='todas'));
+    }else{
+      if(cur.has('todas')){cur.delete('todas');cur.add(pk);}
+      else if(cur.has(pk)){cur.delete(pk);if(!cur.size)cur.add('todas');}
+      else{cur.add(pk);}
+      filters.ufv=[...cur].join(',');
+      allChips.forEach(b=>b.classList.toggle('on',cur.has(b.dataset.fufv)));
+    }
     renderAll();
   });
 });
@@ -7418,7 +7431,8 @@ function syncFilterUI(){
   document.querySelectorAll('[data-fg]').forEach(b=>b.classList.toggle('on',b.dataset.fg===filters.gran));
   document.querySelectorAll('[data-fa]').forEach(b=>b.classList.toggle('on',b.dataset.fa===filters.ano));
   document.getElementById('selMes').value=filters.mes;
-  document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',b.dataset.fufv===(filters.ufv||'todas')));
+  const _ufvA=new Set((filters.ufv||'todas').split(',').filter(Boolean));
+  document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',_ufvA.has(b.dataset.fufv)));
   document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Demat')));
   const fbarIv=document.getElementById('fbarIntervalSel');if(fbarIv){fbarIv.value=filters.interval||'QuinzeMinutos';_fbarOnIntervalChange();}
 
