@@ -4029,6 +4029,59 @@ function _fbarLatestWay2Date(){
   if(!best) return null;
   return best.getFullYear()+'-'+String(best.getMonth()+1).padStart(2,'0')+'-'+String(best.getDate()).padStart(2,'0');
 }
+// ── Energia intradiária · blob Way2 (Power Automate salva a cada 15 min) ──
+const _eneatBlobCache=new Map();
+const _ENEAT_BLOB_TTL=3*60*1000; // 3 min para o dia atual
+async function _eneatLoadBlob(baseInt,dt){
+  const key=baseInt+':'+dt;
+  const now=Date.now();
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  const isToday=dt===today;
+  const c=_eneatBlobCache.get(key);
+  if(c&&!c.loading&&(!isToday||(now-c.t)<_ENEAT_BLOB_TTL)) return c.v;
+  if(c?.loading) return c.v||null;
+  _eneatBlobCache.set(key,{v:c?.v||null,t:c?.t||0,loading:true});
+  let v=null;
+  try{
+    const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store'});
+    v=r.ok?await r.json():null;
+  }catch(e){v=null;}
+  _eneatBlobCache.set(key,{v,t:now,loading:false});
+  return v;
+}
+function _eneatBlobToMap(blob,pkFields,iv){
+  // Converte resposta Way2 (dados[]/valores[]) em mapa HH:mm → MWh
+  const map={};
+  if(!blob) return map;
+  const dados=Array.isArray(blob)?blob:(blob.dados||[]);
+  const parkKeys=Object.keys(WAY2_ENERGY_IDS);
+  const useTotal=pkFields.includes('total');
+  for(const item of dados){
+    const pk=parkKeys.find(k=>WAY2_ENERGY_IDS[k]===item.pontoId);
+    if(!useTotal&&(!pk||!pkFields.map(p=>p.toUpperCase()).includes(pk.toUpperCase()))) continue;
+    for(const v of(item.valores||[])){
+      if(v.valor==null||v.valor<0) continue;
+      const d=new Date(v.data);
+      const h=String(d.getHours()).padStart(2,'0');
+      const slot=iv==='UmaHora'?0:iv==='TrintaMinutos'?Math.floor(d.getMinutes()/30)*30:Math.floor(d.getMinutes()/15)*15;
+      const k=iv==='UmaHora'?h+':00':h+':'+String(slot).padStart(2,'0');
+      if(!map[k])map[k]=0;
+      map[k]=+(map[k]+(v.valor/1000)).toFixed(4);
+    }
+  }
+  return map;
+}
+function _eneatIntraTrigger(iv,dt,type){
+  const bi=iv==='UmaHora'?'UmaHora':iv==='TrintaMinutos'?'TrintaMinutos':'QuinzeMinutos';
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date());
+  const c=_eneatBlobCache.get(bi+':'+dt);
+  if(c&&!c.loading&&(dt!==today||(Date.now()-c.t)<_ENEAT_BLOB_TTL)) return;
+  _eneatLoadBlob(bi,dt).then(v=>{
+    if(v&&filters.fbarDate===dt&&(filters.interval||'QuinzeMinutos')===iv&&_fbarIsIntradaySingle()){
+      renderGer1(type||'bar');renderGer2(type||'bar');renderGer3(type||'bar');
+    }
+  });
+}
 function _fbarW2MapDate(pkFields,dateStr){
   // Way2 single-day — usado como fallback quando patamares não tem dados do dia
   const map={};
@@ -4066,8 +4119,16 @@ function renderGer1(type='bar'){
     const pg=_fbarPatMap(['gv']).gv;
     if(Object.keys(pg).length){w2Map=pg;}
     else{
-      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
-      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+      const _iv=filters.interval||'QuinzeMinutos';
+      const _bi=_iv==='UmaHora'?'UmaHora':_iv==='TrintaMinutos'?'TrintaMinutos':'QuinzeMinutos';
+      const _bc=_eneatBlobCache.get(_bi+':'+filters.fbarDate);
+      const _bm=(_bc&&!_bc.loading&&_bc.v)?_eneatBlobToMap(_bc.v,pkFields,_iv):{};
+      if(Object.keys(_bm).length){w2Map=_bm;}
+      else{
+        w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+        if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+        _eneatIntraTrigger(_iv,filters.fbarDate,type);
+      }
     }
   }else{w2Map=_fbarW2Map(pkFields);}
   const glMap={},irrMap={};
@@ -4166,8 +4227,16 @@ function renderGer2(type='bar'){
     const pg=_fbarPatMap(['gv']).gv;
     if(Object.keys(pg).length){w2Map=pg;}
     else{
-      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
-      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+      const _iv=filters.interval||'QuinzeMinutos';
+      const _bi=_iv==='UmaHora'?'UmaHora':_iv==='TrintaMinutos'?'TrintaMinutos':'QuinzeMinutos';
+      const _bc=_eneatBlobCache.get(_bi+':'+filters.fbarDate);
+      const _bm=(_bc&&!_bc.loading&&_bc.v)?_eneatBlobToMap(_bc.v,pkFields,_iv):{};
+      if(Object.keys(_bm).length){w2Map=_bm;}
+      else{
+        w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+        if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+        _eneatIntraTrigger(_iv,filters.fbarDate,type);
+      }
     }
   }else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap}=_fbarPatMap(['gf']);
@@ -4257,8 +4326,16 @@ function renderGer3(type='bar'){
     const pg=_fbarPatMap(['gv']).gv;
     if(Object.keys(pg).length){w2Map=pg;}
     else{
-      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
-      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+      const _iv=filters.interval||'QuinzeMinutos';
+      const _bi=_iv==='UmaHora'?'UmaHora':_iv==='TrintaMinutos'?'TrintaMinutos':'QuinzeMinutos';
+      const _bc=_eneatBlobCache.get(_bi+':'+filters.fbarDate);
+      const _bm=(_bc&&!_bc.loading&&_bc.v)?_eneatBlobToMap(_bc.v,pkFields,_iv):{};
+      if(Object.keys(_bm).length){w2Map=_bm;}
+      else{
+        w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+        if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+        _eneatIntraTrigger(_iv,filters.fbarDate,type);
+      }
     }
   }else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap,disp_mwh:dispMap}=_fbarPatMap(['gf','disp_mwh']);
