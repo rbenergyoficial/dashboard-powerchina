@@ -2985,7 +2985,7 @@ const C = {
 // ESTADO GLOBAL
 // ═══════════════════════════════════════════════════════════════════
 let dashData = {patamares:[], restricoes:[], way2:[], ppa:null, must:null, meta:{}};
-let filters = {gran:'mes', ano:'todos', mes:'todos', ufv:'todas', razao:'todas', origem:'todas', perIni:'', perFim:'', ppaPark:'todos', ppaMes:0, ppaPerIni:'', ppaPerFim:'', ppaChartScope:'todos', ppaChartGran:'dia', ppaProgressGran:'mes', mustPark:'total', mustGran:'15min', mustMode:'dia', mustDay:'', mustPerIni:'', mustPerFim:''};
+let filters = {gran:'mes', ano:'todos', mes:'todos', ufv:'todas', razao:'todas', origem:'todas', perIni:'', perFim:'', ppaPark:'todos', ppaMes:0, ppaPerIni:'', ppaPerFim:'', ppaChartScope:'todos', ppaChartGran:'dia', ppaProgressGran:'mes', mustPark:'total', mustGran:'15min', mustMode:'dia', mustDay:'', mustPerIni:'', mustPerFim:'', fbarIntraday:false};
 let charts = {};
 let cachedToken = null, tokenExpiry = 0;
 let _animKPIs = false, _kpiShown = false; // microanimação: count-up dos KPIs só na 1ª carga
@@ -3930,7 +3930,8 @@ function xAxisWithTitle(extra){
 function _fbarIsIntradaySingle(){
   const iv=filters.interval||'QuinzeMinutos';
   return (iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora')
-    &&!!filters.fbarDate&&!filters.fbarPerIni&&!filters.fbarPerFim;
+    &&!!filters.fbarDate&&!filters.fbarPerIni&&!filters.fbarPerFim
+    &&!!filters.fbarIntraday; // só quando Hoje/Ontem foi clicado explicitamente
 }
 function _fbarGranKey(d){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
@@ -3964,11 +3965,11 @@ function _fbarDateOk(d){
     const dt=new Date(fy,fm-1,fd,23,59,59,999); // LOCAL — não UTC midnight
     const iv=filters.interval||'QuinzeMinutos';
     const isIntra=iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora';
-    if(isIntra){
-      // Intraday data-única: filtra SOMENTE esse dia (patamares tem timestamp real)
+    if(isIntra&&filters.fbarIntraday){
+      // Intraday data-única (Hoje/Ontem): filtra SOMENTE esse dia
       return d.getFullYear()===fy&&d.getMonth()===fm-1&&d.getDate()===fd;
     }
-    if(iv==='UmDia'){
+    if(iv==='UmDia'||isIntra){ // intraday sem flag → 30 dias diários
       return d>=new Date(fy,fm-1,fd-29)&&d<=dt;
     }
     if(iv==='Semana'){
@@ -7381,7 +7382,7 @@ function _fbarOnIntervalChange(noRender){
     wrap.innerHTML=`<input type="date" class="fdate" id="fbarFrom" value="${fromDef}" style="flex-shrink:0" onchange="filters.fbarPerIni=this.value;renderAll()"><span style="color:var(--t4);font-size:10px;padding:0 3px">até</span><input type="date" class="fdate" id="fbarTo" value="${toDef}" style="flex-shrink:0" onchange="filters.fbarPerFim=this.value;renderAll()">`;
   } else {
     const curDate=filters.fbarDate||today;
-    wrap.innerHTML=`<input type="date" class="fdate" id="fbarDatePicker" style="flex-shrink:0" value="${curDate}" onchange="filters.fbarDate=this.value;renderAll()">`;
+    wrap.innerHTML=`<input type="date" class="fdate" id="fbarDatePicker" style="flex-shrink:0" value="${curDate}" onchange="filters.fbarDate=this.value;filters.fbarIntraday=false;renderAll()">`;
   }
   if(!noRender) renderAll();
 }
@@ -7390,9 +7391,9 @@ function _fbarQuick(p,btn){
   btn.classList.add('on');
   const fmt=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const now=new Date();
-  if(p==='hoje'){const s=fmt(now);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';}
-  else if(p==='ontem'){const d=new Date(now);d.setDate(d.getDate()-1);const s=fmt(d);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';}
-  else{const days=parseInt(p);const end=fmt(now);const start=new Date(now);start.setDate(start.getDate()-days);filters.fbarPerIni=fmt(start);filters.fbarPerFim=end;filters.fbarDate='';}
+  if(p==='hoje'){const s=fmt(now);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';filters.fbarIntraday=true;}
+  else if(p==='ontem'){const d=new Date(now);d.setDate(d.getDate()-1);const s=fmt(d);filters.fbarDate=s;filters.fbarPerIni='';filters.fbarPerFim='';filters.fbarIntraday=true;}
+  else{const days=parseInt(p);const end=fmt(now);const start=new Date(now);start.setDate(start.getDate()-days);filters.fbarPerIni=fmt(start);filters.fbarPerFim=end;filters.fbarDate='';filters.fbarIntraday=false;}
   // Se estiver no modo Personalizado, atualiza os campos visíveis
   const iv=document.getElementById('fbarIntervalSel')?.value;
   if(iv==='Personalizado') _fbarOnIntervalChange(true);
@@ -7411,6 +7412,7 @@ function _fbarBuscar(){
   } else {
     const dt=document.getElementById('fbarDatePicker')?.value;
     if(dt) filters.fbarDate=dt;
+    filters.fbarIntraday=false;
   }
   renderAll();
 }
@@ -7460,7 +7462,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
 });
 
 function clearFilters(){
-  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Demat',interval:'QuinzeMinutos',fbarDate:'',fbarPerIni:'',fbarPerFim:'',ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
+  filters={gran:'mes',ano:'todos',mes:'todos',ufv:'todas',razao:'todas',origem:'todas',perIni:'',perFim:'',grandeza:'Demat',interval:'QuinzeMinutos',fbarDate:'',fbarPerIni:'',fbarPerFim:'',fbarIntraday:false,ppaPark:'todos',ppaMes:0,ppaPerIni:'',ppaPerFim:'',ppaChartScope:'todos',ppaChartGran:'dia',ppaProgressGran:'mes',mustPark:'total',mustGran:'15min',mustMode:'dia',mustDay:'',mustPerIni:'',mustPerFim:''};
   clearFilterCache();
   syncFilterUI();
   // Reseta seleção de parque UFV + intervalo/data do gráfico Way2
