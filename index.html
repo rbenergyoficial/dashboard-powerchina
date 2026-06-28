@@ -1857,6 +1857,43 @@ function _themeCharts(light){
       </div>
     </div>
 
+    <!-- DADOS ABERTOS ONS -->
+    <div class="section" id="sec-ons">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        DADOS ABERTOS ONS · CONSTRAINED-OFF FOTOVOLTAICA
+        <span id="onsStatus" style="font-size:10px;font-weight:500;color:var(--t3);margin-left:10px;letter-spacing:0"></span>
+      </div>
+      <div class="chart-row cols-2">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Constrained-Off por Mês</div><div class="cc-sub">Energia frustrada (GWh) · fonte ONS Dados Abertos</div></div>
+          </div>
+          <div class="cc-body" style="height:320px"><canvas id="cONS1"></canvas></div>
+        </div>
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Razão da Restrição</div><div class="cc-sub">ENE / CNF / REL · GWh frustrado por tipo</div></div>
+          </div>
+          <div id="dONS2" style="position:relative;height:320px;width:100%"></div>
+        </div>
+      </div>
+      <div class="chart-row cols-2">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Geração vs. Referência — Média Diária</div><div class="cc-sub">MW médio por dia · geração real × referência × limitação</div></div>
+          </div>
+          <div class="cc-body" style="height:320px"><canvas id="cONS3"></canvas></div>
+        </div>
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Principais Causas de Restrição</div><div class="cc-sub">Descrições ONS por GWh frustrado</div></div>
+          </div>
+          <div class="cc-body" style="height:280px;overflow-y:auto;padding:0"><div id="dONS4"></div></div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- end page-curt -->
 
   <!-- PÁGINA 4: SAZONALIDADE -->
@@ -3239,6 +3276,7 @@ function processWb(wb){
   try{ renderAll(); }catch(e){ console.error('renderAll error:', e); }
   // Enriquecer automaticamente com dados em tempo real da Way2 (via Azure Blob)
   setTimeout(()=>loadWay2FromBlob(),600);
+  setTimeout(()=>loadONSData(),1200);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -3494,6 +3532,10 @@ function renderDashboardPage(page){
   }
   if(page==='pr' || page==='curt' || page==='saz'){
     renderPagePat();
+    if(page==='curt'){
+      if(_onsData) renderONS();
+      else loadONSData();
+    }
     return;
   }
   if(page==='ppa'){
@@ -7978,6 +8020,181 @@ async function loadWay2FromAPI(token){
 setInterval(()=>{
   if(dashData&&dashData.way2&&dashData.way2.length) loadWay2FromBlob();
 },10*60*1000);
+
+// ═══════════════════════════════════════════════════════════════════
+// ONS DADOS ABERTOS · CONSTRAINED-OFF FOTOVOLTAICA
+// ═══════════════════════════════════════════════════════════════════
+let _onsData=null;
+
+async function loadONSData(){
+  const statusEl=document.getElementById('onsStatus');
+  if(statusEl) statusEl.textContent='Carregando…';
+  // Gera slugs de 2026-03 até mês atual
+  const now=new Date();
+  const months=[];
+  let y=2026,m=3;
+  while(y<now.getFullYear()||(y===now.getFullYear()&&m<=now.getMonth()+1)){
+    months.push(y+'_'+String(m).padStart(2,'0'));
+    m++;if(m>12){m=1;y++;}
+  }
+  const nc={cache:'no-cache'}, _t='?t='+Date.now();
+  try{
+    const blobs=await Promise.all(
+      months.map(mo=>
+        fetch(WAY2_BLOB_BASE+'ons_restricao_'+mo+'.json'+_t,nc)
+          .then(r=>r.ok?r.json():null).catch(()=>null)
+      )
+    );
+    const all=[];
+    for(const blob of blobs){
+      if(!blob||!Array.isArray(blob.consolidado)) continue;
+      for(const rec of blob.consolidado){
+        const ts=new Date(rec.ts.replace(' ','T')+'-03:00');
+        if(isNaN(ts)) continue;
+        const ger=parseFloat(rec.ger)||0;
+        const lim=parseFloat(rec.lim)||0;
+        const gref=parseFloat(rec.gref)||0;
+        const coff=Math.max(0,gref-lim)*0.5/1000; // GWh por intervalo 30min
+        all.push({ts,ger,lim,gref,coff,razao:rec.razao||'',orig:rec.orig||'',dsc:(rec.dsc||'').trim()});
+      }
+    }
+    all.sort((a,b)=>a.ts-b.ts);
+    _onsData=all;
+    const loaded=blobs.filter(Boolean).length;
+    if(statusEl) statusEl.textContent=loaded+' meses · '+all.length.toLocaleString('pt-BR')+' registros · '+new Date().toLocaleTimeString('pt-BR');
+    renderONS();
+    console.log('✅ ONS Dados Abertos:',all.length,'registros de',loaded,'meses');
+  }catch(e){
+    console.error('loadONSData:',e);
+    if(statusEl) statusEl.textContent='Erro ao carregar dados ONS';
+  }
+}
+
+function renderONS(){
+  if(!_onsData||!_onsData.length) return;
+  renderONS1(); renderONS2(); renderONS3(); renderONS4();
+}
+
+function renderONS1(){
+  const canvas=document.getElementById('cONS1'); if(!canvas) return;
+  const monthly={};
+  for(const r of _onsData){
+    if(r.coff<=0) continue;
+    const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0');
+    monthly[k]=(monthly[k]||0)+r.coff;
+  }
+  const labels=Object.keys(monthly).sort();
+  const vals=labels.map(k=>+monthly[k].toFixed(3));
+  const MN=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  if(charts['cONS1']) charts['cONS1'].destroy();
+  charts['cONS1']=new Chart(canvas,{
+    type:'bar',
+    data:{
+      labels:labels.map(k=>{const[y,mo]=k.split('-');return MN[parseInt(mo)-1]+'/'+y.slice(2);}),
+      datasets:[{label:'Constrained-Off (GWh)',data:vals,
+        backgroundColor:'rgba(245,166,35,.55)',borderColor:'#F5A623',borderWidth:1.5,borderRadius:5}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
+          callbacks:{label:ctx=>` ${ctx.parsed.y.toFixed(3)} GWh`}}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#9aa4b8',font:{size:11}}},
+        y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v.toFixed(1)+' GWh'},beginAtZero:true}
+      }
+    }
+  });
+}
+
+function renderONS2(){
+  const wrap=document.getElementById('dONS2'); if(!wrap) return;
+  const energy={ENE:0,CNF:0,REL:0};
+  for(const r of _onsData){if(r.coff>0&&energy[r.razao]!==undefined) energy[r.razao]+=r.coff;}
+  const labels=['ENE','CNF','REL'];
+  const vals=labels.map(k=>+energy[k].toFixed(3));
+  const total=vals.reduce((a,b)=>a+b,0);
+  if(total<=0){wrap.innerHTML='<div class="no-data" style="height:320px"><span>Sem dados</span></div>';return;}
+  const colors=['#F5A623','#f0598c','#A855F7'];
+  if(charts['dONS2c']) charts['dONS2c'].destroy();
+  wrap.innerHTML='<canvas id="cONS2d"></canvas>';
+  const ctx=document.getElementById('cONS2d');
+  charts['dONS2c']=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels,datasets:[{data:vals,backgroundColor:colors.map(c=>c+'cc'),borderColor:'#090d18',borderWidth:4,hoverOffset:10}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'57%',
+      plugins:{
+        legend:{position:'right',labels:{color:'#f0f4ff',font:{size:12,family:"'Inter',system-ui",weight:'600'},padding:18,
+          usePointStyle:true,pointStyleWidth:13,
+          generateLabels:chart=>chart.data.labels.map((label,i)=>({
+            text:label+'   '+(total>0?(vals[i]/total*100).toFixed(1):0)+'%',
+            fillStyle:colors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i
+          }))}},
+        tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
+          callbacks:{label:ctx=>` ${ctx.parsed.toFixed(3)} GWh (${(ctx.parsed/total*100).toFixed(1)}%)`}}
+      }
+    }
+  });
+}
+
+function renderONS3(){
+  const canvas=document.getElementById('cONS3'); if(!canvas) return;
+  const daily={};
+  for(const r of _onsData){
+    const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0')+'-'+String(r.ts.getDate()).padStart(2,'0');
+    if(!daily[k]) daily[k]={ger:0,lim:0,gref:0,n:0};
+    daily[k].ger+=r.ger; daily[k].lim+=r.lim; daily[k].gref+=r.gref; daily[k].n++;
+  }
+  const days=Object.keys(daily).sort();
+  const avgGer=days.map(k=>+(daily[k].ger/daily[k].n).toFixed(2));
+  const avgLim=days.map(k=>+(daily[k].lim/daily[k].n).toFixed(2));
+  const avgGref=days.map(k=>+(daily[k].gref/daily[k].n).toFixed(2));
+  const lbls=days.map(k=>{const[,mo,dd]=k.split('-');return dd+'/'+(+mo);});
+  if(charts['cONS3']) charts['cONS3'].destroy();
+  charts['cONS3']=new Chart(canvas,{
+    type:'line',
+    data:{labels:lbls,datasets:[
+      {label:'Ref. (MW)',data:avgGref,borderColor:'#6b8bf5',backgroundColor:'rgba(107,139,245,.10)',borderWidth:1.5,pointRadius:0,tension:0.3,fill:true},
+      {label:'Real (MW)',data:avgGer,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:1.5,pointRadius:0,tension:0.3},
+      {label:'Limite (MW)',data:avgLim,borderColor:'#F5A623',backgroundColor:'transparent',borderWidth:1,borderDash:[5,4],pointRadius:0,tension:0.3}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{labels:{color:'#9aa4b8',font:{size:11},boxWidth:22}},
+        tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
+          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} MW`}}
+      },
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:14}},
+        y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v+' MW'},beginAtZero:false}
+      }
+    }
+  });
+}
+
+function renderONS4(){
+  const wrap=document.getElementById('dONS4'); if(!wrap) return;
+  const causas={};
+  for(const r of _onsData){
+    if(!r.dsc||r.coff<=0) continue;
+    if(!causas[r.dsc]) causas[r.dsc]={gwh:0,n:0};
+    causas[r.dsc].gwh+=r.coff; causas[r.dsc].n++;
+  }
+  const sorted=Object.entries(causas).sort((a,b)=>b[1].gwh-a[1].gwh).slice(0,8);
+  if(!sorted.length){wrap.innerHTML='<div class="no-data" style="height:120px"><span>Sem dados</span></div>';return;}
+  const maxGwh=sorted[0][1].gwh||1;
+  wrap.innerHTML=sorted.map(([dsc,{gwh,n}],i)=>`
+    <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:flex-start;gap:10px">
+      <span style="color:var(--t3);font-size:11px;font-variant-numeric:tabular-nums;min-width:18px;padding-top:2px">${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11.5px;color:#dfe6f5;font-weight:500;margin-bottom:5px;line-height:1.35">${dsc}</div>
+        <div style="background:rgba(245,166,35,.15);border-radius:3px;height:3px;margin-bottom:5px">
+          <div style="background:#F5A623;height:3px;border-radius:3px;width:${(gwh/maxGwh*100).toFixed(1)}%"></div>
+        </div>
+        <div style="font-size:10.5px;color:var(--t3)">${gwh.toFixed(3)} GWh · ${n.toLocaleString('pt-BR')} intervalos</div>
+      </div>
+    </div>`).join('');
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // MUST DEMANDA INTRADIA · WAY2 (via Azure Blob / Power Automate)
