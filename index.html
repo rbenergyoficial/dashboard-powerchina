@@ -4018,6 +4018,17 @@ function _fbarPatMap(fields){
   }
   return maps;
 }
+function _fbarLatestWay2Date(){
+  if(!dashData.way2||!dashData.way2.length) return null;
+  let best=null;
+  for(const r of dashData.way2){
+    if(!r.data) continue;
+    const tot=r.total||r.liquida||r.bruta||0;
+    if(tot>0&&(!best||r.data>best)) best=r.data;
+  }
+  if(!best) return null;
+  return best.getFullYear()+'-'+String(best.getMonth()+1).padStart(2,'0')+'-'+String(best.getDate()).padStart(2,'0');
+}
 function _fbarW2MapDate(pkFields,dateStr){
   // Way2 single-day — usado como fallback quando patamares não tem dados do dia
   const map={};
@@ -4051,8 +4062,14 @@ function renderGer1(type='bar'){
   const{pkFields,prodC,prodC2,label:ufvLabel}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
   let w2Map;
-  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
-  else{w2Map=_fbarW2Map(pkFields);}
+  if(intra){
+    const pg=_fbarPatMap(['gv']).gv;
+    if(Object.keys(pg).length){w2Map=pg;}
+    else{
+      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+    }
+  }else{w2Map=_fbarW2Map(pkFields);}
   const glMap={},irrMap={};
   if(dashData.patamares&&dashData.patamares.length){
     for(const r of dashData.patamares){
@@ -4145,8 +4162,14 @@ function renderGer2(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
   let w2Map;
-  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
-  else{w2Map=_fbarW2Map(pkFields);}
+  if(intra){
+    const pg=_fbarPatMap(['gv']).gv;
+    if(Object.keys(pg).length){w2Map=pg;}
+    else{
+      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+    }
+  }else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap}=_fbarPatMap(['gf']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer2');return;}
@@ -4230,8 +4253,14 @@ function renderGer3(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
   let w2Map;
-  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
-  else{w2Map=_fbarW2Map(pkFields);}
+  if(intra){
+    const pg=_fbarPatMap(['gv']).gv;
+    if(Object.keys(pg).length){w2Map=pg;}
+    else{
+      w2Map=_fbarW2MapDate(pkFields,filters.fbarDate);
+      if(!Object.keys(w2Map).length){const ld=_fbarLatestWay2Date();if(ld)w2Map=_fbarW2MapDate(pkFields,ld);}
+    }
+  }else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap,disp_mwh:dispMap}=_fbarPatMap(['gf','disp_mwh']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer3');return;}
@@ -7430,10 +7459,12 @@ function _fbarBuscar(){
     if(from) filters.fbarPerIni=from;
     if(to) filters.fbarPerFim=to;
     filters.fbarDate='';
+    filters.fbarIntraday=false;
   } else {
     const dt=document.getElementById('fbarDatePicker')?.value;
     if(dt) filters.fbarDate=dt;
-    filters.fbarIntraday=false;
+    // Intraday/Dia: data única; Semana/Mes/Ano: janela contextual
+    filters.fbarIntraday=(iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'||iv==='UmDia');
   }
   renderAll();
 }
