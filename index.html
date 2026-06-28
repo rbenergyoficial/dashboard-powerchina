@@ -3963,13 +3963,13 @@ function _fbarDateOk(d){
   if(filters.fbarDate){
     const [fy,fm,fd]=filters.fbarDate.split('-').map(Number);
     const dt=new Date(fy,fm-1,fd,23,59,59,999); // LOCAL — não UTC midnight
+    // Hoje/Ontem: filtra APENAS esse dia (qualquer intervalo)
+    if(filters.fbarIntraday){
+      return d>=new Date(fy,fm-1,fd)&&d<=dt;
+    }
     const iv=filters.interval||'QuinzeMinutos';
     const isIntra=iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora';
-    if(isIntra&&filters.fbarIntraday){
-      // Intraday data-única (Hoje/Ontem): filtra SOMENTE esse dia
-      return d.getFullYear()===fy&&d.getMonth()===fm-1&&d.getDate()===fd;
-    }
-    if(iv==='UmDia'||isIntra){ // intraday sem flag → 30 dias diários
+    if(iv==='UmDia'||isIntra){
       return d>=new Date(fy,fm-1,fd-29)&&d<=dt;
     }
     if(iv==='Semana'){
@@ -3985,7 +3985,11 @@ function _fbarKeyLbl(k){
   const iv=filters.interval||'QuinzeMinutos';
   if(iv==='Ano') return k;
   if(iv==='Semana') return k.replace('-W',' S');
-  if(_fbarIsIntradaySingle()) return k; // já é HH:mm
+  if(_fbarIsIntradaySingle()){
+    // key é HH:mm (patamares) ou YYYY-MM-DD (fallback way2)
+    if(k.includes(':')) return k;
+    const[y2,m2,d2]=k.split('-');return +y2!==new Date().getFullYear()?[d2+'/'+m2,String(y2)]:d2+'/'+m2;
+  }
   if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'){
     const[y,m,d]=k.split('-');
     return +y!==new Date().getFullYear()?[d+'/'+m,String(y)]:d+'/'+m;
@@ -4014,6 +4018,19 @@ function _fbarPatMap(fields){
   }
   return maps;
 }
+function _fbarW2MapDate(pkFields,dateStr){
+  // Way2 single-day — usado como fallback quando patamares não tem dados do dia
+  const map={};
+  if(!dashData.way2||!dateStr) return map;
+  const [y,m,d]=dateStr.split('-').map(Number);
+  const start=new Date(y,m-1,d),end=new Date(y,m-1,d,23,59,59,999);
+  for(const r of dashData.way2){
+    if(!r.data||r.data<start||r.data>end) continue;
+    if(!map[dateStr])map[dateStr]=0;
+    for(const pf of pkFields)map[dateStr]+=num(r[pf]);
+  }
+  return map;
+}
 function _fbarUfvPkFields(){
   const ufvSet=new Set((filters.ufv||'todas').split(',').filter(Boolean));
   const useTotal=ufvSet.has('todas')||ufvSet.size===0;
@@ -4033,9 +4050,9 @@ function _fbarUfvPkFields(){
 function renderGer1(type='bar'){
   const{pkFields,prodC,prodC2,label:ufvLabel}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
-  // Intraday data-única: usa patamares.gv (complexo total com timestamp real)
-  // Modo range/dia: usa way2 por parque
-  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
+  let w2Map;
+  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
+  else{w2Map=_fbarW2Map(pkFields);}
   const glMap={},irrMap={};
   if(dashData.patamares&&dashData.patamares.length){
     for(const r of dashData.patamares){
@@ -4127,7 +4144,9 @@ function renderGer1(type='bar'){
 function renderGer2(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
-  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
+  let w2Map;
+  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
+  else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap}=_fbarPatMap(['gf']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer2');return;}
@@ -4210,7 +4229,9 @@ function renderGer2(type='bar'){
 function renderGer3(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
   const intra=_fbarIsIntradaySingle();
-  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
+  let w2Map;
+  if(intra){const pg=_fbarPatMap(['gv']).gv;w2Map=Object.keys(pg).length?pg:_fbarW2MapDate(pkFields,filters.fbarDate);}
+  else{w2Map=_fbarW2Map(pkFields);}
   const{gf:gfMap,disp_mwh:dispMap}=_fbarPatMap(['gf','disp_mwh']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer3');return;}
