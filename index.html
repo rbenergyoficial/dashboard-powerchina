@@ -4009,32 +4009,35 @@ function renderGer1(type='bar'){
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(glMap)])].sort();
   if(!allKeys.length){showNoData('cGer1');return;}
   const labels=allKeys.map(_fbarKeyLbl);
-  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
-  const glData=allKeys.map(k=>+((glMap[k]||0)/1000).toFixed(3));
+  const gvData=allKeys.map(k=>+(w2Map[k]||0).toFixed(1));
+  const glData=allKeys.map(k=>+(glMap[k]||0).toFixed(1));
   const irrData=allKeys.map(k=>{const v=irrMap[k];return v&&v.n?+(v.s/v.n).toFixed(1):null;});
 
-  const fGWh=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:3,maximumFractionDigits:3});
+  const fMWh=v=>v.toLocaleString(getDateLocale(),{maximumFractionDigits:1});
   const fIrr=v=>v!=null?v.toLocaleString(getDateLocale(),{maximumFractionDigits:0}):null;
   const limitC='#F59E0B';
+  const isBar=type==='bar';
 
   mkChart('cGer1',{
-    type:type==='line'?'line':'bar',
+    type:isBar?'bar':'line',
     data:{labels,datasets:[
-      {label:'Energia Produzida (GWh)',data:gvData,
-        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,prodC2,prodC)):(c=>_w2dAreaGrad(c,prodC)),
-        borderColor:prodC,borderWidth:type==='bar'?0:1.5,
-        grouped:true,barPercentage:0.72,categoryPercentage:0.88,
-        borderRadius:type==='bar'?{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0}:0,
-        fill:type==='line'?'origin':false,tension:0.3,order:2,
-        type:type==='line'?'line':'bar',
+      {label:'Energia Produzida (MWh)',data:gvData,
+        backgroundColor:isBar?(ctx=>barGrad(ctx,prodC2,prodC)):(c=>_w2dAreaGrad(c,prodC)),
+        borderColor:prodC,borderWidth:isBar?0:1.5,
+        barPercentage:0.92,categoryPercentage:0.88,
+        borderRadius:isBar?0:0,
+        fill:isBar?false:'origin',tension:0.3,order:2,
+        type:isBar?'bar':'line',
+        stack:isBar?'s1':undefined,
         pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55'},
-      {label:'Energia Limitada (GWh)',data:glData,
-        backgroundColor:type==='bar'?(ctx=>barGrad(ctx,'#78340f',limitC)):(c=>_w2dAreaGrad(c,limitC)),
-        borderColor:limitC,borderWidth:type==='bar'?0:1.5,
-        grouped:true,barPercentage:0.72,categoryPercentage:0.88,
-        borderRadius:type==='bar'?{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0}:0,
-        fill:type==='line'?'origin':false,tension:0.3,order:3,
-        type:type==='line'?'line':'bar',
+      {label:'Energia Limitada (MWh)',data:glData,
+        backgroundColor:isBar?(ctx=>barGrad(ctx,'#78340f',limitC)):(c=>_w2dAreaGrad(c,limitC)),
+        borderColor:limitC,borderWidth:isBar?0:1.5,
+        barPercentage:0.92,categoryPercentage:0.88,
+        borderRadius:isBar?{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0}:0,
+        fill:isBar?false:'origin',tension:0.3,order:3,
+        type:isBar?'bar':'line',
+        stack:isBar?'s1':undefined,
         pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55'},
       {label:'Irradiância (kWh/m²)',data:irrData,
         borderColor:'rgba(253,224,71,0.85)',backgroundColor:'rgba(253,224,71,0.06)',
@@ -4046,9 +4049,9 @@ function renderGer1(type='bar'){
     options:{...CHART_DEFAULTS,
       interaction:{mode:'index',intersect:false},
       scales:{
-        x:{...xAxisWithTitle()},
-        y:{...CHART_DEFAULTS.scales.y,
-          title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},
+        x:{...xAxisWithTitle(),stacked:isBar},
+        y:{...CHART_DEFAULTS.scales.y,stacked:isBar,
+          title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},
           grid:{display:false}},
         y2:{type:'linear',position:'right',min:0,grid:{display:false},
           ticks:{color:'rgba(253,224,71,0.7)',font:{size:9},maxTicksLimit:5},
@@ -4059,29 +4062,17 @@ function renderGer1(type='bar'){
           displayColors:true,
           callbacks:{
             title:function(items){
-              try{
-                const lbl=(items[0]?.label)||'';
-                return '📅 '+(Array.isArray(lbl)?lbl.join(' '):lbl);
-              }catch(e){return '📅 ';}
+              try{const lbl=(items[0]?.label)||'';return '📅 '+(Array.isArray(lbl)?lbl.join(' '):lbl);}catch(e){return '📅 ';}
             },
             label:function(ctx){
               try{
-                const i=ctx.dataIndex;
-                const y=ctx.parsed?.y;
-                if(y==null) return null;
+                const i=ctx.dataIndex;const y=ctx.parsed?.y;if(y==null)return null;
                 const ds=ctx.dataset.label||'';
-                if(ds.includes('Irradiância'))
-                  return `  ☀️ Irradiância: ${fIrr(y)} kWh/m²`;
+                if(ds.includes('Irradiância')) return `  ☀️ Irradiância: ${fIrr(y)} kWh/m²`;
                 if(ctx.datasetIndex===0){
-                  const gv=gvData[i]||0, gl=glData[i]||0;
-                  const tot=gv+gl;
+                  const gv=gvData[i]||0,gl=glData[i]||0,tot=gv+gl;
                   const pct=tot>0?((gl/tot)*100).toFixed(1):0;
-                  const parkLabel=ufvLabel;
-                  return [
-                    `  ⚡ ${parkLabel} · Produzida: ${fGWh(gv)} GWh`,
-                    `  🚫 Limitada: ${fGWh(gl)} GWh`,
-                    `  📉 Perda: ${pct}%`
-                  ];
+                  return[`  ⚡ ${ufvLabel} · Produzida: ${fMWh(gv)} MWh`,`  🚫 Limitada: ${fMWh(gl)} MWh`,`  📉 Perda: ${pct}%`];
                 }
                 return null;
               }catch(e){return null;}
@@ -4099,19 +4090,18 @@ function renderGer2(type='bar'){
   const{gf:gfMap}=_fbarPatMap(['gf']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer2');return;}
-  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
-  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
+  const gvData=allKeys.map(k=>+(w2Map[k]||0).toFixed(1));
+  const gfData=allKeys.map(k=>+(gfMap[k]||0).toFixed(1));
   const nP=allKeys.length||1;
-  const avgGV=+(gvData.reduce((s,v)=>s+v,0)/nP).toFixed(3);
-  const avgGF=+(gfData.reduce((s,v)=>s+v,0)/nP).toFixed(3);
+  const avgGV=+(gvData.reduce((s,v)=>s+v,0)/nP).toFixed(1);
+  const avgGF=+(gfData.reduce((s,v)=>s+v,0)/nP).toFixed(1);
   const labels=allKeys.map(_fbarKeyLbl);
 
   if(type==='line'){
-    // Modo linha: sem barra de média, só séries temporais
     mkChart('cGer2',{type:'line',data:{labels,datasets:[
-      {label:_T('Energia Produzida (GWh)'),data:gvData,borderColor:'#A855F7',backgroundColor:c=>_w2dAreaGrad(c,'#A855F7'),
+      {label:_T('Energia Produzida (MWh)'),data:gvData,borderColor:'#A855F7',backgroundColor:c=>_w2dAreaGrad(c,'#A855F7'),
         fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
-      {label:_T('Energia Frustrada (GWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:c=>_w2dAreaGrad(c,'#F5A623'),
+      {label:_T('Energia Frustrada (MWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:c=>_w2dAreaGrad(c,'#F5A623'),
         fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
       {label:_T('Méd. GV'),data:gvData.map(()=>avgGV),borderColor:'#c084fc88',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false},
@@ -4119,29 +4109,26 @@ function renderGer2(type='bar'){
         borderWidth:1.5,pointRadius:0,type:'line',fill:false}
     ]},options:{...CHART_DEFAULTS,
       scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,
-        title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},grid:{display:false}}}}});
+        title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},grid:{display:false}}}}});
     return;
   }
 
-  // Modo barra: última barra = Média em destaque roxo/violeta
   const labelsExt=[...labels,'Média'];
   const gvExt=[...gvData, avgGV];
   const gfExt=[...gfData, avgGF];
   const n=labelsExt.length-1;
   const isLast=i=>i===n;
-
-  // Bordas: barra de média em roxo, demais na cor do acento
   const gvBorder=gvExt.map((_,i)=>isLast(i)?'#c084fc':'#A855F7');
   const gfBorder=gfExt.map((_,i)=>isLast(i)?'#d8b4fe':'#F5A623');
 
   mkChart('cGer2',{
     type:'bar',
     data:{labels:labelsExt,datasets:[
-      {label:_T('Energia Produzida (GWh)'),data:gvExt,
+      {label:_T('Energia Produzida (MWh)'),data:gvExt,
         backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#1e6f5c','#2DD4BF'):barGrad(ctx,'#3b0d6e','#A855F7'),
         borderColor:gvBorder,borderWidth:0,
         stack:'s1',borderRadius:0,borderSkipped:false},
-      {label:_T('Energia Frustrada (GWh)'),data:gfExt,
+      {label:_T('Energia Frustrada (MWh)'),data:gfExt,
         backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#a21caf','#e879f9'):barGrad(ctx,'#7c5012','#F5A623'),
         borderColor:gfBorder,borderWidth:0,
         stack:'s1',borderRadius:{topLeft:7,topRight:7,bottomLeft:0,bottomRight:0},borderSkipped:false}
@@ -4152,7 +4139,7 @@ function renderGer2(type='bar'){
       scales:{
         x:{...xAxisWithTitle(),stacked:true},
         y:{...CHART_DEFAULTS.scales.y,stacked:true,
-          title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}},grid:{display:false}}
+          title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},grid:{display:false}}
       },
       plugins:{...CHART_DEFAULTS.plugins,
         tooltip:{...CHART_DEFAULTS.plugins.tooltip,
@@ -4161,13 +4148,13 @@ function renderGer2(type='bar'){
             label:function(ctx){
               try{
                 const i=ctx.dataIndex;
-                const gv=gvExt[i]||0, gf=gfExt[i]||0;
+                const gv=gvExt[i]||0,gf=gfExt[i]||0;
                 const tag=isLast(i)?'Média · ':'';
-                const f=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:3,maximumFractionDigits:3});
-                if(ctx.datasetIndex===0) return [
-                  `⚡ ${tag}Energia Produzida: ${f(gv)} GWh`,
-                  `🚫 ${tag}Energia Limitada: ${f(gf)} GWh`,
-                  `📊 ${tag}Total: ${f(gv+gf)} GWh`
+                const f=v=>v.toLocaleString(getDateLocale(),{maximumFractionDigits:1});
+                if(ctx.datasetIndex===0) return[
+                  `⚡ ${tag}Energia Produzida: ${f(gv)} MWh`,
+                  `🚫 ${tag}Energia Frustrada: ${f(gf)} MWh`,
+                  `📊 ${tag}Total: ${f(gv+gf)} MWh`
                 ];
                 return null;
               }catch(e){return null;}
@@ -4186,15 +4173,15 @@ function renderGer3(type='bar'){
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer3');return;}
   const labels=allKeys.map(_fbarKeyLbl);
-  const gvData=allKeys.map(k=>+((w2Map[k]||0)/1000).toFixed(3));
-  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
-  const ociData=allKeys.map((k,i)=>Math.max(0,+((dispMap[k]||0)/1000).toFixed(3)-gvData[i]-gfData[i]));
+  const gvData=allKeys.map(k=>+(w2Map[k]||0).toFixed(1));
+  const gfData=allKeys.map(k=>+(gfMap[k]||0).toFixed(1));
+  const ociData=allKeys.map((k,i)=>Math.max(0,+(dispMap[k]||0).toFixed(1)-gvData[i]-gfData[i]));
 
   mkChart('cGer3',{type:type==='line'?'line':'bar',data:{labels,datasets:[
-    {label:_T('Energia Produzida (GWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):(c=>_w2dAreaGrad(c,'#A855F7')),borderColor:'#A855F7',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
-    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
-    {label:_T('Ociosa (GWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):(c=>_w2dAreaGrad(c,'#6b7a9a')),borderColor:'#6b7a9a',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5}
-  ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',grid:{display:false}}}}});
+    {label:_T('Energia Produzida (MWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#A855F7')):(c=>_w2dAreaGrad(c,'#A855F7')),borderColor:'#A855F7',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
+    {label:_T('Energia Frustrada (MWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
+    {label:_T('Ociosa (MWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):(c=>_w2dAreaGrad(c,'#6b7a9a')),borderColor:'#6b7a9a',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5}
+  ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},grid:{display:false}}}}});
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4970,12 +4957,12 @@ function renderGF1(type='bar'){
   const allKeys=Object.keys(gfMap).sort();
   if(!allKeys.length){showNoData('cGF1');return;}
   const labels=allKeys.map(_fbarKeyLbl);
-  const gfData=allKeys.map(k=>+((gfMap[k]||0)/1000).toFixed(3));
+  const gfData=allKeys.map(k=>+(gfMap[k]||0).toFixed(1));
   const avgGF=gfData.reduce((s,v)=>s+v,0)/(gfData.length||1);
   mkChart('cGF1',{type,data:{labels,datasets:[
-    {label:_T('Energia Frustrada (GWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':false,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?2:1.5},
-    {label:_T('Méd. GF'),data:gfData.map(()=>+avgGF.toFixed(3)),borderColor:'#8d6e6380',borderDash:[5,3],borderWidth:1,pointRadius:0,type:'line'}
-  ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:10}},grid:{display:false}}}}});
+    {label:_T('Energia Frustrada (MWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':false,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?2:1.5},
+    {label:_T('Méd. GF'),data:gfData.map(()=>+avgGF.toFixed(1)),borderColor:'#8d6e6380',borderDash:[5,3],borderWidth:1,pointRadius:0,type:'line'}
+  ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:10}},grid:{display:false}}}}});
 }
 
 function renderAdv4(type='bar'){
@@ -7324,18 +7311,9 @@ document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const pk=btn.dataset.fufv;
     const cur=new Set((filters.ufv||'todas').split(',').filter(Boolean));
-    const allChips=document.querySelectorAll('#fbarUfvGroup .w2d-park-chip');
-    if(pk==='todas'){
-      // Todas: ativa Todas e desmarca parques individuais
-      filters.ufv='todas';
-      allChips.forEach(b=>b.classList.toggle('on',b.dataset.fufv==='todas'));
-    }else{
-      if(cur.has('todas')){cur.delete('todas');cur.add(pk);}
-      else if(cur.has(pk)){cur.delete(pk);if(!cur.size)cur.add('todas');}
-      else{cur.add(pk);}
-      filters.ufv=[...cur].join(',');
-      allChips.forEach(b=>b.classList.toggle('on',cur.has(b.dataset.fufv)));
-    }
+    if(cur.has(pk)){cur.delete(pk);}else{cur.add(pk);}
+    filters.ufv=[...cur].join(',')||'todas';
+    btn.classList.toggle('on');
     renderAll();
   });
 });
