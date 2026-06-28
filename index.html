@@ -3926,23 +3926,35 @@ function xAxisWithTitle(extra){
 // ═══════════════════════════════════════════════════════════════════
 // HELPERS — fbar date/granularity (usados pelos 4 gráficos do PAT)
 // ═══════════════════════════════════════════════════════════════════
+// Retorna true quando o intervalo é intraday E a seleção é uma data única (Hoje/Ontem)
+function _fbarIsIntradaySingle(){
+  const iv=filters.interval||'QuinzeMinutos';
+  return (iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora')
+    &&!!filters.fbarDate&&!filters.fbarPerIni&&!filters.fbarPerFim;
+}
 function _fbarGranKey(d){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
   const iv=filters.interval||'QuinzeMinutos';
-  // Intraday e Dia → chave diária (way2 já é daily; patamares soma por dia)
-  if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora') return y+'-'+m+'-'+dd;
+  const isIntra=iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora';
+  if(isIntra&&_fbarIsIntradaySingle()){
+    // Modo intraday data-única: chave por slot de tempo (HH:mm)
+    const h=String(d.getHours()).padStart(2,'0');
+    if(iv==='UmaHora') return h+':00';
+    const slot=iv==='QuinzeMinutos'?Math.floor(d.getMinutes()/15)*15:Math.floor(d.getMinutes()/30)*30;
+    return h+':'+String(slot).padStart(2,'0');
+  }
+  if(iv==='UmDia'||isIntra) return y+'-'+m+'-'+dd; // diário (range ou UmDia)
   if(iv==='Semana'){
     const dt=new Date(d);dt.setHours(0,0,0,0);const dow=dt.getDay()||7;dt.setDate(dt.getDate()+4-dow);
     const y1=dt.getFullYear(),wk=Math.ceil((dt-new Date(y1,0,1))/(7*86400000));
     return y1+'-W'+String(wk).padStart(2,'0');
   }
   if(iv==='Ano') return String(y);
-  return y+'-'+m; // Mes/Personalizado → mensal
+  return y+'-'+m;
 }
 function _fbarDateOk(d){
   if(!filters.fbarPerIni&&!filters.fbarPerFim&&!filters.fbarDate) return true;
   if(filters.fbarPerIni&&filters.fbarPerFim){
-    // Parsear como LOCAL (evita UTC-midnight deslocando 1 dia em UTC-3)
     const [sy,sm,sd]=filters.fbarPerIni.split('-').map(Number);
     const [ey,em,ed]=filters.fbarPerFim.split('-').map(Number);
     return d>=new Date(sy,sm-1,sd)&&d<=new Date(ey,em-1,ed,23,59,59,999);
@@ -3951,8 +3963,12 @@ function _fbarDateOk(d){
     const [fy,fm,fd]=filters.fbarDate.split('-').map(Number);
     const dt=new Date(fy,fm-1,fd,23,59,59,999); // LOCAL — não UTC midnight
     const iv=filters.interval||'QuinzeMinutos';
-    if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'){
-      // Dia/intraday: 30 dias até fbarDate (Date aceita dia negativo corretamente)
+    const isIntra=iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora';
+    if(isIntra){
+      // Intraday data-única: filtra SOMENTE esse dia (patamares tem timestamp real)
+      return d.getFullYear()===fy&&d.getMonth()===fm-1&&d.getDate()===fd;
+    }
+    if(iv==='UmDia'){
       return d>=new Date(fy,fm-1,fd-29)&&d<=dt;
     }
     if(iv==='Semana'){
@@ -3960,7 +3976,6 @@ function _fbarDateOk(d){
       return d>=s&&d<=dt;
     }
     if(iv==='Ano') return d<=dt;
-    // Mes/Personalizado: 12 meses até fbarDate
     return d>=new Date(fy-1,fm,1)&&d<=dt;
   }
   return true;
@@ -3969,7 +3984,7 @@ function _fbarKeyLbl(k){
   const iv=filters.interval||'QuinzeMinutos';
   if(iv==='Ano') return k;
   if(iv==='Semana') return k.replace('-W',' S');
-  // Dia e intraday → label diária (chave YYYY-MM-DD)
+  if(_fbarIsIntradaySingle()) return k; // já é HH:mm
   if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'){
     const[y,m,d]=k.split('-');
     return +y!==new Date().getFullYear()?[d+'/'+m,String(y)]:d+'/'+m;
@@ -4005,8 +4020,8 @@ function _fbarUfvPkFields(){
   return{
     pkFields:useTotal?['total']:selParks.map(p=>p.toLowerCase()),
     useTotal,selParks,
-    prodC:'#0060AE', // azul PPA BRK (BLUE_V25) — uniforme em todos os gráficos
-    prodC2:'#001a40',
+    prodC:'#6b8bf5', // mesmo azul do gráfico Energia Bruta vs Líquida
+    prodC2:'#1e2a5e',
     label:useTotal?'Complexo':selParks.join('+')
   };
 }
@@ -4016,7 +4031,10 @@ function _fbarUfvPkFields(){
 // ═══════════════════════════════════════════════════════════════════
 function renderGer1(type='bar'){
   const{pkFields,prodC,prodC2,label:ufvLabel}=_fbarUfvPkFields();
-  const w2Map=_fbarW2Map(pkFields);
+  const intra=_fbarIsIntradaySingle();
+  // Intraday data-única: usa patamares.gv (complexo total com timestamp real)
+  // Modo range/dia: usa way2 por parque
+  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
   const glMap={},irrMap={};
   if(dashData.patamares&&dashData.patamares.length){
     for(const r of dashData.patamares){
@@ -4024,7 +4042,7 @@ function renderGer1(type='bar'){
       const k=_fbarGranKey(d);
       if(!glMap[k])glMap[k]=0;glMap[k]+=num(r.gl);
       if(!irrMap[k])irrMap[k]={s:0,n:0};
-      if(r.irr_media>0){irrMap[k].s+=r.irr_media;irrMap[k].n++;}
+      if(r.irr_media>0){irrMap[k].s+=intra?r.irr_media:r.irr_media;irrMap[k].n++;}
     }
   }
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(glMap)])].sort();
@@ -4043,7 +4061,7 @@ function renderGer1(type='bar'){
     type:isBar?'bar':'line',
     data:{labels,datasets:[
       {label:'Energia Produzida (MWh)',data:gvData,
-        backgroundColor:isBar?(ctx=>gradPremiumBar(ctx,prodC)):(c=>_w2dAreaGrad(c,prodC)),
+        backgroundColor:isBar?(ctx=>gradFrom(ctx,prodC)):(c=>_w2dAreaGrad(c,prodC)),
         borderColor:prodC,borderWidth:isBar?0:1.5,
         barPercentage:0.92,categoryPercentage:0.88,
         borderRadius:isBar?0:0,
@@ -4107,7 +4125,8 @@ function renderGer1(type='bar'){
 
 function renderGer2(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
-  const w2Map=_fbarW2Map(pkFields);
+  const intra=_fbarIsIntradaySingle();
+  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
   const{gf:gfMap}=_fbarPatMap(['gf']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer2');return;}
@@ -4120,11 +4139,11 @@ function renderGer2(type='bar'){
 
   if(type==='line'){
     mkChart('cGer2',{type:'line',data:{labels,datasets:[
-      {label:_T('Energia Produzida (MWh)'),data:gvData,borderColor:'#0060AE',backgroundColor:c=>_w2dAreaGrad(c,'#0060AE'),
+      {label:_T('Energia Produzida (MWh)'),data:gvData,borderColor:'#6b8bf5',backgroundColor:c=>_w2dAreaGrad(c,'#6b8bf5'),
         fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
       {label:_T('Energia Frustrada (MWh)'),data:gfData,borderColor:'#F5A623',backgroundColor:c=>_w2dAreaGrad(c,'#F5A623'),
         fill:'origin',tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:1.5},
-      {label:_T('Méd. GV'),data:gvData.map(()=>avgGV),borderColor:'#0060AE88',borderDash:[6,3],
+      {label:_T('Méd. GV'),data:gvData.map(()=>avgGV),borderColor:'#6b8bf588',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false},
       {label:_T('Méd. GF'),data:gfData.map(()=>avgGF),borderColor:'#F5A62344',borderDash:[6,3],
         borderWidth:1.5,pointRadius:0,type:'line',fill:false}
@@ -4139,14 +4158,14 @@ function renderGer2(type='bar'){
   const gfExt=[...gfData, avgGF];
   const n=labelsExt.length-1;
   const isLast=i=>i===n;
-  const gvBorder=gvExt.map((_,i)=>isLast(i)?'#2DD4BF':'#0060AE');
+  const gvBorder=gvExt.map((_,i)=>isLast(i)?'#2DD4BF':'#6b8bf5');
   const gfBorder=gfExt.map((_,i)=>isLast(i)?'#d8b4fe':'#F5A623');
 
   mkChart('cGer2',{
     type:'bar',
     data:{labels:labelsExt,datasets:[
       {label:_T('Energia Produzida (MWh)'),data:gvExt,
-        backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#1e6f5c','#2DD4BF'):gradPremiumBar(ctx,'#0060AE'),
+        backgroundColor:ctx=>isLast(ctx.dataIndex)?barGrad(ctx,'#1e6f5c','#2DD4BF'):gradFrom(ctx,'#6b8bf5'),
         borderColor:gvBorder,borderWidth:0,
         stack:'s1',borderRadius:0,borderSkipped:false},
       {label:_T('Energia Frustrada (MWh)'),data:gfExt,
@@ -4189,7 +4208,8 @@ function renderGer2(type='bar'){
 
 function renderGer3(type='bar'){
   const{pkFields}=_fbarUfvPkFields();
-  const w2Map=_fbarW2Map(pkFields);
+  const intra=_fbarIsIntradaySingle();
+  const w2Map=intra?_fbarPatMap(['gv']).gv:_fbarW2Map(pkFields);
   const{gf:gfMap,disp_mwh:dispMap}=_fbarPatMap(['gf','disp_mwh']);
   const allKeys=[...new Set([...Object.keys(w2Map),...Object.keys(gfMap)])].sort();
   if(!allKeys.length){showNoData('cGer3');return;}
@@ -4199,7 +4219,7 @@ function renderGer3(type='bar'){
   const ociData=allKeys.map((k,i)=>Math.max(0,+(dispMap[k]||0).toFixed(1)-gvData[i]-gfData[i]));
 
   mkChart('cGer3',{type:type==='line'?'line':'bar',data:{labels,datasets:[
-    {label:_T('Energia Produzida (MWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradPremiumBar(ctx,'#0060AE')):(c=>_w2dAreaGrad(c,'#0060AE')),borderColor:'#0060AE',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
+    {label:_T('Energia Produzida (MWh)'),data:gvData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
     {label:_T('Energia Frustrada (MWh)'),data:gfData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):(c=>_w2dAreaGrad(c,'#F5A623')),borderColor:'#F5A623',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5},
     {label:_T('Ociosa (MWh)'),data:ociData,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b7a9a')):(c=>_w2dAreaGrad(c,'#6b7a9a')),borderColor:'#6b7a9a',fill:type==='line'?'origin':true,tension:.3,pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55',borderWidth:type==='bar'?0:1.5}
   ]},options:{...CHART_DEFAULTS,scales:{x:{...CHART_DEFAULTS.scales.x,stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},grid:{display:false}}}}});
