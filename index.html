@@ -8044,10 +8044,17 @@ const _W2D_AGG={QuinzeMinutos:1,TrintaMinutos:2,UmaHora:4,UmDia:96};
 const _W2D_MULTIDAY=['Semana','Mes','Ano'];
 const _W2D_TO_MUST_GRAN={CincoMinutos:'15min',QuinzeMinutos:'15min',TrintaMinutos:'30min',UmaHora:'hora',UmDia:'dia',Semana:'semana',Mes:'mes',Ano:'ano',Personalizado:'15min'};
 const _W2D_GRANLABEL={
-  Demat:'Demat — ativa líquida (geração−consumo)',
-  DematDel:'DematDel — demanda canal Del',
-  DematRec:'DematRec — demanda canal Rec'
+  Demat:'Demanda Ativa Líquida',
+  DematDel:'Demanda Ativa Entregue (Del)',
+  DematRec:'Demanda Ativa Recebida (Rec)',
+  Eneat:'Energia Ativa Líquida',
+  EneatDel:'Energia Ativa Entregue (Del)',
+  EneatRec:'Energia Ativa Recebida (Rec)',
+  Enere:'Energia Reativa Líquida',
+  EnereDel:'Energia Reativa Entregue (Del)',
+  EnereRec:'Energia Reativa Recebida (Rec)'
 };
+const _w2dIsEnergyGran=g=>g&&(g.startsWith('Eneat')||g.startsWith('Enere'));
 const _w2dSt={gran:'Demat',ufv:'all',chartType:'line'};
 let _w2dAutoTimer=null;
 let _w2dRefreshTimer=null; // timer periódico 5 min (separado do debounce _w2dAutoTimer)
@@ -8227,14 +8234,15 @@ function _w2dAggregate(vals,factor){
   return out;
 }
 // Formata MW em pt-BR: vírgula decimal, ponto milhar
-const _w2dFmtMW=(v,dec=3)=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' MW';};
+const _w2dFmtMW=(v,dec=3,unit='MW')=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' '+unit;};
 const _w2dAreaGrad=(c,color)=>{const a=c.chart.chartArea;if(!a)return 'transparent';const rgb=hexRgb(color);const g=c.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,rgbaStr(rgb,.22));g.addColorStop(1,rgbaStr(rgb,0));return g;};
 function _w2dTTLabel(ctx){
   if((ctx.dataset.label||'').startsWith('_')) return null;
   const v=ctx.parsed.y; if(v==null) return null;
+  const unit=_w2dIsEnergyGran(_w2dSt.gran)?'MWh':'MW';
   const c=_w2dLastKpi?.contr;
-  const pct=c>0?`  ⚡ ${(v/c*100).toFixed(2)}% do MUST`:'';
-  return ` ${ctx.dataset.label}: ${_w2dFmtMW(v,2)}${pct}`;
+  const pct=(!_w2dIsEnergyGran(_w2dSt.gran)&&c>0)?`  ⚡ ${(v/c*100).toFixed(2)}% do MUST`:'';
+  return ` ${ctx.dataset.label}: ${_w2dFmtMW(v,2,unit)}${pct}`;
 }
 // Cria dataset de linha de referência contratada (cor por índice)
 function _makeContrDs(label,val,len,idx){
@@ -8245,6 +8253,10 @@ function _makeContrDs(label,val,len,idx){
 // Atualiza linha(s) de referência: 1 linha por parque selecionado (nunca agrupa)
 function _w2dUpdateContrLine(){
   if(!_w2dChart) return;
+  if(_w2dIsEnergyGran(_w2dSt.gran)){
+    _w2dChart.data.datasets=_w2dChart.data.datasets.filter(ds=>!ds.label.startsWith('_contr'));
+    _w2dChart.update('none'); return;
+  }
   const onPks=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip.on')]
     .filter(b=>b.dataset.ufv&&b.dataset.ufv!=='all').map(b=>b.dataset.ufv);
   _w2dChart.data.datasets=_w2dChart.data.datasets.filter(ds=>!ds.label.startsWith('_contr'));
@@ -9106,6 +9118,7 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const aggFactor=aggMap[intervalo]||1;
   const canvas=document.getElementById('cW2Dem');
   if(!canvas) return;
+  const _isEnergy=_w2dIsEnergyGran(gran);
 
   const pm={};
   const allT=new Set();
@@ -9176,9 +9189,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const _lastIdx=datasets.reduce((mx,ds)=>{const l=ds.data.reduceRight((f,v,i)=>f>=0?f:(v!=null?i:-1),-1);return Math.max(mx,l);},-1);
   const _lastTime=_lastIdx>=0?displayLabels[_lastIdx]:null;
 
-  // Linha de referência: demanda contratada (atualizada por _w2dUpdateContrLine ao trocar chip)
+  // Linha de referência: demanda contratada (só para grandezas de demanda)
   const _cBase=num(dashData?.must?.contrat?.total||0);
-  if(_cBase>0) datasets.push({label:'_contr',type:'line',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
+  if(_cBase>0&&!_isEnergy) datasets.push({label:'_contr',type:'line',data:Array(displayLabels.length).fill(_cBase),borderColor:'rgba(255,80,80,.8)',backgroundColor:'transparent',borderWidth:1.5,borderDash:[10,4],pointRadius:0,pointHoverRadius:0,fill:false,tension:0,spanGaps:true});
 
   if(_w2dChart){try{_w2dChart.destroy();}catch(e){}_w2dChart=null;}
 
@@ -9188,7 +9201,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
   const _pkLabel=ufvSel==='all'?'M1–M9 · Total':ufvSel;
   const _metaLast=_lastTime?` · dados até ${_lastTime}`:'';
   _w2dSubBase=`${d}/${m}/${y} · ${_W2D_INTLABEL[intervalo]||intervalo}${_metaLast}`;
-  document.getElementById('w2dTitle').textContent=`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
+  document.getElementById('w2dTitle').textContent=_isEnergy
+    ?`${_W2D_GRANLABEL[gran]||gran} · ${_pkLabel}`
+    :`Demanda Ativa vs Contratada (MUST) · ${_pkLabel}`;
   document.getElementById('w2dSub').textContent=_w2dSubBase;
 
   const _rPad2=12;
@@ -9246,9 +9261,9 @@ function _renderW2Demanda(raw,dataStr,intervalo,baseInt,ufvSel,gran){
            maxRotation:45,minRotation:0,
            autoSkip:true,maxTicksLimit:_w2dIsMobile()?7:97},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'}},
-        y:{min:0,max:_yMax,ticks:{color:'rgba(255,255,255,.78)',font:{size:11},stepSize:_w2dYStep(_yMax),callback:v=>v%(_w2dYStep(_yMax)||50)===0?v:null},
+        y:{min:0,max:_isEnergy?undefined:_yMax,ticks:{color:'rgba(255,255,255,.78)',font:{size:11},stepSize:_isEnergy?undefined:_w2dYStep(_yMax),callback:_isEnergy?undefined:v=>v%(_w2dYStep(_yMax)||50)===0?v:null},
            grid:{display:false},border:{color:'rgba(255,255,255,.08)'},
-           title:{display:true,text:'MW',color:'rgba(255,255,255,.65)',font:{size:11}}}
+           title:{display:true,text:_isEnergy?'MWh':'MW',color:'rgba(255,255,255,.65)',font:{size:11}}}
       },
       layout:{padding:{right:_rPad2,top:_tPad2,bottom:4}}
     }
