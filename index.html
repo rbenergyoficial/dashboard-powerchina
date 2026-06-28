@@ -3929,22 +3929,37 @@ function xAxisWithTitle(extra){
 function _fbarGranKey(d){
   const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');
   const iv=filters.interval||'QuinzeMinutos';
-  if(iv==='UmDia') return y+'-'+m+'-'+dd;
+  // Intraday e Dia → chave diária (way2 já é daily; patamares soma por dia)
+  if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora') return y+'-'+m+'-'+dd;
   if(iv==='Semana'){
     const dt=new Date(d);dt.setHours(0,0,0,0);const dow=dt.getDay()||7;dt.setDate(dt.getDate()+4-dow);
     const y1=dt.getFullYear(),wk=Math.ceil((dt-new Date(y1,0,1))/(7*86400000));
     return y1+'-W'+String(wk).padStart(2,'0');
   }
   if(iv==='Ano') return String(y);
-  return y+'-'+m; // 15min/30min/1h/Mes/Personalizado → mensal
+  return y+'-'+m; // Mes/Personalizado → mensal
 }
 function _fbarDateOk(d){
   if(!filters.fbarPerIni&&!filters.fbarPerFim&&!filters.fbarDate) return true;
   if(filters.fbarPerIni&&filters.fbarPerFim)
     return d>=new Date(filters.fbarPerIni)&&d<=new Date(filters.fbarPerFim+'T23:59:59');
   if(filters.fbarDate){
-    const dt=new Date(filters.fbarDate);
-    return d>=new Date(dt.getFullYear()-1,dt.getMonth()+1,1)&&d<=dt;
+    const dt=new Date(filters.fbarDate);dt.setHours(23,59,59,999);
+    const iv=filters.interval||'QuinzeMinutos';
+    if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'){
+      // Dia/intraday: janela de 30 dias até fbarDate
+      const s=new Date(dt);s.setDate(s.getDate()-29);s.setHours(0,0,0,0);
+      return d>=s&&d<=dt;
+    }
+    if(iv==='Semana'){
+      // Semana: ~26 semanas (6 meses) até fbarDate
+      const s=new Date(dt);s.setDate(s.getDate()-181);s.setHours(0,0,0,0);
+      return d>=s&&d<=dt;
+    }
+    if(iv==='Ano') return d<=dt; // todos os anos disponíveis
+    // Mes/Personalizado: 12 meses até fbarDate
+    const s=new Date(dt.getFullYear()-1,dt.getMonth()+1,1);
+    return d>=s&&d<=dt;
   }
   return true;
 }
@@ -3952,7 +3967,11 @@ function _fbarKeyLbl(k){
   const iv=filters.interval||'QuinzeMinutos';
   if(iv==='Ano') return k;
   if(iv==='Semana') return k.replace('-W',' S');
-  if(iv==='UmDia'){const[y,m,d]=k.split('-');return +y!==new Date().getFullYear()?[d+'/'+m,String(y)]:d+'/'+m;}
+  // Dia e intraday → label diária (chave YYYY-MM-DD)
+  if(iv==='UmDia'||iv==='QuinzeMinutos'||iv==='TrintaMinutos'||iv==='UmaHora'){
+    const[y,m,d]=k.split('-');
+    return +y!==new Date().getFullYear()?[d+'/'+m,String(y)]:d+'/'+m;
+  }
   const[y,m]=k.split('-');return +y!==new Date().getFullYear()?[MNS[+m],String(y)]:MNS[+m];
 }
 function _fbarW2Map(pkFields){
