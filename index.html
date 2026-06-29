@@ -8301,6 +8301,8 @@ async function loadONSData(){
     const restricted=all.filter(r=>r.lim>0).length;
     if(statusEl) statusEl.textContent=loaded+' meses · '+restricted.toLocaleString('pt-BR')+' intervalos com limite ativo';
     renderONS();
+    /* KPIs dependem de _onsData (ger, gref, disp) — re-renderizar após carga */
+    safeRender(()=>renderKPIs());
     console.log('✅ ONS Dados Abertos:',all.length,'total,',restricted,'com limite ativo');
   }catch(e){
     console.error('loadONSData:',e);
