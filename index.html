@@ -17267,10 +17267,6 @@ window._ppaChartGet=function(id){return charts[id];};
   function _initGridCards(pageId){
     var pg=document.getElementById(pageId); if(!pg) return;
     pg.querySelectorAll('.cc').forEach(_initCard);
-    /* Captura posições iniciais para que o layout persista sem precisar de interação do usuário */
-    setTimeout(function(){
-      pg.querySelectorAll('.section').forEach(function(sec){_captureLayout(sec);});
-    },200);
   }
 
   /* compatibilidade com chamadas legadas */
@@ -17294,20 +17290,21 @@ window._ppaChartGet=function(id){return charts[id];};
     return (sec?sec.id:'pg')+'-r'+idx;
   }
 
-  /* chave para salvar/restaurar: canvas.id se existir, senão secId-rROW-cCOL
-     Inclui índice da chart-row dentro da section para evitar colisão entre
-     cards sem canvas na mesma posição em linhas diferentes (ex: dRest2 vs topCausas). */
+  /* chave para salvar/restaurar: prioridade:
+     1. ID do .cc-body (estável, existe antes do canvas renderizar — ex: dRest1, dONS2)
+     2. ID do canvas (fallback se .cc-body não tem id)
+     3. secId-rROW-cCOL (fallback posicional com índice da linha para evitar colisão) */
   function _ccKey(cc){
+    var body=cc.querySelector('.cc-body[id]');
+    if(body&&body.id) return body.id;
     var cv=cc.querySelector('canvas'),id=cv&&cv.id;
-    if(!id){
-      var s=cc.closest('[id]');
-      var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;
-      for(;c&&c!==cc;c=c.nextElementSibling)p++;
-      var ri=0,row=cc.parentElement,rs=row&&row.parentElement&&row.parentElement.firstElementChild;
-      for(;rs&&rs!==row;rs=rs.nextElementSibling)ri++;
-      id=(s?s.id:'pg')+'-r'+ri+'-c'+p;
-    }
-    return id;
+    if(id) return id;
+    var s=cc.closest('[id]');
+    var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;
+    for(;c&&c!==cc;c=c.nextElementSibling)p++;
+    var ri=0,row=cc.parentElement,rs=row&&row.parentElement&&row.parentElement.firstElementChild;
+    for(;rs&&rs!==row;rs=rs.nextElementSibling)ri++;
+    return (s?s.id:'pg')+'-r'+ri+'-c'+p;
   }
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
