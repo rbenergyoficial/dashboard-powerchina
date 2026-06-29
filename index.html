@@ -17296,6 +17296,18 @@ window._ppaChartGet=function(id){return charts[id];};
   }
 
   function _initGridCards(pageId){
+    /* Limpeza única: versões anteriores capturam cc-grid-row-* ANTES dos dados
+       ONS carregarem → posições provisórias salvas causam layout errado no reload.
+       Version bump '5' descarta todas essas entradas stale no primeiro load. */
+    var _LV='5';
+    try{
+      if(localStorage.getItem('cc-layout-ver')!==_LV){
+        var _rm=[];
+        for(var _i=0;_i<localStorage.length;_i++){var _k=localStorage.key(_i);if(_k&&_k.startsWith('cc-grid-row-'))_rm.push(_k);}
+        _rm.forEach(function(_k){try{localStorage.removeItem(_k);}catch(e){}});
+        localStorage.setItem('cc-layout-ver',_LV);
+      }
+    }catch(e){}
     var pg=document.getElementById(pageId); if(!pg) return;
     pg.querySelectorAll('.cc').forEach(_initCard);
   }
