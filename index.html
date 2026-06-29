@@ -17082,6 +17082,9 @@ window._ppaChartGet=function(id){return charts[id];};
     /* ── Restaura ordem (drag) ── */
     try{var savedOrd=k&&localStorage.getItem('cc-ord-'+k);if(savedOrd!==null&&savedOrd!=='')card.style.order=parseInt(savedOrd);}catch(e){}
 
+    /* ── Restaura linha explícita no grid (evita reflow pelo dense) ── */
+    try{var savedRow=k&&localStorage.getItem('cc-grid-row-'+k);if(savedRow)card.style.gridRowStart=parseInt(savedRow);}catch(e){}
+
     /* ── Restaura span de largura salvo ── */
     try{
       var savedSpan=k&&localStorage.getItem('cc-cols-'+k);
@@ -17109,7 +17112,8 @@ window._ppaChartGet=function(id){return charts[id];};
         var tall=card.classList.toggle('cc-tall');
         tallBtn.innerHTML=tall?'⇊':'⇅';
         try{if(k) localStorage.setItem('cc-tall-'+k,tall?'1':'0');}catch(ex){}
-        setTimeout(function(){_resizeChart(card);},60);
+        var sec=card.closest('.section');
+        setTimeout(function(){_resizeChart(card);_captureLayout(sec);},60);
       });
       head.appendChild(tallBtn);
 
@@ -17124,7 +17128,8 @@ window._ppaChartGet=function(id){return charts[id];};
         btn.innerHTML=exp?'⊟':'⊞';
         if(exp){card.style.removeProperty('gridColumn');}
         try{if(k){localStorage.setItem('cc-exp-'+k,exp?'1':'0');if(exp)localStorage.removeItem('cc-cols-'+k);}}catch(ex){}
-        setTimeout(function(){_resizeChart(card);},60);
+        var sec=card.closest('.section');
+        setTimeout(function(){_resizeChart(card);_captureLayout(sec);},60);
       });
       head.appendChild(btn);
     }
@@ -17180,7 +17185,8 @@ window._ppaChartGet=function(id){return charts[id];};
           var expBtn=head&&head.querySelector('.cc-expand-btn');
           if(expBtn) expBtn.innerHTML='⊞';
           try{if(k){localStorage.setItem('cc-cols-'+k,finalSpan);localStorage.removeItem('cc-exp-'+k);}}catch(ex){}
-          setTimeout(function(){_resizeChart(card);},60);
+          var sec=card.closest('.section');
+          setTimeout(function(){_resizeChart(card);_captureLayout(sec);},60);
         }
 
         document.addEventListener('mousemove',onMove);
@@ -17232,6 +17238,21 @@ window._ppaChartGet=function(id){return charts[id];};
     });
   }
 
+  /* Captura grid-row-start computado de cada card e salva no localStorage.
+     Chamado após qualquer interação do usuário (resize, drag, expand, tall).
+     No próximo load, o restore aplica gridRowStart explícito → layout idêntico. */
+  function _captureLayout(sec){
+    if(!sec) return;
+    sec.querySelectorAll('.cc').forEach(function(c){
+      var ck=_ccId(c); if(!ck) return;
+      var row=parseInt(window.getComputedStyle(c).gridRowStart);
+      if(!isNaN(row)&&row>0){
+        try{localStorage.setItem('cc-grid-row-'+ck,row);}catch(e){}
+        c.style.gridRowStart=row; /* torna explícito para evitar reflow no reload */
+      }
+    });
+  }
+
   function _saveOrder(sec){
     if(!sec) return;
     sec.querySelectorAll('.cc').forEach(function(c,i){
@@ -17239,6 +17260,7 @@ window._ppaChartGet=function(id){return charts[id];};
       if(ck) try{localStorage.setItem('cc-ord-'+ck,i);}catch(e){}
       c.style.order=i;
     });
+    setTimeout(function(){_captureLayout(sec);},80);
   }
 
   function _initGridCards(pageId){
