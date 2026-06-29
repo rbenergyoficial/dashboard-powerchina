@@ -1777,55 +1777,57 @@ function _themeCharts(light){
   <!-- PÁGINA 3: CURTAILMENT -->
   <div class="page" id="page-curt">
 
+    <!-- FILTRO GLOBAL DO PAINEL CURTAILMENT (sticky para todas as seções) -->
+    <div class="curt-top-controls">
+      <div class="fg">
+        <span class="fbar-label">Granularidade</span>
+        <button class="fbtn2" data-fg="dia">Dia</button>
+        <button class="fbtn2" data-fg="semana">Semana</button>
+        <button class="fbtn2 on" data-fg="mes">Mês</button>
+        <button class="fbtn2" data-fg="ano">Ano</button>
+      </div>
+      <div class="fg">
+        <span class="fbar-label">Ano</span>
+        <button class="fbtn2 on" data-fa="todos">Todos</button>
+        <button class="fbtn2" data-fa="2025">2025</button>
+        <button class="fbtn2" data-fa="2026">2026</button>
+      </div>
+      <div class="fg">
+        <span class="fbar-label">Mês</span>
+        <select class="fselect" id="selMes">
+          <option value="todos">Todos</option>
+          <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+          <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+          <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+          <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+        </select>
+      </div>
+      <div class="fg">
+        <span class="fbar-label">Período</span>
+        <input type="month" class="fdate" id="selPerIni" title="Mês inicial do período">
+        <span style="color:var(--t3);font-size:11px">→</span>
+        <input type="month" class="fdate" id="selPerFim" title="Mês final do período">
+      </div>
+      <div class="fg">
+        <span class="fbar-label">Restrição</span>
+        <button class="fbtn2 on" data-fr="todas">Todas</button>
+        <button class="fbtn2" data-fr="ENE">ENE</button>
+        <button class="fbtn2" data-fr="CNF">CNF</button>
+        <button class="fbtn2" data-fr="REL">REL</button>
+      </div>
+      <div class="fg">
+        <span class="fbar-label">Origem</span>
+        <button class="fbtn2 on" data-fo="todas">Todas</button>
+        <button class="fbtn2" data-fo="SIS">SIS</button>
+        <button class="fbtn2" data-fo="LOC">LOC</button>
+      </div>
+    </div>
+
     <!-- SEÇÃO 4: RESTRIÇÕES -->
     <div class="section" id="sec-curtailment">
       <div class="section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
         RESTRIÇÕES &amp; LIMITAÇÕES ONS
-      </div>
-      <div class="curt-top-controls">
-        <div class="fg">
-          <span class="fbar-label">Granularidade</span>
-          <button class="fbtn2" data-fg="dia">Dia</button>
-          <button class="fbtn2" data-fg="semana">Semana</button>
-          <button class="fbtn2 on" data-fg="mes">Mês</button>
-          <button class="fbtn2" data-fg="ano">Ano</button>
-        </div>
-        <div class="fg">
-          <span class="fbar-label">Ano</span>
-          <button class="fbtn2 on" data-fa="todos">Todos</button>
-          <button class="fbtn2" data-fa="2025">2025</button>
-          <button class="fbtn2" data-fa="2026">2026</button>
-        </div>
-        <div class="fg">
-          <span class="fbar-label">Mês</span>
-          <select class="fselect" id="selMes">
-            <option value="todos">Todos</option>
-            <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
-            <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
-            <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
-            <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
-          </select>
-        </div>
-        <div class="fg">
-          <span class="fbar-label">Período</span>
-          <input type="month" class="fdate" id="selPerIni" title="Mês inicial do período">
-          <span style="color:var(--t3);font-size:11px">→</span>
-          <input type="month" class="fdate" id="selPerFim" title="Mês final do período">
-        </div>
-        <div class="fg">
-          <span class="fbar-label">Restrição</span>
-          <button class="fbtn2 on" data-fr="todas">Todas</button>
-          <button class="fbtn2" data-fr="ENE">ENE</button>
-          <button class="fbtn2" data-fr="CNF">CNF</button>
-          <button class="fbtn2" data-fr="REL">REL</button>
-        </div>
-        <div class="fg">
-          <span class="fbar-label">Origem</span>
-          <button class="fbtn2 on" data-fo="todas">Todas</button>
-          <button class="fbtn2" data-fo="SIS">SIS</button>
-          <button class="fbtn2" data-fo="LOC">LOC</button>
-        </div>
       </div>
       <div class="chart-row cols-2">
         <div class="cc">
