@@ -3430,33 +3430,31 @@ function agrupar(arr, dateField='data', fields=[]){
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
 
-  /* ── Way2 (planilha): Energia Produzida, Disponibilidade, Irradiância ── */
+  /* ── Planilha (Way2 + SAGER): todos os campos de energia
+     O blob ONS não publica gref (geração de referência) — só existe na planilha ── */
   const totGV=pat.reduce((s,r)=>s+num(r.gv),0)/1000;
+  const totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
+  const totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
   const avgDisp=pat.length?pat.reduce((s,r)=>s+num(r.disp_h),0)/pat.length/CAP_MW*100:0;
   const avgIrr=pat.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
+  const pr=totGRef>0?totGV/totGRef*100:0;
 
-  /* ── ONS: blob (Dados Abertos) quando disponível, planilha como fallback ── */
-  let totGF,totGRef,hRest,kONS,kONSSIS,kONSLOC;
+  /* ── ONS: intervalos e horas via blob (slots de 30min); fallback planilha ── */
+  let hRest,kONS,kONSSIS,kONSLOC;
   if(_onsData&&_onsData.length){
-    const ons=_getFilteredONS();
-    const restr=ons.filter(r=>r.lim>0);
-    totGRef=ons.reduce((s,r)=>s+r.gref*0.5,0)/1000;
-    totGF=restr.reduce((s,r)=>s+Math.max(0,r.gref-r.ger)*0.5,0)/1000;
+    const restr=_getFilteredONS().filter(r=>r.lim>0);
     hRest=restr.length*0.5;
     kONS=restr.length;
     kONSSIS=restr.filter(r=>r.origem==='SIS').length;
     kONSLOC=restr.filter(r=>r.origem==='LOC').length;
   } else {
     const rest=applyRestFilters(dashData.restricoes);
-    totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
-    totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
     hRest=rest.reduce((s,r)=>s+r.dur,0);
     if(hRest===0&&pat.length>0) hRest=pat.filter(r=>num(r.gf)>0||(r.razao&&r.razao!=='')).length*0.5;
     kONS=rest.length;
     kONSSIS=rest.filter(r=>r.origem==='SIS').length;
     kONSLOC=rest.filter(r=>r.origem==='LOC').length;
   }
-  const pr=totGRef>0?totGV/totGRef*100:0;
 
   const _f1=v=>v.toFixed(1),_f0=v=>Math.round(v).toString(),_br=v=>Math.round(v).toLocaleString(getDateLocale());
   _animKPIs=!_kpiShown&&pat.length>0; if(_animKPIs) _kpiShown=true;
