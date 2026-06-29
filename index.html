@@ -1802,6 +1802,7 @@ function _themeCharts(light){
       <div class="fg" style="gap:6px;">
         <select id="curtGranSel" class="fselect" style="flex-shrink:0" onchange="_curtGranOnChange()">
           <option value="mes" selected>Mês</option>
+          <option value="30min">30 min</option>
           <option value="dia">Dia</option>
           <option value="semana">Semana</option>
           <option value="ano">Ano</option>
@@ -3049,7 +3050,7 @@ const C = {
 // ESTADO GLOBAL
 // ═══════════════════════════════════════════════════════════════════
 let dashData = {patamares:[], restricoes:[], way2:[], ppa:null, must:null, meta:{}};
-let filters = {gran:'mes', ano:'todos', mes:'todos', ufv:'todas', razao:'todas', origem:'todas', perIni:'', perFim:'', ppaPark:'todos', ppaMes:0, ppaPerIni:'', ppaPerFim:'', ppaChartScope:'todos', ppaChartGran:'dia', ppaProgressGran:'mes', mustPark:'total', mustGran:'15min', mustMode:'dia', mustDay:'', mustPerIni:'', mustPerFim:'', fbarIntraday:false};
+let filters = {gran:'mes', ano:'todos', mes:'todos', ufv:'todas', razao:'todas', origem:'todas', perIni:'', perFim:'', curtDay:'', ppaPark:'todos', ppaMes:0, ppaPerIni:'', ppaPerFim:'', ppaChartScope:'todos', ppaChartGran:'dia', ppaProgressGran:'mes', mustPark:'total', mustGran:'15min', mustMode:'dia', mustDay:'', mustPerIni:'', mustPerFim:'', fbarIntraday:false};
 let charts = {};
 let cachedToken = null, tokenExpiry = 0;
 let _animKPIs = false, _kpiShown = false; // microanimação: count-up dos KPIs só na 1ª carga
@@ -3428,30 +3429,43 @@ function agrupar(arr, dateField='data', fields=[]){
 // ═══════════════════════════════════════════════════════════════════
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
-  const rest=applyRestFilters(dashData.restricoes);
 
+  /* ── Way2 (planilha): Energia Produzida, Disponibilidade, Irradiância ── */
   const totGV=pat.reduce((s,r)=>s+num(r.gv),0)/1000;
-  const totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
-  const totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
   const avgDisp=pat.length?pat.reduce((s,r)=>s+num(r.disp_h),0)/pat.length/CAP_MW*100:0;
-  const pr=totGRef>0?totGV/totGRef*100:0;
-  // hRest da planilha de restrições (dur)
-  let hRest=rest.reduce((s,r)=>s+r.dur,0);
-  // Fallback: se dur=0, estimar pelas restrições de 30min com GF>0
-  if(hRest===0&&pat.length>0){
-    const patRest=pat.filter(r=>num(r.gf)>0||(r.razao&&r.razao!==''));
-    hRest=patRest.length*0.5; // cada patamar = 30min
-  }
   const avgIrr=pat.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
 
-  const _f1=v=>v.toFixed(1), _f0=v=>Math.round(v).toString(), _br=v=>Math.round(v).toLocaleString(getDateLocale());
-  _animKPIs = !_kpiShown && pat.length>0; if(_animKPIs) _kpiShown=true;
+  /* ── ONS: blob (Dados Abertos) quando disponível, planilha como fallback ── */
+  let totGF,totGRef,hRest,kONS,kONSSIS,kONSLOC;
+  if(_onsData&&_onsData.length){
+    const ons=_getFilteredONS();
+    const restr=ons.filter(r=>r.lim>0);
+    totGRef=ons.reduce((s,r)=>s+r.gref*0.5,0)/1000;
+    totGF=restr.reduce((s,r)=>s+Math.max(0,r.gref-r.ger)*0.5,0)/1000;
+    hRest=restr.length*0.5;
+    kONS=restr.length;
+    kONSSIS=restr.filter(r=>r.origem==='SIS').length;
+    kONSLOC=restr.filter(r=>r.origem==='LOC').length;
+  } else {
+    const rest=applyRestFilters(dashData.restricoes);
+    totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
+    totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
+    hRest=rest.reduce((s,r)=>s+r.dur,0);
+    if(hRest===0&&pat.length>0) hRest=pat.filter(r=>num(r.gf)>0||(r.razao&&r.razao!=='')).length*0.5;
+    kONS=rest.length;
+    kONSSIS=rest.filter(r=>r.origem==='SIS').length;
+    kONSLOC=rest.filter(r=>r.origem==='LOC').length;
+  }
+  const pr=totGRef>0?totGV/totGRef*100:0;
+
+  const _f1=v=>v.toFixed(1),_f0=v=>Math.round(v).toString(),_br=v=>Math.round(v).toLocaleString(getDateLocale());
+  _animKPIs=!_kpiShown&&pat.length>0; if(_animKPIs) _kpiShown=true;
   setKPI('kGV',totGV,_f1);
   setKPI('kGF',totGF,_f1);
   setKPI('kDisp',avgDisp,_f1);
   setKPI('kGRef',totGRef,_f1);
   setKPI('kPR',pr,_f1);
-  setKPI('kONS',rest.length,_br);
+  setKPI('kONS',kONS,_br);
   setKPI('kHRest',hRest,_f0);
   setKPI('kIrr',avgIrr,_f0);
   _animKPIs=false;
@@ -3460,13 +3474,12 @@ function renderKPIs(){
   document.getElementById('kGFsub').textContent=`${(totGF*1000).toFixed(0)} MWh limitados`;
   document.getElementById('kDispSub').textContent=`Capacidade: ${CAP_MW} MW`;
   document.getElementById('kGRefSub').textContent=`Ref. irradiância`;
-  document.getElementById('kONSSub').textContent=`${rest.filter(r=>r.origem==='SIS').length} SIS · ${rest.filter(r=>r.origem==='LOC').length} LOC`;
+  document.getElementById('kONSSub').textContent=`${kONSSIS} SIS · ${kONSLOC} LOC`;
   document.getElementById('kHRestSub').textContent=`${(hRest/24).toFixed(1)} dias`;
   document.getElementById('kIrrSub').textContent=`W/m² médio`;
 
-  // Color PR card
   const prEl=document.getElementById('kPR');
-  if(prEl) prEl.style.color=pr>=90?'var(--green)':pr>=80?'var(--yellow)':'var(--red)';
+  if(prEl) prEl.style.color=pr>100?'var(--yellow)':pr>=90?'var(--green)':pr>=80?'var(--yellow)':'var(--red)';
 }
 function setKPI(id,value,fmt){
   const el=document.getElementById(id);if(!el)return;
@@ -4869,6 +4882,28 @@ function mkDonutSVG(slices,total){
 function renderRest3(type='bar'){
   const rest=applyRestFilters(dashData.restricoes);
   if(!rest.length){showNoData('cRest3');return;}
+
+  /* ── Modo 30min: timeline de slots do dia selecionado ── */
+  if(document.getElementById('curtGranSel')?.value==='30min'&&filters.curtDay){
+    const [ty,tm,td]=filters.curtDay.split('-').map(Number);
+    const dayRest=rest.filter(r=>r.data.getFullYear()===ty&&r.data.getMonth()+1===tm&&r.data.getDate()===td);
+    const slots={};
+    for(let h=0;h<24;h++) for(let mi=0;mi<60;mi+=30){
+      const k=String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
+      slots[k]={dur:0,lim:0};
+    }
+    dayRest.forEach(r=>{
+      const hi=(r.horaIni||'').slice(0,5);
+      if(slots[hi]!==undefined){slots[hi].dur+=Math.min(0.5,r.dur);slots[hi].lim+=r.limite||0;}
+    });
+    const keys=Object.keys(slots).sort();
+    mkChart('cRest3',{type:'bar',data:{labels:keys,datasets:[
+      {label:_T('Horas Restrição'),data:keys.map(k=>+slots[k].dur.toFixed(1)),backgroundColor:(ctx=>gradFrom(ctx,'#F5A623')),borderColor:'#F5A623',yAxisID:'y'},
+      {label:_T('Limitação (MW)'),data:keys.map(k=>+slots[k].lim.toFixed(0)),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
+    ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
+    return;
+  }
+
   const gran=(filters.gran==='dia'&&typeof smartGran==='function')?smartGran():filters.gran;
   const map={};
   rest.forEach(r=>{
@@ -7633,12 +7668,18 @@ function _fbarBuscar(){
 /* ── Curtailment: filtros estilo MUST ── */
 function _curtGranOnChange(noRender){
   const gran=document.getElementById('curtGranSel')?.value||'mes';
-  filters.gran=(gran==='personalizado'?'mes':gran);
+  /* 30min e personalizado usam 'dia' internamente p/ applyFilters */
+  filters.gran=(gran==='personalizado'||gran==='30min')?'dia':gran;
   const wrap=document.getElementById('curtDateWrap'); if(!wrap) return;
   const now=new Date();
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  if(gran==='personalizado'){
+  if(gran==='30min'){
+    const d=filters.curtDay||fmtD(now);
+    wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay30(this.value)">';
+    /* garante filtros de mês/período alinhados ao dia selecionado */
+    if(!filters.curtDay){const p=d.split('-');const mStr=p[0]+'-'+p[1];filters.perIni=mStr;filters.perFim=mStr;filters.ano=p[0];filters.mes=parseInt(p[1],10).toString();}
+  } else if(gran==='personalizado'){
     const f=filters.perIni||fmtM(new Date(now.getFullYear(),now.getMonth()-11));
     const t=filters.perFim||fmtM(now);
     wrap.innerHTML='<input type="month" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="filters.perIni=this.value;filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()"><span style="color:var(--t4);font-size:10px;padding:0 3px">até</span><input type="month" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="filters.perFim=this.value;filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()">';
@@ -7673,6 +7714,14 @@ function _curtApplyYear(y){
 function _curtApplyDay(v){
   if(!v) return;
   const p=v.split('-'); const mStr=p[0]+'-'+p[1];
+  filters.curtDay=v;
+  filters.perIni=mStr; filters.perFim=mStr; filters.ano=p[0]; filters.mes=parseInt(p[1],10).toString();
+  clearFilterCache(); syncFilterUI(); renderAll();
+}
+function _curtApplyDay30(v){
+  if(!v) return;
+  const p=v.split('-'); const mStr=p[0]+'-'+p[1];
+  filters.curtDay=v;
   filters.perIni=mStr; filters.perFim=mStr; filters.ano=p[0]; filters.mes=parseInt(p[1],10).toString();
   clearFilterCache(); syncFilterUI(); renderAll();
 }
@@ -7682,15 +7731,28 @@ function _curtQuick(p,btn){
   const now=new Date();
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   const sel=document.getElementById('curtGranSel');
+  const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  const is30min=sel&&sel.value==='30min';
   if(p==='hoje'){
-    const v=fmtM(now); filters.perIni=v; filters.perFim=v;
-    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
-    if(sel) sel.value='mes';
+    if(is30min){
+      filters.curtDay=fmtD(now); const v=fmtM(now); filters.perIni=v; filters.perFim=v;
+      const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+    } else {
+      const v=fmtM(now); filters.perIni=v; filters.perFim=v;
+      const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+      if(sel) sel.value='mes';
+    }
   } else if(p==='ontem'){
-    const d=new Date(now.getFullYear(),now.getMonth()-1,1); const v=fmtM(d);
-    filters.perIni=v; filters.perFim=v;
-    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
-    if(sel) sel.value='mes';
+    if(is30min){
+      const yest=new Date(now); yest.setDate(yest.getDate()-1);
+      filters.curtDay=fmtD(yest); const v=fmtM(yest); filters.perIni=v; filters.perFim=v;
+      const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+    } else {
+      const d=new Date(now.getFullYear(),now.getMonth()-1,1); const v=fmtM(d);
+      filters.perIni=v; filters.perFim=v;
+      const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+      if(sel) sel.value='mes';
+    }
   } else {
     /* 7d = últimos 6 meses, 30d = últimos 12 meses, 60d = últimos 24 meses */
     const n=p==='7d'?6:p==='30d'?12:24;
@@ -7776,7 +7838,10 @@ function syncFilterUI(){
   /* atualiza seletor de granularidade do curtailment */
   const curtGran=document.getElementById('curtGranSel');
   if(curtGran){
-    if(filters.gran&&curtGran.value!==filters.gran){
+    const cv=curtGran.value;
+    /* '30min' mapeia filters.gran='dia' — não sobrescrever o seletor nesse caso */
+    const skip30=(cv==='30min'&&filters.gran==='dia');
+    if(!skip30&&filters.gran&&cv!==filters.gran){
       curtGran.value=(filters.perIni&&filters.perFim&&filters.perIni!==filters.perFim)?'personalizado':filters.gran;
     }
     _curtGranOnChange(true);
@@ -8201,6 +8266,7 @@ async function loadONSData(){
 function _getFilteredONS(){
   if(!_onsData) return [];
   const perI=_perYM(filters.perIni), perF=_perYM(filters.perFim);
+  const is30min=document.getElementById('curtGranSel')?.value==='30min';
   return _onsData.filter(r=>{
     const d=r.ts;
     if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
@@ -8209,6 +8275,11 @@ function _getFilteredONS(){
       const ym=d.getFullYear()*100+(d.getMonth()+1);
       if(perI!==null&&ym<perI) return false;
       if(perF!==null&&ym>perF) return false;
+    }
+    /* filtro por dia exato no modo 30min */
+    if(is30min&&filters.curtDay){
+      const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      if(ds!==filters.curtDay) return false;
     }
     if(filters.razao!=='todas'&&r.razao!==filters.razao) return false;
     if(filters.origem!=='todas'&&r.origem!==filters.origem) return false;
@@ -8286,34 +8357,50 @@ function renderONS2(){
 
 function renderONS3(){
   const canvas=document.getElementById('cONS3'); if(!canvas) return;
-  const data=_getFilteredONS().filter(r=>r.lim>0);
-  if(!data.length){if(charts['cONS3']){charts['cONS3'].destroy();delete charts['cONS3'];}return;}
-  const daily={};
-  for(const r of data){
-    const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0')+'-'+String(r.ts.getDate()).padStart(2,'0');
-    if(!daily[k]) daily[k]={ger:0,lim:0,n:0};
-    daily[k].ger+=r.ger; daily[k].lim+=r.lim; daily[k].n++;
+  const is30min=document.getElementById('curtGranSel')?.value==='30min';
+  /* no modo 30min usa TODOS os intervalos do dia (não só os restritos) */
+  const raw=is30min?_getFilteredONS():_getFilteredONS().filter(r=>r.lim>0);
+  if(!raw.length){if(charts['cONS3']){charts['cONS3'].destroy();delete charts['cONS3'];}return;}
+
+  let lbls,gerData,limData,grefData;
+  if(is30min){
+    /* intervalos ordenados do dia */
+    const sorted=[...raw].sort((a,b)=>a.ts-b.ts);
+    lbls=sorted.map(r=>String(r.ts.getHours()).padStart(2,'0')+':'+String(r.ts.getMinutes()).padStart(2,'0'));
+    gerData=sorted.map(r=>+r.ger.toFixed(1));
+    limData=sorted.map(r=>r.lim>0?+r.lim.toFixed(1):null);
+    grefData=sorted.map(r=>+r.gref.toFixed(1));
+  } else {
+    const daily={};
+    for(const r of raw){
+      const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0')+'-'+String(r.ts.getDate()).padStart(2,'0');
+      if(!daily[k]) daily[k]={ger:0,lim:0,n:0};
+      daily[k].ger+=r.ger; daily[k].lim+=r.lim; daily[k].n++;
+    }
+    const days=Object.keys(daily).sort();
+    gerData=days.map(k=>+(daily[k].ger/daily[k].n).toFixed(1));
+    limData=days.map(k=>+(daily[k].lim/daily[k].n).toFixed(1));
+    grefData=null;
+    lbls=days.map(k=>{const[,mo,dd]=k.split('-');return dd+'/'+(+mo);});
   }
-  const days=Object.keys(daily).sort();
-  const avgGer=days.map(k=>+(daily[k].ger/daily[k].n).toFixed(1));
-  const avgLim=days.map(k=>+(daily[k].lim/daily[k].n).toFixed(1));
-  const lbls=days.map(k=>{const[,mo,dd]=k.split('-');return dd+'/'+(+mo);});
+
   if(charts['cONS3']) charts['cONS3'].destroy();
+  const datasets=[
+    {label:'Limitação ONS (MW)',data:limData,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.10)',borderWidth:1.5,pointRadius:0,tension:0.3,fill:!is30min,spanGaps:false},
+    {label:'Geração Real (MW)',data:gerData,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}
+  ];
+  if(is30min&&grefData) datasets.push({label:'Ref. ONS (MW)',data:grefData,borderColor:'#6b8bf5',backgroundColor:'transparent',borderWidth:1,borderDash:[3,3],pointRadius:0,tension:0.3});
   charts['cONS3']=new Chart(canvas,{
-    type:'line',
-    data:{labels:lbls,datasets:[
-      {label:'Limitação ONS (MW)',data:avgLim,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.10)',borderWidth:1.5,pointRadius:0,tension:0.3,fill:true},
-      {label:'Geração Real (MW)',data:avgGer,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}
-    ]},
+    type:'line',data:{labels:lbls,datasets},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{labels:{color:'#9aa4b8',font:{size:11},boxWidth:22}},
         tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
-          callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} MW`}}
+          callbacks:{label:ctx=>ctx.parsed.y!==null?` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} MW`:null}}
       },
       scales:{
-        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:14}},
+        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:is30min?12:14}},
         y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v+' MW'},beginAtZero:false}
       }
     }
