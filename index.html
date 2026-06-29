@@ -3534,6 +3534,7 @@ function renderDashboardPage(page){
   if(page==='pat'){
     renderPagePat();
     renderPageWay();
+    setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},80);
     return;
   }
   if(page==='pr' || page==='curt' || page==='saz'){
@@ -3542,19 +3543,23 @@ function renderDashboardPage(page){
       if(_onsData) renderONS();
       else loadONSData();
     }
+    setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},80);
     return;
   }
   if(page==='ppa'){
     renderPagePPA();
+    setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},80);
     return;
   }
   if(page==='must'){
     renderPageMUST();
     loadW2Demanda();
     _loadMustLog();
+    setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},80);
     return;
   }
   renderPageWay();
+  setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},80);
 }
 function movePpaCardsSection(){
   const cards=document.getElementById('sec-ppa-cards');
@@ -17223,6 +17228,8 @@ window._ppaChartGet=function(id){return charts[id];};
   else _init();
   setTimeout(_init,1500);
   setTimeout(_init,3500);
+  // Expõe _init globalmente para restaurar tamanhos após re-renders por filtro
+  window._ccRestoreLayout=_init;
 })();
 </script></body>
 </html>
