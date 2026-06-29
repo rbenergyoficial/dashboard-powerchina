@@ -372,9 +372,9 @@ html[data-theme="light"] #page-curt .curt-top-controls .fg{background:rgba(255,2
 html[data-theme="light"] #page-curt .curt-top-controls .fbtn2{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.10);color:#334;}
 html[data-theme="light"] #page-curt .curt-top-controls .fbtn2.on{background:linear-gradient(180deg,rgba(107,139,245,.28),rgba(107,139,245,.18));border-color:rgba(107,139,245,.55);color:#1a2460;}
 html[data-theme="light"] #page-curt .curt-top-controls .fselect,html[data-theme="light"] #page-curt .curt-top-controls .fdate{background:rgba(255,255,255,.75);border-color:rgba(0,0,0,.15);color:#1a2460;}
-/* Evita que o box-shadow das cards da seção Curtailment vaze para cima do título ONS */
-#page-curt #sec-ons{margin-top:-20px;padding-top:20px;background:var(--bg);position:relative;z-index:2;}
-html[data-theme="light"] #page-curt #sec-ons{background:var(--bg);}
+/* badge de dimensões (largura/altura) durante resize */
+#cc-dim-badge{position:fixed;display:none;padding:5px 11px;border-radius:7px;border:1px solid rgba(107,139,245,.5);background:rgba(10,15,35,.95);color:#dfe8ff;font-size:11px;font-weight:700;letter-spacing:.04em;z-index:9999;pointer-events:none;white-space:nowrap;backdrop-filter:blur(10px);box-shadow:0 4px 16px rgba(0,0,0,.4);}
+html[data-theme="light"] #cc-dim-badge{background:rgba(240,244,255,.97);color:#1a2460;border-color:rgba(45,91,227,.4);}
 /* ─── Curtailment: grid 12 colunas (Grafana-style) ─── */
 #page-curt .chart-row{display:contents;}
 #page-curt .section{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;align-items:start;}
@@ -1881,11 +1881,8 @@ function _themeCharts(light){
           <div class="cc-body" style="height:320px;overflow-y:auto;"><div id="topCausas"></div></div>
         </div>
       </div>
-    </div>
-
-    <!-- DADOS ABERTOS ONS -->
-    <div class="section" id="sec-ons">
-      <div class="section-title">
+      <!-- divisor ONS dentro do mesmo grid 12 colunas -->
+      <div class="section-title" id="sec-ons" style="margin-top:8px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         DADOS ABERTOS ONS · CONSTRAINED-OFF FOTOVOLTAICA
         <span id="onsStatus" style="font-size:10px;font-weight:500;color:var(--t3);margin-left:10px;letter-spacing:0"></span>
@@ -17132,10 +17129,20 @@ window._ppaChartGet=function(id){return charts[id];};
         document.body.style.cursor='col-resize';
         document.body.style.userSelect='none';
 
+        var _badge=document.getElementById('cc-dim-badge');
+        if(!_badge){_badge=document.createElement('div');_badge.id='cc-dim-badge';document.body.appendChild(_badge);}
+
         function onMove(mv){
           var span=Math.max(3,Math.min(12,Math.round((startW+mv.clientX-startX)/colW)));
           card.classList.remove('cc-expanded');
           card.style.gridColumn='span '+span;
+          /* badge */
+          var hEl=card.querySelector('.cc-body');
+          var hPx=hEl?Math.round(hEl.getBoundingClientRect().height):0;
+          _badge.textContent='⟷ '+span+' / 12 colunas ('+Math.round(span/12*100)+'%)  ·  ↕ '+hPx+'px';
+          _badge.style.display='block';
+          _badge.style.left=(mv.clientX+18)+'px';
+          _badge.style.top=(mv.clientY-36)+'px';
           if(typeof Chart!=='undefined'){
             card.querySelectorAll('canvas').forEach(function(cv){
               var ch=Chart.getChart?Chart.getChart(cv):null;if(ch)ch.resize();
@@ -17146,6 +17153,7 @@ window._ppaChartGet=function(id){return charts[id];};
         function onUp(){
           card.classList.remove('cc-w-dragging');
           document.body.style.cursor='';document.body.style.userSelect='';
+          _badge.style.display='none';
           document.removeEventListener('mousemove',onMove);
           document.removeEventListener('mouseup',onUp);
           var m=card.style.gridColumn.match(/span\s+(\d+)/);
@@ -17337,6 +17345,17 @@ window._ppaChartGet=function(id){return charts[id];};
     _applyH(_rs,y-_rs.y0);
     _applyW(_rs,x-_rs.x0);
     _rzRow(_rs.row);
+    /* badge dimensões (Curtailment) */
+    if(_rs.cc.closest('#page-curt')){
+      var badge=document.getElementById('cc-dim-badge');
+      if(!badge){badge=document.createElement('div');badge.id='cc-dim-badge';document.body.appendChild(badge);}
+      var hPx=parseInt(_rs.cc.style.height)||Math.round(_rs.h0+(y-_rs.y0));
+      var colSpan=(_rs.cc.style.gridColumn.match(/span\s+(\d+)/)||[,'6'])[1];
+      badge.textContent='⟷ '+colSpan+' / 12 colunas  ·  ↕ '+hPx+'px';
+      badge.style.display='block';
+      badge.style.left=(x+18)+'px';
+      badge.style.top=(y-36)+'px';
+    }
     e.preventDefault();
   }
 
@@ -17349,6 +17368,9 @@ window._ppaChartGet=function(id){return charts[id];};
     if(_rs.drag!==null) _rs.cc.setAttribute('draggable',_rs.drag);
     else _rs.cc.removeAttribute('draggable');
     _save(_rs);
+    /* esconde badge */
+    var badge=document.getElementById('cc-dim-badge');
+    if(badge) badge.style.display='none';
     _rs=null;
   }
 
