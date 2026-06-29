@@ -377,7 +377,7 @@ html[data-theme="light"] #page-curt .curt-top-controls .fselect,html[data-theme=
 html[data-theme="light"] #cc-dim-badge{background:rgba(240,244,255,.97);color:#1a2460;border-color:rgba(45,91,227,.4);}
 /* ─── Curtailment: grid 12 colunas (Grafana-style) ─── */
 #page-curt .chart-row{display:contents;}
-#page-curt .section{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;align-items:start;}
+#page-curt .section{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;align-items:start;grid-auto-flow:row dense;}
 #page-curt .section>.section-title{grid-column:1 / -1;}
 #page-curt .cc{grid-column:span 6;}
 #page-curt .cc.cc-expanded{grid-column:1 / -1;}
