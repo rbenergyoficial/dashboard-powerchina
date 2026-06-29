@@ -697,6 +697,8 @@ html[data-theme="light"] .cc-move-handle{background-image:radial-gradient(circle
 body.page-ppa-active #fbar,
 body.page-ppa-active #kpiGrid{display:none!important;}
 body.page-curt-active #fbar{display:none!important;}
+body.page-curt-active .cc:hover,
+body.page-curt-active .cc:has(.cc-body canvas):hover{transform:none!important;box-shadow:var(--shadow)!important;border-color:var(--border2)!important;}
 body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa #sec-ppa-overview .section-title{align-items:flex-start;gap:14px;flex-wrap:wrap;}
 #page-ppa .ppa-top-controls{margin-left:auto;display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap;justify-content:flex-end;font-weight:500;text-transform:none;letter-spacing:0;max-width:min(100%,1400px)}
@@ -4594,7 +4596,7 @@ function renderRest1(){
     type:'doughnut',
     data:{labels,datasets:[{data:vals,backgroundColor:colors.map(c=>c+'cc'),
       hoverBackgroundColor:hoverColors,
-      borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:12}]},
+      borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0}]},
     options:{
       responsive:true,maintainAspectRatio:false,
       cutout:'57%',
@@ -4702,10 +4704,10 @@ function renderRest2(){
       datasets:[
         {label:_T('Razão'),data:[...razVals,...oriVals.map(()=>0)],
           backgroundColor:[...razColors.map(c=>c+'cc'),...oriColors.map(()=>'transparent')],
-          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:12},
+          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0},
         {label:_T('Origem'),data:[...razVals.map(()=>0),...oriVals],
           backgroundColor:[...razColors.map(()=>'transparent'),...oriColors.map(c=>c+'cc')],
-          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:12}
+          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0}
       ]
     },
     options:{
@@ -8147,7 +8149,7 @@ function renderONS2(){
   wrap.innerHTML='<canvas id="cONS2d"></canvas>';
   charts['dONS2c']=new Chart(document.getElementById('cONS2d'),{
     type:'doughnut',
-    data:{labels,datasets:[{data:vals,backgroundColor:colors.map(c=>c+'cc'),borderColor:'#090d18',borderWidth:4,hoverOffset:10}]},
+    data:{labels,datasets:[{data:vals,backgroundColor:colors.map(c=>c+'cc'),borderColor:'#090d18',borderWidth:4,hoverOffset:0}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'57%',
       plugins:{
         legend:{position:'right',labels:{color:'#f0f4ff',font:{size:12,family:"'Inter',system-ui",weight:'600'},padding:18,
