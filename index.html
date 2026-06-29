@@ -375,16 +375,26 @@ html[data-theme="light"] #page-curt .curt-top-controls .fselect,html[data-theme=
 /* Evita que o box-shadow das cards da seção Curtailment vaze para cima do título ONS */
 #page-curt #sec-ons{margin-top:-20px;padding-top:20px;background:var(--bg);position:relative;z-index:2;}
 html[data-theme="light"] #page-curt #sec-ons{background:var(--bg);}
-/* ─── Curtailment: expand card (full-width) + drag-to-reorder ─── */
+/* ─── Curtailment: grid 12 colunas (Grafana-style) ─── */
+#page-curt .chart-row{display:contents;}
+#page-curt .section{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;align-items:start;}
+#page-curt .section>.section-title{grid-column:1 / -1;}
+#page-curt .cc{grid-column:span 6;}
 #page-curt .cc.cc-expanded{grid-column:1 / -1;}
 #page-curt .cc.cc-dragging{opacity:.4;cursor:grabbing!important;pointer-events:none;}
 #page-curt .cc.cc-drop-here{border-color:rgba(107,139,245,.75)!important;box-shadow:0 0 0 2px rgba(107,139,245,.25),0 0 28px rgba(107,139,245,.18)!important;transition:border-color .1s,box-shadow .1s;}
+/* botão expandir */
 .cc-expand-btn{width:22px;height:22px;border-radius:5px;border:1px solid rgba(255,255,255,.10);background:transparent;color:var(--t3);cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .18s,background .15s,border-color .15s;flex-shrink:0;margin-left:4px;line-height:1;}
 .cc:hover .cc-expand-btn,.cc.cc-expanded .cc-expand-btn{opacity:1;}
 .cc.cc-expanded .cc-expand-btn{color:#6b8bf5;border-color:rgba(107,139,245,.35);}
 .cc-expand-btn:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.42);color:#fff;}
 html[data-theme="light"] .cc-expand-btn{color:#667;}
 html[data-theme="light"] .cc.cc-expanded .cc-expand-btn{color:#2d5be3;}
+/* handle largura (borda direita) */
+.cc-w-handle{position:absolute;top:0;right:0;bottom:0;width:8px;cursor:col-resize;z-index:25;}
+.cc-w-handle::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:3px;height:48px;border-radius:2px;background:rgba(107,139,245,.6);opacity:0;transition:opacity .15s;}
+#page-curt .cc:hover .cc-w-handle::before{opacity:.7;}
+.cc-w-dragging .cc-w-handle::before{opacity:1!important;background:rgba(107,139,245,1);}
 /* fbar: visual unificado com estilo MUST */
 #fbar{gap:8px;}
 #fbar .fg{padding:6px 10px;border:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03);backdrop-filter:blur(8px);margin-right:0;gap:6px;}
@@ -17072,25 +17082,83 @@ window._ppaChartGet=function(id){return charts[id];};
     if(card.dataset.curtInit) return;
     card.dataset.curtInit='1';
 
-    /* ── Expand button ── */
+    var k=_ccId(card);
+
+    /* ── Restaura span de largura salvo ── */
+    try{
+      var savedSpan=k&&localStorage.getItem('cc-cols-'+k);
+      if(savedSpan) card.style.gridColumn='span '+savedSpan;
+    }catch(e){}
+
+    /* ── Restaura estado expandido ── */
+    var isExp=false;
+    try{isExp=k&&localStorage.getItem('cc-exp-'+k)==='1';}catch(e){}
+    if(isExp){card.classList.add('cc-expanded');card.style.removeProperty('gridColumn');}
+
+    /* ── Botão expandir (⊞/⊟) ── */
     var head=card.querySelector('.cc-head');
-    if(head){
+    if(head&&!head.querySelector('.cc-expand-btn')){
       var btn=document.createElement('button');
       btn.className='cc-expand-btn';
-      var k=_ccId(card);
-      var isExp=false;
-      try{isExp=k&&localStorage.getItem('cc-exp-'+k)==='1';}catch(e){}
-      if(isExp) card.classList.add('cc-expanded');
       btn.innerHTML=card.classList.contains('cc-expanded')?'⊟':'⊞';
       btn.title='Expandir / recolher largura total';
       btn.addEventListener('click',function(e){
         e.stopPropagation();
         var exp=card.classList.toggle('cc-expanded');
         btn.innerHTML=exp?'⊟':'⊞';
-        try{if(k) localStorage.setItem('cc-exp-'+k,exp?'1':'0');}catch(ex){}
+        if(exp){card.style.removeProperty('gridColumn');}  /* CSS class toma controle */
+        try{if(k){localStorage.setItem('cc-exp-'+k,exp?'1':'0');if(exp)localStorage.removeItem('cc-cols-'+k);}}catch(ex){}
         setTimeout(function(){_resizeChart(card);},60);
       });
       head.appendChild(btn);
+    }
+
+    /* ── Handle de largura (borda direita) ── */
+    if(!card.querySelector('.cc-w-handle')){
+      var wh=document.createElement('div');
+      wh.className='cc-w-handle';
+      wh.title='Arrastar para ajustar largura · outros gráficos não mudam';
+      card.appendChild(wh);
+
+      wh.addEventListener('mousedown',function(e){
+        e.preventDefault();e.stopPropagation();
+        var sec=card.closest('.section'); if(!sec) return;
+        var startX=e.clientX;
+        var secW=sec.getBoundingClientRect().width;
+        /* largura de 1 coluna em pixels: 12 colunas, 11 gaps de 16px */
+        var colW=(secW-11*16)/12;
+        var startW=card.getBoundingClientRect().width;
+        card.classList.add('cc-w-dragging');
+        document.body.style.cursor='col-resize';
+        document.body.style.userSelect='none';
+
+        function onMove(mv){
+          var span=Math.max(3,Math.min(12,Math.round((startW+mv.clientX-startX)/colW)));
+          card.classList.remove('cc-expanded');
+          card.style.gridColumn='span '+span;
+          if(typeof Chart!=='undefined'){
+            card.querySelectorAll('canvas').forEach(function(cv){
+              var ch=Chart.getChart?Chart.getChart(cv):null;if(ch)ch.resize();
+            });
+          }
+        }
+
+        function onUp(){
+          card.classList.remove('cc-w-dragging');
+          document.body.style.cursor='';document.body.style.userSelect='';
+          document.removeEventListener('mousemove',onMove);
+          document.removeEventListener('mouseup',onUp);
+          var m=card.style.gridColumn.match(/span\s+(\d+)/);
+          var finalSpan=m?parseInt(m[1]):6;
+          var expBtn=head&&head.querySelector('.cc-expand-btn');
+          if(expBtn) expBtn.innerHTML='⊞';
+          try{if(k){localStorage.setItem('cc-cols-'+k,finalSpan);localStorage.removeItem('cc-exp-'+k);}}catch(ex){}
+          setTimeout(function(){_resizeChart(card);},60);
+        }
+
+        document.addEventListener('mousemove',onMove);
+        document.addEventListener('mouseup',onUp);
+      });
     }
 
     /* ── Drag-to-reorder via move handle ── */
