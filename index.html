@@ -372,6 +372,9 @@ html[data-theme="light"] #page-curt .curt-top-controls .fg{background:rgba(255,2
 html[data-theme="light"] #page-curt .curt-top-controls .fbtn2{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.10);color:#334;}
 html[data-theme="light"] #page-curt .curt-top-controls .fbtn2.on{background:linear-gradient(180deg,rgba(107,139,245,.28),rgba(107,139,245,.18));border-color:rgba(107,139,245,.55);color:#1a2460;}
 html[data-theme="light"] #page-curt .curt-top-controls .fselect,html[data-theme="light"] #page-curt .curt-top-controls .fdate{background:rgba(255,255,255,.75);border-color:rgba(0,0,0,.15);color:#1a2460;}
+/* Evita que o box-shadow das cards da seção Curtailment vaze para cima do título ONS */
+#page-curt #sec-ons{margin-top:-20px;padding-top:20px;background:var(--bg);position:relative;z-index:2;}
+html[data-theme="light"] #page-curt #sec-ons{background:var(--bg);}
 /* fbar: visual unificado com estilo MUST */
 #fbar{gap:8px;}
 #fbar .fg{padding:6px 10px;border:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03);backdrop-filter:blur(8px);margin-right:0;gap:6px;}
