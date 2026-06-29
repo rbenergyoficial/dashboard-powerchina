@@ -381,6 +381,8 @@ html[data-theme="light"] #cc-dim-badge{background:rgba(240,244,255,.97);color:#1
 #page-curt .section>.section-title{grid-column:1 / -1;}
 #page-curt .cc{grid-column:span 6;}
 #page-curt .cc.cc-expanded{grid-column:1 / -1;}
+#page-curt .cc.cc-tall{grid-row:span 2;}
+.cc.cc-tall .cc-tall-btn{opacity:1!important;color:#6b8bf5!important;border-color:rgba(107,139,245,.35)!important;}
 #page-curt .cc.cc-dragging{opacity:.4;cursor:grabbing!important;pointer-events:none;}
 #page-curt .cc.cc-drop-here{border-color:rgba(107,139,245,.75)!important;box-shadow:0 0 0 2px rgba(107,139,245,.25),0 0 28px rgba(107,139,245,.18)!important;transition:border-color .1s,box-shadow .1s;}
 /* botão expandir */
@@ -17095,6 +17097,24 @@ window._ppaChartGet=function(id){return charts[id];};
     /* ── Botão expandir (⊞/⊟) ── */
     var head=card.querySelector('.cc-head');
     if(head&&!head.querySelector('.cc-expand-btn')){
+      /* ── Botão 2 linhas (⇅) ── */
+      var tallBtn=document.createElement('button');
+      tallBtn.className='cc-expand-btn cc-tall-btn';
+      var isTall=false;
+      try{isTall=k&&localStorage.getItem('cc-tall-'+k)==='1';}catch(e){}
+      if(isTall) card.classList.add('cc-tall');
+      tallBtn.innerHTML=card.classList.contains('cc-tall')?'⇊':'⇅';
+      tallBtn.title='Ocupar 2 linhas de altura (1 grande + 2 ao lado)';
+      tallBtn.addEventListener('click',function(e){
+        e.stopPropagation();
+        var tall=card.classList.toggle('cc-tall');
+        tallBtn.innerHTML=tall?'⇊':'⇅';
+        try{if(k) localStorage.setItem('cc-tall-'+k,tall?'1':'0');}catch(ex){}
+        setTimeout(function(){_resizeChart(card);},60);
+      });
+      head.appendChild(tallBtn);
+
+      /* ── Botão largura total (⊞/⊟) ── */
       var btn=document.createElement('button');
       btn.className='cc-expand-btn';
       btn.innerHTML=card.classList.contains('cc-expanded')?'⊟':'⊞';
@@ -17103,7 +17123,7 @@ window._ppaChartGet=function(id){return charts[id];};
         e.stopPropagation();
         var exp=card.classList.toggle('cc-expanded');
         btn.innerHTML=exp?'⊟':'⊞';
-        if(exp){card.style.removeProperty('gridColumn');}  /* CSS class toma controle */
+        if(exp){card.style.removeProperty('gridColumn');}
         try{if(k){localStorage.setItem('cc-exp-'+k,exp?'1':'0');if(exp)localStorage.removeItem('cc-cols-'+k);}}catch(ex){}
         setTimeout(function(){_resizeChart(card);},60);
       });
