@@ -360,7 +360,7 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
   padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:auto;transition:all .15s;font-family:var(--font);}
 .btn-clear:hover{border-color:var(--red);color:var(--red);}
 /* Curtailment inline filter — mesmo glassmorphism do MUST */
-#page-curt .curt-top-controls{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding:10px 0 4px;}
+#page-curt .curt-top-controls{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding:10px 0 8px;position:sticky;top:54px;z-index:99;background:rgba(9,13,24,.97);border-bottom:1px solid rgba(255,255,255,.06);backdrop-filter:blur(14px);box-shadow:0 6px 20px -4px rgba(0,0,0,.55);}
 #page-curt .curt-top-controls .fg{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03);backdrop-filter:blur(8px);margin-right:0;}
 #page-curt .curt-top-controls .fbar-label{font-size:10px;letter-spacing:.08em;text-transform:none;margin:0;white-space:nowrap;color:var(--t3);}
 #page-curt .curt-top-controls .fbtn2{height:28px;padding:0 10px;border-radius:999px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-size:11px;font-weight:700;}
@@ -1832,13 +1832,13 @@ function _themeCharts(light){
           <div class="cc-head">
             <div><div class="cc-title">Energia Frustrada por Tipo</div><div class="cc-sub">GWh perdidos — ENE / CNF / REL</div></div>
           </div>
-          <div id="dRest1" style="position:relative;height:360px;width:100%;cursor:pointer;"></div>
+          <div class="cc-body" id="dRest1" style="position:relative;height:360px;cursor:pointer;"></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Eventos por Razão e Origem</div><div class="cc-sub">Distribuição ENE / CNF / REL × SIS / LOC</div></div>
           </div>
-          <div id="dRest2" style="position:relative;height:360px;width:100%;cursor:pointer;"></div>
+          <div class="cc-body" id="dRest2" style="position:relative;height:360px;cursor:pointer;"></div>
         </div>
       </div>
       <div class="chart-row cols-2">
@@ -1876,7 +1876,7 @@ function _themeCharts(light){
           <div class="cc-head">
             <div><div class="cc-title">Razão da Restrição</div><div class="cc-sub">ENE / CNF / REL · distribuição por horas</div></div>
           </div>
-          <div id="dONS2" style="position:relative;height:320px;width:100%"></div>
+          <div class="cc-body" id="dONS2" style="position:relative;height:320px;"></div>
         </div>
       </div>
       <div class="chart-row cols-2">
