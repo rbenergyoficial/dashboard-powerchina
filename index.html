@@ -3430,24 +3430,70 @@ function agrupar(arr, dateField='data', fields=[]){
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
 
-  /* ── Planilha (Way2 + SAGER): todos os campos de energia
-     O blob ONS não publica gref (geração de referência) — só existe na planilha ── */
-  const totGV=pat.reduce((s,r)=>s+num(r.gv),0)/1000;
-  const totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
-  const totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
-  const avgDisp=pat.length?pat.reduce((s,r)=>s+num(r.disp_h),0)/pat.length/CAP_MW*100:0;
+  /* Irradiância: planilha/SAGER — ONS não publica irradiância */
   const avgIrr=pat.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
-  const pr=totGRef>0?totGV/totGRef*100:0;
 
-  /* ── ONS: intervalos e horas via blob (slots de 30min); fallback planilha ── */
-  let hRest,kONS,kONSSIS,kONSLOC;
-  if(_onsData&&_onsData.length){
+  let totGV=0,totGF=0,totGRef=0,avgDisp=0,pr=0;
+  let hRest=0,kONS=0,kONSSIS=0,kONSLOC=0;
+
+  /* _getFilteredONSPeriod: como _getFilteredONS mas sem filtro razao/origem
+     (energia total = todos intervalos do período, não só os restringidos) */
+  const _onsAllPeriod=(()=>{
+    if(!_onsData||!_onsData.length) return null;
+    const perI=_perYM(filters.perIni),perF=_perYM(filters.perFim);
+    return _onsData.filter(r=>{
+      const d=r.ts;
+      if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
+      if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
+      if(perI!==null||perF!==null){
+        const ym=d.getFullYear()*100+(d.getMonth()+1);
+        if(perI!==null&&ym<perI) return false;
+        if(perF!==null&&ym>perF) return false;
+      }
+      return true;
+    });
+  })();
+
+  if(_onsAllPeriod&&_onsAllPeriod.length){
+    /* ── Energia Produzida: ONS blob ger = Geração Verificada (MW × 0.5h → MWh) ── */
+    totGV=_onsAllPeriod.reduce((s,r)=>s+r.ger*0.5,0)/1000;
+
+    const onsHasGref=_onsAllPeriod.some(r=>r.gref>0);
+    if(onsHasGref){
+      /* ── Energia Ref. e Frustrada: ONS blob gref = Geração de Referência ── */
+      totGRef=_onsAllPeriod.reduce((s,r)=>s+r.gref*0.5,0)/1000;
+      const onsConstr=_onsAllPeriod.filter(r=>r.lim>0);
+      totGF=onsConstr.reduce((s,r)=>s+Math.max(0,(r.gref-r.ger)*0.5),0)/1000;
+      pr=totGRef>0?totGV/totGRef*100:0;
+    } else {
+      /* gref ausente no blob → planilha como fallback temporário até fluxo PA ser atualizado */
+      totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
+      totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
+      pr=totGRef>0?totGV/totGRef*100:0;
+    }
+
+    /* ── Disponibilidade: ONS blob disp = val_disponibilidade (MW) ── */
+    const onsHasDisp=_onsAllPeriod.some(r=>r.disp>0);
+    if(onsHasDisp){
+      avgDisp=_onsAllPeriod.reduce((s,r)=>s+r.disp,0)/_onsAllPeriod.length/CAP_MW*100;
+    } else {
+      avgDisp=pat.length?pat.reduce((s,r)=>s+num(r.disp_h),0)/pat.length/CAP_MW*100:0;
+    }
+
+    /* ── Restrições: _getFilteredONS() aplica filtros razao/origem ── */
     const restr=_getFilteredONS().filter(r=>r.lim>0);
     hRest=restr.length*0.5;
     kONS=restr.length;
     kONSSIS=restr.filter(r=>r.origem==='SIS').length;
     kONSLOC=restr.filter(r=>r.origem==='LOC').length;
+
   } else {
+    /* ── Fallback total: planilha ── */
+    totGV=pat.reduce((s,r)=>s+num(r.gv),0)/1000;
+    totGF=pat.reduce((s,r)=>s+num(r.gf),0)/1000;
+    totGRef=pat.reduce((s,r)=>s+num(r.gref_mwh),0)/1000;
+    avgDisp=pat.length?pat.reduce((s,r)=>s+num(r.disp_h),0)/pat.length/CAP_MW*100:0;
+    pr=totGRef>0?totGV/totGRef*100:0;
     const rest=applyRestFilters(dashData.restricoes);
     hRest=rest.reduce((s,r)=>s+r.dur,0);
     if(hRest===0&&pat.length>0) hRest=pat.filter(r=>num(r.gf)>0||(r.razao&&r.razao!=='')).length*0.5;
@@ -3457,7 +3503,7 @@ function renderKPIs(){
   }
 
   const _f1=v=>v.toFixed(1),_f0=v=>Math.round(v).toString(),_br=v=>Math.round(v).toLocaleString(getDateLocale());
-  _animKPIs=!_kpiShown&&pat.length>0; if(_animKPIs) _kpiShown=true;
+  _animKPIs=!_kpiShown&&(_onsAllPeriod?_onsAllPeriod.length>0:pat.length>0); if(_animKPIs) _kpiShown=true;
   setKPI('kGV',totGV,_f1);
   setKPI('kGF',totGF,_f1);
   setKPI('kDisp',avgDisp,_f1);
@@ -8238,12 +8284,14 @@ async function loadONSData(){
         if(isNaN(ts)) continue;
         all.push({
           ts,
-          ger:parseFloat(rec.ger)||0,
-          lim:parseFloat(rec.lim)||0,
-          gref:parseFloat(rec.gref)||0,
-          razao:rec.razao||'',
-          origem:rec.orig||'',
-          dsc:(rec.dsc||'').trim()
+          ger:parseFloat(rec.ger||rec.val_geracao)||0,
+          lim:parseFloat(rec.lim||rec.val_geracaolimitada)||0,
+          /* gref: campo adicionado ao blob em 2026-06 — tenta nomes curto e completo (CSV ONS) */
+          gref:parseFloat(rec.gref||rec.val_geracaoreferencia||rec.gref_ref)||0,
+          disp:parseFloat(rec.disp||rec.val_disponibilidade)||0,
+          razao:rec.razao||rec.cod_razaorestricao||'',
+          origem:rec.orig||rec.cod_origemrestricao||'',
+          dsc:(rec.dsc||rec.dsc_restricao||'').trim()
         });
       }
     }
