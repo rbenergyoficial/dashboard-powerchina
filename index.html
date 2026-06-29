@@ -17063,6 +17063,11 @@ window._ppaChartGet=function(id){return charts[id];};
   var _dragSrc=null;
 
   function _ccId(card){
+    /* Para chaves de layout (span/order/gridRow): prioriza .cc-body[id] que é estável
+       desde o carregamento (ex: dRest1, dONS2), independente de canvas renderizar.
+       V46 continua usando canvas-id via window._ccKey para chaves de altura. */
+    var body=card.querySelector('.cc-body[id]');
+    if(body&&body.id) return body.id;
     return window._ccKey?window._ccKey(card):null;
   }
 
@@ -17290,21 +17295,19 @@ window._ppaChartGet=function(id){return charts[id];};
     return (sec?sec.id:'pg')+'-r'+idx;
   }
 
-  /* chave para salvar/restaurar: prioridade:
-     1. ID do .cc-body (estável, existe antes do canvas renderizar — ex: dRest1, dONS2)
-     2. ID do canvas (fallback se .cc-body não tem id)
-     3. secId-rROW-cCOL (fallback posicional com índice da linha para evitar colisão) */
+  /* chave para salvar/restaurar altura/largura (V46): canvas.id se existir,
+     senão secId-rROW-cCOL (inclui índice da linha para evitar colisão). */
   function _ccKey(cc){
-    var body=cc.querySelector('.cc-body[id]');
-    if(body&&body.id) return body.id;
     var cv=cc.querySelector('canvas'),id=cv&&cv.id;
-    if(id) return id;
-    var s=cc.closest('[id]');
-    var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;
-    for(;c&&c!==cc;c=c.nextElementSibling)p++;
-    var ri=0,row=cc.parentElement,rs=row&&row.parentElement&&row.parentElement.firstElementChild;
-    for(;rs&&rs!==row;rs=rs.nextElementSibling)ri++;
-    return (s?s.id:'pg')+'-r'+ri+'-c'+p;
+    if(!id){
+      var s=cc.closest('[id]');
+      var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;
+      for(;c&&c!==cc;c=c.nextElementSibling)p++;
+      var ri=0,row=cc.parentElement,rs=row&&row.parentElement&&row.parentElement.firstElementChild;
+      for(;rs&&rs!==row;rs=rs.nextElementSibling)ri++;
+      id=(s?s.id:'pg')+'-r'+ri+'-c'+p;
+    }
+    return id;
   }
 
   /* ── height: resize card (.cc) + body (.cc-body) juntos ── */
