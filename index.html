@@ -1883,32 +1883,34 @@ function _themeCharts(light){
         DADOS ABERTOS ONS · CONSTRAINED-OFF FOTOVOLTAICA
         <span id="onsStatus" style="font-size:10px;font-weight:500;color:var(--t3);margin-left:10px;letter-spacing:0"></span>
       </div>
-      <div class="chart-row cols-2">
+      <!-- Layout ONS: dONS4 alto esquerda | cONS1 direita-cima | dONS2 direita-baixo -->
+      <div class="chart-row">
+        <div class="cc cc-tall" style="display:flex;flex-direction:column;align-self:stretch;">
+          <div class="cc-head">
+            <div><div class="cc-title">Principais Causas de Restrição</div><div class="cc-sub">Descrições ONS por horas de limitação</div></div>
+          </div>
+          <div class="cc-body" style="flex:1;min-height:0;overflow-y:auto;padding:0"><div id="dONS4"></div></div>
+        </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Horas de Restrição por Mês</div><div class="cc-sub">Total de horas com limitação ONS ativa · fonte Dados Abertos</div></div>
           </div>
-          <div class="cc-body" style="height:320px"><canvas id="cONS1"></canvas></div>
+          <div class="cc-body" style="height:300px"><canvas id="cONS1"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Razão da Restrição</div><div class="cc-sub">ENE / CNF / REL · distribuição por horas</div></div>
           </div>
-          <div class="cc-body" id="dONS2" style="position:relative;height:320px;"></div>
+          <div class="cc-body" id="dONS2" style="position:relative;height:300px;"></div>
         </div>
       </div>
-      <div class="chart-row cols-2">
-        <div class="cc">
+      <!-- Geração vs. Limitação: linha própria, largura total -->
+      <div class="chart-row">
+        <div class="cc" style="grid-column:span 12">
           <div class="cc-head">
             <div><div class="cc-title">Geração vs. Limitação ONS — Média Diária</div><div class="cc-sub">MW médio nos intervalos com limite ativo · geração real × limite</div></div>
           </div>
-          <div class="cc-body" style="height:320px"><canvas id="cONS3"></canvas></div>
-        </div>
-        <div class="cc">
-          <div class="cc-head">
-            <div><div class="cc-title">Principais Causas de Restrição</div><div class="cc-sub">Descrições ONS por horas de limitação</div></div>
-          </div>
-          <div class="cc-body" style="height:280px;overflow-y:auto;padding:0"><div id="dONS4"></div></div>
+          <div class="cc-body" style="height:300px"><canvas id="cONS3"></canvas></div>
         </div>
       </div>
     </div>
@@ -17108,8 +17110,11 @@ window._ppaChartGet=function(id){return charts[id];};
       /* ── Botão 2 linhas (⇅) ── */
       var tallBtn=document.createElement('button');
       tallBtn.className='cc-expand-btn cc-tall-btn';
-      var isTall=false;
-      try{isTall=k&&localStorage.getItem('cc-tall-'+k)==='1';}catch(e){}
+      /* cc-tall pode estar no HTML como padrão; localStorage '0' remove, '1' adiciona */
+      var _savedTall;
+      try{_savedTall=k&&localStorage.getItem('cc-tall-'+k);}catch(e){}
+      var isTall=_savedTall==='1'?true:_savedTall==='0'?false:card.classList.contains('cc-tall');
+      if(_savedTall==='0') card.classList.remove('cc-tall');
       if(isTall) card.classList.add('cc-tall');
       tallBtn.innerHTML=card.classList.contains('cc-tall')?'⇊':'⇅';
       tallBtn.title='Ocupar 2 linhas de altura (1 grande + 2 ao lado)';
@@ -17299,11 +17304,12 @@ window._ppaChartGet=function(id){return charts[id];};
     /* Limpeza única: versões anteriores capturam cc-grid-row-* ANTES dos dados
        ONS carregarem → posições provisórias salvas causam layout errado no reload.
        Version bump '5' descarta todas essas entradas stale no primeiro load. */
-    var _LV='5';
+    /* v6: limpa grid-row, cols e tall stale — layout ONS reestruturado no HTML */
+    var _LV='6';
     try{
       if(localStorage.getItem('cc-layout-ver')!==_LV){
         var _rm=[];
-        for(var _i=0;_i<localStorage.length;_i++){var _k=localStorage.key(_i);if(_k&&_k.startsWith('cc-grid-row-'))_rm.push(_k);}
+        for(var _i=0;_i<localStorage.length;_i++){var _k=localStorage.key(_i);if(_k&&(_k.startsWith('cc-grid-row-')||_k.startsWith('cc-cols-')||_k.startsWith('cc-tall-')))_rm.push(_k);}
         _rm.forEach(function(_k){try{localStorage.removeItem(_k);}catch(e){}});
         localStorage.setItem('cc-layout-ver',_LV);
       }
