@@ -739,8 +739,9 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa #sec-ppa-analysis .cc-body.ppa-comp-body{height:360px!important;max-height:360px!important;overflow:hidden}
 #page-ppa #sec-ppa-analysis .cc-body canvas{width:100%!important;height:100%!important;max-height:360px!important}
 #page-ppa .ppa-card-zone{margin-top:-4px}
-#page-ppa #sec-ppa-performance .chart-row{display:flex;flex-direction:row;gap:14px;align-items:stretch}
-#page-ppa #sec-ppa-performance .cc:first-child{flex:0 0 70%;max-width:70%;min-width:0;box-sizing:border-box}
+/* PPA performance usa grid 12 colunas como todos os painéis — proporcão padrão 8/4 (~70/30) */
+#page-ppa #sec-ppa-performance .cc:first-child{grid-column:span 8;min-width:0;box-sizing:border-box}
+#page-ppa #sec-ppa-performance .cc:not(:first-child){grid-column:span 4;min-width:0;box-sizing:border-box}
 #page-ppa #sec-ppa-performance .cc-head{margin-bottom:10px}
 #page-ppa #sec-ppa-performance .cc-body{overflow:hidden;height:360px!important;min-height:360px!important;max-height:360px!important;flex:none}
 #page-ppa #sec-ppa-performance .cc-body canvas{width:100%!important;height:100%!important}
@@ -1026,10 +1027,7 @@ html[data-theme="light"] #w2dPeakPanel .wpp-lbl{color:rgba(0,0,0,.3)}
   #page-ppa .ppa-donut-wrap{flex:0 0 240px!important;height:240px!important;width:100%!important;}
   #page-ppa .ppa-split-info{max-height:none!important;overflow:visible!important;flex:none!important;width:100%;}
 
-  /* PPA Performance (gráfico avanço): empilhar coluna, sem corte lateral */
-  #page-ppa #sec-ppa-performance .chart-row{flex-direction:column!important;align-items:stretch!important;gap:12px!important;}
-  #page-ppa #sec-ppa-performance .cc:first-child,
-  #page-ppa #sec-ppa-performance .cc{flex:1 1 auto!important;max-width:100%!important;min-width:0!important;}
+  /* PPA Performance mobile: grid-column:1/-1!important (regra global .cc) já empilha os cards */
   #page-ppa #sec-ppa-performance .cc-body{height:360px!important;min-height:360px!important;max-height:360px!important;}
 
   /* ── UFVs Way2: ranking — números à direita cabendo ── */
@@ -3551,7 +3549,10 @@ function renderDashboardPage(page){
       if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();
       if(typeof _initGridCards==='function')_initGridCards(pid||('page-'+page));
     },80);
-    setTimeout(function(){if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();},500);
+    setTimeout(function(){
+      if(typeof _ccRestoreLayout==='function')_ccRestoreLayout();
+      if(typeof _initGridCards==='function')_initGridCards(pid||('page-'+page));
+    },500);
   }
   if(page==='pat'){
     renderPagePat();
@@ -15668,7 +15669,7 @@ window._ppaChartGet=function(id){return charts[id];};
             var _ov2=document.createElement('div');
             _ov2.id='ppaRankStatsV40';
             _ov2.className='cc';
-            _ov2.style.cssText='flex:0 0 calc(30% - 14px);max-width:calc(30% - 14px);min-width:0;box-sizing:border-box';
+            _ov2.style.cssText='min-width:0;box-sizing:border-box';
             var _sHead=document.createElement('div');
             _sHead.className='cc-head';
             _sHead.style.cssText='margin-bottom:10px';
@@ -17266,6 +17267,10 @@ window._ppaChartGet=function(id){return charts[id];};
   function _initGridCards(pageId){
     var pg=document.getElementById(pageId); if(!pg) return;
     pg.querySelectorAll('.cc').forEach(_initCard);
+    /* Captura posições iniciais para que o layout persista sem precisar de interação do usuário */
+    setTimeout(function(){
+      pg.querySelectorAll('.section').forEach(function(sec){_captureLayout(sec);});
+    },200);
   }
 
   /* compatibilidade com chamadas legadas */
@@ -17289,10 +17294,19 @@ window._ppaChartGet=function(id){return charts[id];};
     return (sec?sec.id:'pg')+'-r'+idx;
   }
 
-  /* chave para salvar/restaurar altura: canvas.id se existir, senão secId-cPos */
+  /* chave para salvar/restaurar: canvas.id se existir, senão secId-rROW-cCOL
+     Inclui índice da chart-row dentro da section para evitar colisão entre
+     cards sem canvas na mesma posição em linhas diferentes (ex: dRest2 vs topCausas). */
   function _ccKey(cc){
     var cv=cc.querySelector('canvas'),id=cv&&cv.id;
-    if(!id){var s=cc.closest('[id]');var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;for(;c&&c!==cc;c=c.nextElementSibling)p++;id=(s?s.id:'pg')+'-c'+p;}
+    if(!id){
+      var s=cc.closest('[id]');
+      var p=0,c=cc.parentElement&&cc.parentElement.firstElementChild;
+      for(;c&&c!==cc;c=c.nextElementSibling)p++;
+      var ri=0,row=cc.parentElement,rs=row&&row.parentElement&&row.parentElement.firstElementChild;
+      for(;rs&&rs!==row;rs=rs.nextElementSibling)ri++;
+      id=(s?s.id:'pg')+'-r'+ri+'-c'+p;
+    }
     return id;
   }
 
