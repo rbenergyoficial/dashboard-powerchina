@@ -17160,10 +17160,7 @@ window._ppaChartGet=function(id){return charts[id];};
         /* largura de 1 coluna em pixels: 12 colunas, 11 gaps de 16px */
         var colW=(secW-11*16)/12;
         var startW=card.getBoundingClientRect().width;
-        /* irmão na mesma chart-row (para ajuste proporcional) */
         var row=card.parentElement;
-        var sibs=[].slice.call(row.querySelectorAll(':scope>.cc')).filter(function(c){return c!==card;});
-        var hasSib=sibs.length===1;
         card.classList.add('cc-w-dragging');
         document.body.style.cursor='col-resize';
         document.body.style.userSelect='none';
@@ -17172,15 +17169,10 @@ window._ppaChartGet=function(id){return charts[id];};
         if(!_badge){_badge=document.createElement('div');_badge.id='cc-dim-badge';document.body.appendChild(_badge);}
 
         function onMove(mv){
-          /* span máx 9 para que o irmão tenha pelo menos span 3 */
-          var span=Math.max(3,Math.min(hasSib?9:12,Math.round((startW+mv.clientX-startX)/colW)));
+          /* apenas este card redimensiona — o grid empurra os outros naturalmente */
+          var span=Math.max(3,Math.min(12,Math.round((startW+mv.clientX-startX)/colW)));
           card.classList.remove('cc-expanded');
           card.style.gridColumn='span '+span;
-          /* ajusta irmão para preencher colunas restantes */
-          if(hasSib){
-            sibs[0].classList.remove('cc-expanded');
-            sibs[0].style.gridColumn='span '+(12-span);
-          }
           /* badge */
           var hEl=card.querySelector('.cc-body');
           var hPx=hEl?Math.round(hEl.getBoundingClientRect().height):0;
@@ -17192,11 +17184,6 @@ window._ppaChartGet=function(id){return charts[id];};
             card.querySelectorAll('canvas').forEach(function(cv){
               var ch=Chart.getChart?Chart.getChart(cv):null;if(ch)ch.resize();
             });
-            if(hasSib){
-              sibs[0].querySelectorAll('canvas').forEach(function(cv){
-                var ch=Chart.getChart?Chart.getChart(cv):null;if(ch)ch.resize();
-              });
-            }
           }
         }
 
@@ -17211,17 +17198,10 @@ window._ppaChartGet=function(id){return charts[id];};
           var expBtn=head&&head.querySelector('.cc-expand-btn');
           if(expBtn) expBtn.innerHTML='⊞';
           try{if(k){localStorage.setItem('cc-cols-'+k,finalSpan);localStorage.removeItem('cc-exp-'+k);}}catch(ex){}
-          /* salva span do irmão e captura layout de ambos */
-          if(hasSib){
-            var sibSpan=12-finalSpan;
-            sibs[0].style.gridColumn='span '+sibSpan;
-            var sibK=_ccId(sibs[0]);
-            try{if(sibK){localStorage.setItem('cc-cols-'+sibK,sibSpan);localStorage.removeItem('cc-exp-'+sibK);}}catch(ex){}
-          }
           var sec=card.closest('.section');
           setTimeout(function(){
-            _resizeChart(card);
-            if(hasSib) _resizeChart(sibs[0]);
+            /* redimensiona todos os charts da seção (grid pode ter reposicionado cards) */
+            if(sec) sec.querySelectorAll('.cc').forEach(function(c){_resizeChart(c);});
             _captureLayout(sec);
           },60);
         }
