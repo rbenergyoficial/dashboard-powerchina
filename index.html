@@ -1798,35 +1798,29 @@ function _themeCharts(light){
 
     <!-- FILTRO GLOBAL DO PAINEL CURTAILMENT (sticky para todas as seções) -->
     <div class="curt-top-controls">
-      <div class="fg">
-        <span class="fbar-label">Granularidade</span>
-        <button class="fbtn2" data-fg="dia">Dia</button>
-        <button class="fbtn2" data-fg="semana">Semana</button>
-        <button class="fbtn2 on" data-fg="mes">Mês</button>
-        <button class="fbtn2" data-fg="ano">Ano</button>
-      </div>
-      <div class="fg">
-        <span class="fbar-label">Ano</span>
-        <button class="fbtn2 on" data-fa="todos">Todos</button>
-        <button class="fbtn2" data-fa="2025">2025</button>
-        <button class="fbtn2" data-fa="2026">2026</button>
-      </div>
-      <div class="fg">
-        <span class="fbar-label">Mês</span>
-        <select class="fselect" id="selMes">
-          <option value="todos">Todos</option>
-          <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
-          <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
-          <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
-          <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+      <!-- Granularidade + Seletor de data (estilo MUST) -->
+      <div class="fg" style="gap:6px;">
+        <select id="curtGranSel" class="fselect" style="flex-shrink:0" onchange="_curtGranOnChange()">
+          <option value="mes" selected>Mês</option>
+          <option value="dia">Dia</option>
+          <option value="semana">Semana</option>
+          <option value="ano">Ano</option>
+          <option value="personalizado">Personalizado</option>
         </select>
+        <span id="curtDateWrap" style="display:flex;align-items:center;gap:4px;flex-shrink:0"></span>
       </div>
+      <!-- Atalhos rápidos -->
       <div class="fg">
-        <span class="fbar-label">Período</span>
-        <input type="month" class="fdate" id="selPerIni" title="Mês inicial do período">
-        <span style="color:var(--t3);font-size:11px">→</span>
-        <input type="month" class="fdate" id="selPerFim" title="Mês final do período">
+        <span id="curtQuickGroup" style="display:flex;gap:4px;flex-shrink:0">
+          <button class="fbtn2" onclick="_curtQuick('hoje',this)">Hoje</button>
+          <button class="fbtn2" onclick="_curtQuick('ontem',this)">Ontem</button>
+          <button class="fbtn2" onclick="_curtQuick('7d',this)">7d</button>
+          <button class="fbtn2" onclick="_curtQuick('30d',this)">30d</button>
+          <button class="fbtn2" onclick="_curtQuick('60d',this)">60d</button>
+        </span>
       </div>
+      <span style="width:1px;height:20px;background:rgba(255,255,255,.12);flex-shrink:0;align-self:center"></span>
+      <!-- Tipo de restrição -->
       <div class="fg">
         <span class="fbar-label">Restrição</span>
         <button class="fbtn2 on" data-fr="todas">Todas</button>
@@ -1834,12 +1828,23 @@ function _themeCharts(light){
         <button class="fbtn2" data-fr="CNF">CNF</button>
         <button class="fbtn2" data-fr="REL">REL</button>
       </div>
+      <!-- Origem da restrição -->
       <div class="fg">
         <span class="fbar-label">Origem</span>
         <button class="fbtn2 on" data-fo="todas">Todas</button>
         <button class="fbtn2" data-fo="SIS">SIS</button>
         <button class="fbtn2" data-fo="LOC">LOC</button>
       </div>
+      <!-- Ocultos: mantidos para compatibilidade com JS de gráficos -->
+      <input type="month" id="selPerIni" style="display:none">
+      <input type="month" id="selPerFim" style="display:none">
+      <select id="selMes" style="display:none">
+        <option value="todos">Todos</option>
+        <option value="1">Jan</option><option value="2">Fev</option><option value="3">Mar</option>
+        <option value="4">Abr</option><option value="5">Mai</option><option value="6">Jun</option>
+        <option value="7">Jul</option><option value="8">Ago</option><option value="9">Set</option>
+        <option value="10">Out</option><option value="11">Nov</option><option value="12">Dez</option>
+      </select>
     </div>
 
     <!-- SEÇÃO 4: RESTRIÇÕES -->
@@ -7625,6 +7630,79 @@ function _fbarBuscar(){
   }
   renderAll();
 }
+/* ── Curtailment: filtros estilo MUST ── */
+function _curtGranOnChange(noRender){
+  const gran=document.getElementById('curtGranSel')?.value||'mes';
+  filters.gran=(gran==='personalizado'?'mes':gran);
+  const wrap=document.getElementById('curtDateWrap'); if(!wrap) return;
+  const now=new Date();
+  const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(gran==='personalizado'){
+    const f=filters.perIni||fmtM(new Date(now.getFullYear(),now.getMonth()-11));
+    const t=filters.perFim||fmtM(now);
+    wrap.innerHTML='<input type="month" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="filters.perIni=this.value;filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()"><span style="color:var(--t4);font-size:10px;padding:0 3px">até</span><input type="month" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="filters.perFim=this.value;filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()">';
+  } else if(gran==='mes'){
+    let m;
+    if(filters.perIni&&filters.perIni.length===7) m=filters.perIni;
+    else if(filters.ano!=='todos'&&filters.mes!=='todos') m=filters.ano+'-'+String(filters.mes).padStart(2,'0');
+    else m=fmtM(now);
+    wrap.innerHTML='<input type="month" class="fdate" id="curtMonthPicker" value="'+m+'" style="flex-shrink:0" onchange="_curtApplyMonth(this.value)">';
+  } else if(gran==='ano'){
+    const y=now.getFullYear(); const yrs=[y-1,y,y+1];
+    const cur=filters.ano!=='todos'?String(filters.ano):String(y);
+    const opts=yrs.map(yr=>'<option value="'+yr+'"'+(String(yr)===cur?' selected':'')+'>'+yr+'</option>').join('');
+    wrap.innerHTML='<select class="fselect" id="curtYearSel" onchange="_curtApplyYear(this.value)">'+opts+'</select>';
+  } else {
+    const d=fmtD(now);
+    wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay(this.value)">';
+  }
+  clearFilterCache();
+  if(!noRender) renderAll();
+}
+function _curtApplyMonth(v){
+  if(!v) return;
+  const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+  filters.perIni=v; filters.perFim=v;
+  clearFilterCache(); syncFilterUI(); renderAll();
+}
+function _curtApplyYear(y){
+  filters.ano=y; filters.mes='todos'; filters.perIni=''; filters.perFim='';
+  clearFilterCache(); syncFilterUI(); renderAll();
+}
+function _curtApplyDay(v){
+  if(!v) return;
+  const p=v.split('-'); const mStr=p[0]+'-'+p[1];
+  filters.perIni=mStr; filters.perFim=mStr; filters.ano=p[0]; filters.mes=parseInt(p[1],10).toString();
+  clearFilterCache(); syncFilterUI(); renderAll();
+}
+function _curtQuick(p,btn){
+  document.querySelectorAll('#curtQuickGroup button').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const now=new Date();
+  const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const sel=document.getElementById('curtGranSel');
+  if(p==='hoje'){
+    const v=fmtM(now); filters.perIni=v; filters.perFim=v;
+    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+    if(sel) sel.value='mes';
+  } else if(p==='ontem'){
+    const d=new Date(now.getFullYear(),now.getMonth()-1,1); const v=fmtM(d);
+    filters.perIni=v; filters.perFim=v;
+    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+    if(sel) sel.value='mes';
+  } else {
+    /* 7d = últimos 6 meses, 30d = últimos 12 meses, 60d = últimos 24 meses */
+    const n=p==='7d'?6:p==='30d'?12:24;
+    const start=new Date(now.getFullYear(),now.getMonth()-n+1,1);
+    filters.perIni=fmtM(start); filters.perFim=fmtM(now);
+    filters.ano='todos'; filters.mes='todos';
+    if(sel) sel.value='personalizado';
+  }
+  clearFilterCache(); _curtGranOnChange(true); syncFilterUI(); renderAll();
+}
+/* inicializa seletor de data do curtailment com o mês atual */
+(function(){ _curtGranOnChange(true); })();
 document.querySelectorAll('[data-fr]').forEach(btn=>{
   btn.addEventListener('click',()=>{
     document.querySelectorAll('[data-fr]').forEach(b=>b.classList.remove('on'));
@@ -7685,17 +7763,24 @@ function clearFilters(){
 function syncFilterUI(){
   document.querySelectorAll('[data-fg]').forEach(b=>b.classList.toggle('on',b.dataset.fg===filters.gran));
   document.querySelectorAll('[data-fa]').forEach(b=>b.classList.toggle('on',b.dataset.fa===filters.ano));
-  document.getElementById('selMes').value=filters.mes;
+  const sm=document.getElementById('selMes'); if(sm) sm.value=filters.mes;
   const _ufvA=new Set((filters.ufv||'todas').split(',').filter(Boolean));
   document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(b=>b.classList.toggle('on',_ufvA.has(b.dataset.fufv)));
   document.querySelectorAll('[data-fgrandeza]').forEach(b=>b.classList.toggle('on',b.dataset.fgrandeza===(filters.grandeza||'Demat')));
   const fbarIv=document.getElementById('fbarIntervalSel');if(fbarIv){fbarIv.value=filters.interval||'QuinzeMinutos';_fbarOnIntervalChange(true);}
-
   document.querySelectorAll('#fbarQuickGroup [data-fq]').forEach(b=>b.classList.remove('on'));
   const pi=document.getElementById('selPerIni'), pf=document.getElementById('selPerFim');
   if(pi) pi.value=filters.perIni||''; if(pf) pf.value=filters.perFim||'';
   document.querySelectorAll('[data-fr]').forEach(b=>b.classList.toggle('on',b.dataset.fr===filters.razao));
   document.querySelectorAll('[data-fo]').forEach(b=>b.classList.toggle('on',b.dataset.fo===filters.origem));
+  /* atualiza seletor de granularidade do curtailment */
+  const curtGran=document.getElementById('curtGranSel');
+  if(curtGran){
+    if(filters.gran&&curtGran.value!==filters.gran){
+      curtGran.value=(filters.perIni&&filters.perFim&&filters.perIni!==filters.perFim)?'personalizado':filters.gran;
+    }
+    _curtGranOnChange(true);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
