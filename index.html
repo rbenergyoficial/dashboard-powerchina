@@ -1862,19 +1862,14 @@ function _themeCharts(light){
           <div class="cc-body" id="dRest2" style="position:relative;height:360px;cursor:pointer;"></div>
         </div>
       </div>
-      <div class="chart-row cols-2">
-        <div class="cc">
+      <!-- cRest3 em largura total antes do divisor ONS -->
+      <div class="chart-row">
+        <div class="cc" style="grid-column:span 12">
           <div class="cc-head">
             <div><div class="cc-title">Horas de Restrição por Período</div><div class="cc-sub">Total de horas limitadas + potência média</div></div>
             <div class="toggle-grp" id="tg-rest3"><button class="toggle-btn on" data-chart="rest3" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="rest3" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:360px"><canvas id="cRest3"></canvas></div>
-        </div>
-        <div class="cc">
-          <div class="cc-head">
-            <div><div class="cc-title">Top 5 Causas de Restrição</div><div class="cc-sub">Descrições mais frequentes no período</div></div>
-          </div>
-          <div class="cc-body" style="height:320px;overflow-y:auto;"><div id="topCausas"></div></div>
+          <div class="cc-body" style="height:320px"><canvas id="cRest3"></canvas></div>
         </div>
       </div>
       <!-- divisor ONS dentro do mesmo grid 12 colunas -->
@@ -1883,7 +1878,7 @@ function _themeCharts(light){
         DADOS ABERTOS ONS · CONSTRAINED-OFF FOTOVOLTAICA
         <span id="onsStatus" style="font-size:10px;font-weight:500;color:var(--t3);margin-left:10px;letter-spacing:0"></span>
       </div>
-      <!-- Layout ONS: dONS4 alto esquerda | cONS1 direita-cima | dONS2 direita-baixo -->
+      <!-- Layout ONS: dONS4 alto esquerda | topCausas direita-cima | cONS1 direita-baixo -->
       <div class="chart-row">
         <div class="cc cc-tall" style="display:flex;flex-direction:column;align-self:stretch;">
           <div class="cc-head">
@@ -1893,20 +1888,26 @@ function _themeCharts(light){
         </div>
         <div class="cc">
           <div class="cc-head">
+            <div><div class="cc-title">Top 5 Causas de Restrição</div><div class="cc-sub">Descrições mais frequentes no período</div></div>
+          </div>
+          <div class="cc-body" style="height:310px;overflow-y:auto;"><div id="topCausas"></div></div>
+        </div>
+        <div class="cc">
+          <div class="cc-head">
             <div><div class="cc-title">Horas de Restrição por Mês</div><div class="cc-sub">Total de horas com limitação ONS ativa · fonte Dados Abertos</div></div>
           </div>
-          <div class="cc-body" style="height:300px"><canvas id="cONS1"></canvas></div>
+          <div class="cc-body" style="height:310px"><canvas id="cONS1"></canvas></div>
         </div>
+      </div>
+      <!-- Razão da Restrição + Geração vs. Limitação -->
+      <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Razão da Restrição</div><div class="cc-sub">ENE / CNF / REL · distribuição por horas</div></div>
           </div>
           <div class="cc-body" id="dONS2" style="position:relative;height:300px;"></div>
         </div>
-      </div>
-      <!-- Geração vs. Limitação: linha própria, largura total -->
-      <div class="chart-row">
-        <div class="cc" style="grid-column:span 12">
+        <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Geração vs. Limitação ONS — Média Diária</div><div class="cc-sub">MW médio nos intervalos com limite ativo · geração real × limite</div></div>
           </div>
