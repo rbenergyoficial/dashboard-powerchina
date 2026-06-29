@@ -8066,7 +8066,7 @@ async function loadONSData(){
   if(statusEl) statusEl.textContent='Carregando…';
   const now=new Date();
   const months=[];
-  let y=2026,m=3;
+  let y=2025,m=9; /* início: Set/2025 — data de entrada em operação */
   while(y<now.getFullYear()||(y===now.getFullYear()&&m<=now.getMonth()+1)){
     months.push(y+'_'+String(m).padStart(2,'0'));
     m++;if(m>12){m=1;y++;}
