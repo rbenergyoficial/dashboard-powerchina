@@ -3436,36 +3436,47 @@ function agrupar(arr, dateField='data', fields=[]){
 // ═══════════════════════════════════════════════════════════════════
 // KPIs
 // ═══════════════════════════════════════════════════════════════════
+/* Predicado de data compartilhado: aplica ano/mes/período(mensal)/range-de-dias/dia-exato.
+   Usado tanto pelos KPIs (_onsAllPeriod) quanto pelos gráficos (_getFilteredONS),
+   garantindo que "Hoje/Ontem" e o range 7d/30d/60d filtrem TODOS os indicadores de forma idêntica. */
+function _onsDatePass(d){
+  if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
+  if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
+  const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  /* dia exato (Hoje/Ontem ou date-picker no modo 30min) tem precedência total */
+  if(filters.curtDay&&document.getElementById('curtGranSel')?.value==='30min'){
+    return ds===filters.curtDay;
+  }
+  if(filters.perIniDay||filters.perFimDay){
+    if(filters.perIniDay&&ds<filters.perIniDay) return false;
+    if(filters.perFimDay&&ds>filters.perFimDay) return false;
+  } else {
+    const perI=_perYM(filters.perIni),perF=_perYM(filters.perFim);
+    if(perI!==null||perF!==null){
+      const ym=d.getFullYear()*100+(d.getMonth()+1);
+      if(perI!==null&&ym<perI) return false;
+      if(perF!==null&&ym>perF) return false;
+    }
+  }
+  return true;
+}
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
 
-  /* Irradiância: planilha/SAGER — ONS não publica irradiância */
-  const avgIrr=pat.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
+  /* Irradiância: planilha/SAGER — ONS não publica irradiância.
+     Aplica o mesmo filtro de dia exato (Hoje/Ontem) para coerência com os demais cards. */
+  let patIrr=pat;
+  if(filters.curtDay&&document.getElementById('curtGranSel')?.value==='30min'){
+    patIrr=pat.filter(r=>r.data&&(r.data.getFullYear()+'-'+String(r.data.getMonth()+1).padStart(2,'0')+'-'+String(r.data.getDate()).padStart(2,'0'))===filters.curtDay);
+  }
+  const avgIrr=patIrr.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
 
   let totGV=0,totGF=0,totGRef=0,avgDisp=0,pr=0;
   let hRest=0,kONS=0,kONSSIS=0,kONSLOC=0;
 
-  /* _getFilteredONSPeriod: como _getFilteredONS mas sem filtro razao/origem
-     (energia total = todos intervalos do período, não só os restringidos) */
-  const _onsAllPeriod=(()=>{
-    if(!_onsData||!_onsData.length) return null;
-    const perI=_perYM(filters.perIni),perF=_perYM(filters.perFim);
-    return _onsData.filter(r=>{
-      const d=r.ts;
-      if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
-      if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
-      if(filters.perIniDay||filters.perFimDay){
-        const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-        if(filters.perIniDay&&ds<filters.perIniDay) return false;
-        if(filters.perFimDay&&ds>filters.perFimDay) return false;
-      } else if(perI!==null||perF!==null){
-        const ym=d.getFullYear()*100+(d.getMonth()+1);
-        if(perI!==null&&ym<perI) return false;
-        if(perF!==null&&ym>perF) return false;
-      }
-      return true;
-    });
-  })();
+  /* _onsAllPeriod: todos intervalos do período (sem filtro razao/origem) —
+     energia total = todos os intervalos, não só os restringidos */
+  const _onsAllPeriod=(_onsData&&_onsData.length)?_onsData.filter(r=>_onsDatePass(r.ts)):null;
 
   if(_onsAllPeriod&&_onsAllPeriod.length){
     /* ── Energia Produzida: ONS blob ger = Geração Verificada (MW × 0.5h → MWh) ── */
@@ -8404,26 +8415,9 @@ async function loadONSData(){
 // Aplica os mesmos filtros de data/razão/origem do painel Curtailment aos dados ONS
 function _getFilteredONS(){
   if(!_onsData) return [];
-  const perI=_perYM(filters.perIni), perF=_perYM(filters.perFim);
-  const is30min=document.getElementById('curtGranSel')?.value==='30min';
+  /* mesmo predicado de data dos KPIs (_onsDatePass) + filtros razao/origem do painel */
   return _onsData.filter(r=>{
-    const d=r.ts;
-    if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
-    if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
-    if(filters.perIniDay||filters.perFimDay){
-      const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      if(filters.perIniDay&&ds<filters.perIniDay) return false;
-      if(filters.perFimDay&&ds>filters.perFimDay) return false;
-    } else if(perI!==null||perF!==null){
-      const ym=d.getFullYear()*100+(d.getMonth()+1);
-      if(perI!==null&&ym<perI) return false;
-      if(perF!==null&&ym>perF) return false;
-    }
-    /* filtro por dia exato no modo 30min */
-    if(is30min&&filters.curtDay){
-      const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-      if(ds!==filters.curtDay) return false;
-    }
+    if(!_onsDatePass(r.ts)) return false;
     if(filters.razao!=='todas'&&r.razao!==filters.razao) return false;
     if(filters.origem!=='todas'&&r.origem!==filters.origem) return false;
     return true;
