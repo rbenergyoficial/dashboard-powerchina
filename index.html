@@ -4671,14 +4671,25 @@ function renderIrr3(type='line'){
 // SEÇÃO 4 — RESTRIÇÕES
 // ═══════════════════════════════════════════════════════════════════
 function renderRest1(){
-  const pat=applyFilters(dashData.patamares);
   const wrap=document.getElementById('dRest1');
   if(!wrap) return;
-  const totENE=pat.filter(r=>r.razao==='ENE').reduce((s,r)=>s+r.gf,0)/1000;
-  const totCNF=pat.filter(r=>r.razao==='CNF').reduce((s,r)=>s+r.gf,0)/1000;
-  const totREL=pat.filter(r=>r.razao==='REL').reduce((s,r)=>s+r.gf,0)/1000;
+  let totENE=0,totCNF=0,totREL=0;
+  const _onsOk=_onsData&&_onsData.length>0;
+  if(_onsOk){
+    _getFilteredONS().filter(r=>r.lim>0).forEach(r=>{
+      const ef=Math.max(0,r.gref-r.ger)*0.5/1000;
+      if(r.razao==='ENE') totENE+=ef;
+      else if(r.razao==='CNF') totCNF+=ef;
+      else if(r.razao==='REL') totREL+=ef;
+    });
+  } else {
+    const pat=applyFilters(dashData.patamares);
+    totENE=pat.filter(r=>r.razao==='ENE').reduce((s,r)=>s+r.gf,0)/1000;
+    totCNF=pat.filter(r=>r.razao==='CNF').reduce((s,r)=>s+r.gf,0)/1000;
+    totREL=pat.filter(r=>r.razao==='REL').reduce((s,r)=>s+r.gf,0)/1000;
+  }
   const total=totENE+totCNF+totREL;
-  if(!pat.length||total<=0){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
+  if(total<=0){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>'+(_onsOk?'Sem restrições no período':'Sem dados')+'</span></div>';return;}
   if(charts['dRest1c']) charts['dRest1c'].destroy();
   wrap.innerHTML='<canvas id="cRest1d"></canvas>';
   const ctx=document.getElementById('cRest1d');
@@ -4766,10 +4777,12 @@ function renderRest1(){
 }
 
 function renderRest2(){
-  const rest=applyRestFilters(dashData.restricoes);
+  const _onsOk=_onsData&&_onsData.length>0;
+  const rest=_onsOk?_getFilteredONS().filter(r=>r.lim>0):applyRestFilters(dashData.restricoes);
+  const _centerLabel=_onsOk?'INTERVALOS':'EVENTOS';
   const wrap=document.getElementById('dRest2');
   if(!wrap) return;
-  if(!rest.length){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>Sem dados</span></div>';return;}
+  if(!rest.length){wrap.innerHTML='<div class="no-data" style="height:360px"><span><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></span><span>'+(_onsOk?'Sem restrições no período':'Sem dados')+'</span></div>';return;}
   if(charts['dRest2c']) charts['dRest2c'].destroy();
   const ENE=rest.filter(r=>r.razao==='ENE').length;
   const CNF=rest.filter(r=>r.razao==='CNF').length;
@@ -4892,7 +4905,7 @@ function renderRest2(){
         ctx.fillText(total.toLocaleString(getDateLocale()),cx,cy-9);
         ctx.fillStyle=_ct2Lt?'#374151':'#7080a8';
         ctx.font='600 9px Inter,system-ui';
-        ctx.fillText(translateAnyText('EVENTOS'),cx,cy+11);
+        ctx.fillText(translateAnyText(_centerLabel),cx,cy+11);
         ctx.restore();
       }
     }]
@@ -8299,7 +8312,9 @@ async function loadONSData(){
     _onsData=all;
     const loaded=blobs.filter(Boolean).length;
     const restricted=all.filter(r=>r.lim>0).length;
-    if(statusEl) statusEl.textContent=loaded+' meses · '+restricted.toLocaleString('pt-BR')+' intervalos com limite ativo';
+    let _maxTs=0; for(const r of all) if(r.ts.getTime()>_maxTs) _maxTs=r.ts.getTime();
+    const _maxDateStr=_maxTs?(new Date(_maxTs)).toLocaleDateString('pt-BR'):'';
+    if(statusEl) statusEl.textContent=loaded+' meses · '+restricted.toLocaleString('pt-BR')+' intervalos com limite ativo'+(_maxDateStr?' · dados até '+_maxDateStr:'');
     renderONS();
     /* KPIs dependem de _onsData (ger, gref, disp) — re-renderizar após carga */
     safeRender(()=>renderKPIs());
@@ -8408,7 +8423,12 @@ function renderONS3(){
   const is30min=document.getElementById('curtGranSel')?.value==='30min';
   /* no modo 30min usa TODOS os intervalos do dia (não só os restritos) */
   const raw=is30min?_getFilteredONS():_getFilteredONS().filter(r=>r.lim>0);
-  if(!raw.length){if(charts['cONS3']){charts['cONS3'].destroy();delete charts['cONS3'];}return;}
+  if(!raw.length){
+    if(charts['cONS3']){charts['cONS3'].destroy();delete charts['cONS3'];}
+    const _p=canvas.parentElement; _p.style.position='relative';
+    _p.innerHTML='<canvas id="cONS3"></canvas><div class="no-data" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px"><span>'+(is30min?'Sem dados ONS para esta data · verifique atraso de publicação':'Sem restrições no período')+'</span></div>';
+    return;
+  }
 
   let lbls,gerData,limData,grefData;
   if(is30min){
