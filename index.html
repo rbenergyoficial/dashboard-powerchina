@@ -1916,6 +1916,7 @@ function _themeCharts(light){
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Geração vs. Limitação ONS — Média Diária</div><div class="cc-sub">MW médio nos intervalos com limite ativo · geração real × limite</div></div>
+            <div class="toggle-grp" id="tg-ons3"><button class="toggle-btn on" data-chart="ons3" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="ons3" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
           <div class="cc-body" style="height:300px"><canvas id="cONS3"></canvas></div>
         </div>
@@ -4949,11 +4950,53 @@ function mkDonutSVG(slices,total){
 }
 
 function renderRest3(type='bar'){
+  const is30minMode=document.getElementById('curtGranSel')?.value==='30min';
+  const _onsOk=_onsData&&_onsData.length>0;
+
+  /* ── Fonte: ONS como primária, planilha como fallback ── */
+  if(_onsOk){
+    /* Modo 30min: timeline de slots do dia via ONS */
+    if(is30minMode&&filters.curtDay){
+      const dayONS=_getFilteredONS().filter(r=>r.lim>0);
+      const slots={};
+      for(let h=0;h<24;h++) for(let mi=0;mi<60;mi+=30){
+        const k=String(h).padStart(2,'0')+':'+String(mi).padStart(2,'0');
+        slots[k]={dur:0,lim:0};
+      }
+      dayONS.forEach(r=>{
+        const k=String(r.ts.getHours()).padStart(2,'0')+':'+String(r.ts.getMinutes()).padStart(2,'0');
+        if(slots[k]!==undefined){slots[k].dur+=0.5;slots[k].lim+=r.lim;}
+      });
+      const keys=Object.keys(slots).sort();
+      mkChart('cRest3',{type:'bar',data:{labels:keys,datasets:[
+        {label:_T('Horas Restrição'),data:keys.map(k=>+slots[k].dur.toFixed(1)),backgroundColor:(ctx=>gradFrom(ctx,'#F5A623')),borderColor:'#F5A623',yAxisID:'y'},
+        {label:_T('Limitação (MW)'),data:keys.map(k=>+slots[k].lim.toFixed(0)),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
+      ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
+      return;
+    }
+
+    /* Modo diário/semanal/mensal: ONS — agrupa por dia (mesmo eixo X que renderONS3) */
+    const onsR=_getFilteredONS().filter(r=>r.lim>0);
+    if(!onsR.length){showNoData('cRest3');return;}
+    const daily={};
+    for(const r of onsR){
+      const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0')+'-'+String(r.ts.getDate()).padStart(2,'0');
+      if(!daily[k]) daily[k]={hours:0,limSum:0,n:0};
+      daily[k].hours+=0.5; daily[k].limSum+=r.lim; daily[k].n++;
+    }
+    const days=Object.keys(daily).sort();
+    const lbls=days.map(d=>{const[,mo,dd]=d.split('-');return parseInt(dd)+'/'+parseInt(mo);});
+    mkChart('cRest3',{type,data:{labels:lbls,datasets:[
+      {label:_T('Horas Restrição'),data:days.map(d=>+daily[d].hours.toFixed(1)),backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#F5A623')):'#F5A623aa',borderColor:'#F5A623',fill:false,tension:0,yAxisID:'y'},
+      {label:_T('Limitação Média (MW)'),data:days.map(d=>+(daily[d].limSum/daily[d].n).toFixed(1)),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
+    ]},options:{...CHART_DEFAULTS,scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}}},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
+    return;
+  }
+
+  /* ── Fallback: planilha ── */
   const rest=applyRestFilters(dashData.restricoes);
   if(!rest.length){showNoData('cRest3');return;}
-
-  /* ── Modo 30min: timeline de slots do dia selecionado ── */
-  if(document.getElementById('curtGranSel')?.value==='30min'&&filters.curtDay){
+  if(is30minMode&&filters.curtDay){
     const [ty,tm,td]=filters.curtDay.split('-').map(Number);
     const dayRest=rest.filter(r=>r.data.getFullYear()===ty&&r.data.getMonth()+1===tm&&r.data.getDate()===td);
     const slots={};
@@ -4972,12 +5015,10 @@ function renderRest3(type='bar'){
     ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
     return;
   }
-
   const gran=(filters.gran==='dia'&&typeof smartGran==='function')?smartGran():filters.gran;
   const map={};
   rest.forEach(r=>{
-    const k=periodKey(r.data,gran);
-    if(!k) return;
+    const k=periodKey(r.data,gran); if(!k) return;
     if(!map[k]) map[k]={_date:r.data,_key:k,dur:0,lim:0,cnt:0};
     map[k].dur+=r.dur; map[k].lim+=r.limite; map[k].cnt++;
   });
@@ -7876,6 +7917,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
     else if(chartId==='irr3') renderIrr3(t);
     // rest1 is donut, no toggle
     else if(chartId==='rest3') renderRest3(t);
+    else if(chartId==='ons3') renderONS3(t);
     else if(chartId==='ufv1') renderUFV1(t);
     else if(chartId==='must') renderPageMUST(t);
     else if(chartId==='ppamain') renderPagePPA(t);
@@ -8378,7 +8420,7 @@ function _getFilteredONS(){
 
 function renderONS(){
   if(!_onsData||!_onsData.length) return;
-  renderONS1(); renderONS2(); renderONS3(); renderONS4();
+  renderONS1(); renderONS2(); renderONS3(getToggle('ons3')); renderONS4();
 }
 
 function renderONS1(){
@@ -8448,51 +8490,70 @@ function renderONS2(){
   });
 }
 
-function renderONS3(){
+function renderONS3(type='bar'){
   const canvas=document.getElementById('cONS3'); if(!canvas) return;
   const is30min=document.getElementById('curtGranSel')?.value==='30min';
-  const isDayRange=!!(filters.perIniDay&&filters.perFimDay);
-  /* 30min: todos os intervalos do dia; day-range: todos para ver geração; default: só lim>0 */
-  const raw=(is30min||isDayRange)?_getFilteredONS():_getFilteredONS().filter(r=>r.lim>0);
+  /* sempre filtra lim>0 no modo diário/mensal; no 30min mostra todos para ver geração ao longo do dia */
+  const raw=is30min?_getFilteredONS():_getFilteredONS().filter(r=>r.lim>0);
+
+  /* limpa overlay de "sem dados" que pode ter ficado de render anterior */
+  const _p=canvas.parentElement;
+  _p.querySelectorAll('.no-data').forEach(d=>d.remove());
+
   if(!raw.length){
     if(charts['cONS3']){charts['cONS3'].destroy();delete charts['cONS3'];}
-    const _p=canvas.parentElement; _p.style.position='relative';
+    _p.style.position='relative';
     _p.innerHTML='<canvas id="cONS3"></canvas><div class="no-data" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px"><span>'+(is30min?'Sem dados ONS para esta data · verifique atraso de publicação':'Sem restrições no período')+'</span></div>';
     return;
   }
 
   let lbls,gerData,limData,grefData;
   if(is30min){
-    /* intervalos ordenados do dia */
     const sorted=[...raw].sort((a,b)=>a.ts-b.ts);
     lbls=sorted.map(r=>String(r.ts.getHours()).padStart(2,'0')+':'+String(r.ts.getMinutes()).padStart(2,'0'));
     gerData=sorted.map(r=>+r.ger.toFixed(1));
     limData=sorted.map(r=>r.lim>0?+r.lim.toFixed(1):null);
     grefData=sorted.map(r=>+r.gref.toFixed(1));
   } else {
+    /* agrupa por dia — só dias com restrição (lim>0) já filtrado acima */
     const daily={};
     for(const r of raw){
       const k=r.ts.getFullYear()+'-'+String(r.ts.getMonth()+1).padStart(2,'0')+'-'+String(r.ts.getDate()).padStart(2,'0');
-      if(!daily[k]) daily[k]={ger:0,limSum:0,limN:0,n:0};
-      daily[k].ger+=r.ger; daily[k].n++;
-      if(r.lim>0){daily[k].limSum+=r.lim;daily[k].limN++;}
+      if(!daily[k]) daily[k]={ger:0,limSum:0,n:0};
+      daily[k].ger+=r.ger; daily[k].limSum+=r.lim; daily[k].n++;
     }
     const days=Object.keys(daily).sort();
     gerData=days.map(k=>+(daily[k].ger/daily[k].n).toFixed(1));
-    /* limData: média da limitação apenas nos intervalos com lim>0; null se dia sem restrição */
-    limData=days.map(k=>daily[k].limN>0?+(daily[k].limSum/daily[k].limN).toFixed(1):null);
+    limData=days.map(k=>+(daily[k].limSum/daily[k].n).toFixed(1));
     grefData=null;
     lbls=days.map(k=>{const[,mo,dd]=k.split('-');return dd+'/'+(+mo);});
   }
 
   if(charts['cONS3']) charts['cONS3'].destroy();
-  const datasets=[
-    {label:'Limitação ONS (MW)',data:limData,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.10)',borderWidth:1.5,pointRadius:0,tension:0.3,fill:!is30min,spanGaps:false},
-    {label:'Geração Real (MW)',data:gerData,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}
-  ];
-  if(is30min&&grefData) datasets.push({label:'Ref. ONS (MW)',data:grefData,borderColor:'#6b8bf5',backgroundColor:'transparent',borderWidth:1,borderDash:[3,3],pointRadius:0,tension:0.3});
+
+  const chartType=is30min?'line':type;
+  let datasets;
+  if(is30min){
+    datasets=[
+      {label:'Limitação ONS (MW)',data:limData,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.10)',borderWidth:1.5,pointRadius:0,tension:0.3,fill:true,spanGaps:false},
+      {label:'Geração Real (MW)',data:gerData,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}
+    ];
+    if(grefData) datasets.push({label:'Ref. ONS (MW)',data:grefData,borderColor:'#6b8bf5',backgroundColor:'transparent',borderWidth:1,borderDash:[3,3],pointRadius:0,tension:0.3});
+  } else if(type==='bar'){
+    /* barra: Geração como barras empilhadas, Limitação como linha overlay */
+    datasets=[
+      {label:'Geração Real (MW)',data:gerData,backgroundColor:ctx=>gradFrom(ctx,'#34d399'),borderColor:'#34d399bb',borderWidth:0,borderRadius:3,order:2},
+      {label:'Limitação ONS (MW)',data:limData,borderColor:'#F5A623',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointBackgroundColor:'#F5A623',tension:0.3,type:'line',order:1,spanGaps:false}
+    ];
+  } else {
+    datasets=[
+      {label:'Limitação ONS (MW)',data:limData,borderColor:'#F5A623',backgroundColor:'rgba(245,166,35,.12)',borderWidth:2,pointRadius:0,tension:0.3,fill:true,spanGaps:false},
+      {label:'Geração Real (MW)',data:gerData,borderColor:'#34d399',backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}
+    ];
+  }
+
   charts['cONS3']=new Chart(canvas,{
-    type:'line',data:{labels:lbls,datasets},
+    type:chartType,data:{labels:lbls,datasets},
     options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{
@@ -8501,8 +8562,8 @@ function renderONS3(){
           callbacks:{label:ctx=>ctx.parsed.y!==null?` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} MW`:null}}
       },
       scales:{
-        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:is30min?12:14}},
-        y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v+' MW'},beginAtZero:false}
+        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:is30min?12:16}},
+        y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v+' MW'},beginAtZero:true}
       }
     }
   });
