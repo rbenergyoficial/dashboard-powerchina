@@ -1909,7 +1909,7 @@ function _themeCharts(light){
       <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head">
-            <div><div class="cc-title">Razão da Restrição</div><div class="cc-sub">ENE / CNF / REL · distribuição por horas</div></div>
+            <div><div class="cc-title">Origem da Restrição</div><div class="cc-sub">SIS / LOC · horas de restrição por origem</div></div>
           </div>
           <div class="cc-body" id="dONS2" style="position:relative;height:300px;"></div>
         </div>
@@ -4683,6 +4683,33 @@ function renderIrr3(type='line'){
 // ═══════════════════════════════════════════════════════════════════
 // SEÇÃO 4 — RESTRIÇÕES
 // ═══════════════════════════════════════════════════════════════════
+/* Grafana-style leader-line labels around a donut slice */
+function _drawExtLabels(chart,items,dsIdx){
+  if(!items||!items.length) return;
+  const {ctx}=chart;
+  const meta=chart.getDatasetMeta(dsIdx||0);
+  if(!meta||!meta.data) return;
+  ctx.save();ctx.textBaseline='middle';
+  meta.data.forEach(function(arc,i){
+    if(!items[i]) return;
+    const span=Math.abs(arc.endAngle-arc.startAngle);
+    if(span<0.1) return;
+    const mid=(arc.startAngle+arc.endAngle)/2;
+    const cx=arc.x,cy=arc.y,R=arc.outerRadius;
+    const dir=Math.cos(mid)>=0?1:-1;
+    const p1x=cx+Math.cos(mid)*R,p1y=cy+Math.sin(mid)*R;
+    const p2x=cx+Math.cos(mid)*(R+14),p2y=cy+Math.sin(mid)*(R+14);
+    const p3x=p2x+dir*12,p3y=p2y;
+    ctx.beginPath();ctx.moveTo(p1x,p1y);ctx.lineTo(p2x,p2y);ctx.lineTo(p3x,p3y);
+    ctx.strokeStyle=items[i].color+'99';ctx.lineWidth=1;ctx.stroke();
+    ctx.beginPath();ctx.arc(p1x,p1y,1.5,0,Math.PI*2);ctx.fillStyle=items[i].color;ctx.fill();
+    const tx=p3x+dir*3;ctx.textAlign=dir>0?'left':'right';
+    ctx.font='bold 10px Inter,system-ui';ctx.fillStyle='#f0f4ff';ctx.fillText(items[i].label,tx,p3y-8);
+    ctx.font='600 9px Inter,system-ui';ctx.fillStyle='#c8d4f0';ctx.fillText(items[i].valueStr,tx,p3y+3);
+    ctx.font='9px Inter,system-ui';ctx.fillStyle='#7080a8';ctx.fillText(items[i].pctStr,tx,p3y+13);
+  });
+  ctx.restore();
+}
 function renderRest1(){
   const wrap=document.getElementById('dRest1');
   if(!wrap) return;
@@ -4734,25 +4761,7 @@ function renderRest1(){
         renderAll();
       },
       plugins:{
-        legend:{
-          position:'right',
-          labels:{color:'#f0f4ff',font:{size:12,family:"'Inter',system-ui",weight:'600'},
-            padding:18,usePointStyle:true,pointStyleWidth:13,
-            generateLabels:function(chart){
-              const ds=chart.data.datasets[0];
-              return chart.data.labels.map(function(label,i){
-                const val=ds.data[i];
-                const pct=total>0?(val/total*100).toFixed(1):'0';
-                const active=filters.razao===label||filters.razao==='todas';
-                return {text:label+'   '+pct+'%',
-                  fillStyle:active?colors[i]:colors[i]+'44',
-                  strokeStyle:'transparent',
-                  lineWidth:0,pointStyle:'rectRounded',index:i,
-                  fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#6e80a8');})()};
-              });
-            }
-          }
-        },
+        legend:{display:false},
         tooltip:{
           backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
           borderColor:'rgba(255,255,255,.18)',borderWidth:1,padding:12,cornerRadius:10,
@@ -4767,7 +4776,7 @@ function renderRest1(){
           }
         }
       },
-      layout:{padding:{top:4,bottom:4}}
+      layout:{padding:{top:5,bottom:5,right:65,left:65}}
     },
     plugins:[{
       id:'centerText1',
@@ -4784,6 +4793,9 @@ function renderRest1(){
         ctx.font='600 9px Inter,system-ui';
         ctx.fillText('GWh TOTAL',cx,cy+11);
         ctx.restore();
+        _drawExtLabels(chart,labels.map(function(l,i){
+          return {label:l,valueStr:vals[i].toFixed(2)+' GWh',pctStr:(total>0?(vals[i]/total*100).toFixed(1):0)+'%',color:colors[i]};
+        }),0);
       }
     }]
   });
@@ -4860,31 +4872,7 @@ function renderRest2(){
         renderAll();
       },
       plugins:{
-        legend:{
-          position:'right',
-          labels:{color:'#f0f4ff',font:{size:11,family:"'Inter',system-ui",weight:'600'},
-            padding:14,usePointStyle:true,pointStyleWidth:12,
-            filter:function(item){return item.fillStyle!=='transparent';},
-            generateLabels:function(chart){
-              const items=[];
-              razLabels.forEach(function(l,i){
-                const pct=(razVals[i]/total*100).toFixed(1);
-                const active=filters.razao===l||filters.razao==='todas';
-                items.push({text:l+'   '+pct+'%',fillStyle:active?razColors[i]:razColors[i]+'33',
-                  strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',
-                  index:i,datasetIndex:0,fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#4a5a7a');})()});
-              });
-              oriLabels.forEach(function(l,i){
-                const pct=(oriVals[i]/total*100).toFixed(1);
-                const active=filters.origem===l||filters.origem==='todas';
-                items.push({text:l+'   '+pct+'%',fillStyle:active?oriColors[i]:oriColors[i]+'33',
-                  strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',
-                  index:i+razLabels.length,datasetIndex:1,fontColor:(function(){var _l=document.documentElement.getAttribute('data-theme')==='light';return active?(_l?'#3c3f57':'#f0f4ff'):(_l?'#9498b2':'#4a5a7a');})()});
-              });
-              return items;
-            }
-          }
-        },
+        legend:{display:false},
         tooltip:{
           backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
           borderColor:'rgba(255,255,255,.18)',borderWidth:1,padding:12,cornerRadius:10,
@@ -4903,7 +4891,7 @@ function renderRest2(){
           }
         }
       },
-      layout:{padding:{top:4,bottom:4}}
+      layout:{padding:{top:5,bottom:5,right:65,left:65}}
     },
     plugins:[{
       id:'centerText2',
@@ -4920,6 +4908,30 @@ function renderRest2(){
         ctx.font='600 9px Inter,system-ui';
         ctx.fillText(translateAnyText(_centerLabel),cx,cy+11);
         ctx.restore();
+        /* External labels: Razão (outer ring, dataset 0) */
+        const extRaz=[
+          ...razLabels.map(function(l,i){return {label:l,valueStr:razVals[i]+' ev.',pctStr:(razVals[i]/total*100).toFixed(1)+'%',color:razColors[i]};}),
+          ...oriLabels.map(function(){return null;})
+        ];
+        _drawExtLabels(chart,extRaz,0);
+        /* Internal labels: Origem (inner ring, dataset 1) */
+        const meta1=chart.getDatasetMeta(1);
+        oriLabels.forEach(function(l,i){
+          const arc=meta1.data[i+razLabels.length];
+          if(!arc) return;
+          const span=Math.abs(arc.endAngle-arc.startAngle);
+          if(span<0.2) return;
+          const mid2=(arc.startAngle+arc.endAngle)/2;
+          const rr=(arc.innerRadius+arc.outerRadius)/2;
+          const xx=arc.x+Math.cos(mid2)*rr, yy=arc.y+Math.sin(mid2)*rr;
+          const c2=chart.ctx;
+          c2.save();c2.textAlign='center';c2.textBaseline='middle';
+          c2.fillStyle='#f0f4ff';c2.font='bold 8px Inter,system-ui';
+          c2.fillText(l,xx,yy-4);
+          c2.fillStyle='#a0b4d4';c2.font='7px Inter,system-ui';
+          c2.fillText((oriVals[i]/total*100).toFixed(0)+'%',xx,yy+5);
+          c2.restore();
+        });
       }
     }]
   });
@@ -8465,25 +8477,17 @@ function renderONS2(){
   const data=_getFilteredONS().filter(r=>r.lim>0);
   if(!data.length){wrap.innerHTML='<div class="no-data" style="height:300px"><span>Sem restrições no período</span></div>';return;}
 
-  /* horas por Origem (anel externo) */
+  /* horas por Origem (anel único — r.origem mapeado no parser) */
   const hOri={SIS:0,LOC:0};
-  /* horas por Razão (anel interno) */
-  const hRaz={ENE:0,CNF:0,REL:0};
   let totalH=0;
   for(const r of data){
-    if(hOri[r.orig]!==undefined) hOri[r.orig]+=0.5;
-    if(hRaz[r.razao]!==undefined) hRaz[r.razao]+=0.5;
+    if(hOri[r.origem]!==undefined) hOri[r.origem]+=0.5;
     totalH+=0.5;
   }
 
   const oriLabels=[],oriVals=[],oriColors=[];
   if(hOri.SIS>0){oriLabels.push('SIS');oriVals.push(+hOri.SIS.toFixed(1));oriColors.push('#6b8bf5');}
   if(hOri.LOC>0){oriLabels.push('LOC');oriVals.push(+hOri.LOC.toFixed(1));oriColors.push('#f5c84b');}
-
-  const razLabels=[],razVals=[],razColors=[];
-  if(hRaz.ENE>0){razLabels.push('ENE');razVals.push(+hRaz.ENE.toFixed(1));razColors.push('#F5A623');}
-  if(hRaz.CNF>0){razLabels.push('CNF');razVals.push(+hRaz.CNF.toFixed(1));razColors.push('#f0598c');}
-  if(hRaz.REL>0){razLabels.push('REL');razVals.push(+hRaz.REL.toFixed(1));razColors.push('#A855F7');}
 
   if(charts['dONS2c']) charts['dONS2c'].destroy();
   wrap.innerHTML='<canvas id="cONS2d"></canvas>';
@@ -8492,51 +8496,28 @@ function renderONS2(){
   charts['dONS2c']=new Chart(document.getElementById('cONS2d'),{
     type:'doughnut',
     data:{
-      labels:[...oriLabels,...razLabels],
-      datasets:[
-        /* anel externo: Origem por horas */
-        {label:'Origem',data:[...oriVals,...razVals.map(()=>0)],
-          backgroundColor:[...oriColors.map(c=>c+'cc'),...razColors.map(()=>'transparent')],
-          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0},
-        /* anel interno: Razão por horas */
-        {label:'Razão',data:[...oriVals.map(()=>0),...razVals],
-          backgroundColor:[...oriColors.map(()=>'transparent'),...razColors.map(c=>c+'cc')],
-          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0}
-      ]
+      labels:oriLabels,
+      datasets:[{
+        data:oriVals,
+        backgroundColor:oriColors.map(c=>c+'cc'),
+        borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0
+      }]
     },
     options:{responsive:true,maintainAspectRatio:false,cutout:'57%',
       animation:{animateRotate:true,duration:800,easing:'easeOutQuart'},
       plugins:{
-        legend:{position:'right',labels:{color:'#f0f4ff',font:{size:11,family:"'Inter',system-ui",weight:'600'},padding:14,
-          usePointStyle:true,pointStyleWidth:12,
-          filter:item=>item.fillStyle!=='transparent',
-          generateLabels:function(chart){
-            const items=[];
-            oriLabels.forEach(function(l,i){
-              items.push({text:l+'   '+(totalH>0?(oriVals[i]/totalH*100).toFixed(1):0)+'%',
-                fillStyle:oriColors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i,datasetIndex:0,
-                fontColor:'#f0f4ff'});
-            });
-            razLabels.forEach(function(l,i){
-              items.push({text:l+'   '+(totalH>0?(razVals[i]/totalH*100).toFixed(1):0)+'%',
-                fillStyle:razColors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i+oriLabels.length,datasetIndex:1,
-                fontColor:'#f0f4ff'});
-            });
-            return items;
-          }
-        }},
+        legend:{display:false},
         tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
           borderColor:'rgba(255,255,255,.18)',borderWidth:1,padding:12,cornerRadius:10,
-          filter:item=>item.parsed>0,
           callbacks:{
-            title:items=>{const it=items[0];return it.label+(it.datasetIndex===0?' (Origem)':' (Razão)');},
-            label:ctx=>` ${ctx.parsed}h (${(ctx.parsed/totalH*100).toFixed(1)}%)`
+            title:items=>items[0].label+' (Origem)',
+            label:ctx=>` ${ctx.parsed}h  (${(ctx.parsed/totalH*100).toFixed(1)}%)`
           }}
       },
-      layout:{padding:{top:4,bottom:4}}
+      layout:{padding:{top:5,bottom:5,right:65,left:65}}
     },
     plugins:[{
-      id:'centerTextONS2',
+      id:'centerAndLabelsONS2',
       afterDraw(chart){
         const{ctx,chartArea:{top,left,width,height}}=chart;
         ctx.save();
@@ -8549,6 +8530,9 @@ function renderONS2(){
         ctx.font='600 9px Inter,system-ui';
         ctx.fillText('TOTAL HORAS',cx,cy+11);
         ctx.restore();
+        _drawExtLabels(chart,oriLabels.map(function(l,i){
+          return {label:l,valueStr:oriVals[i]+'h',pctStr:(totalH>0?(oriVals[i]/totalH*100).toFixed(1):0)+'%',color:oriColors[i]};
+        }),0);
       }
     }]
   });
