@@ -3453,7 +3453,11 @@ function renderKPIs(){
       const d=r.ts;
       if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
       if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
-      if(perI!==null||perF!==null){
+      if(filters.perIniDay||filters.perFimDay){
+        const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        if(filters.perIniDay&&ds<filters.perIniDay) return false;
+        if(filters.perFimDay&&ds>filters.perFimDay) return false;
+      } else if(perI!==null||perF!==null){
         const ym=d.getFullYear()*100+(d.getMonth()+1);
         if(perI!==null&&ym<perI) return false;
         if(perF!==null&&ym>perF) return false;
@@ -7733,10 +7737,10 @@ function _fbarBuscar(){
 /* ── Curtailment: filtros estilo MUST ── */
 function _curtGranOnChange(noRender){
   const gran=document.getElementById('curtGranSel')?.value||'mes';
-  /* 30min e personalizado usam 'dia' internamente p/ applyFilters; ano usa 'mes' para mostrar meses */
-  filters.gran=(gran==='personalizado'||gran==='30min')?'dia':gran==='ano'?'mes':gran;
-  /* limpa range de dias ao sair do modo personalizado */
-  if(gran!=='personalizado'){filters.perIniDay='';filters.perFimDay='';}
+  /* 30min usa 'dia' internamente p/ applyFilters; ano usa 'mes' para mostrar meses */
+  filters.gran=(gran==='30min')?'dia':gran==='ano'?'mes':gran;
+  /* limpa range de dias apenas nos modos que têm pickers próprios e não usam range */
+  if(gran==='mes'||gran==='ano'||gran==='30min'){filters.perIniDay='';filters.perFimDay='';}
   const wrap=document.getElementById('curtDateWrap'); if(!wrap) return;
   const now=new Date();
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
@@ -7746,16 +7750,6 @@ function _curtGranOnChange(noRender){
     wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay30(this.value)">';
     /* garante filtros de mês/período alinhados ao dia selecionado */
     if(!filters.curtDay){const p=d.split('-');const mStr=p[0]+'-'+p[1];filters.perIni=mStr;filters.perFim=mStr;filters.ano=p[0];filters.mes=parseInt(p[1],10).toString();}
-  } else if(gran==='personalizado'){
-    if(filters.perIniDay||filters.perFimDay){
-      const f=filters.perIniDay||fmtD(new Date(now.getFullYear(),now.getMonth(),now.getDate()-6));
-      const t=filters.perFimDay||fmtD(now);
-      wrap.innerHTML='<input type="date" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="_curtApplyDayRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="_curtApplyDayRange(null,this.value)">';
-    } else {
-      const f=filters.perIni||fmtM(new Date(now.getFullYear(),now.getMonth()-11));
-      const t=filters.perFim||fmtM(now);
-      wrap.innerHTML='<input type="month" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="filters.perIni=this.value;filters.perIniDay=\'\';filters.perFimDay=\'\';filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="month" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="filters.perFim=this.value;filters.perIniDay=\'\';filters.perFimDay=\'\';filters.ano=\'todos\';filters.mes=\'todos\';clearFilterCache();syncFilterUI();renderAll()">';
-    }
   } else if(gran==='mes'){
     let m;
     if(filters.perIni&&filters.perIni.length===7) m=filters.perIni;
@@ -7768,8 +7762,16 @@ function _curtGranOnChange(noRender){
     const opts=yrs.map(yr=>'<option value="'+yr+'"'+(String(yr)===cur?' selected':'')+'>'+yr+'</option>').join('');
     wrap.innerHTML='<select class="fselect" id="curtYearSel" onchange="_curtApplyYear(this.value)">'+opts+'</select>';
   } else {
-    const d=fmtD(now);
-    wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay(this.value)">';
+    /* gran = 'dia' ou 'semana' */
+    if(filters.perIniDay||filters.perFimDay){
+      /* modo range (7d/30d/60d): dois seletores de data */
+      const f=filters.perIniDay||fmtD(new Date(now.getFullYear(),now.getMonth(),now.getDate()-6));
+      const t=filters.perFimDay||fmtD(now);
+      wrap.innerHTML='<input type="date" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="_curtApplyDayRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="_curtApplyDayRange(null,this.value)">';
+    } else {
+      const d=filters.curtDay||fmtD(now);
+      wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay(this.value)">';
+    }
   }
   clearFilterCache();
   if(!noRender) renderAll();
@@ -7836,7 +7838,7 @@ function _curtQuick(p,btn){
     filters.perIniDay=fmtD(start); filters.perFimDay=fmtD(end);
     filters.perIni=fmtM(start); filters.perFim=fmtM(end);
     filters.ano='todos'; filters.mes='todos'; filters.curtDay='';
-    if(sel) sel.value='personalizado';
+    if(sel) sel.value='dia';
   }
   clearFilterCache(); _curtGranOnChange(true); syncFilterUI(); renderAll();
 }
