@@ -3306,6 +3306,7 @@ function processWb(wb){
   // Enriquecer automaticamente com dados em tempo real da Way2 (via Azure Blob)
   setTimeout(()=>loadWay2FromBlob(),600);
   setTimeout(()=>loadONSData(),1200);
+  setTimeout(()=>loadONSIrradiancia(),1500);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -3463,13 +3464,14 @@ function _onsDatePass(d){
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
 
-  /* Irradiância: planilha/SAGER — ONS não publica irradiância.
+  /* Irradiância: ONS Dados Abertos por UFV (_onsIrrData) quando disponível, senão planilha.
      Aplica o mesmo filtro de dia exato (Hoje/Ontem) para coerência com os demais cards. */
-  let patIrr=pat;
+  let patIrr=applyFilters(_irrSource());
   if(filters.curtDay&&document.getElementById('curtGranSel')?.value==='30min'){
-    patIrr=pat.filter(r=>r.data&&(r.data.getFullYear()+'-'+String(r.data.getMonth()+1).padStart(2,'0')+'-'+String(r.data.getDate()).padStart(2,'0'))===filters.curtDay);
+    patIrr=patIrr.filter(r=>r.data&&(r.data.getFullYear()+'-'+String(r.data.getMonth()+1).padStart(2,'0')+'-'+String(r.data.getDate()).padStart(2,'0'))===filters.curtDay);
   }
-  const avgIrr=patIrr.filter(r=>r.irr_media>0).reduce((s,r,_,a)=>s+r.irr_media/a.length,0);
+  const _irrVals=patIrr.filter(r=>r.irr_media>0);
+  const avgIrr=_irrVals.length?_irrVals.reduce((s,r)=>s+r.irr_media,0)/_irrVals.length:0;
 
   let totGV=0,totGF=0,totGRef=0,avgDisp=0,pr=0;
   let hRest=0,kONS=0,kONSSIS=0,kONSLOC=0;
@@ -4635,7 +4637,7 @@ function drillMonth(y,m){
 // SEÇÃO 3 — IRRADIÂNCIA
 // ═══════════════════════════════════════════════════════════════════
 function renderIrr1(type='line'){
-  const pat=applyFilters(dashData.patamares);
+  const pat=applyFilters(_irrSource());
   if(!pat.length){showNoData('cIrr1');return;}
   const g=agrupar(pat,'data',['irr_media','gv']);
   const labels=getLabels(g);
@@ -4656,7 +4658,7 @@ function renderIrr1(type='line'){
 }
 
 function renderIrr2(){
-  const pat=applyFilters(dashData.patamares);
+  const pat=applyFilters(_irrSource());
   if(!pat.length){showNoData('cIrr2');return;}
   // Agrupar por dia para scatter
   const byDay={};
@@ -4680,7 +4682,7 @@ function renderIrr2(){
 }
 
 function renderIrr3(type='line'){
-  const pat=applyFilters(dashData.patamares);
+  const pat=applyFilters(_irrSource());
   if(!pat.length){showNoData('cIrr3');return;}
   const ufvCols=['m1','m2','m3','m4','m5','m6','m7','m8','m9'];
   const g=agrupar(pat,'data',ufvCols);
@@ -8410,6 +8412,68 @@ async function loadONSData(){
     console.error('loadONSData:',e);
     if(statusEl) statusEl.textContent='Erro ao carregar dados ONS';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ONS DADOS ABERTOS · IRRADIÂNCIA POR UFV (RESTRICAO_COFF_FOTOVOLTAICA_DETAIL)
+// Blob ons_irradiancia_YYYY_MM.json: {consolidado:[{ts, irr, gest, gver, m:[M1..M9]}]}
+//   irr  = irradiância média das 9 UFVs (W/m²)
+//   gver = geração verificada somada (MW) · gest = geração estimada somada (MW)
+//   m    = irradiância por UFV (Mauriti 1..9), null quando dado inválido
+// Convertido para o formato "patamares" ({data, irr_media, gv, m1..m9}) para reaproveitar
+// applyFilters/agrupar e os gráficos de irradiância existentes. ONS primário, planilha fallback.
+// ═══════════════════════════════════════════════════════════════════
+let _onsIrrData=null;
+let _irrMerged=null, _irrMergedStamp=-1;
+/* Fonte bruta p/ irradiância. Merge: ONS por UFV nos dias que ele cobre, planilha nos demais
+   (preserva histórico da planilha enquanto o blob ONS só tem meses recentes). Chamadores aplicam applyFilters(). */
+function _irrSource(){
+  if(!_onsIrrData||!_onsIrrData.length) return dashData.patamares;
+  const _dk=d=>d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
+  if(_irrMerged===null||_irrMergedStamp!==_onsIrrData.length){
+    const onsDays=new Set(_onsIrrData.map(r=>_dk(r.data)));
+    const planOnly=(dashData.patamares||[]).filter(r=>r.data&&!onsDays.has(_dk(r.data)));
+    _irrMerged=planOnly.concat(_onsIrrData);
+    _irrMergedStamp=_onsIrrData.length;
+  }
+  return _irrMerged;
+}
+async function loadONSIrradiancia(){
+  const now=new Date();
+  const months=[];
+  let y=2025,m=9; /* mesmo range do loadONSData */
+  while(y<now.getFullYear()||(y===now.getFullYear()&&m<=now.getMonth()+1)){
+    months.push(y+'_'+String(m).padStart(2,'0'));
+    m++;if(m>12){m=1;y++;}
+  }
+  const nc={cache:'no-cache'}, _t='?t='+Date.now();
+  try{
+    const blobs=await Promise.all(
+      months.map(mo=>
+        fetch(WAY2_BLOB_BASE+'ons_irradiancia_'+mo+'.json'+_t,nc)
+          .then(r=>r.ok?r.json():null).catch(()=>null)
+      )
+    );
+    const all=[];
+    for(const blob of blobs){
+      if(!blob||!Array.isArray(blob.consolidado)) continue;
+      for(const rec of blob.consolidado){
+        const d=new Date(rec.ts.replace(' ','T')+'-03:00');
+        if(isNaN(d)) continue;
+        const row={data:d, irr_media:+rec.irr||0, gv:(+rec.gver||0)*0.5 /* MW → MWh no intervalo de 30min */};
+        const mArr=rec.m||[];
+        for(let i=0;i<9;i++){ const v=mArr[i]; row['m'+(i+1)]=(v==null?0:+v); }
+        all.push(row);
+      }
+    }
+    if(!all.length) return; /* sem blobs ainda — mantém planilha */
+    all.sort((a,b)=>a.data-b.data);
+    _onsIrrData=all;
+    clearFilterCache();
+    const _maxD=all[all.length-1].data.toLocaleDateString('pt-BR');
+    console.log('✅ ONS Irradiância:',all.length,'intervalos · até',_maxD);
+    safeRender(()=>renderAll());
+  }catch(e){ console.error('loadONSIrradiancia:',e); }
 }
 
 // Aplica os mesmos filtros de data/razão/origem do painel Curtailment aos dados ONS
