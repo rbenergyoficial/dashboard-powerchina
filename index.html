@@ -4968,7 +4968,7 @@ function renderRest3(type='bar'){
       mkChart('cRest3',{type:'bar',data:{labels:keys,datasets:[
         {label:_T('Horas Restrição'),data:keys.map(k=>+slots[k].dur.toFixed(1)),backgroundColor:(ctx=>gradFrom(ctx,'#F5A623')),borderColor:'#F5A623',yAxisID:'y'},
         {label:_T('Limitação (MW)'),data:keys.map(k=>+slots[k].lim.toFixed(0)),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
-      ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
+      ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:48,maxRotation:45,minRotation:45}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
       return;
     }
 
@@ -5009,7 +5009,7 @@ function renderRest3(type='bar'){
     mkChart('cRest3',{type:'bar',data:{labels:keys,datasets:[
       {label:_T('Horas Restrição'),data:keys.map(k=>+slots[k].dur.toFixed(1)),backgroundColor:(ctx=>gradFrom(ctx,'#F5A623')),borderColor:'#F5A623',yAxisID:'y'},
       {label:_T('Limitação (MW)'),data:keys.map(k=>+slots[k].lim.toFixed(0)),backgroundColor:'#ef444455',borderColor:'#f0598c',type:'line',borderDash:[4,2],yAxisID:'y2',pointRadius:2}
-    ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:12}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
+    ]},options:{...CHART_DEFAULTS,scales:{x:{...xAxisWithTitle(),ticks:{...CHART_DEFAULTS.scales.x?.ticks,maxTicksLimit:48,maxRotation:45,minRotation:45}},y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'Horas',color:'#6b7a9a',font:{size:9}},max:0.6},y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'MW',color:'#6b7a9a',font:{size:9}},grid:{display:false}}}}});
     return;
   }
   const gran=(filters.gran==='dia'&&typeof smartGran==='function')?smartGran():filters.gran;
@@ -8559,7 +8559,7 @@ function renderONS3(type='bar'){
           callbacks:{label:ctx=>ctx.parsed.y!==null?` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} MW`:null}}
       },
       scales:{
-        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:9},maxTicksLimit:is30min?12:16}},
+        x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{color:'#9aa4b8',font:{size:is30min?8:9},maxTicksLimit:is30min?48:16,maxRotation:is30min?45:0,minRotation:is30min?45:0}},
         y:{grid:{color:'rgba(255,255,255,.07)'},ticks:{color:'#9aa4b8',font:{size:11},callback:v=>v+' MW'},beginAtZero:true}
       }
     }
