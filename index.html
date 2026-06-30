@@ -8416,12 +8416,13 @@ async function loadONSData(){
 
 // ═══════════════════════════════════════════════════════════════════
 // ONS DADOS ABERTOS · IRRADIÂNCIA POR UFV (RESTRICAO_COFF_FOTOVOLTAICA_DETAIL)
-// Blob ons_irradiancia_YYYY_MM.json: {consolidado:[{ts, irr, gest, gver, m:[M1..M9]}]}
-//   irr  = irradiância média das 9 UFVs (W/m²)
-//   gver = geração verificada somada (MW) · gest = geração estimada somada (MW)
-//   m    = irradiância por UFV (Mauriti 1..9), null quando dado inválido
-// Convertido para o formato "patamares" ({data, irr_media, gv, m1..m9}) para reaproveitar
-// applyFilters/agrupar e os gráficos de irradiância existentes. ONS primário, planilha fallback.
+// Blob ons_irradiancia_YYYY_MM.json — formato POR-UFV (1 registro por UFV/intervalo,
+// igual ao fluxo de restrição: só Select, sem group-by no Power Automate):
+//   {consolidado:[{ts:"2026-06-01 11:00:00", u:"CEFMT1", irr:917.4, inv:"False", ge:44.9, gv:39.8}, ...]}
+//   u=id_ons (CEFMT1..9 = Mauriti 1..9) · irr=val_irradianciaverificado (W/m²)
+//   inv=flg_dadoirradianciainvalido · ge=val_geracaoestimada (MW) · gv=val_geracaoverificada (MW)
+// Agregado AQUI por ts → formato "patamares" ({data, irr_media=média das 9, gv=Σgver×0.5, m1..m9})
+// p/ reaproveitar applyFilters/agrupar e os gráficos de irradiância. ONS primário, planilha fallback.
 // ═══════════════════════════════════════════════════════════════════
 let _onsIrrData=null;
 let _irrMerged=null, _irrMergedStamp=-1;
@@ -8454,17 +8455,31 @@ async function loadONSIrradiancia(){
           .then(r=>r.ok?r.json():null).catch(()=>null)
       )
     );
-    const all=[];
+    /* Blob por-UFV: cada registro = 1 UFV em 1 intervalo {ts,u,irr,inv,ge,gv}.
+       Agrega aqui por ts: m[9]=irradiância por UFV, gv=soma geração verificada (MW). */
+    const mapUFV={CEFMT1:0,CEFMT2:1,CEFMT3:2,CEFMT4:3,CEFMT5:4,CEFMT6:5,CEFMT7:6,CEFMT8:7,CEFMT9:8};
+    const byTs=new Map();
     for(const blob of blobs){
       if(!blob||!Array.isArray(blob.consolidado)) continue;
       for(const rec of blob.consolidado){
-        const d=new Date(rec.ts.replace(' ','T')+'-03:00');
-        if(isNaN(d)) continue;
-        const row={data:d, irr_media:+rec.irr||0, gv:(+rec.gver||0)*0.5 /* MW → MWh no intervalo de 30min */};
-        const mArr=rec.m||[];
-        for(let i=0;i<9;i++){ const v=mArr[i]; row['m'+(i+1)]=(v==null?0:+v); }
-        all.push(row);
+        const ui=mapUFV[rec.u]; if(ui===undefined) continue;
+        let slot=byTs.get(rec.ts);
+        if(!slot){ slot={m:[null,null,null,null,null,null,null,null,null],gv:0}; byTs.set(rec.ts,slot); }
+        const inval=rec.inv===true||rec.inv==='True'||rec.inv==='true'||rec.inv===1;
+        const irr=parseFloat(rec.irr)||0;
+        slot.m[ui]=inval?null:irr;
+        slot.gv+=parseFloat(rec.gv)||0; /* val_geracaoverificada (MW) */
       }
+    }
+    const all=[];
+    for(const[ts,slot] of byTs){
+      const d=new Date(ts.replace(' ','T')+'-03:00');
+      if(isNaN(d)) continue;
+      const valid=slot.m.filter(v=>v!=null&&v>0);
+      const irrAvg=valid.length?valid.reduce((s,v)=>s+v,0)/valid.length:0;
+      const row={data:d, irr_media:+irrAvg.toFixed(1), gv:slot.gv*0.5 /* MW → MWh no intervalo de 30min */};
+      for(let i=0;i<9;i++){ const v=slot.m[i]; row['m'+(i+1)]=(v==null?0:v); }
+      all.push(row);
     }
     if(!all.length) return; /* sem blobs ainda — mantém planilha */
     all.sort((a,b)=>a.data-b.data);
