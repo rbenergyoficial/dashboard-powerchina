@@ -379,7 +379,8 @@ html[data-theme="light"] #cc-dim-badge{background:rgba(240,244,255,.97);color:#1
 .cc{grid-column:span 6;}
 .cc.cc-expanded{grid-column:1 / -1;}
 .cc.cc-tall{grid-row:span 2;}
-.cc.cc-tall .cc-tall-btn{opacity:1!important;color:#6b8bf5!important;border-color:rgba(107,139,245,.35)!important;}
+.cc-tall-btn{display:none!important;}
+.cc.cc-tall .cc-tall-btn{display:none!important;}
 .cc.cc-dragging{opacity:.4;cursor:grabbing!important;pointer-events:none;}
 .cc.cc-drop-here{border-color:rgba(107,139,245,.75)!important;box-shadow:0 0 0 2px rgba(107,139,245,.25),0 0 28px rgba(107,139,245,.18)!important;transition:border-color .1s,box-shadow .1s;}
 /* botão expandir */
@@ -556,11 +557,7 @@ html[data-theme="light"] .kpi-unit{opacity:.75;}
 .cc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
   background:linear-gradient(90deg,transparent 0%,rgba(107,139,245,.52) 30%,rgba(45,212,191,.34) 70%,transparent 100%);}
 /* V46 resize + move handles */
-.cc-resize-handle{position:absolute;bottom:4px;right:4px;width:22px;height:22px;cursor:se-resize;z-index:10;opacity:.18;transition:opacity .15s}
-.cc-resize-handle::after{content:'';position:absolute;bottom:2px;right:2px;width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.65);box-shadow:-7px 0 0 rgba(255,255,255,.65),0 -7px 0 rgba(255,255,255,.65),-7px -7px 0 rgba(255,255,255,.65)}
-.cc:hover .cc-resize-handle{opacity:.65}
-.cc-resize-handle:hover{opacity:1!important}
-html[data-theme="light"] .cc-resize-handle::after{background:rgba(0,0,0,.38);box-shadow:-6px 0 0 rgba(0,0,0,.38),0 -6px 0 rgba(0,0,0,.38),-6px -6px 0 rgba(0,0,0,.38)}
+.cc-resize-handle{display:none}
 .cc.cc-resizing{transform:none!important;transition:none!important;box-shadow:0 0 0 2px rgba(107,139,245,.55),0 8px 36px rgba(0,0,0,.72)!important}
 .cc-move-handle{position:absolute;left:0;top:50%;transform:translateY(-50%);width:14px;height:22px;cursor:grab;opacity:0;transition:opacity .15s;background-image:radial-gradient(circle,rgba(255,255,255,.6) 1.5px,transparent 1.5px);background-size:4px 4px;background-repeat:repeat}
 .cc:hover .cc-move-handle{opacity:.5}
@@ -575,7 +572,8 @@ body:not(.page-curt-active) .cc:has(.cc-body canvas):hover{transform:translateY(
 .cc[draggable]:active{cursor:grabbing;}
 .cc.cc-dragging{opacity:.32!important;transform:none!important;box-shadow:none!important;transition:none!important;}
 .cc.cc-drag-over{outline:2px dashed rgba(107,139,245,.50)!important;outline-offset:3px;}
-.cc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;position:relative;padding-left:20px;}
+.cc-head{display:flex;align-items:center;gap:6px;position:relative;padding-left:20px;}
+.cc-head > div:first-child{flex:1;min-width:0;}
 .cc-title{font-size:13px;font-weight:700;color:#e4eaf8;letter-spacing:-.1px;font-family:var(--display);}
 .cc-sub{font-size:10px;color:#8b9dbe;margin-top:2px;letter-spacing:.01em;}
 .cc-body{position:relative;flex:1;min-height:0;}
@@ -17466,12 +17464,14 @@ window._ppaChartGet=function(id){return charts[id];};
       /* ── Botão largura total (⊞/⊟) ── */
       var btn=document.createElement('button');
       btn.className='cc-expand-btn';
-      btn.innerHTML=card.classList.contains('cc-expanded')?'⊟':'⊞';
+      var _svgExp='<svg width="13" height="10" viewBox="0 0 13 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="5" x2="4.5" y2="5"/><line x1="8.5" y1="5" x2="12" y2="5"/><polyline points="3,3 1,5 3,7"/><polyline points="10,3 12,5 10,7"/></svg>';
+      var _svgCol='<svg width="13" height="10" viewBox="0 0 13 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="1" y1="5" x2="4.5" y2="5"/><line x1="8.5" y1="5" x2="12" y2="5"/><polyline points="5.5,3 4,5 5.5,7"/><polyline points="7.5,3 9,5 7.5,7"/></svg>';
+      btn.innerHTML=card.classList.contains('cc-expanded')?_svgCol:_svgExp;
       btn.title='Expandir / recolher largura total';
       btn.addEventListener('click',function(e){
         e.stopPropagation();
         var exp=card.classList.toggle('cc-expanded');
-        btn.innerHTML=exp?'⊟':'⊞';
+        btn.innerHTML=exp?_svgCol:_svgExp;
         if(exp){card.style.removeProperty('gridColumn');}
         try{if(k){localStorage.setItem('cc-exp-'+k,exp?'1':'0');if(exp)localStorage.removeItem('cc-cols-'+k);}}catch(ex){}
         var sec=card.closest('.section');
