@@ -8462,31 +8462,95 @@ function renderONS1(){
 
 function renderONS2(){
   const wrap=document.getElementById('dONS2'); if(!wrap) return;
-  const data=_getFilteredONS().filter(r=>r.lim>0&&r.razao!=='');
-  const hours={ENE:0,CNF:0,REL:0};
-  for(const r of data){if(hours[r.razao]!==undefined) hours[r.razao]+=0.5;}
-  const labels=['ENE','CNF','REL'];
-  const vals=labels.map(k=>+hours[k].toFixed(0));
-  const total=vals.reduce((a,b)=>a+b,0);
-  if(total<=0){wrap.innerHTML='<div class="no-data" style="height:320px"><span>Sem restrições no período</span></div>';return;}
-  const colors=['#F5A623','#f0598c','#A855F7'];
+  const data=_getFilteredONS().filter(r=>r.lim>0);
+  if(!data.length){wrap.innerHTML='<div class="no-data" style="height:300px"><span>Sem restrições no período</span></div>';return;}
+
+  /* horas por Origem (anel externo) */
+  const hOri={SIS:0,LOC:0};
+  /* horas por Razão (anel interno) */
+  const hRaz={ENE:0,CNF:0,REL:0};
+  let totalH=0;
+  for(const r of data){
+    if(hOri[r.orig]!==undefined) hOri[r.orig]+=0.5;
+    if(hRaz[r.razao]!==undefined) hRaz[r.razao]+=0.5;
+    totalH+=0.5;
+  }
+
+  const oriLabels=[],oriVals=[],oriColors=[];
+  if(hOri.SIS>0){oriLabels.push('SIS');oriVals.push(+hOri.SIS.toFixed(1));oriColors.push('#6b8bf5');}
+  if(hOri.LOC>0){oriLabels.push('LOC');oriVals.push(+hOri.LOC.toFixed(1));oriColors.push('#f5c84b');}
+
+  const razLabels=[],razVals=[],razColors=[];
+  if(hRaz.ENE>0){razLabels.push('ENE');razVals.push(+hRaz.ENE.toFixed(1));razColors.push('#F5A623');}
+  if(hRaz.CNF>0){razLabels.push('CNF');razVals.push(+hRaz.CNF.toFixed(1));razColors.push('#f0598c');}
+  if(hRaz.REL>0){razLabels.push('REL');razVals.push(+hRaz.REL.toFixed(1));razColors.push('#A855F7');}
+
   if(charts['dONS2c']) charts['dONS2c'].destroy();
   wrap.innerHTML='<canvas id="cONS2d"></canvas>';
+  const totalHfmt=totalH>=1?totalH.toFixed(1)+'h':(totalH*60).toFixed(0)+'min';
+
   charts['dONS2c']=new Chart(document.getElementById('cONS2d'),{
     type:'doughnut',
-    data:{labels,datasets:[{data:vals,backgroundColor:colors.map(c=>c+'cc'),borderColor:'#090d18',borderWidth:4,hoverOffset:0}]},
+    data:{
+      labels:[...oriLabels,...razLabels],
+      datasets:[
+        /* anel externo: Origem por horas */
+        {label:'Origem',data:[...oriVals,...razVals.map(()=>0)],
+          backgroundColor:[...oriColors.map(c=>c+'cc'),...razColors.map(()=>'transparent')],
+          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0},
+        /* anel interno: Razão por horas */
+        {label:'Razão',data:[...oriVals.map(()=>0),...razVals],
+          backgroundColor:[...oriColors.map(()=>'transparent'),...razColors.map(c=>c+'cc')],
+          borderColor:'#090d18',borderWidth:4,hoverBorderWidth:1,hoverOffset:0}
+      ]
+    },
     options:{responsive:true,maintainAspectRatio:false,cutout:'57%',
+      animation:{animateRotate:true,duration:800,easing:'easeOutQuart'},
       plugins:{
-        legend:{position:'right',labels:{color:'#f0f4ff',font:{size:12,family:"'Inter',system-ui",weight:'600'},padding:18,
-          usePointStyle:true,pointStyleWidth:13,
-          generateLabels:chart=>chart.data.labels.map((lbl,i)=>({
-            text:lbl+'   '+(total>0?(vals[i]/total*100).toFixed(1):0)+'%',
-            fillStyle:colors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i
-          }))}},
+        legend:{position:'right',labels:{color:'#f0f4ff',font:{size:11,family:"'Inter',system-ui",weight:'600'},padding:14,
+          usePointStyle:true,pointStyleWidth:12,
+          filter:item=>item.fillStyle!=='transparent',
+          generateLabels:function(chart){
+            const items=[];
+            oriLabels.forEach(function(l,i){
+              items.push({text:l+'   '+(totalH>0?(oriVals[i]/totalH*100).toFixed(1):0)+'%',
+                fillStyle:oriColors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i,datasetIndex:0,
+                fontColor:'#f0f4ff'});
+            });
+            razLabels.forEach(function(l,i){
+              items.push({text:l+'   '+(totalH>0?(razVals[i]/totalH*100).toFixed(1):0)+'%',
+                fillStyle:razColors[i]+'cc',strokeStyle:'transparent',lineWidth:0,pointStyle:'rectRounded',index:i+oriLabels.length,datasetIndex:1,
+                fontColor:'#f0f4ff'});
+            });
+            return items;
+          }
+        }},
         tooltip:{backgroundColor:'rgba(7,10,22,.97)',titleColor:'#f0f4ff',bodyColor:'#c8d4f0',
-          callbacks:{label:ctx=>` ${ctx.parsed}h (${(ctx.parsed/total*100).toFixed(1)}%)`}}
+          borderColor:'rgba(255,255,255,.18)',borderWidth:1,padding:12,cornerRadius:10,
+          filter:item=>item.parsed>0,
+          callbacks:{
+            title:items=>{const it=items[0];return it.label+(it.datasetIndex===0?' (Origem)':' (Razão)');},
+            label:ctx=>` ${ctx.parsed}h (${(ctx.parsed/totalH*100).toFixed(1)}%)`
+          }}
+      },
+      layout:{padding:{top:4,bottom:4}}
+    },
+    plugins:[{
+      id:'centerTextONS2',
+      afterDraw(chart){
+        const{ctx,chartArea:{top,left,width,height}}=chart;
+        ctx.save();
+        const cx=left+width/2,cy=top+height/2;
+        ctx.fillStyle='#f0f4ff';
+        ctx.font='bold 22px Inter,system-ui';
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(totalHfmt,cx,cy-9);
+        ctx.fillStyle='#7080a8';
+        ctx.font='600 9px Inter,system-ui';
+        ctx.fillText('TOTAL HORAS',cx,cy+11);
+        ctx.restore();
       }
-    }
+    }]
   });
 }
 
