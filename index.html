@@ -1533,6 +1533,7 @@ function _themeCharts(light){
         <button class="page-btn on" data-page="pat" onclick="switchPage('pat')" title="Painel de Controle"><svg viewBox="0 0 24 24"><line x1="3" y1="20" x2="21" y2="20"/><rect x="5" y="11" width="3" height="7"/><rect x="11" y="6" width="3" height="12"/><rect x="17" y="9" width="3" height="9"/></svg><span class="side-label">Painel de Controle</span></button>
         <button class="page-btn" data-page="pr" onclick="switchPage('pr')" title="PR"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="side-label">PR</span></button>
         <button class="page-btn" data-page="curt" onclick="switchPage('curt')" title="Dados Abertos ONS"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><span class="side-label">Dados Abertos ONS</span></button>
+        <button class="page-btn" data-page="cmp" onclick="switchPage('cmp')" title="Comparativo ONS × Way2"><svg viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg><span class="side-label">Comparativo</span></button>
         <button class="page-btn" data-page="saz" onclick="switchPage('saz')" title="Sazonalidade"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 17V9"/><path d="M12 17V5"/><path d="M18 17v-7"/></svg><span class="side-label">Sazonalidade</span></button>
         <button class="page-btn" data-page="way" onclick="switchPage('way')" title="UFVs Way2"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="side-label">UFVs Way2</span></button>
         <button class="page-btn" data-page="ppa" onclick="switchPage('ppa')" title="PPA · BRK"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="18" x2="13" y2="18"/></svg><span class="side-label">PPA · BRK</span></button>
@@ -1617,6 +1618,7 @@ function _themeCharts(light){
     <button class="page-btn on" data-page="pat" onclick="switchPage('pat')"><svg viewBox="0 0 24 24"><line x1="3" y1="20" x2="21" y2="20"/><rect x="5" y="11" width="3" height="7"/><rect x="11" y="6" width="3" height="12"/><rect x="17" y="9" width="3" height="9"/></svg>Painel de Controle</button>
     <button class="page-btn" data-page="pr" onclick="switchPage('pr')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>PR</button>
     <button class="page-btn" data-page="curt" onclick="switchPage('curt')"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Dados Abertos ONS</button>
+    <button class="page-btn" data-page="cmp" onclick="switchPage('cmp')"><svg viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg>Comparativo</button>
     <button class="page-btn" data-page="saz" onclick="switchPage('saz')"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 17V9"/><path d="M12 17V5"/><path d="M18 17v-7"/></svg>Sazonalidade</button>
     <button class="page-btn" data-page="way" onclick="switchPage('way')"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>UFVs Way2</button>
     <button class="page-btn" data-page="ppa" onclick="switchPage('ppa')"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="18" x2="13" y2="18"/></svg>PPA · BRK</button>
@@ -1984,7 +1986,23 @@ function _themeCharts(light){
       </div>
     </div>
 
-    <!-- SEÇÃO D: COMPARATIVO DE FONTES — ONS × WAY2 -->
+  </div><!-- end page-curt -->
+
+  <!-- PÁGINA: COMPARATIVO DE FONTES (ONS × WAY2) -->
+  <div class="page" id="page-cmp">
+    <div class="curt-top-controls">
+      <div class="fg">
+        <span class="fbar-label">Período</span>
+        <span id="cmpQuickGroup" style="display:flex;gap:4px;flex-shrink:0">
+          <button class="fbtn2" onclick="_cmpQuick('7d',this)">7d</button>
+          <button class="fbtn2 on" onclick="_cmpQuick('30d',this)">30d</button>
+          <button class="fbtn2" onclick="_cmpQuick('60d',this)">60d</button>
+          <button class="fbtn2" onclick="_cmpQuick('90d',this)">90d</button>
+          <button class="fbtn2" onclick="_cmpQuick('tudo',this)">Tudo</button>
+        </span>
+      </div>
+    </div>
+
     <div class="section" id="sec-cmp">
       <div class="section-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg>
@@ -2006,8 +2024,7 @@ function _themeCharts(light){
         </div>
       </div>
     </div>
-
-  </div><!-- end page-curt -->
+  </div><!-- end page-cmp -->
 
   <!-- PÁGINA 4: SAZONALIDADE -->
   <div class="page" id="page-saz">
@@ -3708,10 +3725,16 @@ function renderDashboardPage(page){
       safeRender(()=>renderIrr2());
       safeRender(()=>renderIrr3(getToggle('irr3')));
       safeRender(()=>renderAdv1('cAdv1b'));
-      safeRender(()=>renderCmpTotal(getToggle('cmptot')));
-      safeRender(()=>renderCmpScatter());
     }
     _afterRender('page-'+page);
+    return;
+  }
+  if(page==='cmp'){
+    if(!_onsData) loadONSData();
+    if(!_onsIrrData) loadONSIrradiancia();
+    safeRender(()=>renderCmpTotal(getToggle('cmptot')));
+    safeRender(()=>renderCmpScatter());
+    _afterRender('page-cmp');
     return;
   }
   if(page==='ppa'){
@@ -8076,6 +8099,25 @@ function _curtQuick(p,btn){
     if(sel) sel.value='dia';
   }
   clearFilterCache(); _curtGranOnChange(true); syncFilterUI(); renderAll();
+}
+/* Filtro de período do painel Comparativo (page-cmp) — usa os mesmos filtros globais */
+function _cmpQuick(p,btn){
+  const grp=document.getElementById('cmpQuickGroup');
+  if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  const now=new Date();
+  const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  const fmtD=d=>fmtM(d)+'-'+String(d.getDate()).padStart(2,'0');
+  filters.curtDay=''; filters.ano='todos'; filters.mes='todos';
+  if(p==='tudo'){
+    filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
+  } else {
+    const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
+    const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
+    filters.perIniDay=fmtD(start); filters.perFimDay=fmtD(end);
+    filters.perIni=fmtM(start); filters.perFim=fmtM(end);
+  }
+  clearFilterCache(); renderAll();
 }
 /* inicializa seletor de data do curtailment com o mês atual */
 (function(){ _curtGranOnChange(true); })();
