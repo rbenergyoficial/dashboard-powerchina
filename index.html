@@ -1854,7 +1854,7 @@ function _themeCharts(light){
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         VISÃO GERAL · FONTE ONS DADOS ABERTOS
       </div>
-      <div id="onsKpiStrip" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;"></div>
+      <div id="onsKpiStrip" class="kpi-grid"></div>
     </div>
 
     <!-- SEÇÃO B: GERAÇÃO & IRRADIÂNCIA (ONS) -->
@@ -3504,8 +3504,9 @@ function _onsDatePass(d){
   if(filters.ano!=='todos'&&d.getFullYear()!==parseInt(filters.ano)) return false;
   if(filters.mes!=='todos'&&d.getMonth()+1!==parseInt(filters.mes)) return false;
   const ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  /* dia exato (Hoje/Ontem ou date-picker no modo 30min) tem precedência total */
-  if(filters.curtDay&&document.getElementById('curtGranSel')?.value==='30min'){
+  /* dia exato (Hoje/Ontem ou data única nos modos 30min/Dia) tem precedência total */
+  const _gs=document.getElementById('curtGranSel')?.value;
+  if(filters.curtDay&&(_gs==='30min'||_gs==='dia')){
     return ds===filters.curtDay;
   }
   if(filters.perIniDay||filters.perFimDay){
@@ -3538,10 +3539,7 @@ function renderKPIs(){
 
   /* Irradiância: ONS Dados Abertos por UFV (_onsIrrData) quando disponível, senão planilha.
      Aplica o mesmo filtro de dia exato (Hoje/Ontem) para coerência com os demais cards. */
-  let patIrr=applyFilters(_irrSource());
-  if(filters.curtDay&&document.getElementById('curtGranSel')?.value==='30min'){
-    patIrr=patIrr.filter(r=>r.data&&(r.data.getFullYear()+'-'+String(r.data.getMonth()+1).padStart(2,'0')+'-'+String(r.data.getDate()).padStart(2,'0'))===filters.curtDay);
-  }
+  const patIrr=_irrSource().filter(r=>r.data&&_onsDatePass(r.data));
   const _irrVals=patIrr.filter(r=>r.irr_media>0);
   const avgIrr=_irrVals.length?_irrVals.reduce((s,r)=>s+r.irr_media,0)/_irrVals.length:0;
 
@@ -8018,10 +8016,11 @@ function _curtGranOnChange(noRender){
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   if(gran==='30min'){
-    const d=filters.curtDay||fmtD(now);
+    /* dia exibido = curtDay atual, ou último dia ONS disponível (só fixa se os dados já carregaram) */
+    let d=filters.curtDay || ((_onsData&&_onsData.length)?_onsDayOnOrBefore(fmtD(now)):fmtD(now));
+    if(_onsData&&_onsData.length) filters.curtDay=d;
     wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay30(this.value)">';
-    /* garante filtros de mês/período alinhados ao dia selecionado */
-    if(!filters.curtDay){const p=d.split('-');const mStr=p[0]+'-'+p[1];filters.perIni=mStr;filters.perFim=mStr;filters.ano=p[0];filters.mes=parseInt(p[1],10).toString();}
+    const p=d.split('-');const mStr=p[0]+'-'+p[1];filters.perIni=mStr;filters.perFim=mStr;filters.ano=p[0];filters.mes=parseInt(p[1],10).toString();
   } else if(gran==='mes'){
     let m;
     if(filters.perIni&&filters.perIni.length===7) m=filters.perIni;
@@ -8041,7 +8040,10 @@ function _curtGranOnChange(noRender){
       const t=filters.perFimDay||fmtD(now);
       wrap.innerHTML='<input type="date" class="fdate" id="curtFrom" value="'+f+'" style="flex-shrink:0" onchange="_curtApplyDayRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="curtTo" value="'+t+'" style="flex-shrink:0" onchange="_curtApplyDayRange(null,this.value)">';
     } else {
-      const d=filters.curtDay||fmtD(now);
+      /* data única no modo Dia = 1 dia; padrão no último dia ONS disponível */
+      let d=filters.curtDay || ((_onsData&&_onsData.length)?_onsDayOnOrBefore(fmtD(now)):fmtD(now));
+      if(_onsData&&_onsData.length) filters.curtDay=d;
+      const p=d.split('-');const mStr=p[0]+'-'+p[1];filters.perIni=mStr;filters.perFim=mStr;filters.ano=p[0];filters.mes=parseInt(p[1],10).toString();
       wrap.innerHTML='<input type="date" class="fdate" id="curtDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_curtApplyDay(this.value)">';
     }
   }
