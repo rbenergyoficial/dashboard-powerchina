@@ -4815,13 +4815,13 @@ function renderONSgerUFV(type='bar'){
     scales:{x:{...xAxisWithTitle(),stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}}}});
 }
 
-// Comparativo do complexo: ONS (verificada) × Way2 (líquida) + desvio %
+// Comparativo do complexo: ONS (verificada, agregado _onsData.ger) × Way2 (líquida) + desvio %
 function renderCmpTotal(type='line'){
-  const gen=_onsGenRows(), way=_wayRows();
-  if(!gen.length||!way.length){showNoData('cCmpTotal');return;}
+  const way=_wayRows();
+  if(!_onsData||!_onsData.length||!way.length){showNoData('cCmpTotal');return;}
   const gran=smartGran();
-  const onsMap={}, wayMap={};
-  agrupar(gen,'data',['gv']).forEach(r=>{onsMap[r._key]=num(r.gv)/1000;});
+  const onsMap={};
+  (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=periodKey(r.ts,gran);if(!k)return;onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
   const gw=agrupar(way,'data',['liquida']);
   const labels=getLabels(gw);
   const wayArr=gw.map(r=>+(num(r.liquida)/1000).toFixed(3));
@@ -4839,11 +4839,11 @@ function renderCmpTotal(type='line'){
 
 // Correlação ONS × Way2 (1 ponto por dia) + linha ideal 45° + R²
 function renderCmpScatter(){
-  const gen=_onsGenRows(), way=_wayRows();
-  if(!gen.length||!way.length){showNoData('cCmpScatter');return;}
+  const way=_wayRows();
+  if(!_onsData||!_onsData.length||!way.length){showNoData('cCmpScatter');return;}
   const dk=d=>d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
   const onsD={}, wayD={};
-  gen.forEach(r=>{const k=dk(r.data);onsD[k]=(onsD[k]||0)+num(r.gv)/1000;});
+  (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=dk(r.ts);onsD[k]=(onsD[k]||0)+num(r.ger)*0.5/1000;});
   way.forEach(r=>{const k=dk(r.data);wayD[k]=(wayD[k]||0)+num(r.liquida)/1000;});
   const pts=[];
   for(const k in onsD){ if(wayD[k]>0&&onsD[k]>0) pts.push({x:+wayD[k].toFixed(3),y:+onsD[k].toFixed(3)}); }
