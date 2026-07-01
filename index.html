@@ -3521,6 +3521,18 @@ function _onsDatePass(d){
   }
   return true;
 }
+/* Dia mais recente COM dados ONS publicados, ≤ ymd (YYYY-MM-DD). Usado por Hoje/Ontem
+   para encaixar no último dia disponível (ONS publica com atraso). Fallback: o próprio ymd. */
+function _onsDayOnOrBefore(ymd){
+  if(!_onsData||!_onsData.length) return ymd;
+  let best='';
+  for(const r of _onsData){
+    const d=r.ts;
+    const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    if(k<=ymd && k>best) best=k;
+  }
+  return best||ymd;
+}
 function renderKPIs(){
   const pat=applyFilters(dashData.patamares);
 
@@ -8077,18 +8089,14 @@ function _curtQuick(p,btn){
   const sel=document.getElementById('curtGranSel');
   const fmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   const is30min=sel&&sel.value==='30min';
-  if(p==='hoje'){
-    /* Hoje: sempre 30min — mostra as 24h do dia atual */
-    filters.curtDay=fmtD(now); filters.perIniDay=''; filters.perFimDay='';
-    const v=fmtM(now); filters.perIni=v; filters.perFim=v;
-    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
-    if(sel) sel.value='30min';
-  } else if(p==='ontem'){
-    /* Ontem: sempre 30min — mostra as 24h de ontem */
-    const yest=new Date(now); yest.setDate(yest.getDate()-1);
-    filters.curtDay=fmtD(yest); filters.perIniDay=''; filters.perFimDay='';
-    const v=fmtM(yest); filters.perIni=v; filters.perFim=v;
-    const[y,m]=v.split('-'); filters.ano=y; filters.mes=parseInt(m,10).toString();
+  if(p==='hoje'||p==='ontem'){
+    /* Hoje/Ontem: 30min. O ONS publica com atraso (~1-2 dias), então "encaixa"
+       no dia mais recente COM dados publicados, ≤ ao alvo — evita tela vazia. */
+    const tgt=new Date(now); if(p==='ontem') tgt.setDate(tgt.getDate()-1);
+    const day=_onsDayOnOrBefore(fmtD(tgt));
+    filters.curtDay=day; filters.perIniDay=''; filters.perFimDay='';
+    const v=day.slice(0,7); filters.perIni=v; filters.perFim=v;
+    filters.ano=day.slice(0,4); filters.mes=parseInt(day.slice(5,7),10).toString();
     if(sel) sel.value='30min';
   } else {
     /* 7d/30d/60d: últimos N dias reais com granularidade diária */
