@@ -3537,10 +3537,12 @@ function renderKPIs(){
   let hRest=0,kONS=0,kONSSIS=0,kONSLOC=0;
 
   /* _onsAllPeriod: todos intervalos do período (sem filtro razao/origem) —
-     energia total = todos os intervalos, não só os restringidos */
+     energia total = todos os intervalos, não só os restringidos.
+     null SOMENTE quando o ONS nunca carregou; se carregou mas o período está vazio,
+     é [] (mostra 0) — NUNCA cai na planilha. Planilha é backup manual, não fonte. */
   const _onsAllPeriod=(_onsData&&_onsData.length)?_onsData.filter(r=>_onsDatePass(r.ts)):null;
 
-  if(_onsAllPeriod&&_onsAllPeriod.length){
+  if(_onsAllPeriod){
     /* ── Energia Produzida: ONS blob ger = Geração Verificada (MW × 0.5h → MWh) ── */
     totGV=_onsAllPeriod.reduce((s,r)=>s+r.ger*0.5,0)/1000;
 
@@ -4715,7 +4717,7 @@ function drillMonth(y,m){
 // SEÇÃO 3 — IRRADIÂNCIA
 // ═══════════════════════════════════════════════════════════════════
 function renderIrr1(type='line'){
-  const pat=applyFilters(_irrSource());
+  const pat=_irrSource().filter(r=>r.data&&_onsDatePass(r.data));
   if(!pat.length){showNoData('cIrr1');return;}
   const g=agrupar(pat,'data',['irr_media','gv']);
   const labels=getLabels(g);
@@ -4736,7 +4738,7 @@ function renderIrr1(type='line'){
 }
 
 function renderIrr2(){
-  const pat=applyFilters(_irrSource());
+  const pat=_irrSource().filter(r=>r.data&&_onsDatePass(r.data));
   if(!pat.length){showNoData('cIrr2');return;}
   // Agrupar por dia para scatter
   const byDay={};
@@ -4760,7 +4762,7 @@ function renderIrr2(){
 }
 
 function renderIrr3(type='line'){
-  const pat=applyFilters(_irrSource());
+  const pat=_irrSource().filter(r=>r.data&&_onsDatePass(r.data));
   if(!pat.length){showNoData('cIrr3');return;}
   const ufvCols=['m1','m2','m3','m4','m5','m6','m7','m8','m9'];
   const g=agrupar(pat,'data',ufvCols);
