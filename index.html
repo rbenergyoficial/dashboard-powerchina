@@ -4890,20 +4890,20 @@ function _cmpNote(id,msg){
 /* ── Intradiário (30min/1h): 1 dia. ONS de _onsData/_onsIrrData (30min nativo) ×
    Way2 dos blobs intradiários de energia (_eneatLoadBlob/_eneatBlobToMap). Unidade: MWh/slot. ── */
 async function _cmpIntradayBuild(day,iv){
-  const uf=filters.cmpUfv||'todas';
+  const parks=_cmpSelParks(), isComplex=parks.length===9;
   const dayMatch=d=>{const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return k===day;};
   const slotKey=d=>{const h=String(d.getHours()).padStart(2,'0');if(iv==='UmaHora')return h+':00';const s=Math.floor(d.getMinutes()/30)*30;return h+':'+String(s).padStart(2,'0');};
   const onsMap={};
-  if(uf==='todas'){
+  if(isComplex){
     (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return;const k=slotKey(r.ts);onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5;});
   } else {
-    const n=+uf; (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=slotKey(r.data);onsMap[k]=(onsMap[k]||0)+num(r['gv'+n]);});
+    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=slotKey(r.data);let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v;});
   }
   const blob=await _eneatLoadBlob(iv,day);
-  const pkFields=uf==='todas'?['total']:[(+uf===1?'m10':'m'+uf)];
+  const pkFields=isComplex?['total']:parks.map(n=>n===1?'m10':'m'+n);
   const wayMap=_eneatBlobToMap(blob,pkFields,iv); /* HH:mm → MWh */
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), uf};
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
 async function _cmpRenderIntraday(target,type){
   const g=filters.cmpGran, day=filters.perIniDay, iv=g==='1h'?'UmaHora':'TrintaMinutos';
@@ -4913,7 +4913,7 @@ async function _cmpRenderIntraday(target,type){
   if(filters.cmpGran!==g||filters.perIniDay!==day) return; /* filtro mudou durante o carregamento */
   const wayHas=s.way.some(v=>v>0);
   if(!s.labels.length||!wayHas){_cmpNote(target,'Way2 intradiário indisponível para '+day+'. O comparativo 30min/1h depende dos blobs <b>way2_eneat_intradia</b> (energia por parque), que ainda não são gerados/retidos. Use Dia ou superior.');return;}
-  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
+  const subj=s.subj;
   if(target==='cCmpScatter'){
     const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
     if(!pts.length){_cmpNote('cCmpScatter','Sem pares ONS×Way2 no dia');return;}
@@ -4942,12 +4942,13 @@ async function _cmpRenderIntraday(target,type){
 // Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
   if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
+  if(!_cmpSelParks().length){_cmpNote('cCmpTotal','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
   if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpTotal',type);return;}
   const s=_cmpBuildSeries();
   if(!s.labels.length){showNoData('cCmpTotal');return;}
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
-  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
+  const subj=s.subj;
   mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
     {label:'ONS Verificada · '+subj+' (GWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
     {label:'Way2 Líquida · '+subj+' (GWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
@@ -4961,6 +4962,7 @@ function renderCmpTotal(type='line'){
 // Correlação ONS × Way2 (1 ponto por bucket) + linha ideal 45° + R²
 function renderCmpScatter(){
   if(!_onsData||!_onsData.length){showNoData('cCmpScatter');return;}
+  if(!_cmpSelParks().length){_cmpNote('cCmpScatter','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
   if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpScatter');return;}
   const s=_cmpBuildSeries();
@@ -4971,7 +4973,7 @@ function renderCmpScatter(){
   const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
   const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
   const mx=Math.max(...pts.map(p=>Math.max(p.x,p.y)))*1.05;
-  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
+  const subj=s.subj;
   mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
     {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
@@ -8255,19 +8257,17 @@ function _cmpBucketKey(d){
 }
 // Constrói séries ONS × Way2 agregadas por bucket, para complexo ou UFV selecionada (granularidade dia+)
 function _cmpBuildSeries(){
-  const uf=filters.cmpUfv||'todas';
+  const parks=_cmpSelParks(), isComplex=parks.length===9;
   const onsMap={}, wayMap={};
-  if(uf==='todas'){
+  if(isComplex){
     (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
   } else {
-    const n=+uf;
-    _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(k)onsMap[k]=(onsMap[k]||0)+num(r['gv'+n])/1000;});
+    _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
   const way=_wayRows();
-  const wf=uf==='todas'?'liquida':_M2WAY2[+uf];
-  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(k)wayMap[k]=(wayMap[k]||0)+num(r[wf])/1000;});
+  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;if(isComplex)v=num(r.liquida);else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));wayMap[k]=(wayMap[k]||0)+v/1000;});
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), uf};
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
 function _cmpGranOnChange(noRender){
   const g=document.getElementById('cmpGranSel')?.value||'dia';
@@ -8301,11 +8301,25 @@ function _cmpApplyRange(ini,fim){
   filters.perIni=(filters.perIniDay||'').slice(0,7);filters.perFim=(filters.perFimDay||'').slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
   clearFilterCache(); renderAll();
 }
+/* Seleção de UFV do Comparativo — MULTI-toggle (igual MUST): cada chip liga/desliga sozinho;
+   "Complexo" seleciona/limpa todas. Estado em filters.cmpUfvSet (array de 1..9). Vazio = nada. */
+function _cmpSelParks(){ return filters.cmpUfvSet?filters.cmpUfvSet.slice():[1,2,3,4,5,6,7,8,9]; }
+/* Multi-toggle dirigido pelo estado dos chips (igual MUST). Complexo = todas (padrão);
+   clicar um M sai do Complexo e alterna esse M; se nenhum M fica ligado, volta ao Complexo. */
 function _cmpUfvSel(u,btn){
-  const grp=document.getElementById('cmpUfvGroup');
-  if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
-  if(btn) btn.classList.add('on');
-  filters.cmpUfv=u;
+  const chips=[...document.querySelectorAll('#cmpUfvGroup .w2d-park-chip')];
+  const cx=chips.find(c=>c.dataset.cufv==='todas');
+  if(u==='todas'){
+    chips.forEach(c=>c.classList.toggle('on', c.dataset.cufv==='todas'));
+  } else {
+    if(cx) cx.classList.remove('on');
+    btn.classList.toggle('on');
+    const anyM=chips.some(c=>c.dataset.cufv!=='todas'&&c.classList.contains('on'));
+    if(!anyM&&cx) cx.classList.add('on');
+  }
+  const complexo=cx&&cx.classList.contains('on');
+  filters.cmpUfvSet = complexo ? [1,2,3,4,5,6,7,8,9]
+    : chips.filter(c=>c.dataset.cufv!=='todas'&&c.classList.contains('on')).map(c=>+c.dataset.cufv);
   clearFilterCache(); renderAll();
 }
 function _cmpQuick(p,btn){
