@@ -721,6 +721,8 @@ body:not(.page-curt-active) .cc:has(.cc-body canvas):hover{transform:translateY(
 body.page-ppa-active #fbar,
 body.page-ppa-active #kpiGrid{display:none!important;}
 body.page-curt-active #fbar{display:none!important;}
+body.page-cmp-active #fbar,
+body.page-cmp-active #kpiGrid{display:none!important;}
 body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa #sec-ppa-overview .section-title{align-items:flex-start;gap:14px;flex-wrap:wrap;}
 #page-ppa .ppa-top-controls{margin-left:auto;display:flex;align-items:center;gap:10px 12px;flex-wrap:wrap;justify-content:flex-end;font-weight:500;text-transform:none;letter-spacing:0;max-width:min(100%,1400px)}
@@ -1991,14 +1993,43 @@ function _themeCharts(light){
   <!-- PÁGINA: COMPARATIVO DE FONTES (ONS × WAY2) -->
   <div class="page" id="page-cmp">
     <div class="curt-top-controls">
+      <div class="fg" style="gap:6px;">
+        <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()">
+          <option value="dia" selected>Dia</option>
+          <option value="30min">30 min</option>
+          <option value="1h">1 hora</option>
+          <option value="semana">Semana</option>
+          <option value="mes">Mês</option>
+          <option value="ano">Ano</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+        <span id="cmpDateWrap" style="display:flex;align-items:center;gap:4px;flex-shrink:0"></span>
+      </div>
       <div class="fg">
-        <span class="fbar-label">Período</span>
         <span id="cmpQuickGroup" style="display:flex;gap:4px;flex-shrink:0">
+          <button class="fbtn2" onclick="_cmpQuick('hoje',this)">Hoje</button>
+          <button class="fbtn2" onclick="_cmpQuick('ontem',this)">Ontem</button>
           <button class="fbtn2" onclick="_cmpQuick('7d',this)">7d</button>
           <button class="fbtn2 on" onclick="_cmpQuick('30d',this)">30d</button>
           <button class="fbtn2" onclick="_cmpQuick('60d',this)">60d</button>
           <button class="fbtn2" onclick="_cmpQuick('90d',this)">90d</button>
           <button class="fbtn2" onclick="_cmpQuick('tudo',this)">Tudo</button>
+        </span>
+      </div>
+      <span style="width:1px;height:20px;background:rgba(255,255,255,.12);flex-shrink:0;align-self:center"></span>
+      <div class="fg">
+        <span class="fbar-label">UFV</span>
+        <span id="cmpUfvGroup" style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="w2d-park-chip on" data-cufv="todas" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)" onclick="_cmpUfvSel('todas',this)">Complexo</button>
+          <button class="w2d-park-chip" data-cufv="1" style="--pk-c:#34E0A1;--pk-bg:rgba(52,224,161,.18)" onclick="_cmpUfvSel('1',this)">M1</button>
+          <button class="w2d-park-chip" data-cufv="2" style="--pk-c:#2DD4BF;--pk-bg:rgba(45,212,191,.18)" onclick="_cmpUfvSel('2',this)">M2</button>
+          <button class="w2d-park-chip" data-cufv="3" style="--pk-c:#A855F7;--pk-bg:rgba(168,85,247,.18)" onclick="_cmpUfvSel('3',this)">M3</button>
+          <button class="w2d-park-chip" data-cufv="4" style="--pk-c:#F0598C;--pk-bg:rgba(240,89,140,.18)" onclick="_cmpUfvSel('4',this)">M4</button>
+          <button class="w2d-park-chip" data-cufv="5" style="--pk-c:#F5A623;--pk-bg:rgba(245,166,35,.18)" onclick="_cmpUfvSel('5',this)">M5</button>
+          <button class="w2d-park-chip" data-cufv="6" style="--pk-c:#6B7BD6;--pk-bg:rgba(107,123,214,.18)" onclick="_cmpUfvSel('6',this)">M6</button>
+          <button class="w2d-park-chip" data-cufv="7" style="--pk-c:#C084FC;--pk-bg:rgba(192,132,252,.18)" onclick="_cmpUfvSel('7',this)">M7</button>
+          <button class="w2d-park-chip" data-cufv="8" style="--pk-c:#6b8bf5;--pk-bg:rgba(107,139,245,.18)" onclick="_cmpUfvSel('8',this)">M8</button>
+          <button class="w2d-park-chip" data-cufv="9" style="--pk-c:#7DEFC4;--pk-bg:rgba(125,239,196,.18)" onclick="_cmpUfvSel('9',this)">M9</button>
         </span>
       </div>
     </div>
@@ -2027,6 +2058,7 @@ function _themeCharts(light){
         <div class="cc">
           <div class="cc-head">
             <div><div class="cc-title">Geração por UFV: ONS × Way2</div><div class="cc-sub">Mauriti 1–9 · verificada (ONS) × líquida (Way2) · desvio no tooltip</div></div>
+            <div class="toggle-grp" id="tg-cmpuf"><button class="toggle-btn on" data-chart="cmpuf" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="cmpuf" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
           <div class="cc-body" style="height:360px"><canvas id="cCmpUFV"></canvas></div>
         </div>
@@ -3752,9 +3784,10 @@ function renderDashboardPage(page){
   if(page==='cmp'){
     if(!_onsData) loadONSData();
     if(!_onsIrrData) loadONSIrradiancia();
+    if(document.getElementById('cmpDateWrap')&&!document.getElementById('cmpDateWrap').hasChildNodes()) _cmpGranOnChange(true);
     safeRender(()=>renderCmpTotal(getToggle('cmptot')));
     safeRender(()=>renderCmpScatter());
-    safeRender(()=>renderCmpUFV());
+    safeRender(()=>renderCmpUFV(getToggle('cmpuf')));
     _afterRender('page-cmp');
     return;
   }
@@ -3786,6 +3819,7 @@ function applyPageChrome(page){
   document.body.classList.toggle('page-ppa-active',isPpa);
   document.body.classList.toggle('page-must-active',isMust);
   document.body.classList.toggle('page-curt-active',page==='curt');
+  document.body.classList.toggle('page-cmp-active',page==='cmp');
   if(isPpa) movePpaCardsSection();
 }
 function switchPage(page){
@@ -4836,57 +4870,63 @@ function renderONSgerUFV(type='bar'){
     scales:{x:{...xAxisWithTitle(),stacked:type==='bar'},y:{...CHART_DEFAULTS.scales.y,stacked:type==='bar',title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}}}});
 }
 
-// Comparativo do complexo: ONS (verificada, agregado _onsData.ger) × Way2 (líquida) + desvio %
+/* De-para UFV Mauriti → campo Way2 em dashData.way2, descoberto por correlação de perfil
+   diário (jun/2026): pontoId 6368 = Mauriti 1 (Way2 rotula "M10"); demais casam o número.
+   dashData.way2 usa m10 p/ o pontoId 6368 e m2..m9 p/ os demais (patch da API Way2). */
+const _M2WAY2={1:'m10',2:'m2',3:'m3',4:'m4',5:'m5',6:'m6',7:'m7',8:'m8',9:'m9'};
+// Mensagem "em construção" para o intradiário (30min/1h) — fase seguinte
+function _cmpNote(id,msg){
+  if(charts[id]){try{charts[id].destroy();}catch(e){}delete charts[id];}
+  const el=document.getElementById(id); if(!el) return;
+  const p=el.parentElement; p.style.position='relative';
+  p.querySelectorAll('.no-data').forEach(d=>d.remove());
+  const div=document.createElement('div'); div.className='no-data';
+  div.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px';
+  div.innerHTML='<span>'+msg+'</span>'; p.appendChild(div);
+}
+// Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
-  const way=_wayRows();
-  if(!_onsData||!_onsData.length||!way.length){showNoData('cCmpTotal');return;}
-  const gran=smartGran();
-  const onsMap={};
-  (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=periodKey(r.ts,gran);if(!k)return;onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
-  const gw=agrupar(way,'data',['liquida']);
-  const labels=getLabels(gw);
-  const wayArr=gw.map(r=>+(num(r.liquida)/1000).toFixed(3));
-  const onsArr=gw.map(r=>+((onsMap[r._key]||0)).toFixed(3));
-  const devArr=gw.map(r=>{const o=onsMap[r._key]||0,w=num(r.liquida)/1000;return w>0?+((o-w)/w*100).toFixed(1):null;});
-  mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels,datasets:[
-    {label:_T('ONS Verificada (GWh)'),data:onsArr,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
-    {label:_T('Way2 Líquida (GWh)'),data:wayArr,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
-    {label:_T('Desvio (%)'),data:devArr,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,borderDash:[4,3],yAxisID:'y2'}
+  if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
+  const g=filters.cmpGran||'dia';
+  if(g==='30min'||g==='1h'){_cmpNote('cCmpTotal','Comparativo intradiário (30min/1h) — em construção. Use Dia ou superior.');return;}
+  const s=_cmpBuildSeries();
+  if(!s.labels.length){showNoData('cCmpTotal');return;}
+  const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
+  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
+  mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
+    {label:'ONS Verificada · '+subj+' (GWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
+    {label:'Way2 Líquida · '+subj+' (GWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:5,yAxisID:'y'},
+    {label:_T('Desvio (%)'),data:dev,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,borderDash:[4,3],yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,
     scales:{x:xAxisWithTitle(),
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
 }
 
-// Correlação ONS × Way2 (1 ponto por dia) + linha ideal 45° + R²
+// Correlação ONS × Way2 (1 ponto por bucket) + linha ideal 45° + R²
 function renderCmpScatter(){
-  const way=_wayRows();
-  if(!_onsData||!_onsData.length||!way.length){showNoData('cCmpScatter');return;}
-  const dk=d=>d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();
-  const onsD={}, wayD={};
-  (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=dk(r.ts);onsD[k]=(onsD[k]||0)+num(r.ger)*0.5/1000;});
-  way.forEach(r=>{const k=dk(r.data);wayD[k]=(wayD[k]||0)+num(r.liquida)/1000;});
+  if(!_onsData||!_onsData.length){showNoData('cCmpScatter');return;}
+  const g=filters.cmpGran||'dia';
+  if(g==='30min'||g==='1h'){_cmpNote('cCmpScatter','Correlação intradiária — em construção.');return;}
+  const s=_cmpBuildSeries();
   const pts=[];
-  for(const k in onsD){ if(wayD[k]>0&&onsD[k]>0) pts.push({x:+wayD[k].toFixed(3),y:+onsD[k].toFixed(3)}); }
+  for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
   if(!pts.length){showNoData('cCmpScatter');return;}
-  const n=pts.length, sx=pts.reduce((s,p)=>s+p.x,0), sy=pts.reduce((s,p)=>s+p.y,0);
-  const sxx=pts.reduce((s,p)=>s+p.x*p.x,0), sxy=pts.reduce((s,p)=>s+p.x*p.y,0), syy=pts.reduce((s,p)=>s+p.y*p.y,0);
+  const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
+  const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
   const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
   const mx=Math.max(...pts.map(p=>Math.max(p.x,p.y)))*1.05;
+  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
   mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
-    {label:'Dias (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
+    {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
     scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 Líquida (GWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS Verificada (GWh)',color:'#8090b8',font:{size:9}}}}}});
 }
 
-/* De-para UFV Mauriti → campo Way2 em dashData.way2, descoberto por correlação de perfil
-   diário (jun/2026): pontoId 6368 = Mauriti 1 (Way2 rotula "M10"); demais casam o número.
-   dashData.way2 usa m10 p/ o pontoId 6368 e m2..m9 p/ os demais (patch da API Way2). */
-const _M2WAY2={1:'m10',2:'m2',3:'m3',4:'m4',5:'m5',6:'m6',7:'m7',8:'m8',9:'m9'};
-// Comparativo por UFV: ONS verificada × Way2 líquida, barras agrupadas Mauriti 1–9 + desvio %
-function renderCmpUFV(){
+// Comparativo por UFV: ONS verificada × Way2 líquida, Mauriti 1–9 no período + desvio (tooltip)
+function renderCmpUFV(type='bar'){
   const gen=_onsGenRows(), way=_wayRows();
   if(!gen.length||!way.length){showNoData('cCmpUFV');return;}
   const labels=[],onsN=[],wayN=[];
@@ -4895,9 +4935,9 @@ function renderCmpUFV(){
     const w=way.reduce((s,r)=>s+num(r[_M2WAY2[n]]),0)/1000;
     labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+w.toFixed(3));
   }
-  mkChart('cCmpUFV',{type:'bar',data:{labels,datasets:[
-    {label:_T('ONS Verificada (GWh)'),data:onsN,backgroundColor:ctx=>gradFrom(ctx,'#34E0A1'),borderColor:'#34E0A1',borderWidth:1,borderRadius:4},
-    {label:_T('Way2 Líquida (GWh)'),data:wayN,backgroundColor:ctx=>gradFrom(ctx,'#6b8bf5'),borderColor:'#6b8bf5',borderWidth:1,borderRadius:4}
+  mkChart('cCmpUFV',{type:type==='line'?'line':'bar',data:{labels,datasets:[
+    {label:_T('ONS Verificada (GWh)'),data:onsN,backgroundColor:type==='line'?'#34E0A122':(ctx=>gradFrom(ctx,'#34E0A1')),borderColor:'#34E0A1',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0},
+    {label:_T('Way2 Líquida (GWh)'),data:wayN,backgroundColor:type==='line'?'#6b8bf522':(ctx=>gradFrom(ctx,'#6b8bf5')),borderColor:'#6b8bf5',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0}
   ]},options:{...CHART_DEFAULTS,
     scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}},
     plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{
@@ -8146,20 +8186,91 @@ function _curtQuick(p,btn){
   clearFilterCache(); _curtGranOnChange(true); syncFilterUI(); renderAll();
 }
 /* Filtro de período do painel Comparativo (page-cmp) — usa os mesmos filtros globais */
+/* ── Painel Comparativo: granularidade (bucket do eixo X) + UFV (complexo|M1..9) ── */
+const _cmpFmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+// Chave de agrupamento conforme a granularidade escolhida no painel Comparativo
+function _cmpBucketKey(d){
+  const g=filters.cmpGran||'dia';
+  if(g==='30min'){const h=String(d.getHours()).padStart(2,'0');return h+':'+(d.getMinutes()<30?'00':'30');}
+  if(g==='1h') return String(d.getHours()).padStart(2,'0')+':00';
+  if(g==='mes') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  if(g==='ano') return ''+d.getFullYear();
+  if(g==='semana') return periodKey(d,'semana');
+  return _cmpFmtD(d); // dia / personalizado
+}
+// Constrói séries ONS × Way2 agregadas por bucket, para complexo ou UFV selecionada (granularidade dia+)
+function _cmpBuildSeries(){
+  const uf=filters.cmpUfv||'todas';
+  const onsMap={}, wayMap={};
+  if(uf==='todas'){
+    (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
+  } else {
+    const n=+uf;
+    _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(k)onsMap[k]=(onsMap[k]||0)+num(r['gv'+n])/1000;});
+  }
+  const way=_wayRows();
+  const wf=uf==='todas'?'liquida':_M2WAY2[+uf];
+  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(k)wayMap[k]=(wayMap[k]||0)+num(r[wf])/1000;});
+  const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), uf};
+}
+function _cmpGranOnChange(noRender){
+  const g=document.getElementById('cmpGranSel')?.value||'dia';
+  filters.cmpGran=g;
+  const wrap=document.getElementById('cmpDateWrap'); const now=new Date();
+  if(wrap){
+    if(g==='30min'||g==='1h'){
+      let d=(filters.perIniDay&&filters.perIniDay===filters.perFimDay)?filters.perIniDay:((_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now));
+      filters.perIniDay=d;filters.perFimDay=d;filters.perIni=d.slice(0,7);filters.perFim=d.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
+      wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
+    } else if(g==='personalizado'){
+      const f=filters.perIniDay||_cmpFmtD(new Date(now.getFullYear(),now.getMonth(),now.getDate()-29));
+      const t=filters.perFimDay||_cmpFmtD(now);
+      filters.perIniDay=f;filters.perFimDay=t;filters.ano='todos';filters.mes='todos';filters.curtDay='';
+      wrap.innerHTML='<input type="date" class="fdate" id="cmpFrom" value="'+f+'" onchange="_cmpApplyRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="cmpTo" value="'+t+'" onchange="_cmpApplyRange(null,this.value)">';
+    } else {
+      wrap.innerHTML='<span style="color:var(--t4);font-size:10px">janela pelos botões →</span>';
+    }
+  }
+  clearFilterCache(); if(!noRender) renderAll();
+}
+function _cmpApplyDay(v){
+  if(!v) return;
+  filters.perIniDay=v;filters.perFimDay=v;filters.perIni=v.slice(0,7);filters.perFim=v.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
+  document.querySelectorAll('#cmpQuickGroup button').forEach(b=>b.classList.remove('on'));
+  clearFilterCache(); renderAll();
+}
+function _cmpApplyRange(ini,fim){
+  if(ini!==null) filters.perIniDay=ini;
+  if(fim!==null) filters.perFimDay=fim;
+  filters.perIni=(filters.perIniDay||'').slice(0,7);filters.perFim=(filters.perFimDay||'').slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
+  clearFilterCache(); renderAll();
+}
+function _cmpUfvSel(u,btn){
+  const grp=document.getElementById('cmpUfvGroup');
+  if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  filters.cmpUfv=u;
+  clearFilterCache(); renderAll();
+}
 function _cmpQuick(p,btn){
   const grp=document.getElementById('cmpQuickGroup');
   if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
   if(btn) btn.classList.add('on');
   const now=new Date();
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  const fmtD=d=>fmtM(d)+'-'+String(d.getDate()).padStart(2,'0');
   filters.curtDay=''; filters.ano='todos'; filters.mes='todos';
-  if(p==='tudo'){
+  if(p==='hoje'||p==='ontem'){
+    const tgt=new Date(now); if(p==='ontem') tgt.setDate(tgt.getDate()-1);
+    const d=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(tgt)):_cmpFmtD(tgt);
+    filters.perIniDay=d; filters.perFimDay=d; filters.perIni=d.slice(0,7); filters.perFim=d.slice(0,7);
+    const dp=document.getElementById('cmpDatePicker'); if(dp) dp.value=d;
+  } else if(p==='tudo'){
     filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
   } else {
     const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
     const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
-    filters.perIniDay=fmtD(start); filters.perFimDay=fmtD(end);
+    filters.perIniDay=_cmpFmtD(start); filters.perFimDay=_cmpFmtD(end);
     filters.perIni=fmtM(start); filters.perFim=fmtM(end);
   }
   clearFilterCache(); renderAll();
@@ -8202,6 +8313,7 @@ document.querySelectorAll('.toggle-btn').forEach(btn=>{
     else if(chartId==='onsgerref') renderONSgerRef(t);
     else if(chartId==='onsgeruf') renderONSgerUFV(t);
     else if(chartId==='cmptot') renderCmpTotal(t);
+    else if(chartId==='cmpuf') renderCmpUFV(t);
     else if(chartId==='ufv1') renderUFV1(t);
     else if(chartId==='must') renderPageMUST(t);
     else if(chartId==='ppamain') renderPagePPA(t);
