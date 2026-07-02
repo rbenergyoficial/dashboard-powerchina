@@ -4884,11 +4884,63 @@ function _cmpNote(id,msg){
   div.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px';
   div.innerHTML='<span>'+msg+'</span>'; p.appendChild(div);
 }
+/* ── Intradiário (30min/1h): 1 dia. ONS de _onsData/_onsIrrData (30min nativo) ×
+   Way2 dos blobs intradiários de energia (_eneatLoadBlob/_eneatBlobToMap). Unidade: MWh/slot. ── */
+async function _cmpIntradayBuild(day,iv){
+  const uf=filters.cmpUfv||'todas';
+  const dayMatch=d=>{const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return k===day;};
+  const slotKey=d=>{const h=String(d.getHours()).padStart(2,'0');if(iv==='UmaHora')return h+':00';const s=Math.floor(d.getMinutes()/30)*30;return h+':'+String(s).padStart(2,'0');};
+  const onsMap={};
+  if(uf==='todas'){
+    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return;const k=slotKey(r.ts);onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5;});
+  } else {
+    const n=+uf; (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=slotKey(r.data);onsMap[k]=(onsMap[k]||0)+num(r['gv'+n]);});
+  }
+  const blob=await _eneatLoadBlob(iv,day);
+  const pkFields=uf==='todas'?['total']:[(+uf===1?'m10':'m'+uf)];
+  const wayMap=_eneatBlobToMap(blob,pkFields,iv); /* HH:mm → MWh */
+  const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), uf};
+}
+async function _cmpRenderIntraday(target,type){
+  const g=filters.cmpGran, day=filters.perIniDay, iv=g==='1h'?'UmaHora':'TrintaMinutos';
+  if(!day){_cmpNote(target,'Selecione um dia para ver o intradiário');return;}
+  _cmpNote(target,'Carregando intradiário de '+day+'…');
+  const s=await _cmpIntradayBuild(day,iv);
+  if(filters.cmpGran!==g||filters.perIniDay!==day) return; /* filtro mudou durante o carregamento */
+  const wayHas=s.way.some(v=>v>0);
+  if(!s.labels.length||!wayHas){_cmpNote(target,'Way2 intradiário indisponível para '+day+'. O comparativo 30min/1h depende dos blobs <b>way2_eneat_intradia</b> (energia por parque), que ainda não são gerados/retidos. Use Dia ou superior.');return;}
+  const subj=s.uf==='todas'?'Complexo':'Mauriti '+s.uf;
+  if(target==='cCmpScatter'){
+    const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
+    if(!pts.length){_cmpNote('cCmpScatter','Sem pares ONS×Way2 no dia');return;}
+    const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
+    const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
+    const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
+    const mx=Math.max(...pts.map(p=>Math.max(p.x,p.y)))*1.05;
+    mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
+      {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
+      {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
+    ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
+      scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
+        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
+    return;
+  }
+  const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
+  mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
+    {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:4,yAxisID:'y'},
+    {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:4,yAxisID:'y'},
+    {label:_T('Desvio (%)'),data:dev,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,borderDash:[4,3],yAxisID:'y2'}
+  ]},options:{...CHART_DEFAULTS,
+    scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:iv==='UmaHora'?24:24,maxRotation:45,minRotation:45}},
+      y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
+      y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
+}
 // Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
   if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
   const g=filters.cmpGran||'dia';
-  if(g==='30min'||g==='1h'){_cmpNote('cCmpTotal','Comparativo intradiário (30min/1h) — em construção. Use Dia ou superior.');return;}
+  if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpTotal',type);return;}
   const s=_cmpBuildSeries();
   if(!s.labels.length){showNoData('cCmpTotal');return;}
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
@@ -4907,7 +4959,7 @@ function renderCmpTotal(type='line'){
 function renderCmpScatter(){
   if(!_onsData||!_onsData.length){showNoData('cCmpScatter');return;}
   const g=filters.cmpGran||'dia';
-  if(g==='30min'||g==='1h'){_cmpNote('cCmpScatter','Correlação intradiária — em construção.');return;}
+  if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpScatter');return;}
   const s=_cmpBuildSeries();
   const pts=[];
   for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
