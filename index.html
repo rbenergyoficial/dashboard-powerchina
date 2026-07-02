@@ -2023,6 +2023,14 @@ function _themeCharts(light){
           <div class="cc-body" style="height:340px"><canvas id="cCmpScatter"></canvas></div>
         </div>
       </div>
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head">
+            <div><div class="cc-title">Geração por UFV: ONS × Way2</div><div class="cc-sub">Mauriti 1–9 · verificada (ONS) × líquida (Way2) · desvio no tooltip</div></div>
+          </div>
+          <div class="cc-body" style="height:360px"><canvas id="cCmpUFV"></canvas></div>
+        </div>
+      </div>
     </div>
   </div><!-- end page-cmp -->
 
@@ -3746,6 +3754,7 @@ function renderDashboardPage(page){
     if(!_onsIrrData) loadONSIrradiancia();
     safeRender(()=>renderCmpTotal(getToggle('cmptot')));
     safeRender(()=>renderCmpScatter());
+    safeRender(()=>renderCmpUFV());
     _afterRender('page-cmp');
     return;
   }
@@ -4870,6 +4879,30 @@ function renderCmpScatter(){
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
     scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 Líquida (GWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS Verificada (GWh)',color:'#8090b8',font:{size:9}}}}}});
+}
+
+/* De-para UFV Mauriti → campo Way2 em dashData.way2, descoberto por correlação de perfil
+   diário (jun/2026): pontoId 6368 = Mauriti 1 (Way2 rotula "M10"); demais casam o número.
+   dashData.way2 usa m10 p/ o pontoId 6368 e m2..m9 p/ os demais (patch da API Way2). */
+const _M2WAY2={1:'m10',2:'m2',3:'m3',4:'m4',5:'m5',6:'m6',7:'m7',8:'m8',9:'m9'};
+// Comparativo por UFV: ONS verificada × Way2 líquida, barras agrupadas Mauriti 1–9 + desvio %
+function renderCmpUFV(){
+  const gen=_onsGenRows(), way=_wayRows();
+  if(!gen.length||!way.length){showNoData('cCmpUFV');return;}
+  const labels=[],onsN=[],wayN=[];
+  for(let n=1;n<=9;n++){
+    const o=gen.reduce((s,r)=>s+num(r['gv'+n]),0)/1000;
+    const w=way.reduce((s,r)=>s+num(r[_M2WAY2[n]]),0)/1000;
+    labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+w.toFixed(3));
+  }
+  mkChart('cCmpUFV',{type:'bar',data:{labels,datasets:[
+    {label:_T('ONS Verificada (GWh)'),data:onsN,backgroundColor:ctx=>gradFrom(ctx,'#34E0A1'),borderColor:'#34E0A1',borderWidth:1,borderRadius:4},
+    {label:_T('Way2 Líquida (GWh)'),data:wayN,backgroundColor:ctx=>gradFrom(ctx,'#6b8bf5'),borderColor:'#6b8bf5',borderWidth:1,borderRadius:4}
+  ]},options:{...CHART_DEFAULTS,
+    scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}},
+    plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{
+      footer:function(items){const i=items[0]?.dataIndex;if(i==null)return'';const o=onsN[i],w=wayN[i];return w>0?'Desvio: '+((o-w)/w*100).toFixed(1)+'%':'';}
+    }}}}});
 }
 
 // Faixa de KPIs da fonte ONS (período do filtro)
