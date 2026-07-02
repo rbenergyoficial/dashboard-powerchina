@@ -9206,12 +9206,19 @@ function _w2dAggregate(vals,factor){
 const _w2dFmtMW=(v,dec=3,unit='MW')=>{if(v==null)return'—';const[i,d]=v.toFixed(dec).split('.');return i.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+','+d+' '+unit;};
 const _w2dAreaGrad=(c,color)=>{const a=c.chart.chartArea;if(!a)return 'transparent';const rgb=hexRgb(color);const g=c.chart.ctx.createLinearGradient(0,a.top,0,a.bottom);g.addColorStop(0,rgbaStr(rgb,.22));g.addColorStop(1,rgbaStr(rgb,0));return g;};
 function _w2dTTLabel(ctx){
-  if((ctx.dataset.label||'').startsWith('_')) return null;
+  const lbl=ctx.dataset.label||'';
+  if(lbl.startsWith('_')) return null;
   const v=ctx.parsed.y; if(v==null) return null;
   const unit=_w2dIsEnergyGran(_w2dSt.gran)?'MWh':'MW';
-  const c=_w2dLastKpi?.contr;
+  /* Contrato de referência correto POR SÉRIE: "Total" → MUST total (soma dos 9 parques);
+     parque Mx → MUST daquele parque. Antes usava sempre o contrato do parque selecionado,
+     o que dava % absurdo (ex.: Total 183 MW ÷ MUST M9 9,82 = 1868%). */
+  const ct=dashData?.must?.contrat||{};
+  let c=_w2dLastKpi?.contr;
+  if(lbl==='Total') c=num(ct.total||0);
+  else if(/^M\d+$/.test(lbl)&&ct[lbl]!=null) c=num(ct[lbl]);
   const pct=(!_w2dIsEnergyGran(_w2dSt.gran)&&c>0)?`  ⚡ ${(v/c*100).toFixed(2)}% do MUST`:'';
-  return ` ${ctx.dataset.label}: ${_w2dFmtMW(v,2,unit)}${pct}`;
+  return ` ${lbl}: ${_w2dFmtMW(v,2,unit)}${pct}`;
 }
 // Cria dataset de linha de referência contratada (cor por índice)
 function _makeContrDs(label,val,len,idx){
