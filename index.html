@@ -1997,6 +1997,8 @@ function _themeCharts(light){
         <span class="fbar-label">Granularidade</span>
         <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()">
           <option value="dia" selected>Dia</option>
+          <option value="30min">30 min</option>
+          <option value="1h">1 hora</option>
           <option value="semana">Semana</option>
           <option value="mes">Mês</option>
           <option value="ano">Ano</option>
@@ -4900,9 +4902,10 @@ async function _cmpIntradayBuild(day,iv){
   } else {
     (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=slotKey(r.data);let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v;});
   }
-  const blob=await _eneatLoadBlob(iv,day);
+  /* fonte Way2 = blob de 15 min (base); _eneatBlobToMap agrega para 30min/1h conforme iv */
+  const blob=await _eneatLoadBlob('QuinzeMinutos',day);
   const pkFields=isComplex?['total']:parks.map(n=>n===1?'m10':'m'+n);
-  const wayMap=_eneatBlobToMap(blob,pkFields,iv); /* HH:mm → MWh */
+  const wayMap=_eneatBlobToMap(blob,pkFields,iv); /* HH:mm → MWh (agregado p/ iv) */
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
@@ -4912,8 +4915,12 @@ async function _cmpRenderIntraday(target,type){
   _cmpNote(target,'Carregando intradiário de '+day+'…');
   const s=await _cmpIntradayBuild(day,iv);
   if(filters.cmpGran!==g||filters.perIniDay!==day) return; /* filtro mudou durante o carregamento */
-  const wayHas=s.way.some(v=>v>0);
-  if(!s.labels.length||!wayHas){_cmpNote(target,'Way2 intradiário indisponível para '+day+'. O comparativo 30min/1h depende dos blobs <b>way2_eneat_intradia</b> (energia por parque), que ainda não são gerados/retidos. Use Dia ou superior.');return;}
+  const wayHas=s.way.some(v=>v>0), onsHas=s.ons.some(v=>v>0);
+  if(!s.labels.length||!wayHas||!onsHas){
+    const falta=!wayHas?'Way2 (way2_eneat_intradia)':'ONS (publicação com atraso ~1-2 dias)';
+    _cmpNote(target,'Sem dado intradiário completo para '+day+' — falta '+falta+'. O 30min/1h só aparece em dias que já têm as DUAS fontes. Escolha um dia mais antigo ou use Dia/superior.');
+    return;
+  }
   const subj=s.subj;
   if(target==='cCmpScatter'){
     const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
