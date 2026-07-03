@@ -1995,13 +1995,12 @@ function _themeCharts(light){
     <div class="curt-top-controls">
       <div class="fg" style="gap:6px;">
         <span class="fbar-label">Granularidade</span>
-        <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()">
-          <option value="dia" selected>Dia</option>
-          <option value="1h">1 hora (perfil do dia)</option>
-          <option value="semana">Semana</option>
-          <option value="mes">Mês</option>
-          <option value="ano">Ano</option>
-          <option value="personalizado">Personalizado</option>
+        <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()" title="Cada nível mostra as sub-unidades: Dia→horas, Semana/Mês→dias, Ano→meses">
+          <option value="dia">Dia → horas</option>
+          <option value="semana">Semana → dias</option>
+          <option value="mes">Mês → dias</option>
+          <option value="ano">Ano → meses</option>
+          <option value="personalizado" selected>Personalizado → dias</option>
         </select>
         <span id="cmpDateWrap" style="display:flex;align-items:center;gap:4px;flex-shrink:0"></span>
       </div>
@@ -2012,7 +2011,7 @@ function _themeCharts(light){
           <button class="fbtn2" onclick="_cmpQuick('hoje',this)">Hoje</button>
           <button class="fbtn2" onclick="_cmpQuick('ontem',this)">Ontem</button>
           <button class="fbtn2" onclick="_cmpQuick('7d',this)">7d</button>
-          <button class="fbtn2 on" onclick="_cmpQuick('30d',this)">30d</button>
+          <button class="fbtn2" onclick="_cmpQuick('30d',this)">30d</button>
           <button class="fbtn2" onclick="_cmpQuick('60d',this)">60d</button>
           <button class="fbtn2" onclick="_cmpQuick('90d',this)">90d</button>
           <button class="fbtn2" onclick="_cmpQuick('tudo',this)">Tudo</button>
@@ -4977,24 +4976,20 @@ async function _cmpRenderIntraday(target,type){
 const _CMP_MN=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function _cmpAxisLabel(key){
   const g=filters.cmpGran||'dia';
-  if(g==='dia'||g==='personalizado'){const p=key.split('-');return [p[2], _CMP_MN[+p[1]]+'/'+p[0].slice(2)];}
-  if(g==='mes'){const p=key.split('-');return [_CMP_MN[+p[1]], p[0]];}
-  if(g==='semana'){const p=key.split('-W');return ['S'+(p[1]||''), p[0]];}
-  return key; /* ano */
+  if(g==='ano'){const p=key.split('-');return [_CMP_MN[+p[1]], p[0]];} /* meses do ano */
+  const p=key.split('-');return [p[2], _CMP_MN[+p[1]]+'/'+p[0].slice(2)]; /* semana/mes/personalizado → dias */
 }
 function _cmpTitleLabel(key){
   const g=filters.cmpGran||'dia';const MU=['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  if(g==='dia'||g==='personalizado'){const p=key.split('-');return p[2]+' '+MU[+p[1]]+' '+p[0];}
-  if(g==='mes'){const p=key.split('-');return MU[+p[1]]+'/'+p[0];}
-  if(g==='semana'){const p=key.split('-W');return 'Semana '+(p[1]||'')+'/'+p[0];}
-  return key;
+  if(g==='ano'){const p=key.split('-');return MU[+p[1]]+'/'+p[0];}
+  const p=key.split('-');return p[2]+' '+MU[+p[1]]+' '+p[0];
 }
 // Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
   if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
   if(!_cmpSelParks().length){_cmpNote('cCmpTotal','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
-  if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpTotal',type);return;}
+  if(g==='dia'){_cmpRenderIntraday('cCmpTotal',type);return;} /* Dia → perfil por hora */
   const s=_cmpBuildSeries();
   if(!s.labels.length){showNoData('cCmpTotal');return;}
   const devReal=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return (w>0.02&&o>0.02)?+((o-w)/w*100).toFixed(1):null;});
@@ -5011,7 +5006,7 @@ function renderCmpTotal(type='line'){
   const isBar=type==='bar';
   /* Eixo X: período em UM mês → só os dias (todos, inclusive 30/31) + mês/ano UMA vez ao centro. */
   let xLabels, xTitle='', singleMonth=false;
-  if(g==='dia'||g==='personalizado'){
+  if(g!=='ano'){ /* granularidades diárias (semana/mes/personalizado): se tudo num mês, mostra só os dias + mês/ano ao centro */
     const months=[...new Set(s.labels.map(k=>k.slice(0,7)))];
     if(months.length===1){ singleMonth=true; xLabels=s.labels.map(k=>k.split('-')[2]); const p=months[0].split('-'); xTitle=p[1]+'/'+p[0]; }
     else xLabels=s.labels.map(_cmpAxisLabel);
@@ -5044,7 +5039,7 @@ function renderCmpScatter(){
   if(!_onsData||!_onsData.length){showNoData('cCmpScatter');return;}
   if(!_cmpSelParks().length){_cmpNote('cCmpScatter','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
-  if(g==='30min'||g==='1h'){_cmpRenderIntraday('cCmpScatter');return;}
+  if(g==='dia'){_cmpRenderIntraday('cCmpScatter');return;} /* Dia → perfil por hora */
   const s=_cmpBuildSeries();
   const pts=[];
   for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
@@ -8328,12 +8323,11 @@ const _cmpFmtD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'
 // Chave de agrupamento conforme a granularidade escolhida no painel Comparativo
 function _cmpBucketKey(d){
   const g=filters.cmpGran||'dia';
-  if(g==='30min'){const h=String(d.getHours()).padStart(2,'0');return h+':'+(d.getMinutes()<30?'00':'30');}
-  if(g==='1h') return String(d.getHours()).padStart(2,'0')+':00';
-  if(g==='mes') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  if(g==='ano') return ''+d.getFullYear();
-  if(g==='semana') return periodKey(d,'semana');
-  return _cmpFmtD(d); // dia / personalizado
+  /* DRILL-DOWN: cada granularidade mostra suas SUB-unidades no eixo X.
+     Ano → meses (YYYY-MM). Semana/Mês/Personalizado → dias (YYYY-MM-DD).
+     Dia → horas: tratado antes, no caminho intradiário (_cmpRenderIntraday), não aqui. */
+  if(g==='ano') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  return _cmpFmtD(d);
 }
 // Constrói séries ONS × Way2 agregadas por bucket, para complexo ou UFV selecionada (granularidade dia+)
 function _cmpBuildSeries(){
@@ -8349,39 +8343,65 @@ function _cmpBuildSeries(){
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
+/* ── DRILL-DOWN: a granularidade define QUAL período olho; o eixo X mostra as sub-unidades ──
+   Dia→horas · Semana→dias da semana · Mês→dias do mês · Ano→meses · Personalizado→dias.
+   Cada setter define a janela (perIniDay/perFimDay) que _onsDatePass usa. */
+function _cmpSetWeek(dstr){
+  const d=new Date(dstr+'T12:00:00'); const dow=(d.getDay()+6)%7; /* 0=segunda */
+  const mon=new Date(d); mon.setDate(d.getDate()-dow);
+  const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  filters.perIniDay=_cmpFmtD(mon);filters.perFimDay=_cmpFmtD(sun);
+  filters.perIni=filters.perIniDay.slice(0,7);filters.perFim=filters.perFimDay.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
+}
+function _cmpSetMonth(m){ /* m='YYYY-MM' */
+  const y=+m.slice(0,4),mo=+m.slice(5,7); const last=new Date(y,mo,0).getDate();
+  filters.perIniDay=m+'-01';filters.perFimDay=m+'-'+String(last).padStart(2,'0');
+  filters.perIni=m;filters.perFim=m;filters.ano='todos';filters.mes='todos';filters.curtDay='';
+}
+function _cmpSetYear(y){
+  filters.perIniDay=y+'-01-01';filters.perFimDay=y+'-12-31';
+  filters.perIni=y+'-01';filters.perFim=y+'-12';filters.ano='todos';filters.mes='todos';filters.curtDay='';
+}
 function _cmpGranOnChange(noRender){
   const g=document.getElementById('cmpGranSel')?.value||'dia';
   filters.cmpGran=g;
   const wrap=document.getElementById('cmpDateWrap'); const now=new Date();
+  const grp=document.getElementById('cmpQuickGroup');
+  if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on')); /* seleção agora vem do picker */
+  const _recent=()=>(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now);
   if(wrap){
-    if(g==='30min'||g==='1h'){
-      let d=(filters.perIniDay&&filters.perIniDay===filters.perFimDay)?filters.perIniDay:((_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now));
+    if(g==='dia'){
+      let d=(filters.perIniDay&&filters.perIniDay===filters.perFimDay)?filters.perIniDay:_recent();
       filters.perIniDay=d;filters.perFimDay=d;filters.perIni=d.slice(0,7);filters.perFim=d.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
       wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
-    } else if(g==='personalizado'){
+    } else if(g==='semana'){
+      let base=(filters.perIniDay)||_recent(); _cmpSetWeek(base);
+      wrap.innerHTML='<input type="date" class="fdate" id="cmpWeekPick" value="'+base+'" title="qualquer dia da semana" style="flex-shrink:0" onchange="_cmpApplyWeek(this.value)">';
+    } else if(g==='mes'){
+      let m=(filters.perIniDay||_cmpFmtD(now)).slice(0,7); _cmpSetMonth(m);
+      wrap.innerHTML='<input type="month" class="fdate" id="cmpMonthPick" value="'+m+'" style="flex-shrink:0" onchange="_cmpApplyMonth(this.value)">';
+    } else if(g==='ano'){
+      let y=(filters.perIniDay||_cmpFmtD(now)).slice(0,4); _cmpSetYear(y);
+      let opts=''; for(let yy=2025;yy<=now.getFullYear();yy++) opts+='<option value="'+yy+'"'+(yy==+y?' selected':'')+'>'+yy+'</option>';
+      wrap.innerHTML='<select class="fselect" id="cmpYearPick" style="flex-shrink:0" onchange="_cmpApplyYear(this.value)">'+opts+'</select>';
+    } else { /* personalizado */
       const f=filters.perIniDay||_cmpFmtD(new Date(now.getFullYear(),now.getMonth(),now.getDate()-29));
       const t=filters.perFimDay||_cmpFmtD(now);
-      filters.perIniDay=f;filters.perFimDay=t;filters.ano='todos';filters.mes='todos';filters.curtDay='';
+      filters.perIniDay=f;filters.perFimDay=t;filters.perIni=f.slice(0,7);filters.perFim=t.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
       wrap.innerHTML='<input type="date" class="fdate" id="cmpFrom" value="'+f+'" onchange="_cmpApplyRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="cmpTo" value="'+t+'" onchange="_cmpApplyRange(null,this.value)">';
-    } else if(g==='mes'||g==='ano'||g==='semana'){
-      /* granularidade grossa: janela ampla por padrão (Tudo) para mostrar a série completa —
-         com "30d" só apareceriam 1-2 pontos. Usuário pode estreitar nos botões. */
-      filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';filters.ano='todos';filters.mes='todos';filters.curtDay='';
-      const grp=document.getElementById('cmpQuickGroup');
-      if(grp){grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));const t=[...grp.querySelectorAll('button')].find(b=>b.textContent.trim()==='Tudo');if(t)t.classList.add('on');}
-      wrap.innerHTML='<span style="color:var(--t4);font-size:10px">período: Tudo · ajuste nos botões →</span>';
-    } else {
-      wrap.innerHTML='<span style="color:var(--t4);font-size:10px">janela pelos botões →</span>';
     }
   }
   clearFilterCache(); if(!noRender) renderAll();
 }
+function _cmpClearQuick(){ document.querySelectorAll('#cmpQuickGroup button').forEach(b=>b.classList.remove('on')); }
 function _cmpApplyDay(v){
   if(!v) return;
   filters.perIniDay=v;filters.perFimDay=v;filters.perIni=v.slice(0,7);filters.perFim=v.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
-  document.querySelectorAll('#cmpQuickGroup button').forEach(b=>b.classList.remove('on'));
-  clearFilterCache(); renderAll();
+  _cmpClearQuick(); clearFilterCache(); renderAll();
 }
+function _cmpApplyWeek(v){ if(!v)return; _cmpSetWeek(v); _cmpClearQuick(); clearFilterCache(); renderAll(); }
+function _cmpApplyMonth(v){ if(!v)return; _cmpSetMonth(v); _cmpClearQuick(); clearFilterCache(); renderAll(); }
+function _cmpApplyYear(v){ if(!v)return; _cmpSetYear(v); _cmpClearQuick(); clearFilterCache(); renderAll(); }
 function _cmpApplyRange(ini,fim){
   if(ini!==null) filters.perIniDay=ini;
   if(fim!==null) filters.perFimDay=fim;
@@ -8409,6 +8429,9 @@ function _cmpUfvSel(u,btn){
     : chips.filter(c=>c.dataset.cufv!=='todas'&&c.classList.contains('on')).map(c=>+c.dataset.cufv);
   clearFilterCache(); renderAll();
 }
+/* Atalhos de período. Coerentes com o drill-down:
+   Hoje/Ontem → 1 dia → granularidade "Dia" (perfil por hora).
+   7d/30d/60d/90d/Tudo → intervalo → granularidade "Personalizado" (por dia). */
 function _cmpQuick(p,btn){
   const grp=document.getElementById('cmpQuickGroup');
   if(grp) grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
@@ -8416,34 +8439,32 @@ function _cmpQuick(p,btn){
   const now=new Date();
   const fmtM=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   filters.curtDay=''; filters.ano='todos'; filters.mes='todos';
+  const gsel=document.getElementById('cmpGranSel'); const wrap=document.getElementById('cmpDateWrap');
   if(p==='hoje'||p==='ontem'){
     const tgt=new Date(now); if(p==='ontem') tgt.setDate(tgt.getDate()-1);
     const d=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(tgt)):_cmpFmtD(tgt);
     filters.perIniDay=d; filters.perFimDay=d; filters.perIni=d.slice(0,7); filters.perFim=d.slice(0,7);
-    /* dia único → mostra o PERFIL POR HORA automaticamente (senão "Dia" daria 1 ponto só) */
-    filters.cmpGran='1h';
-    const gsel=document.getElementById('cmpGranSel'); if(gsel) gsel.value='1h';
-    const wrap=document.getElementById('cmpDateWrap');
+    filters.cmpGran='dia'; /* Dia → perfil por hora */
+    if(gsel) gsel.value='dia';
     if(wrap) wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
-  } else if(p==='tudo'){
-    filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
-    _cmpQuickToDia();
   } else {
-    const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
-    const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
-    filters.perIniDay=_cmpFmtD(start); filters.perFimDay=_cmpFmtD(end);
-    filters.perIni=fmtM(start); filters.perFim=fmtM(end);
-    _cmpQuickToDia();
+    if(p==='tudo'){
+      filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
+    } else {
+      const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
+      const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
+      filters.perIniDay=_cmpFmtD(start); filters.perFimDay=_cmpFmtD(end);
+      filters.perIni=fmtM(start); filters.perFim=fmtM(end);
+    }
+    filters.cmpGran='personalizado'; /* intervalo → por dia */
+    if(gsel) gsel.value='personalizado';
+    if(wrap){
+      const f=filters.perIniDay, t=filters.perFimDay;
+      if(f&&t) wrap.innerHTML='<input type="date" class="fdate" id="cmpFrom" value="'+f+'" onchange="_cmpApplyRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="cmpTo" value="'+t+'" onchange="_cmpApplyRange(null,this.value)">';
+      else wrap.innerHTML='<span style="color:var(--t4);font-size:10px">Tudo · por dia</span>';
+    }
   }
   clearFilterCache(); renderAll();
-}
-/* range (7d/30d/…/Tudo) → volta p/ granularidade Dia se estava no perfil por hora */
-function _cmpQuickToDia(){
-  if(filters.cmpGran==='1h'||filters.cmpGran==='30min'){
-    filters.cmpGran='dia';
-    const gsel=document.getElementById('cmpGranSel'); if(gsel) gsel.value='dia';
-    const wrap=document.getElementById('cmpDateWrap'); if(wrap) wrap.innerHTML='<span style="color:var(--t4);font-size:10px">janela pelos botões →</span>';
-  }
 }
 /* inicializa seletor de data do curtailment com o mês atual */
 (function(){ _curtGranOnChange(true); })();
