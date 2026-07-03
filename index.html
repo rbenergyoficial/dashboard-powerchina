@@ -4928,12 +4928,17 @@ async function _cmpIntradayBuild(day){
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
+const _cmpIntraSeq={};
 async function _cmpRenderIntraday(target,type){
   const g=filters.cmpGran, day=filters.perIniDay;
+  const seq=(_cmpIntraSeq[target]=(_cmpIntraSeq[target]||0)+1); /* token por-gráfico: só o + recente renderiza */
   if(!day){_cmpNote(target,'Selecione um dia para ver o perfil horário');return;}
   _cmpNote(target,'Carregando perfil horário de '+day+'…');
-  const s=await _cmpIntradayBuild(day);
-  if(filters.cmpGran!==g||filters.perIniDay!==day) return; /* filtro mudou durante o carregamento */
+  let s;
+  try{ s=await _cmpIntradayBuild(day); }
+  catch(e){ if(seq===_cmpIntraSeq[target]) _cmpNote(target,'Erro ao carregar intradiário: '+(e&&e.message||e)); return; }
+  /* superado por render mais recente, ou filtro mudou durante o carregamento → não desenha */
+  if(seq!==_cmpIntraSeq[target]||filters.cmpGran!==g||filters.perIniDay!==day) return;
   const wayHas=s.way.some(v=>v>0), onsHas=s.ons.some(v=>v>0);
   if(!s.labels.length||!wayHas||!onsHas){
     const falta=!wayHas?'Way2 (way2_eneat_intradia)':'ONS (publicação com atraso ~1-2 dias)';
