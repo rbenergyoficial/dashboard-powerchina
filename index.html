@@ -4884,10 +4884,12 @@ function _cmpNote(id,msg){
   if(charts[id]){try{charts[id].destroy();}catch(e){}delete charts[id];}
   const el=document.getElementById(id); if(!el) return;
   const p=el.parentElement; p.style.position='relative';
-  p.querySelectorAll('.no-data').forEach(d=>d.remove());
-  const div=document.createElement('div'); div.className='no-data';
-  div.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px';
+  /* mesma classe do showNoData → mkChart/clearNoData removem sozinho quando o gráfico redesenha */
+  p.querySelectorAll('.no-data-msg').forEach(d=>d.remove());
+  const div=document.createElement('div'); div.className='no-data no-data-msg';
+  div.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;pointer-events:none;color:var(--t3);font-size:12px';
   div.innerHTML='<span>'+msg+'</span>'; p.appendChild(div);
+  el.style.display='none';
 }
 /* Mauriti N → pontoId Way2 (energia). 6368 = Mauriti 1 (Way2 rotula "M10"). */
 const _MAURITI_PONTO={1:6368,2:6369,3:6373,4:6374,5:6375,6:6376,7:6215,8:6378,9:6219};
