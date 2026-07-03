@@ -14983,7 +14983,13 @@ window._ppaChartGet=function(id){return charts[id];};
     const _patAll=(typeof _irrSource==='function'?_irrSource():dashData?.patamares)||[];
     const _dayIrr=(yd,md,dd)=>{const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===yd&&r.data.getMonth()===md&&r.data.getDate()===dd&&r.irr_media>0);return recs.length?+(recs.reduce((s,r)=>s+r.irr_media,0)/recs.length).toFixed(1):null;};
     let irrData=labels.map(()=>null);
-    if(gran==='ano'){irrData=months.map(mi=>{const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===y&&r.data.getMonth()===mi&&r.irr_media>0);return recs.length?+(recs.reduce((s,r)=>s+r.irr_media,0)/recs.length).toFixed(1):null;});}
+    if(gran==='ano'){irrData=months.map(mi=>{
+      /* média diária de irradiação do mês (kWh/m²/dia): por dia soma irr×0,5h/1000, depois média dos dias */
+      const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===y&&r.data.getMonth()===mi);
+      if(!recs.length) return null;
+      const byDay={}; recs.forEach(r=>{const k=r.data.getDate(); byDay[k]=(byDay[k]||0)+(num(r.irr_media)||0)*0.5/1000;});
+      const ds=Object.values(byDay); return ds.length?+(ds.reduce((a,b)=>a+b,0)/ds.length).toFixed(2):null;
+    });}
     else if(gran==='mes'){const mf=rows.filter(r=>r.date.getFullYear()===y&&months.includes(r.date.getMonth())&&r.date>=ini&&r.date<=fim);irrData=mf.map(r=>_dayIrr(r.date.getFullYear(),r.date.getMonth(),r.date.getDate()));}
     else{const sd=[];for(let d=new Date(ini);d<=fim;d=addDaysV30(d,1))sd.push(new Date(d));irrData=sd.map(d=>_dayIrr(d.getFullYear(),d.getMonth(),d.getDate()));}
     // Only inject irradiance in annual view — V40 already handles daily/monthly views
@@ -16521,8 +16527,9 @@ window._ppaChartGet=function(id){return charts[id];};
                   irrByLabel[lb].sum+=(parseFloat(r.irr_media)||0); irrByLabel[lb].cnt++;
                 }
               }
+              /* irradiação diária = Σ(irr W/m² × 0,5h)/1000 = kWh/m² (energia solar do dia) */
               irrData = labels.map(function(lb){
-                var v=irrByLabel[lb]; return (v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(2):null;
+                var v=irrByLabel[lb]; return (v&&v.cnt>0)?+(v.sum*0.5/1000).toFixed(2):null;
               });
             }
 
@@ -16540,8 +16547,9 @@ window._ppaChartGet=function(id){return charts[id];};
                   if(!irrByDay[dn]) irrByDay[dn]={sum:0,cnt:0};
                   irrByDay[dn].sum+=(parseFloat(r.irr_media)||0); irrByDay[dn].cnt++;
                 }
+                /* irradiação diária = Σ(irr W/m² × 0,5h)/1000 = kWh/m² (energia solar do dia) */
                 irrData = labels.map(function(lb){
-                  var v=irrByDay[parseInt(lb)]; return (v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(2):null;
+                  var v=irrByDay[parseInt(lb)]; return (v&&v.cnt>0)?+(v.sum*0.5/1000).toFixed(2):null;
                 });
               }
             }
