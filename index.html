@@ -1997,8 +1997,7 @@ function _themeCharts(light){
         <span class="fbar-label">Granularidade</span>
         <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()">
           <option value="dia" selected>Dia</option>
-          <option value="30min">30 min</option>
-          <option value="1h">1 hora</option>
+          <option value="1h">1 hora (perfil do dia)</option>
           <option value="semana">Semana</option>
           <option value="mes">Mês</option>
           <option value="ano">Ano</option>
@@ -4890,35 +4889,48 @@ function _cmpNote(id,msg){
   div.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px';
   div.innerHTML='<span>'+msg+'</span>'; p.appendChild(div);
 }
-/* ── Intradiário (30min/1h): 1 dia. ONS de _onsData/_onsIrrData (30min nativo) ×
-   Way2 dos blobs intradiários de energia (_eneatLoadBlob/_eneatBlobToMap). Unidade: MWh/slot. ── */
-async function _cmpIntradayBuild(day,iv){
+/* Mauriti N → pontoId Way2 (energia). 6368 = Mauriti 1 (Way2 rotula "M10"). */
+const _MAURITI_PONTO={1:6368,2:6369,3:6373,4:6374,5:6375,6:6376,7:6215,8:6378,9:6219};
+/* ── Intradiário POR HORA (1 dia). Descoberta: EneatLiqGeracao só tem valor real nos marcos
+   :00 (energia HORÁRIA; :15/:30/:45 vêm vazios). E o valor em HH:00 = energia da hora [HH-1,HH],
+   então desloca -1h p/ casar com o ONS (que é 30min → soma por hora). Unidade: MWh/hora. ── */
+async function _cmpIntradayBuild(day){
   const parks=_cmpSelParks(), isComplex=parks.length===9;
   const dayMatch=d=>{const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return k===day;};
-  const slotKey=d=>{const h=String(d.getHours()).padStart(2,'0');if(iv==='UmaHora')return h+':00';const s=Math.floor(d.getMinutes()/30)*30;return h+':'+String(s).padStart(2,'0');};
+  const hourKey=h=>String(h).padStart(2,'0')+':00';
   const onsMap={};
   if(isComplex){
-    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return;const k=slotKey(r.ts);onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5;});
+    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return;const k=hourKey(r.ts.getHours());onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5;});
   } else {
-    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=slotKey(r.data);let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v;});
+    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=hourKey(r.data.getHours());let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v;});
   }
-  /* fonte Way2 = blob de 15 min (base); _eneatBlobToMap agrega para 30min/1h conforme iv */
+  /* Way2: blob 15min, mas só :00 tem valor (horário). Valor em HH:00 = hora [HH-1,HH] → slot HH-1. */
   const blob=await _eneatLoadBlob('QuinzeMinutos',day);
-  const pkFields=isComplex?['total']:parks.map(n=>n===1?'m10':'m'+n);
-  const wayMap=_eneatBlobToMap(blob,pkFields,iv); /* HH:mm → MWh (agregado p/ iv) */
+  const dados=Array.isArray(blob)?blob:((blob&&blob.dados)||[]);
+  const wantPontos=isComplex?null:new Set(parks.map(n=>_MAURITI_PONTO[n]));
+  const wayMap={};
+  for(const item of dados){
+    if(wantPontos&&!wantPontos.has(item.pontoId)) continue;
+    for(const v of (item.valores||[])){
+      if(v.valor==null||v.valor<0) continue;
+      const d=new Date(v.data);
+      const k=hourKey((d.getHours()-1+24)%24); /* HH:00 → hora HH-1 */
+      wayMap[k]=(wayMap[k]||0)+v.valor/1000; /* kWh → MWh */
+    }
+  }
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
 async function _cmpRenderIntraday(target,type){
-  const g=filters.cmpGran, day=filters.perIniDay, iv=g==='1h'?'UmaHora':'TrintaMinutos';
-  if(!day){_cmpNote(target,'Selecione um dia para ver o intradiário');return;}
-  _cmpNote(target,'Carregando intradiário de '+day+'…');
-  const s=await _cmpIntradayBuild(day,iv);
+  const g=filters.cmpGran, day=filters.perIniDay;
+  if(!day){_cmpNote(target,'Selecione um dia para ver o perfil horário');return;}
+  _cmpNote(target,'Carregando perfil horário de '+day+'…');
+  const s=await _cmpIntradayBuild(day);
   if(filters.cmpGran!==g||filters.perIniDay!==day) return; /* filtro mudou durante o carregamento */
   const wayHas=s.way.some(v=>v>0), onsHas=s.ons.some(v=>v>0);
   if(!s.labels.length||!wayHas||!onsHas){
     const falta=!wayHas?'Way2 (way2_eneat_intradia)':'ONS (publicação com atraso ~1-2 dias)';
-    _cmpNote(target,'Sem dado intradiário completo para '+day+' — falta '+falta+'. O 30min/1h só aparece em dias que já têm as DUAS fontes. Escolha um dia mais antigo ou use Dia/superior.');
+    _cmpNote(target,'Sem dado horário completo para '+day+' — falta '+falta+'. O perfil por hora só aparece em dias que já têm as DUAS fontes. Escolha outro dia ou use Dia/superior.');
     return;
   }
   const subj=s.subj;
@@ -4933,8 +4945,8 @@ async function _cmpRenderIntraday(target,type){
       {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
     ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
-      scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
-        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
+      scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/hora)',color:'#8090b8',font:{size:9}}},
+        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/hora)',color:'#8090b8',font:{size:9}}}}}});
     return;
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
