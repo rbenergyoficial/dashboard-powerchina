@@ -1679,7 +1679,7 @@ function _themeCharts(light){
     <div class="kpi-card blue2">
       <div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:#93c5fd"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg></div></div>
       <div class="kpi-label">Irradiância Média</div>
-      <div class="kpi-value"><span id="kIrr">—</span><span class="kpi-unit">kWh/m²</span></div>
+      <div class="kpi-value"><span id="kIrr">—</span><span class="kpi-unit">W/m²</span></div>
       <div class="kpi-sub" id="kIrrSub"></div>
     </div>
   </div>
@@ -2453,7 +2453,7 @@ Object.assign(LANG_PACKS['en'].text, {
   'Energia Produzida (GWh)': 'Generated Energy (GWh)',
   'Energia Frustrada (GWh)': 'Curtailed Energy (GWh)',
   'Energia de Referência (GWh)': 'Reference Energy (GWh)',
-  'Irradiância (kWh/m²)': 'Irradiance (kWh/m²)',
+  'Irradiância (W/m²)': 'Irradiance (W/m²)',
   'Méd. GV': 'Avg. GV',
   'Méd. GF': 'Avg. GF',
   'Ociosa (GWh)': 'Idle (GWh)',
@@ -2470,7 +2470,7 @@ Object.assign(LANG_PACKS['zh-CN'].text, {
   'Energia Produzida (GWh)': '发电量 (GWh)',
   'Energia Frustrada (GWh)': '受限电量 (GWh)',
   'Energia de Referência (GWh)': '参考电量 (GWh)',
-  'Irradiância (kWh/m²)': '辐照度 (kWh/m²)',
+  'Irradiância (W/m²)': '辐照度 (W/m²)',
   'Méd. GV': '平均 GV',
   'Méd. GF': '平均 GF',
   'Ociosa (GWh)': '闲置容量 (GWh)',
@@ -4498,7 +4498,7 @@ function renderGer1(type='bar'){
         type:isBar?'bar':'line',
         stack:isBar?'s1':undefined,
         pointRadius:0,pointHoverRadius:8,pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff55'},
-      {label:'Irradiância (kWh/m²)',data:irrData,
+      {label:'Irradiância (W/m²)',data:irrData,
         borderColor:'rgba(253,224,71,0.85)',backgroundColor:'rgba(253,224,71,0.06)',
         type:'line',fill:false,tension:0.35,
         pointRadius:3,pointBackgroundColor:'rgba(253,224,71,0.85)',
@@ -4514,7 +4514,7 @@ function renderGer1(type='bar'){
           grid:{display:false}},
         y2:{type:'linear',position:'right',min:0,grid:{display:false},
           ticks:{color:'rgba(253,224,71,0.7)',font:{size:9},maxTicksLimit:5},
-          title:{display:true,text:'kWh/m²',color:'rgba(253,224,71,0.7)',font:{size:9}}}
+          title:{display:true,text:'W/m²',color:'rgba(253,224,71,0.7)',font:{size:9}}}
       },
       plugins:{...CHART_DEFAULTS.plugins,
         tooltip:{...CHART_DEFAULTS.plugins.tooltip,
@@ -4527,7 +4527,7 @@ function renderGer1(type='bar'){
               try{
                 const i=ctx.dataIndex;const y=ctx.parsed?.y;if(y==null)return null;
                 const ds=ctx.dataset.label||'';
-                if(ds.includes('Irradiância')) return `  ☀️ Irradiância: ${fIrr(y)} kWh/m²`;
+                if(ds.includes('Irradiância')) return `  ☀️ Irradiância: ${fIrr(y)} W/m²`;
                 if(ctx.datasetIndex===0){
                   const gv=gvData[i]||0,gl=glData[i]||0,tot=gv+gl;
                   const pct=tot>0?((gl/tot)*100).toFixed(1):0;
@@ -14984,11 +14984,9 @@ window._ppaChartGet=function(id){return charts[id];};
     const _dayIrr=(yd,md,dd)=>{const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===yd&&r.data.getMonth()===md&&r.data.getDate()===dd&&r.irr_media>0);return recs.length?+(recs.reduce((s,r)=>s+r.irr_media,0)/recs.length).toFixed(1):null;};
     let irrData=labels.map(()=>null);
     if(gran==='ano'){irrData=months.map(mi=>{
-      /* média diária de irradiação do mês (kWh/m²/dia): por dia soma irr×0,5h/1000, depois média dos dias */
+      /* irradiância média do mês, em W/m² (mesma unidade da base ONS) */
       const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===y&&r.data.getMonth()===mi);
-      if(!recs.length) return null;
-      const byDay={}; recs.forEach(r=>{const k=r.data.getDate(); byDay[k]=(byDay[k]||0)+(num(r.irr_media)||0)*0.5/1000;});
-      const ds=Object.values(byDay); return ds.length?+(ds.reduce((a,b)=>a+b,0)/ds.length).toFixed(2):null;
+      return recs.length?+(recs.reduce((s,r)=>s+(num(r.irr_media)||0),0)/recs.length).toFixed(1):null;
     });}
     else if(gran==='mes'){const mf=rows.filter(r=>r.date.getFullYear()===y&&months.includes(r.date.getMonth())&&r.date>=ini&&r.date<=fim);irrData=mf.map(r=>_dayIrr(r.date.getFullYear(),r.date.getMonth(),r.date.getDate()));}
     else{const sd=[];for(let d=new Date(ini);d<=fim;d=addDaysV30(d,1))sd.push(new Date(d));irrData=sd.map(d=>_dayIrr(d.getFullYear(),d.getMonth(),d.getDate()));}
@@ -15009,13 +15007,13 @@ window._ppaChartGet=function(id){return charts[id];};
       data:{labels,datasets:[
         genDataset,
         {type:'line',label:_T('Meta'),data:meta,borderColor:'rgba(255,218,80,0.88)',backgroundColor:'rgba(255,218,80,0.06)',borderWidth:2.2,borderDash:[14,6],borderCapStyle:'round',pointRadius:0,pointHoverRadius:5,pointBackgroundColor:'rgba(255,218,80,0.88)',pointBorderColor:'#0b0f1a',pointBorderWidth:1,stepped:true,tension:0,yAxisID:'y',order:1},
-        ...(hasIrr?[{type:'line',label:_T('Irradiância (kWh/m²)'),data:irrData,borderColor:'rgba(245,200,75,0.85)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(245,200,75,0.85)',fill:false,tension:0.18,yAxisID:'y2',order:0,spanGaps:true}]:[])
+        ...(hasIrr?[{type:'line',label:_T('Irradiância (W/m²)'),data:irrData,borderColor:'rgba(245,200,75,0.85)',backgroundColor:'transparent',borderWidth:2,pointRadius:3,pointHoverRadius:5,pointBackgroundColor:'rgba(245,200,75,0.85)',fill:false,tension:0.18,yAxisID:'y2',order:0,spanGaps:true}]:[])
       ]},
       options:{
         ...CHART_DEFAULTS,
         maintainAspectRatio:false,
-        plugins:{...CHART_DEFAULTS.plugins,legend:{...CHART_DEFAULTS.plugins.legend,display:true,position:'top',align:'start',labels:{...CHART_DEFAULTS.plugins.legend.labels,padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>`📅 ${items?.[0]?.label||''}`,label:(ctx)=>{const idx=ctx.dataIndex;if(ctx.dataset.yAxisID==='y2')return[`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];return [`⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`,`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} kWh/m²`];}}}},
-        scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:gran==='ano'?13:(gran==='mes' && months.length>1)?10:11,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:yMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})},afterFit:(s)=>{s.width=Math.max(s.width,82);}},...(hasIrr?{y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'kWh/m²',color:'#b09040',font:{size:9}},grid:{display:false},ticks:{color:'#c0a050'},afterFit:(s)=>{s.width=Math.max(s.width,52);}}}:{})}
+        plugins:{...CHART_DEFAULTS.plugins,legend:{...CHART_DEFAULTS.plugins.legend,display:true,position:'top',align:'start',labels:{...CHART_DEFAULTS.plugins.legend.labels,padding:14}},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:(items)=>`📅 ${items?.[0]?.label||''}`,label:(ctx)=>{const idx=ctx.dataIndex;if(ctx.dataset.yAxisID==='y2')return[`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} W/m²`];return [`⚡ ${translateAnyText('Geração')}: ${_fmtMWh2(prod[idx]||0)} MWh`,`🎯 ${translateAnyText('Meta')}: ${_fmtMWh2(meta[idx]||0)} MWh`,`📊 ${translateAnyText('% da meta')}: ${(pct[idx]||0).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})}%`,`☀️ Irradiância: ${irrData[idx]!=null?irrData[idx]:'--'} W/m²`];}}}},
+        scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{color:'#d9e2f5',autoSkip:false,maxRotation:0,minRotation:0,font:{size:gran==='ano'?13:(gran==='mes' && months.length>1)?10:11,weight:'700'}}},y:{...CHART_DEFAULTS.scales.y,beginAtZero:true,suggestedMax:yMax,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{color:'#90a4c8',callback:(v)=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2})},afterFit:(s)=>{s.width=Math.max(s.width,82);}},...(hasIrr?{y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'W/m²',color:'#b09040',font:{size:9}},grid:{display:false},ticks:{color:'#c0a050'},afterFit:(s)=>{s.width=Math.max(s.width,52);}}}:{})}
       }
     });
 
@@ -16527,9 +16525,9 @@ window._ppaChartGet=function(id){return charts[id];};
                   irrByLabel[lb].sum+=(parseFloat(r.irr_media)||0); irrByLabel[lb].cnt++;
                 }
               }
-              /* irradiação diária = Σ(irr W/m² × 0,5h)/1000 = kWh/m² (energia solar do dia) */
+              /* irradiância média do dia, em W/m² (mesma unidade da base ONS) */
               irrData = labels.map(function(lb){
-                var v=irrByLabel[lb]; return (v&&v.cnt>0)?+(v.sum*0.5/1000).toFixed(2):null;
+                var v=irrByLabel[lb]; return (v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(1):null;
               });
             }
 
@@ -16547,16 +16545,16 @@ window._ppaChartGet=function(id){return charts[id];};
                   if(!irrByDay[dn]) irrByDay[dn]={sum:0,cnt:0};
                   irrByDay[dn].sum+=(parseFloat(r.irr_media)||0); irrByDay[dn].cnt++;
                 }
-                /* irradiação diária = Σ(irr W/m² × 0,5h)/1000 = kWh/m² (energia solar do dia) */
+                /* irradiância média do dia, em W/m² (mesma unidade da base ONS) */
                 irrData = labels.map(function(lb){
-                  var v=irrByDay[parseInt(lb)]; return (v&&v.cnt>0)?+(v.sum*0.5/1000).toFixed(2):null;
+                  var v=irrByDay[parseInt(lb)]; return (v&&v.cnt>0)?+(v.sum/v.cnt).toFixed(1):null;
                 });
               }
             }
 
             if(irrData && irrData.some(function(x){return x!==null;})){
               var lang=(typeof currentLang!=='undefined')?currentLang:'pt-BR';
-              var irrLbl=lang==='zh-CN'?'辐照量 (kWh/m²)':(lang==='en'?'Irradiance (kWh/m²)':'Irradiância (kWh/m²)');
+              var irrLbl=lang==='zh-CN'?'辐照度 (W/m²)':(lang==='en'?'Irradiance (W/m²)':'Irradiância (W/m²)');
               cfg.data.datasets.push({
                 type:'line', label:irrLbl, data:irrData,
                 borderColor:'rgba(250,210,60,0.95)', backgroundColor:'rgba(245,200,66,0.06)',
@@ -16573,8 +16571,8 @@ window._ppaChartGet=function(id){return charts[id];};
               if(!cfg.options.scales.y2){
                 cfg.options.scales.y2={
                   type:'linear', position:'right', beginAtZero:true,
-                  title:{display:true,text:'kWh/m²',color:'#F5C842',font:{size:9}},
-                  ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(1);}},
+                  title:{display:true,text:'W/m²',color:'#F5C842',font:{size:9}},
+                  ticks:{color:'rgba(245,200,66,0.7)',font:{size:9},callback:function(v){return v.toFixed(0);}},
                   grid:{display:false}, border:{display:false}
                 };
               }
