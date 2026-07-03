@@ -1997,8 +1997,6 @@ function _themeCharts(light){
         <span class="fbar-label">Granularidade</span>
         <select id="cmpGranSel" class="fselect" style="flex-shrink:0" onchange="_cmpGranOnChange()">
           <option value="dia" selected>Dia</option>
-          <option value="30min">30 min</option>
-          <option value="1h">1 hora</option>
           <option value="semana">Semana</option>
           <option value="mes">Mês</option>
           <option value="ano">Ano</option>
@@ -3787,7 +3785,10 @@ function renderDashboardPage(page){
   if(page==='cmp'){
     if(!_onsData) loadONSData();
     if(!_onsIrrData) loadONSIrradiancia();
-    if(document.getElementById('cmpDateWrap')&&!document.getElementById('cmpDateWrap').hasChildNodes()) _cmpGranOnChange(true);
+    if(document.getElementById('cmpDateWrap')&&!document.getElementById('cmpDateWrap').hasChildNodes()){
+      if(!filters.perIniDay&&!filters.perFimDay){const _n=new Date(),_s=new Date();_s.setDate(_s.getDate()-29);filters.perIniDay=_cmpFmtD(_s);filters.perFimDay=_cmpFmtD(_n);filters.perIni=filters.perIniDay.slice(0,7);filters.perFim=filters.perFimDay.slice(0,7);filters.ano='todos';filters.mes='todos';}
+      _cmpGranOnChange(true);
+    }
     safeRender(()=>renderCmpTotal(getToggle('cmptot')));
     safeRender(()=>renderCmpScatter());
     safeRender(()=>renderCmpUFV(getToggle('cmpuf')));
@@ -8283,6 +8284,13 @@ function _cmpGranOnChange(noRender){
       const t=filters.perFimDay||_cmpFmtD(now);
       filters.perIniDay=f;filters.perFimDay=t;filters.ano='todos';filters.mes='todos';filters.curtDay='';
       wrap.innerHTML='<input type="date" class="fdate" id="cmpFrom" value="'+f+'" onchange="_cmpApplyRange(this.value,null)"><span style="color:var(--t4);font-size:10px;padding:0 3px">→</span><input type="date" class="fdate" id="cmpTo" value="'+t+'" onchange="_cmpApplyRange(null,this.value)">';
+    } else if(g==='mes'||g==='ano'||g==='semana'){
+      /* granularidade grossa: janela ampla por padrão (Tudo) para mostrar a série completa —
+         com "30d" só apareceriam 1-2 pontos. Usuário pode estreitar nos botões. */
+      filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';filters.ano='todos';filters.mes='todos';filters.curtDay='';
+      const grp=document.getElementById('cmpQuickGroup');
+      if(grp){grp.querySelectorAll('button').forEach(b=>b.classList.remove('on'));const t=[...grp.querySelectorAll('button')].find(b=>b.textContent.trim()==='Tudo');if(t)t.classList.add('on');}
+      wrap.innerHTML='<span style="color:var(--t4);font-size:10px">período: Tudo · ajuste nos botões →</span>';
     } else {
       wrap.innerHTML='<span style="color:var(--t4);font-size:10px">janela pelos botões →</span>';
     }
