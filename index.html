@@ -4995,7 +4995,6 @@ function renderCmpTotal(type='line'){
   const isBar=type==='bar';
   /* Eixo X: se o período está todo em UM mês, mostra só os dias e o mês/ano UMA vez
      (centralizado, via título do eixo). Caso contrário, rótulo em 2 linhas por ponto. */
-  const g=filters.cmpGran||'dia';
   let xLabels, xTitle='';
   if(g==='dia'||g==='personalizado'){
     const months=[...new Set(s.labels.map(k=>k.slice(0,7)))];
