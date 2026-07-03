@@ -749,7 +749,8 @@ body.page-ppa-active #page-ppa{margin-top:0;}
 #page-ppa #sec-ppa-performance .cc-body canvas{width:100%!important;height:100%!important}
 #page-ppa #sec-ppa-performance #cPPARank{height:100%!important}
 #page-ppa #sec-ppa-performance #ppaXAxisMonthTag{flex:0 0 22px;display:flex;align-items:center;justify-content:center;font-size:11px!important;position:static}
-#page-ppa #sec-ppa-performance .ppa-local-controls{display:flex!important}
+/* filtro interno do gráfico removido — controle é só a barra superior (mês/escopo/parque) */
+#page-ppa #sec-ppa-performance .ppa-local-controls{display:none!important}
 @media (max-width: 1280px){
   #page-ppa .ppa-top-controls{width:100%;justify-content:flex-start;margin-left:0}
 }
@@ -14954,8 +14955,8 @@ window._ppaChartGet=function(id){return charts[id];};
 
     const pct=prod.map((v,i)=>meta[i]>0?+((v/meta[i])*100).toFixed(2):0);
 
-    // Irradiance from patamares data (daily average W/m²)
-    const _patAll=dashData?.patamares||[];
+    // Irradiância: ONS Dados Abertos (_irrSource funde ONS por-UFV + planilha)
+    const _patAll=(typeof _irrSource==='function'?_irrSource():dashData?.patamares)||[];
     const _dayIrr=(yd,md,dd)=>{const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===yd&&r.data.getMonth()===md&&r.data.getDate()===dd&&r.irr_media>0);return recs.length?+(recs.reduce((s,r)=>s+r.irr_media,0)/recs.length).toFixed(1):null;};
     let irrData=labels.map(()=>null);
     if(gran==='ano'){irrData=months.map(mi=>{const recs=_patAll.filter(r=>r.data instanceof Date&&r.data.getFullYear()===y&&r.data.getMonth()===mi&&r.irr_media>0);return recs.length?+(recs.reduce((s,r)=>s+r.irr_media,0)/recs.length).toFixed(1):null;});}
@@ -16464,7 +16465,8 @@ window._ppaChartGet=function(id){return charts[id];};
                        && labels.length <= 31 && parseInt(String(labels[labels.length-1])) <= 31;
 
         if(isDD_MM || isNumDay){
-          var allPat = (typeof dashData !== 'undefined') ? (dashData.patamares || []) : [];
+          /* Irradiância vinda do ONS Dados Abertos (_irrSource funde ONS por-UFV + planilha). */
+          var allPat = (typeof _irrSource==='function') ? (_irrSource()||[]) : ((typeof dashData!=='undefined')?(dashData.patamares||[]):[]);
           var fs     = (typeof filters  !== 'undefined') ? filters  : {};
 
           if(allPat.length > 0){
@@ -17768,6 +17770,18 @@ window._ppaChartGet=function(id){return charts[id];};
     window.__v43Hooked__=true;
     var _orig=window.renderPagePPA;
     window.renderPagePPA=function(type){
+      /* Sincroniza o mês legado (filters.ppaMes = índice em ppa.months) a partir do mês da
+         barra superior (ppaCalYear/ppaCalMonth), para que TODOS os cards do PPA (evolução,
+         meta×realizado, participação, taxa de conclusão) sigam a mesma seleção do gráfico. */
+      try{
+        var _ppa=dashData&&dashData.ppa;
+        if(_ppa&&_ppa.months&&filters.ppaCalMonth!=null){
+          var _want=Number(filters.ppaCalMonth)+1, _cy=Number(filters.ppaCalYear)||null;
+          var _idx=_ppa.months.findIndex(function(m){return m.mesNum===_want&&(_cy==null||m.mesAno==null||m.mesAno===_cy);});
+          if(_idx<0) _idx=_ppa.months.findIndex(function(m){return m.mesNum===_want;});
+          if(_idx>=0) filters.ppaMes=_idx;
+        }
+      }catch(e){console.warn('PPA sync mês:',e);}
       var r=_orig.call(this,type);
       requestAnimationFrame(function(){try{buildGauges();}catch(e){console.warn('V43:',e);}});
       return r;
@@ -17793,6 +17807,10 @@ window._ppaChartGet=function(id){return charts[id];};
 
   /* ── Button injection helper (called from RAF and setTimeout fallbacks) ── */
   function _v44Btn(){
+    /* Botão PROJ removido a pedido do usuário — apenas limpa instância antiga se existir. */
+    try{ var _rm=document.getElementById('ppaRankProjWrapV44'); if(_rm) _rm.remove(); }catch(e){}
+    return;
+    /* eslint-disable no-unreachable */
     try{
       var _old=document.getElementById('ppaRankProjWrapV44');
       if(_old) _old.remove();
@@ -17948,7 +17966,7 @@ window._ppaChartGet=function(id){return charts[id];};
                 for(var i=lastActiveIdx+1;i<genDs.data.length;i++) genDs.data[i]=null;
 
                 /* ── Irradiance history (same month, all years) for weighted projection + line extension ── */
-                var allPat=(typeof dashData!=='undefined')?(dashData.patamares||[]):[];
+                var allPat=(typeof _irrSource==='function')?(_irrSource()||[]):((typeof dashData!=='undefined')?(dashData.patamares||[]):[]);
                 _v44_hbd={}; var _irrS=0,_irrC=0;
                 for(var _pi=0;_pi<allPat.length;_pi++){
                   var _rec=allPat[_pi]; if(!_rec||!_rec.data) continue;
