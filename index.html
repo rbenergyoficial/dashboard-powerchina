@@ -8792,38 +8792,51 @@ async function _applyWay2Data(eMes,eMesAnt,eMust){
     if(last&&(!dashData.meta.dataMax||last.data>dashData.meta.dataMax)) dashData.meta.dataMax=last.data;
   }
 
-  // Patch dashData.ppa.months[].daily — junho/2026 em diante vem do Way2 (2 casas decimais)
+  // Patch dashData.ppa.months[].daily — junho/2026 em diante vem do Way2 (2 casas decimais).
+  // Robusto: NÃO depende de a planilha já ter linhas diárias como âncora. Infere o ANO de cada
+  // bloco de mês (mesmo os vazios) e cria os dias direto do Way2 — assim o gráfico é 100% automático.
   if(dashData?.ppa?.months?.length){
-    const moIdx={};
-    for(const mo of dashData.ppa.months){
-      const firstRec=(mo.daily||[]).find(r=>r?.data);
-      if(!firstRec) continue;
-      const _fd=firstRec.data instanceof Date?firstRec.data:new Date(firstRec.data);
-      const k=`${_fd.getUTCFullYear()}-${String(_fd.getUTCMonth()+1).padStart(2,'0')}`;
-      moIdx[k]=mo;
+    const mos=dashData.ppa.months;
+    /* 1) Ano de cada bloco: pela 1ª linha diária, se houver; senão propaga pelos vizinhos
+       (mesNum decrescente entre blocos consecutivos ⇒ virou o ano). */
+    const yearOf=new Array(mos.length).fill(null);
+    mos.forEach((mo,i)=>{
+      const fr=(mo.daily||[]).find(r=>r?.data);
+      if(fr){const d=fr.data instanceof Date?fr.data:new Date(fr.data);yearOf[i]=d.getFullYear();}
+    });
+    for(let i=1;i<mos.length;i++){
+      if(yearOf[i]==null&&yearOf[i-1]!=null&&mos[i].mesNum&&mos[i-1].mesNum)
+        yearOf[i]=yearOf[i-1]+(mos[i].mesNum<=mos[i-1].mesNum?1:0);
     }
+    for(let i=mos.length-2;i>=0;i--){
+      if(yearOf[i]==null&&yearOf[i+1]!=null&&mos[i].mesNum&&mos[i+1].mesNum)
+        yearOf[i]=yearOf[i+1]-(mos[i].mesNum>=mos[i+1].mesNum?1:0);
+    }
+    const _curY=new Date().getFullYear();
+    /* 2) Índice YYYY-MM → bloco (agora inclui meses sem linhas diárias). */
+    const moIdx={};
+    mos.forEach((mo,i)=>{
+      if(!mo.mesNum) return;
+      const y=yearOf[i]!=null?yearOf[i]:_curY;
+      moIdx[`${y}-${String(mo.mesNum).padStart(2,'0')}`]=mo;
+    });
     const CUTOFF='2026-06';
     const allPkWay2=Object.keys(WAY2_ENERGY_IDS);
+    let _inj=0;
     for(const [day,vals] of Object.entries(dayMapPPA)){
       if(day.slice(0,7)<CUTOFF) continue;
-      const moKey=day.slice(0,7);
-      if(!moIdx[moKey]) continue;
-      const mo=moIdx[moKey];
+      const mo=moIdx[day.slice(0,7)];
+      if(!mo) continue;
       const [y,mo2,d]=day.split('-').map(Number);
-      let rec=(mo.daily||[]).find(r=>{if(!r?.data)return false;const _d=r.data instanceof Date?r.data:new Date(r.data);return _d.getUTCFullYear()===y&&_d.getUTCMonth()===mo2-1&&_d.getUTCDate()===d;});
+      let rec=(mo.daily||[]).find(r=>{if(!r?.data)return false;const _d=r.data instanceof Date?r.data:new Date(r.data);return _d.getFullYear()===y&&_d.getMonth()===mo2-1&&_d.getDate()===d;});
       if(!rec){rec={data:new Date(y,mo2-1,d)};if(!mo.daily)mo.daily=[];mo.daily.push(rec);}
       let tot=0;
       for(const pk of allPkWay2){if(vals[pk]!=null){rec[pk]=+vals[pk].toFixed(2);tot+=vals[pk];}}
-      if(tot>0)rec.total=+tot.toFixed(2);
+      if(tot>0){rec.total=+tot.toFixed(2);_inj++;}
     }
     for(const mo of Object.values(moIdx)){if(mo.daily)mo.daily.sort((a,b)=>a.data-b.data);}
-    const _mo6=moIdx['2026-06'];
-    if(_mo6){
-      const _r1=(_mo6.daily||[]).find(r=>{const _d=r.data instanceof Date?r.data:new Date(r.data);return _d.getUTCMonth()===5&&_d.getUTCDate()===1;});
-      console.log('🟢 PPA patch dia-1 após injeção: M2=',_r1?.M2,'M10=',_r1?.M10,'total=',_r1?.total,'data=',_r1?.data);
-    } else {
-      console.warn('🔴 moIdx NÃO tem "2026-06"! Chaves disponíveis:',Object.keys(moIdx));
-    }
+    console.log('🟢 PPA Way2 injetado:',_inj,'dias · meses no índice:',Object.keys(moIdx).join(', '));
+    if(!moIdx['2026-06']) console.warn('🔴 Nenhum bloco de mês casou com 2026-06 (mesNum/ano). Blocos:',mos.map(m=>m.mes+'#'+m.mesNum).join(', '));
   }
 
   // Patch dashData.must.ativa
