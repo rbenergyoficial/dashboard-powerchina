@@ -18526,6 +18526,15 @@ window._ppaChartGet=function(id){return charts[id];};
       var gc=(function(){try{return localStorage.getItem('cc-gc-'+_ccKey(cc));}catch(e){return null;}}());
       if(gc) cc.style.setProperty('grid-column',gc,'important');
     });
+    /* re-ajusta os charts à altura restaurada — o Chart.js não redimensiona sozinho quando o
+       container muda de altura; sem isso o gráfico ficava no tamanho padrão e o card "crescia" no reload */
+    if(typeof Chart!=='undefined'){
+      setTimeout(function(){
+        document.querySelectorAll('.cc canvas').forEach(function(cv){
+          var ch=Chart.getChart?Chart.getChart(cv):null; if(ch){try{ch.resize();}catch(e){}}
+        });
+      },40);
+    }
   }
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',_init);
