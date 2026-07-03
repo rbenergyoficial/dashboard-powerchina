@@ -8420,16 +8420,30 @@ function _cmpQuick(p,btn){
     const tgt=new Date(now); if(p==='ontem') tgt.setDate(tgt.getDate()-1);
     const d=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(tgt)):_cmpFmtD(tgt);
     filters.perIniDay=d; filters.perFimDay=d; filters.perIni=d.slice(0,7); filters.perFim=d.slice(0,7);
-    const dp=document.getElementById('cmpDatePicker'); if(dp) dp.value=d;
+    /* dia único → mostra o PERFIL POR HORA automaticamente (senão "Dia" daria 1 ponto só) */
+    filters.cmpGran='1h';
+    const gsel=document.getElementById('cmpGranSel'); if(gsel) gsel.value='1h';
+    const wrap=document.getElementById('cmpDateWrap');
+    if(wrap) wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
   } else if(p==='tudo'){
     filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
+    _cmpQuickToDia();
   } else {
     const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
     const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
     filters.perIniDay=_cmpFmtD(start); filters.perFimDay=_cmpFmtD(end);
     filters.perIni=fmtM(start); filters.perFim=fmtM(end);
+    _cmpQuickToDia();
   }
   clearFilterCache(); renderAll();
+}
+/* range (7d/30d/…/Tudo) → volta p/ granularidade Dia se estava no perfil por hora */
+function _cmpQuickToDia(){
+  if(filters.cmpGran==='1h'||filters.cmpGran==='30min'){
+    filters.cmpGran='dia';
+    const gsel=document.getElementById('cmpGranSel'); if(gsel) gsel.value='dia';
+    const wrap=document.getElementById('cmpDateWrap'); if(wrap) wrap.innerHTML='<span style="color:var(--t4);font-size:10px">janela pelos botões →</span>';
+  }
 }
 /* inicializa seletor de data do curtailment com o mês atual */
 (function(){ _curtGranOnChange(true); })();
