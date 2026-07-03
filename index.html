@@ -4350,10 +4350,12 @@ async function _eneatLoadBlob(baseInt,dt){
   if(c?.loading&&c._p) return c._p;
   const _p=(async()=>{
     let v=null;
+    const _ctrl=new AbortController(); const _to=setTimeout(()=>_ctrl.abort(),15000);
     try{
-      const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store'});
+      const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store',signal:_ctrl.signal});
       v=r.ok?await r.json():null;
     }catch(e){v=null;}
+    finally{clearTimeout(_to);}
     _eneatBlobCache.set(key,{v,t:Date.now(),loading:false});
     return v;
   })();
