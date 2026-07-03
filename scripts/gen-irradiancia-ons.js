@@ -64,6 +64,18 @@ function baixarEConverter(mo) {
         usina: 'Conj. Mauriti (CEFMT1-9)',
         mes: mo.replace('_', '-'),
         gerado_em: new Date().toISOString(),
+        // Unidades NATIVAS do ONS preservadas (sem conversão) p/ análises/comparativos futuros.
+        // Fonte: Dicionário de Dados oficial do dataset ONS.
+        intervalo: 'semi-hora (30 min)',
+        unidades: { irr: 'W/m2', ge: 'MWmed', gv: 'MWmed' },
+        campos: {
+          ts: 'din_instante — Data/Hora',
+          u: 'id_ons — CEFMT1..9 = Mauriti 1..9',
+          irr: 'val_irradianciaverificado — Irradiância verificada, em W/m2',
+          inv: 'flg_dadoirradianciainvalido — 1 = medida inválida (>6 min sem dado na semi-hora)',
+          ge: 'val_geracaoestimada — Geração estimada, em MWmed',
+          gv: 'val_geracaoverificada — Geração verificada, em MWmed'
+        },
         consolidado: cons
       };
       const body = JSON.stringify(out);
