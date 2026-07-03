@@ -6295,7 +6295,15 @@ function renderPagePPA(type){
   // ── KPIs ──
   const kpiParks=(sel==='todos'?chartParksBase:[sel]);
   const ger=+kpiParks.reduce((s,p)=>s+prodAgg(p),0).toFixed(2);
-  const meta=+kpiParks.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
+  /* META idêntica à planilha: usa os totais/subtotais OFICIAIS da planilha (PPA Total col N,
+     PPA-BRF col H, Subtotal ML col L) em vez de somar metas por parque — a soma por parque
+     arredonda cada valor e perde centavos (ex.: 50.592,00 virava 50.591,99). */
+  const _metaSumMonths=fn=>+(_v42MatchMs||[M]).reduce((s,mm)=>s+(num(fn(mm))||0),0).toFixed(2);
+  let meta;
+  if(sel!=='todos')           meta=+metaAgg(sel).toFixed(2);
+  else if(chartScope==='ppa') meta=_metaSumMonths(mm=>mm.meta&&mm.meta._sub)||+parks.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
+  else if(chartScope==='ml')  meta=_metaSumMonths(mm=>mm.meta&&mm.meta._ml)||+mlParks.reduce((s,p)=>s+metaAgg(p),0).toFixed(2);
+  else                        meta=_metaSumMonths(mm=>calcMonth(mm).metaTotal);
   window._ppaCurKpi={ger,meta};
   const kpiIniDate=filters.ppaPerIni?parseDate(filters.ppaPerIni):null;
   const kpiFimDate=filters.ppaPerFim?parseDate(filters.ppaPerFim):null;
