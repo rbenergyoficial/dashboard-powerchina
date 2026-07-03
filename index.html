@@ -4345,15 +4345,20 @@ async function _eneatLoadBlob(baseInt,dt){
   const isToday=dt===today;
   const c=_eneatBlobCache.get(key);
   if(c&&!c.loading&&(!isToday||(now-c.t)<_ENEAT_BLOB_TTL)) return c.v;
-  if(c?.loading) return c.v||null;
-  _eneatBlobCache.set(key,{v:c?.v||null,t:c?.t||0,loading:true});
-  let v=null;
-  try{
-    const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store'});
-    v=r.ok?await r.json():null;
-  }catch(e){v=null;}
-  _eneatBlobCache.set(key,{v,t:now,loading:false});
-  return v;
+  /* carga em andamento → aguarda o MESMO promise (evita corrida: antes o 2º chamador
+     recebia null e mostrava "falta Way2" indevidamente / travava o outro gráfico) */
+  if(c?.loading&&c._p) return c._p;
+  const _p=(async()=>{
+    let v=null;
+    try{
+      const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store'});
+      v=r.ok?await r.json():null;
+    }catch(e){v=null;}
+    _eneatBlobCache.set(key,{v,t:Date.now(),loading:false});
+    return v;
+  })();
+  _eneatBlobCache.set(key,{v:c?.v||null,t:c?.t||0,loading:true,_p});
+  return _p;
 }
 function _eneatBlobToMap(blob,pkFields,iv){
   // Converte resposta Way2 (dados[]/valores[]) em mapa HH:mm → MWh
