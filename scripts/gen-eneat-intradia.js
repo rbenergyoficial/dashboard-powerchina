@@ -21,19 +21,23 @@ function diaBRT(offset) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-function buscarDia(day, token) {
+function apiGet(query, token, timeout = 45000) {
   return new Promise((resolve, reject) => {
-    const q = `ids=${IDS}&grandezas=${GRANDEZA}&contextodasdatas=ConsiderarDiaCheio&intervalo=QuinzeMinutos` +
-      `&medicao-datainicio=${day}T00:00:00&medicao-datafim=${day}T23:59:59` +
-      `&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false`;
-    const req = https.get({ ...API, path: `${API.path}?${q}`, headers: { 'Pim-Auth': token }, timeout: 30000 }, (res) => {
+    const req = https.get({ ...API, path: `${API.path}?${query}`, headers: { 'Pim-Auth': token }, timeout }, (res) => {
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('Way2 HTTP ' + res.statusCode)); }
       let buf = ''; res.on('data', c => buf += c);
       res.on('end', () => { try { resolve(JSON.parse(buf.replace(/^﻿/, ''))); } catch (e) { reject(e); } });
     });
-    req.on('timeout', () => req.destroy(new Error('timeout 30s')));
+    req.on('timeout', () => req.destroy(new Error('timeout')));
     req.on('error', reject);
   });
+}
+
+function buscarDia(day, token) {
+  const q = `ids=${IDS}&grandezas=${GRANDEZA}&contextodasdatas=ConsiderarDiaCheio&intervalo=QuinzeMinutos` +
+    `&medicao-datainicio=${day}T00:00:00&medicao-datafim=${day}T23:59:59` +
+    `&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false`;
+  return apiGet(q, token);
 }
 
 // Retry com backoff — a API Way2 pode dar timeout/5xx em chamadas rápidas seguidas.
@@ -42,6 +46,21 @@ async function buscarComRetry(day, token, tentativas = 5) {
     try { return await buscarDia(day, token); }
     catch (e) { if (t === tentativas) throw e; await sleep(1500 * t); } // backoff 1.5s,3s,4.5s,6s
   }
+}
+
+// Agregado DIÁRIO EneatRec (bruta) desde o início de Mauriti → 1 blob p/ o comparativo 7d+ usar bruta.
+// (não afeta o blob diário way2_energia_mes, que é EneatLiquida e alimenta PPA/KPIs.)
+async function gerarDiario(container, token) {
+  const ini = '2025-09-04', fim = diaBRT(0);
+  const q = `ids=${IDS}&grandezas=${GRANDEZA}&contextodasdatas=ConsiderarDiaCheio&intervalo=UmDia` +
+    `&medicao-datainicio=${ini}T00:00:00&medicao-datafim=${fim}T23:59:59` +
+    `&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false`;
+  let j;
+  for (let t = 1; t <= 5; t++) { try { j = await apiGet(q, token, 90000); break; } catch (e) { if (t === 5) throw e; await sleep(2000 * t); } }
+  const body = JSON.stringify(j);
+  await container.getBlockBlobClient('way2_eneat_diario.json').upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+  let n = 0; (j.dados || []).forEach(it => (it.valores || []).forEach(v => { if (v.valor > 0) n++; }));
+  console.log(`[diário] way2_eneat_diario.json OK — ${n} valores diários (${GRANDEZA}), ${(body.length / 1024).toFixed(0)} KB`);
 }
 
 (async () => {
@@ -76,7 +95,9 @@ async function buscarComRetry(day, token, tentativas = 5) {
     console.log(`Repassando ${falhas.length} dia(s) que falharam...`);
     for (const day of falhas) { await sleep(800); if (!(await processar(day))) resto.push(day); }
   }
-  console.log(`=== FIM: ${DIAS - resto.length}/${DIAS} dias OK` + (resto.length ? ` · ainda com erro: ${resto.join(', ')}` : '') + ` ===`);
+  console.log(`=== FIM 15min: ${DIAS - resto.length}/${DIAS} dias OK` + (resto.length ? ` · ainda com erro: ${resto.join(', ')}` : '') + ` ===`);
+  // Agregado diário (bruta) p/ o comparativo 7d+
+  try { await gerarDiario(container, token); } catch (e) { console.error('diário falhou: ' + e.message); }
   // Só falha o job se MUITOS dias (>15%) ficarem de fora — poucas falhas transientes são
   // preenchidas pelo agendamento diário (últimos 5 dias) nas próximas execuções.
   if (resto.length > Math.max(3, DIAS * 0.15)) process.exit(1);

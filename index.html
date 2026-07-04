@@ -3796,6 +3796,7 @@ function renderDashboardPage(page){
   if(page==='cmp'){
     if(!_onsData) loadONSData();
     if(!_onsIrrData) loadONSIrradiancia();
+    if(_eneatDiario===null){_eneatDiario={};loadEneatDiario().then(()=>{try{renderCmpTotal(getToggle('cmptot'));renderCmpScatter();renderCmpUFV(getToggle('cmpuf'));}catch(e){}});} /* EneatRec bruta 7d+ */
     if(document.getElementById('cmpDateWrap')&&!document.getElementById('cmpDateWrap').hasChildNodes()){
       if(!filters.perIniDay&&!filters.perFimDay){const _n=new Date(),_s=new Date();_s.setDate(_s.getDate()-29);filters.perIniDay=_cmpFmtD(_s);filters.perFimDay=_cmpFmtD(_n);filters.perIni=filters.perIniDay.slice(0,7);filters.perFim=filters.perFimDay.slice(0,7);filters.ano='todos';filters.mes='todos';}
       _cmpGranOnChange(true);
@@ -4911,6 +4912,21 @@ function _cmpNote(id,msg){
 }
 /* Mauriti N → pontoId Way2 (energia). 6368 = Mauriti 1 (Way2 rotula "M10"). */
 const _MAURITI_PONTO={1:6368,2:6369,3:6373,4:6374,5:6375,6:6376,7:6215,8:6378,9:6219};
+/* EneatRec diário (BRUTA) por parque — usado no comparativo 7d+ p/ ficar coerente c/ o ONS.
+   Formato: {'YYYY-MM-DD':{1..9: MWh}}. Fonte: blob way2_eneat_diario.json (GitHub reprocessador). */
+let _eneatDiario=null;
+async function loadEneatDiario(){
+  try{
+    const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_diario.json?t='+Date.now(),{cache:'no-cache'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const rev={}; Object.keys(_MAURITI_PONTO).forEach(n=>rev[_MAURITI_PONTO[n]]=+n);
+    const map={};
+    (j.dados||[]).forEach(it=>{const n=rev[it.pontoId]; if(!n)return; (it.valores||[]).forEach(v=>{if(v.valor==null)return;const d=(''+v.data).slice(0,10);(map[d]=map[d]||{})[n]=(map[d][n]||0)+v.valor/1000;});});
+    _eneatDiario=map;
+    console.log('✅ EneatRec diário (bruta):',Object.keys(map).length,'dias');
+  }catch(e){ _eneatDiario=_eneatDiario||{}; console.warn('loadEneatDiario:',e.message); }
+}
 /* ── Perfil intradiário (1 dia) com intervalo selecionável: 15 / 30 / 60 min. ──
    Way2 = EneatRec (15 min nativo, kWh/intervalo, ~tempo real). ONS = 30 min (ger MWmed → ×0,5 MWh).
    30 min é a comparação mais fiel (ONS nativo); 15 min mostra o Way2 cheio (ONS repartido em 2);
@@ -5109,14 +5125,14 @@ function renderCmpScatter(){
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS Verificada (GWh)',color:'#8090b8',font:{size:9}}}}}});
 }
 
-// Comparativo por UFV: ONS verificada × Way2 líquida, Mauriti 1–9 no período + desvio (tooltip)
+// Comparativo por UFV: ONS verificada × Way2 BRUTA (EneatRec), Mauriti 1–9 no período + desvio (tooltip)
 function renderCmpUFV(type='bar'){
   const gen=_onsGenRows(), way=_wayRows();
   if(!gen.length||!way.length){showNoData('cCmpUFV');return;}
   const labels=[],onsN=[],wayN=[];
   for(let n=1;n<=9;n++){
     const o=gen.reduce((s,r)=>s+num(r['gv'+n]),0)/1000;
-    const w=way.reduce((s,r)=>s+num(r[_M2WAY2[n]]),0)/1000;
+    const w=way.reduce((s,r)=>{const ed=_eneatDiario&&_eneatDiario[_cmpFmtD(r.data)];return s+(ed?num(ed[n]):num(r[_M2WAY2[n]]));},0)/1000;
     labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+w.toFixed(3));
   }
   mkChart('cCmpUFV',{type:type==='line'?'line':'bar',data:{labels,datasets:[
@@ -8399,9 +8415,11 @@ function _cmpBuildSeries(){
     _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
   const way=_wayRows();
-  /* Way2 = BRUTA (soma dos 9 parques) — consistente c/ o intradiário (EneatRec) e c/ a geração
-     verificada do ONS (bruta). Complexo = Σ dos parques (não a energia líquida do medidor). */
-  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r[_M2WAY2[n]]));wayMap[k]=(wayMap[k]||0)+v/1000;});
+  /* Way2 = BRUTA (EneatRec) p/ ficar coerente c/ a geração verificada do ONS (bruta).
+     Prefere o agregado diário EneatRec (_eneatDiario); cai p/ a líquida (dashData.way2) só quando falta. */
+  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;const ed=_eneatDiario&&_eneatDiario[_cmpFmtD(r.data)];let v=0;
+    if(ed) parks.forEach(n=>v+=num(ed[n])); else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));
+    wayMap[k]=(wayMap[k]||0)+v/1000;});
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
