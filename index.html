@@ -2044,7 +2044,7 @@ function _themeCharts(light){
       <div class="chart-row cols-2">
         <div class="cc">
           <div class="cc-head">
-            <div><div class="cc-title">Geração do Complexo: ONS × Way2</div><div class="cc-sub">Verificada (ONS) × Líquida (Way2) + desvio %</div></div>
+            <div><div class="cc-title">Geração do Complexo: ONS × Way2</div><div class="cc-sub">Verificada (ONS) × Way2 (EneatRec) + desvio %</div></div>
             <div class="toggle-grp" id="tg-cmptot"><button class="toggle-btn on" data-chart="cmptot" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="cmptot" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
           <div class="cc-body" style="height:340px"><canvas id="cCmpTotal"></canvas></div>
@@ -4911,36 +4911,53 @@ function _cmpNote(id,msg){
 }
 /* Mauriti N → pontoId Way2 (energia). 6368 = Mauriti 1 (Way2 rotula "M10"). */
 const _MAURITI_PONTO={1:6368,2:6369,3:6373,4:6374,5:6375,6:6376,7:6215,8:6378,9:6219};
-/* ── Intradiário POR HORA (1 dia). Descoberta: EneatLiqGeracao só tem valor real nos marcos
-   :00 (energia HORÁRIA; :15/:30/:45 vêm vazios). E o valor em HH:00 = energia da hora [HH-1,HH],
-   então desloca -1h p/ casar com o ONS (que é 30min → soma por hora). Unidade: MWh/hora. ── */
+/* ── Perfil intradiário (1 dia) com intervalo selecionável: 15 / 30 / 60 min. ──
+   Way2 = EneatRec (15 min nativo, kWh/intervalo, ~tempo real). ONS = 30 min (ger MWmed → ×0,5 MWh).
+   30 min é a comparação mais fiel (ONS nativo); 15 min mostra o Way2 cheio (ONS repartido em 2);
+   1h integraliza. Slots por INÍCIO de intervalo; Way2 desloca -15 min (valor em T = energia [T-15,T]). */
 async function _cmpIntradayBuild(day){
   const parks=_cmpSelParks(), isComplex=parks.length===9;
+  const interval=parseInt(filters.cmpIntraInterval||'30',10); // 15 | 30 | 60
   const dayMatch=d=>{const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return k===day;};
-  const hourKey=h=>String(h).padStart(2,'0')+':00';
-  const onsMap={};
+  const slotKey=min=>{const s=Math.floor(min/interval)*interval;return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
+  const onsMap={}, wayMap={};
+  /* ONS 30 min → energia por slot; se intervalo=15, reparte a meia-hora em duas metades de 15. */
+  const addOns=(d,energy)=>{
+    const m=d.getHours()*60+d.getMinutes();
+    if(interval>=30){ const k=slotKey(m); onsMap[k]=(onsMap[k]||0)+energy; }
+    else { const h=energy/2; const k1=slotKey(m),k2=slotKey(m+15); onsMap[k1]=(onsMap[k1]||0)+h; onsMap[k2]=(onsMap[k2]||0)+h; }
+  };
   if(isComplex){
-    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return;const k=hourKey(r.ts.getHours());onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5;});
+    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return; addOns(r.ts, num(r.ger)*0.5);});
   } else {
-    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;const k=hourKey(r.data.getHours());let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v;});
+    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));addOns(r.data, v);});
   }
-  /* Way2: blob 15min, mas só :00 tem valor (horário). Valor em HH:00 = hora [HH-1,HH] → slot HH-1. */
+  /* Way2 EneatRec 15 min: valor em T = energia de [T-15,T] → desloca -15 min p/ casar o slot inicial. */
   const blob=await _eneatLoadBlob('QuinzeMinutos',day);
   const dados=Array.isArray(blob)?blob:((blob&&blob.dados)||[]);
   const wantPontos=isComplex?null:new Set(parks.map(n=>_MAURITI_PONTO[n]));
-  const wayMap={};
   for(const item of dados){
     if(wantPontos&&!wantPontos.has(item.pontoId)) continue;
     for(const v of (item.valores||[])){
       if(v.valor==null||v.valor<0) continue;
       const d=new Date(v.data);
-      const k=hourKey((d.getHours()-1+24)%24); /* HH:00 → hora HH-1 */
+      const m=d.getHours()*60+d.getMinutes()-15; if(m<0) continue;
+      const k=slotKey(m);
       wayMap[k]=(wayMap[k]||0)+v.valor/1000; /* kWh → MWh */
     }
   }
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(2)), way:keys.map(k=>+(wayMap[k]||0).toFixed(2)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), interval};
 }
+/* HTML do seletor de data + intervalo (perfil intradiário) — usado no dropdown Dia e nos atalhos Hoje/Ontem */
+function _cmpDiaWrapHTML(d){
+  const iv=filters.cmpIntraInterval||'30';
+  return '<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">'+
+    '<select class="fselect" id="cmpIntraSel" title="intervalo do perfil (Way2 15min · ONS 30min)" style="flex-shrink:0;margin-left:4px" onchange="_cmpIntervalChange(this.value)">'+
+    [['15','15 min'],['30','30 min · fiel ao ONS'],['60','1 hora']].map(o=>'<option value="'+o[0]+'"'+(iv===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+
+    '</select>';
+}
+function _cmpIntervalChange(v){ filters.cmpIntraInterval=v||'30'; clearFilterCache(); renderAll(); }
 const _cmpIntraSeq={};
 async function _cmpRenderIntraday(target,type){
   const g=filters.cmpGran, day=filters.perIniDay;
@@ -4970,8 +4987,8 @@ async function _cmpRenderIntraday(target,type){
       {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
     ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
-      scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/hora)',color:'#8090b8',font:{size:9}}},
-        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/hora)',color:'#8090b8',font:{size:9}}}}}});
+      scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
+        y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
     return;
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
@@ -8393,7 +8410,7 @@ function _cmpGranOnChange(noRender){
     if(g==='dia'){
       let d=(filters.perIniDay&&filters.perIniDay===filters.perFimDay)?filters.perIniDay:_recent();
       filters.perIniDay=d;filters.perFimDay=d;filters.perIni=d.slice(0,7);filters.perFim=d.slice(0,7);filters.ano='todos';filters.mes='todos';filters.curtDay='';
-      wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
+      wrap.innerHTML=_cmpDiaWrapHTML(d);
     } else if(g==='semana'){
       let base=(filters.perIniDay)||_recent(); _cmpSetWeek(base);
       wrap.innerHTML='<input type="date" class="fdate" id="cmpWeekPick" value="'+base+'" title="qualquer dia da semana" style="flex-shrink:0" onchange="_cmpApplyWeek(this.value)">';
@@ -8466,7 +8483,7 @@ function _cmpQuick(p,btn){
     filters.perIniDay=d; filters.perFimDay=d; filters.perIni=d.slice(0,7); filters.perFim=d.slice(0,7);
     filters.cmpGran='dia'; /* Dia → perfil por hora */
     if(gsel) gsel.value='dia';
-    if(wrap) wrap.innerHTML='<input type="date" class="fdate" id="cmpDatePicker" value="'+d+'" style="flex-shrink:0" onchange="_cmpApplyDay(this.value)">';
+    if(wrap) wrap.innerHTML=_cmpDiaWrapHTML(d);
   } else {
     if(p==='tudo'){
       filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
