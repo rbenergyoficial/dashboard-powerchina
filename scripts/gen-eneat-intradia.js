@@ -37,10 +37,10 @@ function buscarDia(day, token) {
 }
 
 // Retry com backoff — a API Way2 pode dar timeout/5xx em chamadas rápidas seguidas.
-async function buscarComRetry(day, token, tentativas = 3) {
+async function buscarComRetry(day, token, tentativas = 5) {
   for (let t = 1; t <= tentativas; t++) {
     try { return await buscarDia(day, token); }
-    catch (e) { if (t === tentativas) throw e; await sleep(1200 * t); }
+    catch (e) { if (t === tentativas) throw e; await sleep(1500 * t); } // backoff 1.5s,3s,4.5s,6s
   }
 }
 
@@ -49,21 +49,35 @@ async function buscarComRetry(day, token, tentativas = 3) {
   if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
   if (!token) { console.error('ERRO: secret WAY2_TOKEN ausente.'); process.exit(1); }
   const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
-  let erros = 0;
-  for (let k = 0; k < DIAS; k++) {
-    const day = diaBRT(k);
+
+  async function processar(day) {
     try {
       const j = await buscarComRetry(day, token);
       let cnt = 0;
       (j.dados || []).forEach(it => (it.valores || []).forEach(v => { if (v.valor != null && v.valor > 0) cnt++; }));
-      if (!cnt) { console.log(`[${day}] ainda sem valores — pulando`); continue; }
+      if (!cnt) { console.log(`[${day}] sem valores — pulando`); return true; }
       const body = JSON.stringify(j);
       const blob = container.getBlockBlobClient(`way2_eneat_intradia_QuinzeMinutos_${day}.json`);
       await blob.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
-      console.log(`[${day}] OK — ${cnt} valores 15min (${GRANDEZA}), ${(body.length / 1024).toFixed(0)} KB enviados ao blob`);
-    } catch (e) { erros++; console.error(`[${day}] falhou: ${e.message}`); }
-    await sleep(250); // pausa entre dias — evita timeout/limite da API Way2
+      console.log(`[${day}] OK — ${cnt} valores 15min (${GRANDEZA}), ${(body.length / 1024).toFixed(0)} KB`);
+      return true;
+    } catch (e) { console.error(`[${day}] falhou: ${e.message}`); return false; }
   }
-  console.log(`=== FIM: ${erros} dia(s) com erro ===`);
-  if (erros) process.exit(1);
+
+  const falhas = [];
+  for (let k = 0; k < DIAS; k++) {
+    const day = diaBRT(k);
+    if (!(await processar(day))) falhas.push(day);
+    await sleep(400); // pausa entre dias — evita limite de taxa da API Way2
+  }
+  // 2ª passada nos que falharam (a API costuma responder na segunda rodada)
+  let resto = [];
+  if (falhas.length) {
+    console.log(`Repassando ${falhas.length} dia(s) que falharam...`);
+    for (const day of falhas) { await sleep(800); if (!(await processar(day))) resto.push(day); }
+  }
+  console.log(`=== FIM: ${DIAS - resto.length}/${DIAS} dias OK` + (resto.length ? ` · ainda com erro: ${resto.join(', ')}` : '') + ` ===`);
+  // Só falha o job se MUITOS dias (>15%) ficarem de fora — poucas falhas transientes são
+  // preenchidas pelo agendamento diário (últimos 5 dias) nas próximas execuções.
+  if (resto.length > Math.max(3, DIAS * 0.15)) process.exit(1);
 })();
