@@ -5008,7 +5008,7 @@ async function _cmpRenderIntraday(target,type){
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
     ]},options:{...CHART_DEFAULTS,
       plugins:{...CHART_DEFAULTS.plugins,legend:{display:true},
-        tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{
           label:ctx=>{if(ctx.datasetIndex!==0)return null;const _f=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
             const d=(ctx.raw.x>0)?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;
             return ['🔵 Way2: '+_f(ctx.raw.x)+' MWh','🟢 ONS: '+_f(ctx.raw.y)+' MWh','📊 Desvio: '+_f(d)+'%'];}
@@ -5026,7 +5026,7 @@ async function _cmpRenderIntraday(target,type){
     interaction:{mode:'index',intersect:false},
     plugins:{...CHART_DEFAULTS.plugins,
       subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}},
-      tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,callbacks:{
+      tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,callbacks:{
         title:items=>items.length?'🕐 '+s.labels[items[0].dataIndex]+' · '+subj:'',
         label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
           const _f=v=>v==null?'--':Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -5086,15 +5086,15 @@ function renderCmpTotal(type='line'){
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
     plugins:{...CHART_DEFAULTS.plugins,
-      tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,
+      tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
-          title:items=>items.length?_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
+          title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
           label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
-            if(di===0) return '  ONS Verificada: '+_fmt(onsMW[i])+' MWh';
-            if(di===1) return '  Way2: '+_fmt(wayMW[i])+' MWh';
+            if(di===0) return '  🟢 ONS Verificada: '+_fmt(onsMW[i])+' MWh';
+            if(di===1) return '  🔵 Way2: '+_fmt(wayMW[i])+' MWh';
             if(devReal[i]==null) return null;
             const dir=devReal[i]>0.05?' (ONS > Way2)':devReal[i]<-0.05?' (Way2 > ONS)':'';
-            return '  Desvio: '+_fmt(Math.abs(devReal[i]))+'%'+dir;}
+            return '  📊 Desvio: '+_fmt(Math.abs(devReal[i]))+'%'+dir;}
         }}},
     scales:{
       x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxRotation:0,minRotation:0,autoSkip:!singleMonth,maxTicksLimit:singleMonth?31:16,font:{size:9}},title:xTitle?{display:true,text:xTitle,color:'#8090b8',font:{size:11,weight:'600'}}:{display:false}},
