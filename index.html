@@ -4990,7 +4990,13 @@ async function _cmpRenderIntraday(target,type){
     mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
       {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
-    ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
+    ]},options:{...CHART_DEFAULTS,
+      plugins:{...CHART_DEFAULTS.plugins,legend:{display:true},
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{
+          label:ctx=>{if(ctx.datasetIndex!==0)return null;const _f=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+            const d=(ctx.raw.x>0)?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;
+            return ['🔵 Way2: '+_f(ctx.raw.x)+' MWh','🟢 ONS: '+_f(ctx.raw.y)+' MWh','📊 Desvio: '+_f(d)+'%'];}
+        }}},
       scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
         y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
     return;
@@ -5001,7 +5007,19 @@ async function _cmpRenderIntraday(target,type){
     {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:4,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:dev,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,borderDash:[4,3],yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,
-    plugins:{...CHART_DEFAULTS.plugins,subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}}},
+    interaction:{mode:'index',intersect:false},
+    plugins:{...CHART_DEFAULTS.plugins,
+      subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}},
+      tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,callbacks:{
+        title:items=>items.length?'🕐 '+s.labels[items[0].dataIndex]+' · '+subj:'',
+        label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
+          const _f=v=>v==null?'--':Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+          if(di===0) return '  🟢 ONS: '+_f(s.ons[i])+' MWh';
+          if(di===1) return '  🔵 Way2: '+_f(s.way[i])+' MWh';
+          if(dev[i]==null) return null;
+          const dir=dev[i]>0.05?' (ONS > Way2)':dev[i]<-0.05?' (Way2 > ONS)':'';
+          return '  📊 Desvio: '+_f(dev[i])+'%'+dir;}
+      }}},
     scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:24,maxRotation:45,minRotation:45}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
