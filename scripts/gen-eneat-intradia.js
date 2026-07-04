@@ -19,17 +19,29 @@ function diaBRT(offset) {
   return d.toISOString().slice(0, 10);
 }
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 function buscarDia(day, token) {
   return new Promise((resolve, reject) => {
     const q = `ids=${IDS}&grandezas=${GRANDEZA}&contextodasdatas=ConsiderarDiaCheio&intervalo=QuinzeMinutos` +
       `&medicao-datainicio=${day}T00:00:00&medicao-datafim=${day}T23:59:59` +
       `&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false`;
-    https.get({ ...API, path: `${API.path}?${q}`, headers: { 'Pim-Auth': token } }, (res) => {
+    const req = https.get({ ...API, path: `${API.path}?${q}`, headers: { 'Pim-Auth': token }, timeout: 30000 }, (res) => {
       if (res.statusCode !== 200) { res.resume(); return reject(new Error('Way2 HTTP ' + res.statusCode)); }
       let buf = ''; res.on('data', c => buf += c);
       res.on('end', () => { try { resolve(JSON.parse(buf.replace(/^﻿/, ''))); } catch (e) { reject(e); } });
-    }).on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout 30s')));
+    req.on('error', reject);
   });
+}
+
+// Retry com backoff — a API Way2 pode dar timeout/5xx em chamadas rápidas seguidas.
+async function buscarComRetry(day, token, tentativas = 3) {
+  for (let t = 1; t <= tentativas; t++) {
+    try { return await buscarDia(day, token); }
+    catch (e) { if (t === tentativas) throw e; await sleep(1200 * t); }
+  }
 }
 
 (async () => {
@@ -41,7 +53,7 @@ function buscarDia(day, token) {
   for (let k = 0; k < DIAS; k++) {
     const day = diaBRT(k);
     try {
-      const j = await buscarDia(day, token);
+      const j = await buscarComRetry(day, token);
       let cnt = 0;
       (j.dados || []).forEach(it => (it.valores || []).forEach(v => { if (v.valor != null && v.valor > 0) cnt++; }));
       if (!cnt) { console.log(`[${day}] ainda sem valores — pulando`); continue; }
@@ -50,6 +62,8 @@ function buscarDia(day, token) {
       await blob.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
       console.log(`[${day}] OK — ${cnt} valores 15min (${GRANDEZA}), ${(body.length / 1024).toFixed(0)} KB enviados ao blob`);
     } catch (e) { erros++; console.error(`[${day}] falhou: ${e.message}`); }
+    await sleep(250); // pausa entre dias — evita timeout/limite da API Way2
   }
+  console.log(`=== FIM: ${erros} dia(s) com erro ===`);
   if (erros) process.exit(1);
 })();
