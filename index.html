@@ -4944,7 +4944,10 @@ async function _cmpIntradayBuild(day){
     else { const h=energy/2; const k1=slotKey(m),k2=slotKey(m+15); onsMap[k1]=(onsMap[k1]||0)+h; onsMap[k2]=(onsMap[k2]||0)+h; }
   };
   if(isComplex){
-    (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return; addOns(r.ts, num(r.ger)*0.5);});
+    /* ONS complexo do agregado; fallback DETAIL (_onsIrrData.gv, já MWh) se o agregado não tem o dia */
+    const _hasAgg=(_onsData||[]).some(r=>dayMatch(r.ts));
+    if(_hasAgg) (_onsData||[]).forEach(r=>{if(!dayMatch(r.ts))return; addOns(r.ts, num(r.ger)*0.5);});
+    else (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return; addOns(r.data, num(r.gv));}); /* r.gv já é MWh/intervalo */
   } else {
     (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));addOns(r.data, v);});
   }
@@ -8415,7 +8418,11 @@ function _cmpBuildSeries(){
   const parks=_cmpSelParks(), isComplex=parks.length===9;
   const onsMap={}, wayMap={};
   if(isComplex){
-    (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
+    /* ONS complexo = ger do agregado (ons_restricao). Fallback: dias que o agregado NÃO tem
+       (ex.: último dia do mês, blob gerado antes da publicação) vêm do DETAIL (_onsIrrData.gv). */
+    const _onsDias=new Set();
+    (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{_onsDias.add(_cmpFmtD(r.ts));const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
+    (_onsIrrData||[]).forEach(r=>{if(!_onsDatePass(r.data))return;if(_onsDias.has(_cmpFmtD(r.data)))return;const k=_cmpBucketKey(r.data);if(k)onsMap[k]=(onsMap[k]||0)+num(r.gv)/1000;});
   } else {
     _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
