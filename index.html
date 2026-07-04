@@ -4970,11 +4970,15 @@ async function _cmpRenderIntraday(target,type){
   /* superado por render mais recente, ou filtro mudou durante o carregamento → não desenha */
   if(seq!==_cmpIntraSeq[target]||filters.cmpGran!==g||filters.perIniDay!==day) return;
   const wayHas=s.way.some(v=>v>0), onsHas=s.ons.some(v=>v>0);
-  if(!s.labels.length||!wayHas||!onsHas){
-    const falta=!wayHas?'Way2 (way2_eneat_intradia)':'ONS (publicação com atraso ~1-2 dias)';
-    _cmpNote(target,'Sem dado horário completo para '+day+' — falta '+falta+'. O perfil por hora só aparece em dias que já têm as DUAS fontes. Escolha outro dia ou use Dia/superior.');
+  if(!s.labels.length||(!wayHas&&!onsHas)){
+    _cmpNote(target,'Sem dado intradiário para '+day+' (nem ONS nem Way2). Escolha outro dia ou use Dia/superior.');
     return;
   }
+  /* Se falta UMA fonte, desenha só a disponível (anula a ausente p/ não virar linha em zero). */
+  let _aviso='';
+  if(!onsHas){ s.ons=s.ons.map(()=>null); _aviso='ONS de '+day+' ainda não publicado (~1-2 dias de atraso)'; }
+  else if(!wayHas){ s.way=s.way.map(()=>null); _aviso='Way2 de '+day+' indisponível'; }
+  s._aviso=_aviso;
   const subj=s.subj;
   if(target==='cCmpScatter'){
     const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
@@ -4997,6 +5001,7 @@ async function _cmpRenderIntraday(target,type){
     {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:.3,borderWidth:2,pointRadius:0,borderRadius:4,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:dev,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,borderDash:[4,3],yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,
+    plugins:{...CHART_DEFAULTS.plugins,subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:24,maxRotation:45,minRotation:45}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
@@ -8478,8 +8483,9 @@ function _cmpQuick(p,btn){
   filters.curtDay=''; filters.ano='todos'; filters.mes='todos';
   const gsel=document.getElementById('cmpGranSel'); const wrap=document.getElementById('cmpDateWrap');
   if(p==='hoje'||p==='ontem'){
+    /* dia REAL (sem encaixar no dia do ONS) — Way2 é tempo real; ONS entra quando publicar */
     const tgt=new Date(now); if(p==='ontem') tgt.setDate(tgt.getDate()-1);
-    const d=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(tgt)):_cmpFmtD(tgt);
+    const d=_cmpFmtD(tgt);
     filters.perIniDay=d; filters.perFimDay=d; filters.perIni=d.slice(0,7); filters.perFim=d.slice(0,7);
     filters.cmpGran='dia'; /* Dia → perfil por hora */
     if(gsel) gsel.value='dia';
