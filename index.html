@@ -5065,7 +5065,7 @@ function renderCmpTotal(type='line'){
   } else xLabels=s.labels.map(_cmpAxisLabel);
   mkChart('cCmpTotal',{type:isBar?'bar':'line',data:{labels:xLabels,datasets:[
     {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):'#34E0A122',borderColor:'#34E0A1',fill:false,tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:4,borderRadius:5,yAxisID:'y'},
-    {label:_T('Way2 Líquida (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:4,borderRadius:5,yAxisID:'y'},
+    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):'#6b8bf522',borderColor:'#6b8bf5',fill:false,tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:4,borderRadius:5,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:3,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
@@ -5075,7 +5075,7 @@ function renderCmpTotal(type='line'){
           title:items=>items.length?_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
           label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
             if(di===0) return '  ONS Verificada: '+_fmt(onsMW[i])+' MWh';
-            if(di===1) return '  Way2 Líquida: '+_fmt(wayMW[i])+' MWh';
+            if(di===1) return '  Way2: '+_fmt(wayMW[i])+' MWh';
             if(devReal[i]==null) return null;
             const dir=devReal[i]>0.05?' (ONS > Way2)':devReal[i]<-0.05?' (Way2 > ONS)':'';
             return '  Desvio: '+_fmt(Math.abs(devReal[i]))+'%'+dir;}
@@ -5105,7 +5105,7 @@ function renderCmpScatter(){
     {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true}},
-    scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 Líquida (GWh)',color:'#8090b8',font:{size:9}}},
+    scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (GWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS Verificada (GWh)',color:'#8090b8',font:{size:9}}}}}});
 }
 
@@ -5121,7 +5121,7 @@ function renderCmpUFV(type='bar'){
   }
   mkChart('cCmpUFV',{type:type==='line'?'line':'bar',data:{labels,datasets:[
     {label:_T('ONS Verificada (GWh)'),data:onsN,backgroundColor:type==='line'?'#34E0A122':(ctx=>gradFrom(ctx,'#34E0A1')),borderColor:'#34E0A1',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0},
-    {label:_T('Way2 Líquida (GWh)'),data:wayN,backgroundColor:type==='line'?'#6b8bf522':(ctx=>gradFrom(ctx,'#6b8bf5')),borderColor:'#6b8bf5',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0}
+    {label:_T('Way2 (GWh)'),data:wayN,backgroundColor:type==='line'?'#6b8bf522':(ctx=>gradFrom(ctx,'#6b8bf5')),borderColor:'#6b8bf5',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0}
   ]},options:{...CHART_DEFAULTS,
     scales:{x:xAxisWithTitle(),y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'GWh',color:'#8090b8',font:{size:9}}}},
     plugins:{...CHART_DEFAULTS.plugins,tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{
@@ -8399,7 +8399,9 @@ function _cmpBuildSeries(){
     _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
   const way=_wayRows();
-  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;if(isComplex)v=num(r.liquida);else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));wayMap[k]=(wayMap[k]||0)+v/1000;});
+  /* Way2 = BRUTA (soma dos 9 parques) — consistente c/ o intradiário (EneatRec) e c/ a geração
+     verificada do ONS (bruta). Complexo = Σ dos parques (não a energia líquida do medidor). */
+  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r[_M2WAY2[n]]));wayMap[k]=(wayMap[k]||0)+v/1000;});
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
 }
