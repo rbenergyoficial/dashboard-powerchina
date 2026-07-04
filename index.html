@@ -5019,8 +5019,8 @@ async function _cmpRenderIntraday(target,type){
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
   mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
-    {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBorderWidth:2,pointHoverBorderColor:'#0b0f1a',borderRadius:4,yAxisID:'y'},
-    {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBorderWidth:2,pointHoverBorderColor:'#0b0f1a',borderRadius:4,yAxisID:'y'},
+    {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
+    {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:dev,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
@@ -5080,8 +5080,8 @@ function renderCmpTotal(type='line'){
     else xLabels=s.labels.map(_cmpAxisLabel);
   } else xLabels=s.labels.map(_cmpAxisLabel);
   mkChart('cCmpTotal',{type:isBar?'bar':'line',data:{labels:xLabels,datasets:[
-    {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBorderWidth:2,pointHoverBorderColor:'#0b0f1a',borderRadius:5,yAxisID:'y'},
-    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBorderWidth:2,pointHoverBorderColor:'#0b0f1a',borderRadius:5,yAxisID:'y'},
+    {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
+    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
