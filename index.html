@@ -5130,10 +5130,15 @@ function renderCmpUFV(type='bar'){
   const gen=_onsGenRows(), way=_wayRows();
   if(!gen.length||!way.length){showNoData('cCmpUFV');return;}
   const labels=[],onsN=[],wayN=[];
+  /* Way2 bruta por parque: ed é total do dia → conta UMA vez por dia (deduplica linhas/dia). */
+  const wayByPark={}; for(let n=1;n<=9;n++) wayByPark[n]=0;
+  const _uSeen={};
+  way.forEach(r=>{const dk=_cmpFmtD(r.data);const ed=_eneatDiario&&_eneatDiario[dk];
+    if(ed){ if(_uSeen[dk]) return; _uSeen[dk]=1; for(let n=1;n<=9;n++) wayByPark[n]+=num(ed[n]); }
+    else for(let n=1;n<=9;n++) wayByPark[n]+=num(r[_M2WAY2[n]]);});
   for(let n=1;n<=9;n++){
     const o=gen.reduce((s,r)=>s+num(r['gv'+n]),0)/1000;
-    const w=way.reduce((s,r)=>{const ed=_eneatDiario&&_eneatDiario[_cmpFmtD(r.data)];return s+(ed?num(ed[n]):num(r[_M2WAY2[n]]));},0)/1000;
-    labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+w.toFixed(3));
+    labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+(wayByPark[n]/1000).toFixed(3));
   }
   mkChart('cCmpUFV',{type:type==='line'?'line':'bar',data:{labels,datasets:[
     {label:_T('ONS Verificada (GWh)'),data:onsN,backgroundColor:type==='line'?'#34E0A122':(ctx=>gradFrom(ctx,'#34E0A1')),borderColor:'#34E0A1',borderWidth:1.5,borderRadius:4,fill:false,tension:0,pointRadius:type==='line'?3:0},
@@ -8416,9 +8421,12 @@ function _cmpBuildSeries(){
   }
   const way=_wayRows();
   /* Way2 = BRUTA (EneatRec) p/ ficar coerente c/ a geração verificada do ONS (bruta).
-     Prefere o agregado diário EneatRec (_eneatDiario); cai p/ a líquida (dashData.way2) só quando falta. */
-  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;const ed=_eneatDiario&&_eneatDiario[_cmpFmtD(r.data)];let v=0;
-    if(ed) parks.forEach(n=>v+=num(ed[n])); else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));
+     Prefere o agregado diário EneatRec (_eneatDiario); cai p/ a líquida (dashData.way2) só quando falta.
+     ed é TOTAL DO DIA → soma UMA vez por dia (dashData.way2 pode ter várias linhas/dia). */
+  const _wSeen={};
+  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;const dk=_cmpFmtD(r.data);const ed=_eneatDiario&&_eneatDiario[dk];let v=0;
+    if(ed){ if(_wSeen[dk]) return; _wSeen[dk]=1; parks.forEach(n=>v+=num(ed[n])); }
+    else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));
     wayMap[k]=(wayMap[k]||0)+v/1000;});
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
