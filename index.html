@@ -8541,8 +8541,11 @@ function _cmpQuick(p,btn){
       filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
     } else {
       const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
-      const end=new Date(now), start=new Date(now); start.setDate(start.getDate()-(n-1));
-      filters.perIniDay=_cmpFmtD(start); filters.perFimDay=_cmpFmtD(end);
+      /* termina no ÚLTIMO dia com dados ONS (hoje ainda não publicou), p/ mostrar N dias completos */
+      const endStr=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now);
+      const ep=endStr.split('-').map(Number); const end=new Date(ep[0],ep[1]-1,ep[2]);
+      const start=new Date(end); start.setDate(end.getDate()-(n-1));
+      filters.perIniDay=_cmpFmtD(start); filters.perFimDay=endStr;
       filters.perIni=fmtM(start); filters.perFim=fmtM(end);
     }
     filters.cmpGran='personalizado'; /* intervalo → por dia */
