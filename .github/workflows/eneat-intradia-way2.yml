@@ -1,0 +1,31 @@
+name: Way2 Energia Intradiária (EneatRec 15min → Blob)
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Quantos dias reprocessar (a partir de hoje, para trás)'
+        default: '5'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  gerar-eneat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependência (SDK do Blob)
+        run: npm install @azure/storage-blob@^12
+      - name: Gerar energia intradiária EneatRec (últimos N dias)
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS: ${{ github.event.inputs.dias || '5' }}
+        run: node scripts/gen-eneat-intradia.js
