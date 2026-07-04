@@ -5030,11 +5030,11 @@ async function _cmpRenderIntraday(target,type){
         title:items=>items.length?'🕐 '+s.labels[items[0].dataIndex]+' · '+subj:'',
         label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
           const _f=v=>v==null?'--':Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
-          if(di===0) return '  🟢 ONS: '+_f(s.ons[i])+' MWh';
-          if(di===1) return '  🔵 Way2: '+_f(s.way[i])+' MWh';
+          if(di===0) return '🟢 ONS: '+_f(s.ons[i])+' MWh';
+          if(di===1) return '🔵 Way2: '+_f(s.way[i])+' MWh';
           if(dev[i]==null) return null;
           const dir=dev[i]>0.05?' (ONS > Way2)':dev[i]<-0.05?' (Way2 > ONS)':'';
-          return '  📊 Desvio: '+_f(dev[i])+'%'+dir;}
+          return '📊 Desvio: '+_f(dev[i])+'%'+dir;}
       }}},
     scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:24,maxRotation:45,minRotation:45}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
@@ -5090,11 +5090,11 @@ function renderCmpTotal(type='line'){
         callbacks:{
           title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
           label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
-            if(di===0) return '  🟢 ONS Verificada: '+_fmt(onsMW[i])+' MWh';
-            if(di===1) return '  🔵 Way2: '+_fmt(wayMW[i])+' MWh';
+            if(di===0) return '🟢 ONS Verificada: '+_fmt(onsMW[i])+' MWh';
+            if(di===1) return '🔵 Way2: '+_fmt(wayMW[i])+' MWh';
             if(devReal[i]==null) return null;
             const dir=devReal[i]>0.05?' (ONS > Way2)':devReal[i]<-0.05?' (Way2 > ONS)':'';
-            return '  📊 Desvio: '+_fmt(Math.abs(devReal[i]))+'%'+dir;}
+            return '📊 Desvio: '+_fmt(Math.abs(devReal[i]))+'%'+dir;}
         }}},
     scales:{
       x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxRotation:0,minRotation:0,autoSkip:!singleMonth,maxTicksLimit:singleMonth?31:16,font:{size:9}},title:xTitle?{display:true,text:xTitle,color:'#8090b8',font:{size:11,weight:'600'}}:{display:false}},
