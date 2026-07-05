@@ -9657,26 +9657,28 @@ function _w2dChip(btn,tipo){
   const allChips=[...document.querySelectorAll('#w2dUfvGroup .w2d-park-chip')];
   const parkChips=allChips.filter(b=>b.dataset.ufv!=='all');
   const todasBtn=allChips.find(b=>b.dataset.ufv==='all');
+  // Complexo × Mx (igual ao Comparativo): clicar Complexo liga só ele e desliga os Mx;
+  // clicar um Mx desliga o Complexo e alterna esse Mx; se nenhum Mx fica ligado, o Complexo volta.
   if(ufv==='all'){
-    // Todas: toggle independente — controla só a linha Total
-    const ligar=!btn.classList.contains('on');
-    btn.classList.toggle('on',ligar);
-    if(_w2dChart){
-      const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
-      if(ti>=0){_w2dChart.setDatasetVisibility(ti,ligar);_w2dChart.update();}
-    }
+    allChips.forEach(b=>b.classList.toggle('on', b.dataset.ufv==='all'));
   }else{
-    // Parque individual: toggle completamente independente
+    if(todasBtn) todasBtn.classList.remove('on');
     btn.classList.toggle('on');
-    const isOn=btn.classList.contains('on');
-    if(_w2dChart){
-      const idx=_w2dChart.data.datasets.findIndex(ds=>ds.label===ufv);
-      if(idx>=0){_w2dChart.setDatasetVisibility(idx,isOn);_w2dChart.update();}
-    }
+    const anyM=parkChips.some(b=>b.classList.contains('on'));
+    if(!anyM&&todasBtn) todasBtn.classList.add('on');
+  }
+  const complexo=todasBtn&&todasBtn.classList.contains('on');
+  // gráfico: Total (Complexo) visível só no Complexo; cada Mx visível apenas se selecionado
+  if(_w2dChart){
+    const ti=_w2dChart.data.datasets.findIndex(ds=>ds.label==='Total');
+    if(ti>=0) _w2dChart.setDatasetVisibility(ti,complexo);
+    parkChips.forEach(b=>{const idx=_w2dChart.data.datasets.findIndex(ds=>ds.label===b.dataset.ufv);
+      if(idx>=0) _w2dChart.setDatasetVisibility(idx, !complexo && b.classList.contains('on'));});
+    _w2dChart.update();
   }
   _w2dUpdateContrLine();
   _w2dUpdateKpiPeak();
-  filters.mustPark=ufv==='all'?'total':ufv;
+  filters.mustPark = complexo ? 'total' : ufv;
   if(typeof renderPageMUST==='function') renderPageMUST();
 }
 
