@@ -4967,8 +4967,11 @@ async function _cmpIntradayBuild(day){
       wayMap[k]=(wayMap[k]||0)+v.valor/1000; /* kWh → MWh */
     }
   }
-  const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), interval};
+  /* eixo com o DIA INTEIRO (00:00→último slot) já montado — horários sem dado ficam null
+     (a linha para no horário atual e vai preenchendo; o eixo não "cresce" ao longo do dia). */
+  const nSlots=Math.floor(1440/interval), keys=[];
+  for(let i=0;i<nSlots;i++){const m=i*interval;keys.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));}
+  return {labels:keys, ons:keys.map(k=>k in onsMap?+onsMap[k].toFixed(3):null), way:keys.map(k=>k in wayMap?+wayMap[k].toFixed(3):null), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), interval};
 }
 /* HTML do seletor de data + intervalo (perfil intradiário) — usado no dropdown Dia e nos atalhos Hoje/Ontem */
 function _cmpDiaWrapHTML(d){
