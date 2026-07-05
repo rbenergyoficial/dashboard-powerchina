@@ -5060,7 +5060,7 @@ async function _cmpRenderIntraday(target,type){
   s._aviso=_aviso;
   const subj=s.subj;
   if(target==='cCmpScatter'){
-    const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i]}); }
+    const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i],t:s.labels[i]}); }
     if(!pts.length){_cmpNote('cCmpScatter','Sem pares ONS×Way2 no dia');return;}
     const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
     const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
@@ -5075,7 +5075,7 @@ async function _cmpRenderIntraday(target,type){
           label:ctx=>{if(ctx.datasetIndex!==0)return null;const _f=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
             const d=(ctx.raw.x>0)?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;
             const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';
-            return ['🔵 Way2: '+_f(ctx.raw.x)+' MWh','🟢 ONS: '+_f(ctx.raw.y)+' MWh','📊 Desvio: '+_f(Math.abs(d))+'%'+dir];}
+            return ['🕐 '+(ctx.raw.t||'')+' · '+day,'🔵 Way2: '+_f(ctx.raw.x)+' MWh','🟢 ONS: '+_f(ctx.raw.y)+' MWh','📊 Desvio: '+_f(Math.abs(d))+'%'+dir];}
         }}},
       scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
         y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
@@ -5231,7 +5231,7 @@ function renderCmpScatter(){
   if(g==='dia'){_cmpRenderIntraday('cCmpScatter');return;} /* Dia → perfil por hora */
   const s=_cmpBuildSeries();
   const pts=[];
-  for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:+(s.way[i]*1000).toFixed(2),y:+(s.ons[i]*1000).toFixed(2)}); } /* MWh */
+  for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:+(s.way[i]*1000).toFixed(2),y:+(s.ons[i]*1000).toFixed(2),d:s.labels[i]}); } /* MWh + data do ponto */
   if(!pts.length){showNoData('cCmpScatter');return;}
   const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
   const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
@@ -5243,7 +5243,7 @@ function renderCmpScatter(){
     {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#ffffff55',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
   ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true},
-      tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{label:ctx=>{if(ctx.datasetIndex!==0)return null;const d=ctx.raw.x>0?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';return ['🔵 Way2: '+_fs(ctx.raw.x)+' MWh','🟢 ONS: '+_fs(ctx.raw.y)+' MWh','📊 Desvio: '+_fs(Math.abs(d))+'%'+dir];}}}},
+      tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{label:ctx=>{if(ctx.datasetIndex!==0)return null;const d=ctx.raw.x>0?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';return ['📅 '+(ctx.raw.d?_cmpTitleLabel(ctx.raw.d):''),'🔵 Way2: '+_fs(ctx.raw.x)+' MWh','🟢 ONS: '+_fs(ctx.raw.y)+' MWh','📊 Desvio: '+_fs(Math.abs(d))+'%'+dir];}}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'ONS Verificada (MWh)',color:'#8090b8',font:{size:9}}}}}});
 }
