@@ -4990,6 +4990,9 @@ function _cmpKeepSize(){
       var cH=localStorage.getItem('cc-h-'+key), bH=localStorage.getItem('cc-bh-'+key);
       if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');cc.classList.add('cc-resized');}
       if(bH&&body){body.style.setProperty('height',bH,'important');body.style.setProperty('min-height',bH,'important');body.style.setProperty('max-height',bH,'important');body.style.setProperty('flex','none','important');}
+      /* largura (span da coluna do grid) — senão o card muda de arranjo ao trocar filtro */
+      var gc=localStorage.getItem('cc-gc-'+key); if(gc) cc.style.setProperty('grid-column',gc,'important');
+      var cols=localStorage.getItem('cc-cols-'+key); if(cols) cc.style.setProperty('grid-column','span '+cols,'important');
     }catch(e){}
     if(typeof Chart!=='undefined'&&Chart.getChart){var ch=Chart.getChart(cv); if(ch){try{ch.resize();}catch(e){}}}
   });
