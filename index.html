@@ -785,6 +785,10 @@ body.page-must-active #kpiGrid{display:none!important;}
 .w2d-park-chip.on{background:color-mix(in srgb,var(--pk-c,#6b8bf5) 22%,transparent);border-color:var(--pk-c,#6b8bf5);color:#fff}
 .w2d-park-chip.on::before{background:var(--pk-c,#6b8bf5)}
 .w2d-park-chip:not(.on):hover{border-color:var(--pk-c,#6b8bf5);background:var(--pk-bg,rgba(107,139,245,.10))}
+/* cards sem "pulo" no hover (mantém brilho/borda) */
+body:not(.page-curt-active) .cc.cc-nolift,
+body:not(.page-curt-active) .cc.cc-nolift:hover,
+body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:none!important}
 /* Análise ONS×Way2 (KPIs + tabela + heatmap) */
 .cmp-anal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .cmp-anal-kpi{background:linear-gradient(160deg,#13161f,#0f1118);border:1px solid rgba(107,139,245,.16);border-radius:12px;padding:12px 14px}
@@ -2089,17 +2093,17 @@ function _themeCharts(light){
       <div class="section-title" style="margin-top:6px">ANÁLISE DE DIVERGÊNCIA · ONS × WAY2</div>
       <div id="cmpAnalKpis" class="cmp-anal-kpis"></div>
       <div class="chart-row cols-2">
-        <div class="cc" id="ccCmpTable">
+        <div class="cc cc-nolift" id="ccCmpTable">
           <div class="cc-head"><div><div class="cc-title">Tabela comparativa</div><div class="cc-sub">ONS × Way2 por período · clique no cabeçalho p/ ordenar</div></div></div>
           <div class="cc-body" style="height:360px;overflow:auto" id="cmpAnalTableWrap"><table class="cmp-anal-tbl" id="cmpAnalTable"></table></div>
         </div>
-        <div class="cc">
+        <div class="cc cc-nolift">
           <div class="cc-head"><div><div class="cc-title">Ranking de divergências</div><div class="cc-sub">Maiores |desvio %| ONS × Way2 no período</div></div></div>
           <div class="cc-body" style="height:360px"><canvas id="cCmpRank"></canvas></div>
         </div>
       </div>
       <div class="chart-row cols-1">
-        <div class="cc" id="ccCmpHeat">
+        <div class="cc cc-nolift" id="ccCmpHeat">
           <div class="cc-head"><div><div class="cc-title">Heatmap de desvio · dia × UFV</div><div class="cc-sub">|Δ%| ONS×Way2 · verde = alinhado, vermelho = divergente</div></div></div>
           <div class="cc-body" style="height:300px;overflow:auto" id="cmpHeatmapWrap"><div id="cmpHeatmap"></div></div>
         </div>
