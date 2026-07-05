@@ -18412,8 +18412,11 @@ window._ppaChartGet=function(id){return charts[id];};
     if(isExp){card.classList.add('cc-expanded');card.style.removeProperty('gridColumn');}
 
     /* ── Botão expandir (⊞/⊟) ── */
+    /* Comparativo: os 3 cards usam o sistema próprio de geometria (cmpGeom), que sobrescreve
+       a largura total — o botão fica sem efeito. Não criamos ele nesses cards. */
+    var _noExpand=(k==='cCmpTotal'||k==='cCmpScatter'||k==='cCmpUFV');
     var head=card.querySelector('.cc-head');
-    if(head&&!head.querySelector('.cc-expand-btn')){
+    if(head&&!_noExpand&&!head.querySelector('.cc-expand-btn')){
       /* ── Botão 2 linhas (⇅) ── */
       var tallBtn=document.createElement('button');
       tallBtn.className='cc-expand-btn cc-tall-btn';
