@@ -5130,7 +5130,9 @@ function renderCmpTotal(type='line'){
   if(g!=='ano'){ /* granularidades diárias (semana/mes/personalizado): se tudo num mês, mostra só os dias + mês/ano ao centro */
     const months=[...new Set(s.labels.map(k=>k.slice(0,7)))];
     if(months.length===1){ singleMonth=true; xLabels=s.labels.map(k=>k.split('-')[2]); const p=months[0].split('-'); xTitle=p[1]+'/'+p[0]; }
-    else xLabels=s.labels.map(_cmpAxisLabel);
+    else { /* multi-mês: só o dia em cada ponto; mês/ano só na 1ª ocorrência de cada mês (sem repetir) */
+      singleMonth=true; /* dias horizontais, não empilha */
+      let _pm=''; xLabels=s.labels.map(k=>{const p=k.split('-');const mm=p[0]+p[1];if(mm!==_pm){_pm=mm;return [p[2], _CMP_MN[+p[1]]+'/'+p[0].slice(2)];}return p[2];}); }
   } else xLabels=s.labels.map(_cmpAxisLabel);
   mkChart('cCmpTotal',{type:isBar?'bar':'line',data:{labels:xLabels,datasets:[
     {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
