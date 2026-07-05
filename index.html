@@ -4978,25 +4978,51 @@ function _cmpDiaWrapHTML(d){
     '</select>';
 }
 function _cmpIntervalChange(v){ filters.cmpIntraInterval=v||'30'; clearFilterCache(); renderAll(); }
-/* Re-aplica o tamanho que o usuário deixou (arrastando a alcinha) após cada re-render —
-   sem isso o mkChart recria o gráfico no tamanho padrão ao trocar filtro/intervalo. */
+/* ── Persistência de tamanho/posição dos 3 cards do Comparativo — FONTE ÚNICA (cmpGeom-<id>). ──
+   Os dois sistemas de resize (cc-cols × cc-gc) conflitavam e um sobrescrevia o outro no re-render.
+   Aqui capturamos a geometria FINAL ao soltar o arraste e re-aplicamos por último, vencendo o conflito. */
+var _CMP_CARDS=['cCmpTotal','cCmpScatter','cCmpUFV'];
+function _cmpGeomOf(id){
+  try{var g=JSON.parse(localStorage.getItem('cmpGeom-'+id)||'null'); if(g) return g;}catch(e){}
+  /* migração única do sistema antigo: prioriza cc-cols (largura em colunas) */
+  var cols=localStorage.getItem('cc-cols-'+id), gc=localStorage.getItem('cc-gc-'+id);
+  var bh=localStorage.getItem('cc-bh-'+id), ch=localStorage.getItem('cc-h-'+id);
+  var gcv=cols?('span '+cols):(gc||'');
+  if(gcv||bh||ch){var g2={gc:gcv,bh:bh||'',ch:ch||''};
+    try{localStorage.setItem('cmpGeom-'+id,JSON.stringify(g2));
+      ['cc-cols-','cc-gc-','cc-h-','cc-bh-'].forEach(function(p){localStorage.removeItem(p+id);}); /* evita o _ccRestoreLayout sobrescrever */
+    }catch(e){}
+    return g2;}
+  return null;
+}
 function _cmpKeepSize(){
-  if(!window._ccKey) return;
-  ['cCmpTotal','cCmpScatter','cCmpUFV'].forEach(function(id){
+  _CMP_CARDS.forEach(function(id){
     var cv=document.getElementById(id); if(!cv) return;
     var cc=cv.closest?cv.closest('.cc'):null; if(!cc) return;
-    var body=cc.querySelector('.cc-body'); var key=window._ccKey(cc);
-    try{
-      var cH=localStorage.getItem('cc-h-'+key), bH=localStorage.getItem('cc-bh-'+key);
-      if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');cc.classList.add('cc-resized');}
-      if(bH&&body){body.style.setProperty('height',bH,'important');body.style.setProperty('min-height',bH,'important');body.style.setProperty('max-height',bH,'important');body.style.setProperty('flex','none','important');}
-      /* largura (span da coluna do grid) — senão o card muda de arranjo ao trocar filtro */
-      var gc=localStorage.getItem('cc-gc-'+key); if(gc) cc.style.setProperty('grid-column',gc,'important');
-      var cols=localStorage.getItem('cc-cols-'+key); if(cols) cc.style.setProperty('grid-column','span '+cols,'important');
-    }catch(e){}
+    var body=cc.querySelector('.cc-body'); var g=_cmpGeomOf(id);
+    if(g){
+      if(g.gc){cc.style.setProperty('grid-column',g.gc,'important');cc.classList.add('cc-resized');}
+      if(g.ch){cc.style.setProperty('height',g.ch,'important');cc.style.setProperty('min-height',g.ch,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');}
+      if(g.bh&&body){body.style.setProperty('height',g.bh,'important');body.style.setProperty('min-height',g.bh,'important');body.style.setProperty('max-height',g.bh,'important');body.style.setProperty('flex','none','important');}
+    }
     if(typeof Chart!=='undefined'&&Chart.getChart){var ch=Chart.getChart(cv); if(ch){try{ch.resize();}catch(e){}}}
   });
 }
+/* Ao terminar de arrastar um card do Comparativo, grava a geometria final na fonte única
+   e limpa as chaves dos sistemas antigos (evita o conflito voltar). */
+document.addEventListener('mouseup',function(){
+  setTimeout(function(){
+    _CMP_CARDS.forEach(function(id){
+      var cv=document.getElementById(id); if(!cv) return;
+      var cc=cv.closest?cv.closest('.cc'):null; if(!cc||!cc.classList.contains('cc-resized')) return;
+      var body=cc.querySelector('.cc-body');
+      var g={gc:cc.style.gridColumn||'',bh:(body&&body.style.height)||'',ch:cc.style.height||''};
+      try{localStorage.setItem('cmpGeom-'+id,JSON.stringify(g));
+        ['cc-cols-','cc-gc-','cc-h-','cc-bh-'].forEach(function(p){localStorage.removeItem(p+id);});
+      }catch(e){}
+    });
+  },120);
+},true);
 const _cmpIntraSeq={};
 async function _cmpRenderIntraday(target,type){
   const g=filters.cmpGran, day=filters.perIniDay;
