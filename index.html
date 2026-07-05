@@ -5152,7 +5152,7 @@ function renderCmpTotal(type='line'){
     /* linha-guia arredondada sob o bloco + rótulo mês/ano centralizado e coordenado */
     afterDraw(chart){
       if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx,ca=chart.chartArea; if(!xs)return;
-      const yLine=ca.bottom+16,yTxt=ca.bottom+21;
+      const yLine=ca.bottom+15,yTxt=ca.bottom+27;
       ctx.save();ctx.lineCap='round';ctx.lineWidth=1.5;ctx.textAlign='center';ctx.textBaseline='top';
       ctx.font='700 13px Inter, system-ui, sans-serif';
       _cmpMonths.forEach((gr,gi)=>{const c=_CMP_BANDC[gi%2];
@@ -5169,7 +5169,7 @@ function renderCmpTotal(type='line'){
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
-    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:14,bottom:_cmpMonths?36:0}},
+    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:0,bottom:_cmpMonths?44:0}},
     plugins:{...CHART_DEFAULTS.plugins,
       legend:{...CHART_DEFAULTS.plugins.legend,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),padding:22}},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
