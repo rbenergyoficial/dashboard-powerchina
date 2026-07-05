@@ -8665,6 +8665,20 @@ function _cmpUfvSel(u,btn){
     : chips.filter(c=>c.dataset.cufv!=='todas'&&c.classList.contains('on')).map(c=>+c.dataset.cufv);
   clearFilterCache(); renderAll();
 }
+/* Últimos N dias que têm dado REAL nas DUAS fontes (ONS ger>0 E Way2>0) — assim o 7d/30d/…
+   sempre mostra N pares completos, pulando dias sem ONS publicado ou sem geração. */
+function _cmpLastNBothDays(n){
+  const onsBy={};
+  (_onsData||[]).forEach(r=>{const dk=_cmpFmtD(r.ts);onsBy[dk]=(onsBy[dk]||0)+num(r.ger);});
+  (_onsIrrData||[]).forEach(r=>{const dk=_cmpFmtD(r.data);let g=0;for(let i=1;i<=9;i++)g+=num(r['gv'+i]);onsBy[dk]=(onsBy[dk]||0)+g;});
+  const waySet={};
+  if(_eneatDiario) Object.keys(_eneatDiario).forEach(dk=>{let v=0;for(let i=1;i<=9;i++)v+=num(_eneatDiario[dk][i]);if(v>0)waySet[dk]=1;});
+  (dashData.way2||[]).forEach(r=>{if(r&&r.data)waySet[_cmpFmtD(r.data)]=1;});
+  const days=Object.keys(onsBy).filter(dk=>onsBy[dk]>0&&waySet[dk]).sort();
+  if(!days.length) return null;
+  const last=days.slice(-n);
+  return {start:last[0], end:last[last.length-1]};
+}
 /* Atalhos de período. Coerentes com o drill-down:
    Hoje/Ontem → 1 dia → granularidade "Dia" (perfil por hora).
    7d/30d/60d/90d/Tudo → intervalo → granularidade "Personalizado" (por dia). */
@@ -8689,11 +8703,19 @@ function _cmpQuick(p,btn){
       filters.perIniDay='';filters.perFimDay='';filters.perIni='';filters.perFim='';
     } else {
       const n=p==='7d'?7:p==='30d'?30:p==='60d'?60:90;
-      /* termina no ÚLTIMO dia com dados ONS (hoje ainda não publicou), p/ mostrar N dias completos */
-      const endStr=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now);
-      const ep=endStr.split('-').map(Number); const end=new Date(ep[0],ep[1]-1,ep[2]);
-      const start=new Date(end); start.setDate(end.getDate()-(n-1));
-      filters.perIniDay=_cmpFmtD(start); filters.perFimDay=endStr;
+      /* janela = últimos N dias com dado nas DUAS fontes (pula dias sem ONS ou sem geração) */
+      const rng=_cmpLastNBothDays(n);
+      let start,end;
+      if(rng){
+        filters.perIniDay=rng.start; filters.perFimDay=rng.end;
+        const sp=rng.start.split('-').map(Number), epp=rng.end.split('-').map(Number);
+        start=new Date(sp[0],sp[1]-1,sp[2]); end=new Date(epp[0],epp[1]-1,epp[2]);
+      } else {
+        const endStr=(_onsData&&_onsData.length)?_onsDayOnOrBefore(_cmpFmtD(now)):_cmpFmtD(now);
+        const ep=endStr.split('-').map(Number); end=new Date(ep[0],ep[1]-1,ep[2]);
+        start=new Date(end); start.setDate(end.getDate()-(n-1));
+        filters.perIniDay=_cmpFmtD(start); filters.perFimDay=endStr;
+      }
       filters.perIni=fmtM(start); filters.perFim=fmtM(end);
     }
     filters.cmpGran='personalizado'; /* intervalo → por dia */
