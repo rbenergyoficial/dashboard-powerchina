@@ -5137,8 +5137,8 @@ function renderCmpTotal(type='line'){
   let _cmpMonths=null;
   if(g!=='ano'){ const _mm=[...new Set(s.labels.map(k=>k.slice(0,7)))];
     if(_mm.length>1){ _cmpMonths=[]; let _c=null; s.labels.forEach((k,i)=>{const mk=k.slice(0,7);if(!_c||_c.mk!==mk){_c={mk,i0:i,i1:i};_cmpMonths.push(_c);}else _c.i1=i;}); } }
-  const _CMP_BANDC=[{fill:'rgba(52,224,161,0.045)',line:'rgba(52,224,161,0.5)',txt:'#7fe6c0'},
-                    {fill:'rgba(122,150,255,0.05)',line:'rgba(122,150,255,0.55)',txt:'#a3b4ee'}];
+  const _CMP_BANDC=[{fill:'rgba(52,224,161,0.045)',line:'rgba(52,224,161,0.28)',txt:'#7fe6c0'},
+                    {fill:'rgba(122,150,255,0.05)',line:'rgba(122,150,255,0.3)',txt:'#a3b4ee'}];
   const _cmpMonthBand={id:'cmpMonthBand',
     /* faixa sutil alternada atrás dos dados p/ agrupar visualmente os dias de cada mês */
     beforeDatasetsDraw(chart){
@@ -5153,7 +5153,7 @@ function renderCmpTotal(type='line'){
     afterDraw(chart){
       if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx,ca=chart.chartArea; if(!xs)return;
       const yLine=ca.bottom+16,yTxt=ca.bottom+21;
-      ctx.save();ctx.lineCap='round';ctx.lineWidth=3;ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.save();ctx.lineCap='round';ctx.lineWidth=1.5;ctx.textAlign='center';ctx.textBaseline='top';
       ctx.font='700 13px Inter, system-ui, sans-serif';
       _cmpMonths.forEach((gr,gi)=>{const c=_CMP_BANDC[gi%2];
         const x0=xs.getPixelForValue(gr.i0),x1=xs.getPixelForValue(gr.i1);
@@ -5183,7 +5183,7 @@ function renderCmpTotal(type='line'){
         }}},
     scales:{
       x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxRotation:0,minRotation:0,autoSkip:false,maxTicksLimit:s.labels.length+1,color:'#cdd9f2',font:{size:8,weight:'600'}},title:xTitle?{display:true,text:xTitle,color:'#8090b8',font:{size:11,weight:'600'}}:{display:false}},
-      y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt0(v)}},
+      y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt0(v)}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',min:0,max:_db,title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt(v)+'%'}}}}});
 }
 
