@@ -789,6 +789,8 @@ body.page-must-active #kpiGrid{display:none!important;}
 body:not(.page-curt-active) .cc.cc-nolift,
 body:not(.page-curt-active) .cc.cc-nolift:hover,
 body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:none!important}
+/* cada card analítico mantém a própria altura (não estica junto com o parceiro da linha) */
+.cc.cc-nolift{align-self:start!important}
 /* Análise ONS×Way2 (KPIs + tabela + heatmap) */
 .cmp-anal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .cmp-anal-kpi{background:linear-gradient(160deg,#13161f,#0f1118);border:1px solid rgba(107,139,245,.16);border-radius:12px;padding:12px 14px}
