@@ -8558,9 +8558,10 @@ function _cmpBuildSeries(){
   if(isComplex){
     /* ONS complexo = ger do agregado (ons_restricao). Fallback: dias que o agregado NÃO tem
        (ex.: último dia do mês, blob gerado antes da publicação) vêm do DETAIL (_onsIrrData.gv). */
-    const _onsDias=new Set();
-    (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{_onsDias.add(_cmpFmtD(r.ts));const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
-    (_onsIrrData||[]).forEach(r=>{if(!_onsDatePass(r.data))return;if(_onsDias.has(_cmpFmtD(r.data)))return;const k=_cmpBucketKey(r.data);if(k)onsMap[k]=(onsMap[k]||0)+num(r.gv)/1000;});
+    /* ger total por dia — dias com ger 0 (agregado defasado, ex.: 30/06) são preenchidos pelo DETAIL */
+    const _gerByDay={};
+    (_onsData||[]).filter(r=>_onsDatePass(r.ts)).forEach(r=>{const dk=_cmpFmtD(r.ts);_gerByDay[dk]=(_gerByDay[dk]||0)+num(r.ger);const k=_cmpBucketKey(r.ts);if(k)onsMap[k]=(onsMap[k]||0)+num(r.ger)*0.5/1000;});
+    (_onsIrrData||[]).forEach(r=>{if(!_onsDatePass(r.data))return;if(_gerByDay[_cmpFmtD(r.data)]>0)return;const k=_cmpBucketKey(r.data);if(k)onsMap[k]=(onsMap[k]||0)+num(r.gv)/1000;});
   } else {
     _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
