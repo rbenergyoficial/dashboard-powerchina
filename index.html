@@ -2048,7 +2048,7 @@ function _themeCharts(light){
             <div class="toggle-grp" id="tg-cmptot"><button class="toggle-btn on" data-chart="cmptot" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="cmptot" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
           <div id="cmpTotLeg" style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:2px;padding:0;margin-top:-30px"></div>
-          <div class="cc-body" style="height:440px"><canvas id="cCmpTotal"></canvas></div>
+          <div class="cc-body" style="height:480px"><canvas id="cCmpTotal"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -4998,11 +4998,9 @@ function _cmpGeomOf(id){
 }
 /* Migração única: solta a altura salva do card de total (o usuário pediu maior; a altura
    antiga estava fixada no cmpGeom e sobrescrevendo o padrão). Preserva posição/coluna (gc). */
-(function(){try{ if(localStorage.getItem('cmpGeomHReset')!=='1'){
-  var g=JSON.parse(localStorage.getItem('cmpGeom-cCmpTotal')||'null');
-  if(g){ delete g.bh; delete g.ch; localStorage.setItem('cmpGeom-cCmpTotal',JSON.stringify(g)); }
-  ['cc-h-cCmpTotal','cc-bh-cCmpTotal'].forEach(function(k){localStorage.removeItem(k);});
-  localStorage.setItem('cmpGeomHReset','1');
+(function(){try{ if(localStorage.getItem('cmpGeomHReset')!=='3'){
+  ['cmpGeom-cCmpTotal','cc-h-cCmpTotal','cc-bh-cCmpTotal','cc-cols-cCmpTotal','cc-gc-cCmpTotal'].forEach(function(k){localStorage.removeItem(k);});
+  localStorage.setItem('cmpGeomHReset','3');
 }}catch(e){}})();
 function _cmpKeepSize(){
   _CMP_CARDS.forEach(function(id){
