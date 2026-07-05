@@ -785,6 +785,23 @@ body.page-must-active #kpiGrid{display:none!important;}
 .w2d-park-chip.on{background:color-mix(in srgb,var(--pk-c,#6b8bf5) 22%,transparent);border-color:var(--pk-c,#6b8bf5);color:#fff}
 .w2d-park-chip.on::before{background:var(--pk-c,#6b8bf5)}
 .w2d-park-chip:not(.on):hover{border-color:var(--pk-c,#6b8bf5);background:var(--pk-bg,rgba(107,139,245,.10))}
+/* Análise ONS×Way2 (KPIs + tabela + heatmap) */
+.cmp-anal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.cmp-anal-kpi{background:linear-gradient(160deg,#13161f,#0f1118);border:1px solid rgba(107,139,245,.16);border-radius:12px;padding:12px 14px}
+.cmp-anal-kpi .k-lbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:700}
+.cmp-anal-kpi .k-val{font-size:20px;font-weight:800;color:#eef2fb;margin-top:3px;line-height:1.1}
+.cmp-anal-kpi .k-sub{font-size:10px;color:var(--t4);margin-top:2px}
+.cmp-anal-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.cmp-anal-tbl th{position:sticky;top:0;background:#12151d;color:#aeb9d6;font-weight:700;text-align:right;padding:7px 10px;cursor:pointer;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.10);user-select:none}
+.cmp-anal-tbl th:first-child,.cmp-anal-tbl td:first-child{text-align:left}
+.cmp-anal-tbl th:hover{color:#fff}
+.cmp-anal-tbl td{padding:6px 10px;text-align:right;color:#dfe8ff;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap}
+.cmp-anal-tbl tr:hover td{background:rgba(107,139,245,.06)}
+.cmp-anal-tbl tfoot td{font-weight:800;color:#fff;border-top:1px solid rgba(255,255,255,.18)}
+.cmp-hm-grid{display:grid;gap:2px}
+.cmp-hm-cell{height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#eaf0ff;white-space:nowrap}
+.cmp-hm-hd{font-size:10px;font-weight:700;color:#aeb9d6;display:flex;align-items:center;justify-content:center;padding:2px}
+.cmp-hm-rl{font-size:10px;font-weight:700;color:#aeb9d6;display:flex;align-items:center;padding:0 6px}
 #page-must .must-day-nav{height:34px;min-width:34px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
 #page-must .must-day-nav:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.38)}
 #page-must .must-day-nav:disabled{opacity:.35;cursor:not-allowed}
@@ -2065,6 +2082,26 @@ function _themeCharts(light){
             <div class="toggle-grp" id="tg-cmpuf"><button class="toggle-btn on" data-chart="cmpuf" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button><button class="toggle-btn" data-chart="cmpuf" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
           </div>
           <div class="cc-body" style="height:360px"><canvas id="cCmpUFV"></canvas></div>
+        </div>
+      </div>
+
+      <!-- === ANÁLISE ONS × WAY2 (KPIs + tabela + ranking + heatmap) === -->
+      <div class="section-title" style="margin-top:6px">ANÁLISE DE DIVERGÊNCIA · ONS × WAY2</div>
+      <div id="cmpAnalKpis" class="cmp-anal-kpis"></div>
+      <div class="chart-row cols-2">
+        <div class="cc">
+          <div class="cc-head"><div><div class="cc-title">Tabela comparativa</div><div class="cc-sub">ONS × Way2 por período · clique no cabeçalho p/ ordenar</div></div></div>
+          <div class="cc-body" style="height:360px;overflow:auto;flex:none" id="cmpAnalTableWrap"><table class="cmp-anal-tbl" id="cmpAnalTable"></table></div>
+        </div>
+        <div class="cc">
+          <div class="cc-head"><div><div class="cc-title">Ranking de divergências</div><div class="cc-sub">Maiores |desvio %| ONS × Way2 no período</div></div></div>
+          <div class="cc-body" style="height:360px"><canvas id="cCmpRank"></canvas></div>
+        </div>
+      </div>
+      <div class="chart-row cols-1">
+        <div class="cc">
+          <div class="cc-head"><div><div class="cc-title">Heatmap de desvio · dia × UFV</div><div class="cc-sub">|Δ%| ONS×Way2 · verde = alinhado, vermelho = divergente</div></div></div>
+          <div class="cc-body" style="height:auto;min-height:120px;flex:none;overflow:auto" id="cmpHeatmapWrap"><div id="cmpHeatmap"></div></div>
         </div>
       </div>
     </div>
@@ -3799,7 +3836,7 @@ function renderDashboardPage(page){
   if(page==='cmp'){
     if(!_onsData) loadONSData();
     if(!_onsIrrData) loadONSIrradiancia();
-    if(_eneatDiario===null){_eneatDiario={};loadEneatDiario().then(()=>{try{renderCmpTotal(getToggle('cmptot'));renderCmpScatter();renderCmpUFV(getToggle('cmpuf'));}catch(e){}});} /* EneatRec bruta 7d+ */
+    if(_eneatDiario===null){_eneatDiario={};loadEneatDiario().then(()=>{try{renderCmpTotal(getToggle('cmptot'));renderCmpScatter();renderCmpUFV(getToggle('cmpuf'));renderCmpAnalytics();}catch(e){}});} /* EneatRec bruta 7d+ */
     if(document.getElementById('cmpDateWrap')&&!document.getElementById('cmpDateWrap').hasChildNodes()){
       if(!filters.perIniDay&&!filters.perFimDay){const _n=new Date(),_s=new Date();_s.setDate(_s.getDate()-29);filters.perIniDay=_cmpFmtD(_s);filters.perFimDay=_cmpFmtD(_n);filters.perIni=filters.perIniDay.slice(0,7);filters.perFim=filters.perFimDay.slice(0,7);filters.ano='todos';filters.mes='todos';}
       _cmpGranOnChange(true);
@@ -3807,6 +3844,7 @@ function renderDashboardPage(page){
     safeRender(()=>renderCmpTotal(getToggle('cmptot')));
     safeRender(()=>renderCmpScatter());
     safeRender(()=>renderCmpUFV(getToggle('cmpuf')));
+    safeRender(()=>renderCmpAnalytics());
     setTimeout(_cmpKeepSize,50); /* mantém o tamanho que o usuário deixou (resize) após re-render */
     _afterRender('page-cmp');
     return;
@@ -5312,6 +5350,80 @@ function renderCmpUFV(type='bar'){
     }}}}});
 }
 
+/* ===== ANÁLISE DE DIVERGÊNCIA ONS × WAY2 (KPIs + tabela ordenável + ranking + heatmap) ===== */
+var _cmpAnalState={rows:[],sortKey:'adpct',sortDir:-1};
+function _cmpAnalNum(v,d){return Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:d==null?2:d,maximumFractionDigits:d==null?2:d});}
+/* cor do desvio: verde (alinhado) → vermelho (divergente), saturando em ~8% */
+function _cmpDevBg(pct){ if(pct==null) return 'rgba(255,255,255,.04)'; const a=Math.min(1,Math.abs(pct)/8); const hue=140-140*a; return 'hsla('+hue.toFixed(0)+',65%,45%,'+(0.20+0.45*a).toFixed(2)+')'; }
+function renderCmpAnalytics(){
+  const kpiEl=document.getElementById('cmpAnalKpis'); if(!kpiEl) return;
+  const s=_cmpBuildSeries();
+  const rows=[];
+  for(let i=0;i<s.labels.length;i++){
+    const ons=+(s.ons[i]*1000).toFixed(2), way=+(s.way[i]*1000).toFixed(2);
+    if(!(ons>0&&way>0)) continue;
+    const dpct=+(((ons-way)/way)*100).toFixed(2);
+    rows.push({key:s.labels[i],label:_cmpTitleLabel(s.labels[i]),ons,way,dmwh:+(ons-way).toFixed(2),dpct,adpct:Math.abs(dpct)});
+  }
+  _cmpAnalState.rows=rows;
+  if(!rows.length){ kpiEl.innerHTML='<div class="cmp-anal-kpi"><div class="k-lbl">Análise</div><div class="k-val">—</div><div class="k-sub">sem pares ONS×Way2 no período</div></div>';
+    const t=document.getElementById('cmpAnalTable'); if(t)t.innerHTML=''; const hm=document.getElementById('cmpHeatmap'); if(hm)hm.innerHTML=''; showNoData('cCmpRank'); return; }
+  const tOns=rows.reduce((a,r)=>a+r.ons,0), tWay=rows.reduce((a,r)=>a+r.way,0);
+  const mean=arr=>arr.reduce((a,b)=>a+b,0)/arr.length;
+  const desvioMedio=mean(rows.map(r=>r.dpct)), mape=mean(rows.map(r=>r.adpct));
+  const worst=rows.reduce((a,b)=>b.adpct>a.adpct?b:a,rows[0]);
+  const biasPct=tWay>0?(tOns-tWay)/tWay*100:0;
+  const biasDir=biasPct>0.05?'ONS > Way2':biasPct<-0.05?'Way2 > ONS':'≈ iguais';
+  const kpis=[
+    {l:'Total ONS',v:_cmpAnalNum(tOns,0)+' MWh',s:rows.length+' períodos'},
+    {l:'Total Way2',v:_cmpAnalNum(tWay,0)+' MWh',s:'&nbsp;'},
+    {l:'Desvio médio',v:_cmpAnalNum(desvioMedio)+' %',s:'média assinada'},
+    {l:'MAPE',v:_cmpAnalNum(mape)+' %',s:'erro % médio absoluto'},
+    {l:'Maior desvio',v:_cmpAnalNum(worst.adpct)+' %',s:worst.label},
+    {l:'Viés global',v:_cmpAnalNum(Math.abs(biasPct))+' %',s:biasDir}
+  ];
+  kpiEl.innerHTML=kpis.map(k=>'<div class="cmp-anal-kpi"><div class="k-lbl">'+k.l+'</div><div class="k-val">'+k.v+'</div><div class="k-sub">'+(k.s||'&nbsp;')+'</div></div>').join('');
+  _cmpAnalRenderTable(); _cmpAnalRenderRank(); _cmpAnalRenderHeatmap();
+}
+function _cmpAnalSort(key){ if(_cmpAnalState.sortKey===key)_cmpAnalState.sortDir*=-1; else {_cmpAnalState.sortKey=key;_cmpAnalState.sortDir=(key==='label')?1:-1;} _cmpAnalRenderTable(); }
+function _cmpAnalRenderTable(){
+  const tbl=document.getElementById('cmpAnalTable'); if(!tbl) return;
+  const st=_cmpAnalState, rows=st.rows, key=(st.sortKey==='dir')?'dpct':st.sortKey;
+  const sorted=rows.slice().sort((a,b)=>{const x=a[key],y=b[key]; if(typeof x==='string')return st.sortDir*x.localeCompare(y); return st.sortDir*(x-y);});
+  const arrow=k=>st.sortKey===k?(st.sortDir>0?' ▲':' ▼'):'';
+  const cols=[['label','Período'],['ons','ONS (MWh)'],['way','Way2 (MWh)'],['dmwh','Δ (MWh)'],['adpct','Δ %'],['dir','Direção']];
+  let h='<thead><tr>'+cols.map(c=>'<th onclick="_cmpAnalSort(\''+c[0]+'\')">'+c[1]+arrow(c[0])+'</th>').join('')+'</tr></thead><tbody>';
+  sorted.forEach(r=>{const dir=r.dpct>0.05?'ONS &gt; Way2':r.dpct<-0.05?'Way2 &gt; ONS':'≈';
+    h+='<tr><td>'+r.label+'</td><td>'+_cmpAnalNum(r.ons)+'</td><td>'+_cmpAnalNum(r.way)+'</td><td>'+(r.dmwh>0?'+':'')+_cmpAnalNum(r.dmwh)+'</td><td style="background:'+_cmpDevBg(r.dpct)+';border-radius:4px;font-weight:700">'+_cmpAnalNum(r.adpct)+'%</td><td>'+dir+'</td></tr>';});
+  h+='</tbody>';
+  const tOns=rows.reduce((a,r)=>a+r.ons,0),tWay=rows.reduce((a,r)=>a+r.way,0);
+  h+='<tfoot><tr><td>Total</td><td>'+_cmpAnalNum(tOns)+'</td><td>'+_cmpAnalNum(tWay)+'</td><td>'+((tOns-tWay)>0?'+':'')+_cmpAnalNum(tOns-tWay)+'</td><td>'+_cmpAnalNum(tWay>0?Math.abs((tOns-tWay)/tWay*100):0)+'%</td><td></td></tr></tfoot>';
+  tbl.innerHTML=h;
+}
+function _cmpAnalRenderRank(){
+  const top=_cmpAnalState.rows.slice().sort((a,b)=>b.adpct-a.adpct).slice(0,12);
+  if(!top.length){showNoData('cCmpRank');return;}
+  const labels=top.map(r=>r.label), data=top.map(r=>r.dpct), colors=top.map(r=>r.dpct>0?'#34E0A1':'#6b8bf5');
+  mkChart('cCmpRank',{type:'bar',data:{labels,datasets:[{label:'Desvio %',data,backgroundColor:colors,borderRadius:4,barPercentage:0.82,categoryPercentage:0.85}]},options:{...CHART_DEFAULTS,indexAxis:'y',
+    plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>{const r=top[ctx.dataIndex];const dir=r.dpct>0?' (ONS > Way2)':' (Way2 > ONS)';return ['📊 Desvio: '+_cmpAnalNum(Math.abs(r.dpct))+'%'+dir,'🟢 ONS: '+_cmpAnalNum(r.ons)+' MWh','🔵 Way2: '+_cmpAnalNum(r.way)+' MWh'];}}}},
+    scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},title:{display:true,text:'Desvio % (ONS − Way2)',color:'#8090b8',font:{size:9}}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,autoSkip:false,font:{size:10}}}}}});
+}
+function _cmpAnalRenderHeatmap(){
+  const wrap=document.getElementById('cmpHeatmap'); if(!wrap) return;
+  const gen=_onsGenRows().slice().sort((a,b)=>a.data-b.data);
+  const days=gen.slice(-45); /* últimos 45 dias p/ não explodir a grade */
+  if(!days.length||!_eneatDiario){ wrap.innerHTML='<div style="color:var(--t4);font-size:12px;padding:10px">Sem dados suficientes p/ o heatmap (precisa ONS por UFV + Way2 diário).</div>'; return; }
+  let html='<div class="cmp-hm-grid" style="grid-template-columns:56px repeat(9,minmax(28px,1fr))">';
+  html+='<div class="cmp-hm-hd"></div>'; for(let n=1;n<=9;n++) html+='<div class="cmp-hm-hd">M'+n+'</div>';
+  days.forEach(r=>{const dk=_cmpFmtD(r.data), ed=_eneatDiario[dk];
+    html+='<div class="cmp-hm-rl">'+dk.slice(8,10)+'/'+dk.slice(5,7)+'</div>';
+    for(let n=1;n<=9;n++){const ons=num(r['gv'+n]), way=ed?num(ed[n]):0; const dpct=(ons>0&&way>0)?(ons-way)/way*100:null;
+      const txt=dpct==null?'—':(Math.abs(dpct)<10?_cmpAnalNum(Math.abs(dpct),1):String(Math.round(Math.abs(dpct))));
+      html+='<div class="cmp-hm-cell" style="background:'+_cmpDevBg(dpct)+'" title="'+dk+' · M'+n+': ONS '+_cmpAnalNum(ons)+' × Way2 '+_cmpAnalNum(way)+' MWh">'+txt+'</div>';}
+  });
+  html+='</div>';
+  wrap.innerHTML=html;
+}
 // Faixa de KPIs da fonte ONS (período do filtro)
 function renderONSKpis(){
   const el=document.getElementById('onsKpiStrip'); if(!el) return;
