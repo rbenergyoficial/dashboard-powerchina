@@ -5179,14 +5179,16 @@ function renderCmpScatter(){
 // Comparativo por UFV: ONS verificada × Way2 BRUTA (EneatRec), Mauriti 1–9 no período + desvio (tooltip)
 function renderCmpUFV(type='bar'){
   const gen=_onsGenRows(), way=_wayRows();
-  if(!gen.length||!way.length){showNoData('cCmpUFV');return;}
+  if(!gen.length){showNoData('cCmpUFV');return;} /* Way2 pode vir do _eneatDiario mesmo sem dashData.way2 */
   const labels=[],onsN=[],wayN=[];
-  /* Way2 bruta por parque: ed é total do dia → conta UMA vez por dia (deduplica linhas/dia). */
+  /* Way2 bruta por parque: união dos dias (dashData.way2 + _eneatDiario), 1 valor por dia. */
   const wayByPark={}; for(let n=1;n<=9;n++) wayByPark[n]=0;
-  const _uSeen={};
-  way.forEach(r=>{const dk=_cmpFmtD(r.data);const ed=_eneatDiario&&_eneatDiario[dk];
-    if(ed){ if(_uSeen[dk]) return; _uSeen[dk]=1; for(let n=1;n<=9;n++) wayByPark[n]+=num(ed[n]); }
-    else for(let n=1;n<=9;n++) wayByPark[n]+=num(r[_M2WAY2[n]]);});
+  const w2byDay={}; way.forEach(r=>{const dk=_cmpFmtD(r.data); if(!w2byDay[dk]) w2byDay[dk]=r;});
+  const wayDays=new Set(Object.keys(w2byDay));
+  if(_eneatDiario) Object.keys(_eneatDiario).forEach(dk=>{const p=dk.split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);if(_onsDatePass(d))wayDays.add(dk);});
+  wayDays.forEach(dk=>{const ed=_eneatDiario&&_eneatDiario[dk];
+    if(ed) for(let n=1;n<=9;n++) wayByPark[n]+=num(ed[n]);
+    else { const r=w2byDay[dk]; if(r) for(let n=1;n<=9;n++) wayByPark[n]+=num(r[_M2WAY2[n]]); }});
   for(let n=1;n<=9;n++){
     const o=gen.reduce((s,r)=>s+num(r['gv'+n]),0)/1000;
     labels.push('M'+n); onsN.push(+o.toFixed(3)); wayN.push(+(wayByPark[n]/1000).toFixed(3));
@@ -8474,14 +8476,17 @@ function _cmpBuildSeries(){
   } else {
     _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;let v=0;parks.forEach(n=>v+=num(r['gv'+n]));onsMap[k]=(onsMap[k]||0)+v/1000;});
   }
-  const way=_wayRows();
   /* Way2 = BRUTA (EneatRec) p/ ficar coerente c/ a geração verificada do ONS (bruta).
-     Prefere o agregado diário EneatRec (_eneatDiario); cai p/ a líquida (dashData.way2) só quando falta.
-     ed é TOTAL DO DIA → soma UMA vez por dia (dashData.way2 pode ter várias linhas/dia). */
-  const _wSeen={};
-  way.forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;const dk=_cmpFmtD(r.data);const ed=_eneatDiario&&_eneatDiario[dk];let v=0;
-    if(ed){ if(_wSeen[dk]) return; _wSeen[dk]=1; parks.forEach(n=>v+=num(ed[n])); }
-    else parks.forEach(n=>v+=num(r[_M2WAY2[n]]));
+     Itera a UNIÃO dos dias (dashData.way2 + _eneatDiario) porque o agregado diário EneatRec cobre
+     dias que a planilha/blob líquida pode não ter (ex.: 17/jun em diante). 1 valor por dia. */
+  const way=_wayRows();
+  const w2byDay={}; way.forEach(r=>{const dk=_cmpFmtD(r.data); if(!w2byDay[dk]) w2byDay[dk]=r;});
+  const wayDays=new Set(Object.keys(w2byDay));
+  if(_eneatDiario) Object.keys(_eneatDiario).forEach(dk=>{const p=dk.split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);if(_onsDatePass(d))wayDays.add(dk);});
+  wayDays.forEach(dk=>{const p=dk.split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);const k=_cmpBucketKey(d);if(!k)return;
+    const ed=_eneatDiario&&_eneatDiario[dk];let v=0;
+    if(ed) parks.forEach(n=>v+=num(ed[n]));
+    else { const r=w2byDay[dk]; if(r) parks.forEach(n=>v+=num(r[_M2WAY2[n]])); }
     wayMap[k]=(wayMap[k]||0)+v/1000;});
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
   return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
