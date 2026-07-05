@@ -2054,6 +2054,7 @@ function _themeCharts(light){
           <div class="cc-head">
             <div><div class="cc-title">Correlação ONS vs Way2</div><div class="cc-sub">1 ponto = 1 dia · linha ideal 1:1 · R²</div></div>
           </div>
+          <div id="cmpScatterLeg" style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:2px;padding:0;margin-top:-4px"></div>
           <div class="cc-body" style="height:340px"><canvas id="cCmpScatter"></canvas></div>
         </div>
       </div>
@@ -5066,11 +5067,11 @@ async function _cmpRenderIntraday(target,type){
     const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
     const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
     const mx=Math.max(...pts.map(p=>Math.max(p.x,p.y)))*1.05;
-    mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
+    const _chS=mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
       {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#9aa6c8',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
     ]},options:{...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),color:'#c2ccea',font:{weight:'600'}}},
+      plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
         tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{
           label:ctx=>{if(ctx.datasetIndex!==0)return null;const _f=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
             const d=(ctx.raw.x>0)?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;
@@ -5079,6 +5080,7 @@ async function _cmpRenderIntraday(target,type){
         }}},
       scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
         y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
+    _cmpScatterLegend(_chS,'cmpScatterLeg');
     setTimeout(_cmpKeepSize,60);
     return;
   }
@@ -5135,6 +5137,24 @@ function _cmpHtmlLegend(chart,containerId){
     sw.style.cssText='width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:'+(ds.borderColor||'#888');
     it.appendChild(sw); it.appendChild(document.createTextNode(ds.label||''));
     it.onclick=()=>{chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpHtmlLegend(chart,containerId);};
+    box.appendChild(it);
+  });
+}
+/* Legenda HTML do scatter (mesma nitidez da legenda do gráfico principal). Bolinha p/ os pontos,
+   traço tracejado p/ a linha ideal 1:1. Clique liga/desliga. */
+function _cmpScatterLegend(chart,containerId){
+  const box=document.getElementById(containerId); if(!box){return;} if(!chart){box.innerHTML='';return;}
+  box.innerHTML='';
+  chart.data.datasets.forEach((ds,i)=>{
+    const on=chart.isDatasetVisible(i), isLine=ds.type==='line';
+    const col=isLine?(ds.borderColor||'#9aa6c8'):(typeof ds.backgroundColor==='string'?ds.backgroundColor:'#34E0A1');
+    const it=document.createElement('span');
+    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 13px;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;color:'+(on?'#cdd9f2':'#6b7690')+';opacity:'+(on?'1':'0.5');
+    const sw=document.createElement('span');
+    if(isLine) sw.style.cssText='width:16px;height:0;border-top:2px dashed '+col+';flex:0 0 auto';
+    else sw.style.cssText='width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:'+col;
+    it.appendChild(sw); it.appendChild(document.createTextNode(ds.label||''));
+    it.onclick=()=>{chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpScatterLegend(chart,containerId);};
     box.appendChild(it);
   });
 }
@@ -5230,6 +5250,7 @@ function renderCmpTotal(type='line'){
 
 // Correlação ONS × Way2 (1 ponto por bucket) + linha ideal 45° + R²
 function renderCmpScatter(){
+  {const _sl=document.getElementById('cmpScatterLeg');if(_sl)_sl.innerHTML='';} /* limpa legenda HTML (repovoada ao desenhar) */
   if(!_onsData||!_onsData.length){showNoData('cCmpScatter');return;}
   if(!_cmpSelParks().length){_cmpNote('cCmpScatter','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
@@ -5244,13 +5265,14 @@ function renderCmpScatter(){
   const mx=Math.max(...pts.map(p=>Math.max(p.x,p.y)))*1.05;
   const subj=s.subj;
   const _fs=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
-  mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
+  const _chS=mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
     {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#9aa6c8',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
-  ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),color:'#c2ccea',font:{weight:'600'}}},
+  ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{label:ctx=>{if(ctx.datasetIndex!==0)return null;const d=ctx.raw.x>0?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';return ['📅 '+(ctx.raw.d?_cmpTitleLabel(ctx.raw.d):''),'🔵 Way2: '+_fs(ctx.raw.x)+' MWh','🟢 ONS: '+_fs(ctx.raw.y)+' MWh','📊 Desvio: '+_fs(Math.abs(d))+'%'+dir];}}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'ONS Verificada (MWh)',color:'#8090b8',font:{size:9}}}}}});
+  _cmpScatterLegend(_chS,'cmpScatterLeg');
 }
 
 // Comparativo por UFV: ONS verificada × Way2 BRUTA (EneatRec), Mauriti 1–9 no período + desvio (tooltip)
