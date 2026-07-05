@@ -5077,13 +5077,15 @@ async function _cmpRenderIntraday(target,type){
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
   const devAbs=dev.map(v=>v==null?null:Math.abs(v)); /* linha sempre positiva (magnitude); direção no tooltip */
-  mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
+  const _chI=mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
     {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
     {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2'}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
+    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:10,bottom:2}},
     plugins:{...CHART_DEFAULTS.plugins,
+      legend:{display:false},
       subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,callbacks:{
         title:items=>items.length?'🕐 '+s.labels[items[0].dataIndex]+' · '+subj:'',
@@ -5098,6 +5100,7 @@ async function _cmpRenderIntraday(target,type){
     scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,autoSkip:false,maxTicksLimit:s.labels.length+1,maxRotation:90,minRotation:90,color:'#cdd9f2',font:{size:10,weight:'600'}}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',min:0,title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
+  _cmpHtmlLegend(_chI,'cmpTotLeg');
   setTimeout(_cmpKeepSize,60);
 }
 /* Rótulo do eixo X em 2 linhas conforme a granularidade (dia em cima, mês/ano embaixo) */
