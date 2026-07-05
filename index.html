@@ -2047,7 +2047,8 @@ function _themeCharts(light){
             <div><div class="cc-title">Geração do Complexo: ONS × Way2</div><div class="cc-sub">Verificada (ONS) × Way2 (EneatRec) + desvio %</div></div>
             <div class="toggle-grp" id="tg-cmptot"><button class="toggle-btn on" data-chart="cmptot" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="cmptot" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:340px;margin-top:-16px"><canvas id="cCmpTotal"></canvas></div>
+          <div id="cmpTotLeg" style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:2px;padding:0 0 4px;margin-top:-4px"></div>
+          <div class="cc-body" style="height:392px"><canvas id="cCmpTotal"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -5105,6 +5106,22 @@ function _cmpTitleLabel(key){
   if(g==='ano'){const p=key.split('-');return MU[+p[1]]+'/'+p[0];}
   const p=key.split('-');return p[2]+' '+MU[+p[1]]+' '+p[0];
 }
+/* Legenda em HTML (fora do canvas) — fica no topo do card, independente do gráfico,
+   e libera todo o canvas p/ o gráfico. Clique liga/desliga a série (igual à legenda nativa). */
+function _cmpHtmlLegend(chart,containerId){
+  const box=document.getElementById(containerId); if(!box||!chart)return;
+  box.innerHTML='';
+  chart.data.datasets.forEach((ds,i)=>{
+    const on=chart.isDatasetVisible(i);
+    const it=document.createElement('span');
+    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 13px;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;color:'+(on?'#cdd9f2':'#6b7690')+';opacity:'+(on?'1':'0.5');
+    const sw=document.createElement('span');
+    sw.style.cssText='width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:'+(ds.borderColor||'#888');
+    it.appendChild(sw); it.appendChild(document.createTextNode(ds.label||''));
+    it.onclick=()=>{chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpHtmlLegend(chart,containerId);};
+    box.appendChild(it);
+  });
+}
 // Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
   if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
@@ -5163,7 +5180,7 @@ function renderCmpTotal(type='line'){
         ctx.fillText(_CMP_MN[+p[1]]+'/'+p[0].slice(2),(a+b)/2,yTxt);});
       ctx.restore();
     }};
-  mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
+  const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
     {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
     {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
@@ -5171,7 +5188,7 @@ function renderCmpTotal(type='line'){
     interaction:{mode:'index',intersect:false},
     layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:0,bottom:_cmpMonths?44:0}},
     plugins:{...CHART_DEFAULTS.plugins,
-      legend:{...CHART_DEFAULTS.plugins.legend,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),padding:14}},
+      legend:{display:false},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
           title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
@@ -5186,6 +5203,7 @@ function renderCmpTotal(type='line'){
       x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxRotation:0,minRotation:0,autoSkip:false,maxTicksLimit:s.labels.length+1,color:'#cdd9f2',font:{size:8,weight:'600'}},title:xTitle?{display:true,text:xTitle,color:'#8090b8',font:{size:11,weight:'600'}}:{display:false}},
       y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt0(v)}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',min:0,max:_db,title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt(v)+'%'}}}}});
+  _cmpHtmlLegend(_chT,'cmpTotLeg');
 }
 
 // Correlação ONS × Way2 (1 ponto por bucket) + linha ideal 45° + R²
