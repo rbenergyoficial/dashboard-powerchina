@@ -8350,11 +8350,22 @@ document.getElementById('selPerIni').addEventListener('change',onPeriodoChange);
 document.getElementById('selPerFim').addEventListener('change',onPeriodoChange);
 document.querySelectorAll('#fbarUfvGroup .w2d-park-chip').forEach(btn=>{
   btn.addEventListener('click',()=>{
+    // Complexo × Mx (igual ao Comparativo/MUST): Complexo liga só ele; Mx alternam;
+    // se nenhum Mx fica ligado, o Complexo volta automaticamente.
+    const chips=[...document.querySelectorAll('#fbarUfvGroup .w2d-park-chip')];
+    const todasBtn=chips.find(c=>c.dataset.fufv==='todas');
     const pk=btn.dataset.fufv;
-    const cur=new Set((filters.ufv||'todas').split(',').filter(Boolean));
-    if(cur.has(pk)){cur.delete(pk);}else{cur.add(pk);}
-    filters.ufv=[...cur].join(',')||'todas';
-    btn.classList.toggle('on');
+    if(pk==='todas'){
+      chips.forEach(c=>c.classList.toggle('on',c.dataset.fufv==='todas'));
+    }else{
+      if(todasBtn) todasBtn.classList.remove('on');
+      btn.classList.toggle('on');
+      const anyM=chips.some(c=>c.dataset.fufv!=='todas'&&c.classList.contains('on'));
+      if(!anyM&&todasBtn) todasBtn.classList.add('on');
+    }
+    const complexo=todasBtn&&todasBtn.classList.contains('on');
+    filters.ufv = complexo ? 'todas'
+      : chips.filter(c=>c.dataset.fufv!=='todas'&&c.classList.contains('on')).map(c=>c.dataset.fufv).join(',')||'todas';
     renderAll();
   });
 });
