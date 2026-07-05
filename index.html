@@ -2089,9 +2089,9 @@ function _themeCharts(light){
       <div class="section-title" style="margin-top:6px">ANÁLISE DE DIVERGÊNCIA · ONS × WAY2</div>
       <div id="cmpAnalKpis" class="cmp-anal-kpis"></div>
       <div class="chart-row cols-2">
-        <div class="cc">
+        <div class="cc" id="ccCmpTable">
           <div class="cc-head"><div><div class="cc-title">Tabela comparativa</div><div class="cc-sub">ONS × Way2 por período · clique no cabeçalho p/ ordenar</div></div></div>
-          <div class="cc-body" style="height:360px;overflow:auto;flex:none" id="cmpAnalTableWrap"><table class="cmp-anal-tbl" id="cmpAnalTable"></table></div>
+          <div class="cc-body" style="height:360px;overflow:auto" id="cmpAnalTableWrap"><table class="cmp-anal-tbl" id="cmpAnalTable"></table></div>
         </div>
         <div class="cc">
           <div class="cc-head"><div><div class="cc-title">Ranking de divergências</div><div class="cc-sub">Maiores |desvio %| ONS × Way2 no período</div></div></div>
@@ -2099,9 +2099,9 @@ function _themeCharts(light){
         </div>
       </div>
       <div class="chart-row cols-1">
-        <div class="cc">
+        <div class="cc" id="ccCmpHeat">
           <div class="cc-head"><div><div class="cc-title">Heatmap de desvio · dia × UFV</div><div class="cc-sub">|Δ%| ONS×Way2 · verde = alinhado, vermelho = divergente</div></div></div>
-          <div class="cc-body" style="height:auto;min-height:120px;flex:none;overflow:auto" id="cmpHeatmapWrap"><div id="cmpHeatmap"></div></div>
+          <div class="cc-body" style="height:300px;overflow:auto" id="cmpHeatmapWrap"><div id="cmpHeatmap"></div></div>
         </div>
       </div>
     </div>
@@ -5025,7 +5025,7 @@ function _cmpIntervalChange(v){ filters.cmpIntraInterval=v||'30'; clearFilterCac
 /* ── Persistência de tamanho/posição dos 3 cards do Comparativo — FONTE ÚNICA (cmpGeom-<id>). ──
    Os dois sistemas de resize (cc-cols × cc-gc) conflitavam e um sobrescrevia o outro no re-render.
    Aqui capturamos a geometria FINAL ao soltar o arraste e re-aplicamos por último, vencendo o conflito. */
-var _CMP_CARDS=['cCmpTotal','cCmpScatter','cCmpUFV'];
+var _CMP_CARDS=['cCmpTotal','cCmpScatter','cCmpUFV','ccCmpTable','cCmpRank','ccCmpHeat'];
 function _cmpGeomOf(id){
   try{var g=JSON.parse(localStorage.getItem('cmpGeom-'+id)||'null'); if(g) return g;}catch(e){}
   /* migração única do sistema antigo: prioriza cc-cols (largura em colunas) */
