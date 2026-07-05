@@ -5251,7 +5251,6 @@ function renderCmpScatter(){
 // Comparativo por UFV: ONS verificada × Way2 BRUTA (EneatRec), Mauriti 1–9 no período + desvio (tooltip)
 function renderCmpUFV(type='bar'){
   const gen=_onsGenRows(), way=_wayRows();
-  if(!gen.length){showNoData('cCmpUFV');return;} /* Way2 pode vir do _eneatDiario mesmo sem dashData.way2 */
   const labels=[],onsN=[],wayN=[];
   /* Way2 bruta por parque: união dos dias (dashData.way2 + _eneatDiario), 1 valor por dia. */
   const wayByPark={}; for(let n=1;n<=9;n++) wayByPark[n]=0;
@@ -5261,9 +5260,13 @@ function renderCmpUFV(type='bar'){
   wayDays.forEach(dk=>{const ed=_eneatDiario&&_eneatDiario[dk];
     if(ed) for(let n=1;n<=9;n++) wayByPark[n]+=num(ed[n]);
     else { const r=w2byDay[dk]; if(r) for(let n=1;n<=9;n++) wayByPark[n]+=num(r[_M2WAY2[n]]); }});
+  /* ONS pode não estar publicado (hoje/ontem, ~1-2 dias de atraso) — mostra só o Way2 nesse caso,
+     igual o gráfico principal. Só "sem dados" se faltarem AS DUAS fontes. */
+  const hasOns=gen.length>0, hasWay=Object.keys(wayByPark).some(n=>wayByPark[n]>0);
+  if(!hasOns&&!hasWay){showNoData('cCmpUFV');return;}
   for(let n=1;n<=9;n++){
     const o=gen.reduce((s,r)=>s+num(r['gv'+n]),0); /* MWh */
-    labels.push('M'+n); onsN.push(+o.toFixed(2)); wayN.push(+wayByPark[n].toFixed(2));
+    labels.push('M'+n); onsN.push(hasOns?+o.toFixed(2):null); wayN.push(+wayByPark[n].toFixed(2));
   }
   const _fu=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
   mkChart('cCmpUFV',{type:type==='line'?'line':'bar',data:{labels,datasets:[
