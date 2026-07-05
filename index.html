@@ -5388,6 +5388,7 @@ function renderCmpAnalytics(){
   ];
   kpiEl.innerHTML=kpis.map(k=>'<div class="cmp-anal-kpi"><div class="k-lbl">'+k.l+'</div><div class="k-val">'+k.v+'</div><div class="k-sub">'+(k.s||'&nbsp;')+'</div></div>').join('');
   _cmpAnalRenderTable(); _cmpAnalRenderRank(); _cmpAnalRenderHeatmap();
+  setTimeout(_cmpKeepSize,60); /* reasseverar tamanho/posição salvos após re-render */
 }
 function _cmpAnalSort(key){ if(_cmpAnalState.sortKey===key)_cmpAnalState.sortDir*=-1; else {_cmpAnalState.sortKey=key;_cmpAnalState.sortDir=(key==='label')?1:-1;} _cmpAnalRenderTable(); }
 function _cmpAnalRenderTable(){
@@ -5409,8 +5410,11 @@ function _cmpAnalRenderRank(){
   if(!top.length){showNoData('cCmpRank');return;}
   const labels=top.map(r=>r.label), data=top.map(r=>r.dpct), colors=top.map(r=>r.dpct>0?'#34E0A1':'#6b8bf5');
   mkChart('cCmpRank',{type:'bar',data:{labels,datasets:[{label:'Desvio %',data,backgroundColor:colors,borderRadius:4,barPercentage:0.82,categoryPercentage:0.85}]},options:{...CHART_DEFAULTS,indexAxis:'y',
-    plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>{const r=top[ctx.dataIndex];const dir=r.dpct>0?' (ONS > Way2)':' (Way2 > ONS)';return ['📊 Desvio: '+_cmpAnalNum(Math.abs(r.dpct))+'%'+dir,'🟢 ONS: '+_cmpAnalNum(r.ons)+' MWh','🔵 Way2: '+_cmpAnalNum(r.way)+' MWh'];}}}},
-    scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},title:{display:true,text:'Desvio % (ONS − Way2)',color:'#8090b8',font:{size:9}}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,autoSkip:false,font:{size:10}}}}}});
+    plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{title:items=>items.length?top[items[0].dataIndex].label:'',label:ctx=>{const r=top[ctx.dataIndex];const dir=r.dpct>0?' (ONS > Way2)':' (Way2 > ONS)';return ['📊 Desvio: '+_cmpAnalNum(Math.abs(r.dpct))+'%'+dir,'🟢 ONS: '+_cmpAnalNum(r.ons)+' MWh','🔵 Way2: '+_cmpAnalNum(r.way)+' MWh'];}}}},
+    scales:{
+      x:{grid:{color:'rgba(255,255,255,.05)'},ticks:{color:'#8090b8',font:{size:9},callback:v=>_cmpAnalNum(v,1)+'%'},title:{display:true,text:'Desvio % (ONS − Way2)',color:'#8090b8',font:{size:9}}},
+      y:{grid:{display:false},ticks:{color:'#cdd9f2',autoSkip:false,font:{size:10,weight:'600'},callback:function(v){return this.getLabelForValue(v);}}}
+    }}});
 }
 function _cmpAnalRenderHeatmap(){
   const wrap=document.getElementById('cmpHeatmap'); if(!wrap) return;
