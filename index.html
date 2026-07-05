@@ -5071,8 +5071,10 @@ async function _cmpRenderIntraday(target,type){
       {label:subj+' · '+day+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
       {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#9aa6c8',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
     ]},options:{...CHART_DEFAULTS,
+      interaction:{mode:'nearest',intersect:false},
+      onHover:(e,els)=>{const t=e.native&&e.native.target;if(t)t.style.cursor=els.length?'pointer':'default';},
       plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
-        tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{
+        tooltip:{...CHART_DEFAULTS.plugins.tooltip,mode:'nearest',intersect:false,displayColors:false,callbacks:{
           label:ctx=>{if(ctx.datasetIndex!==0)return null;const _f=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
             const d=(ctx.raw.x>0)?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;
             const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';
@@ -5268,8 +5270,11 @@ function renderCmpScatter(){
   const _chS=mkChart('cCmpScatter',{type:'scatter',data:{datasets:[
     {label:subj+' (R²='+(r*r).toFixed(3)+')',data:pts,backgroundColor:'#34E0A1aa',pointRadius:4},
     {label:_T('Ideal (1:1)'),data:[{x:0,y:0},{x:mx,y:mx}],type:'line',borderColor:'#9aa6c8',borderWidth:1.5,borderDash:[5,4],pointRadius:0,showLine:true}
-  ]},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
-      tooltip:{...CHART_DEFAULTS.plugins.tooltip,displayColors:false,callbacks:{label:ctx=>{if(ctx.datasetIndex!==0)return null;const d=ctx.raw.x>0?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';return ['📅 '+(ctx.raw.d?_cmpTitleLabel(ctx.raw.d):''),'🔵 Way2: '+_fs(ctx.raw.x)+' MWh','🟢 ONS: '+_fs(ctx.raw.y)+' MWh','📊 Desvio: '+_fs(Math.abs(d))+'%'+dir];}}}},
+  ]},options:{...CHART_DEFAULTS,
+    interaction:{mode:'nearest',intersect:false}, /* mostra o ponto mais próximo ao passar o mouse */
+    onHover:(e,els)=>{const t=e.native&&e.native.target;if(t)t.style.cursor=els.length?'pointer':'default';},
+    plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
+      tooltip:{...CHART_DEFAULTS.plugins.tooltip,mode:'nearest',intersect:false,displayColors:false,callbacks:{label:ctx=>{if(ctx.datasetIndex!==0)return null;const d=ctx.raw.x>0?((ctx.raw.y-ctx.raw.x)/ctx.raw.x*100):0;const dir=d>0.05?' (ONS > Way2)':d<-0.05?' (Way2 > ONS)':'';return ['📅 '+(ctx.raw.d?_cmpTitleLabel(ctx.raw.d):''),'🔵 Way2: '+_fs(ctx.raw.x)+' MWh','🟢 ONS: '+_fs(ctx.raw.y)+' MWh','📊 Desvio: '+_fs(Math.abs(d))+'%'+dir];}}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh)',color:'#8090b8',font:{size:9}}},
       y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'ONS Verificada (MWh)',color:'#8090b8',font:{size:9}}}}}});
   _cmpScatterLegend(_chS,'cmpScatterLeg');
