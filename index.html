@@ -5010,8 +5010,11 @@ function _cmpKeepSize(){
     var cv=document.getElementById(id); if(!cv) return;
     var cc=cv.closest?cv.closest('.cc'):null; if(!cc) return;
     var body=cc.querySelector('.cc-body'); var g=_cmpGeomOf(id);
+    /* card expandido (botão largura total): não força a largura salva — deixa o cc-expanded (1/-1) valer */
+    var _exp=cc.classList.contains('cc-expanded');
+    if(_exp){cc.style.removeProperty('grid-column');}
     if(g){
-      if(g.gc){cc.style.setProperty('grid-column',g.gc,'important');cc.classList.add('cc-resized');}
+      if(g.gc&&!_exp){cc.style.setProperty('grid-column',g.gc,'important');cc.classList.add('cc-resized');}
       if(g.ch){cc.style.setProperty('height',g.ch,'important');cc.style.setProperty('min-height',g.ch,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');}
       if(g.bh&&body){body.style.setProperty('height',g.bh,'important');body.style.setProperty('min-height',g.bh,'important');body.style.setProperty('max-height',g.bh,'important');body.style.setProperty('flex','none','important');}
     }
@@ -18412,11 +18415,8 @@ window._ppaChartGet=function(id){return charts[id];};
     if(isExp){card.classList.add('cc-expanded');card.style.removeProperty('gridColumn');}
 
     /* ── Botão expandir (⊞/⊟) ── */
-    /* Comparativo: os 3 cards usam o sistema próprio de geometria (cmpGeom), que sobrescreve
-       a largura total — o botão fica sem efeito. Não criamos ele nesses cards. */
-    var _noExpand=(k==='cCmpTotal'||k==='cCmpScatter'||k==='cCmpUFV');
     var head=card.querySelector('.cc-head');
-    if(head&&!_noExpand&&!head.querySelector('.cc-expand-btn')){
+    if(head&&!head.querySelector('.cc-expand-btn')){
       /* ── Botão 2 linhas (⇅) ── */
       var tallBtn=document.createElement('button');
       tallBtn.className='cc-expand-btn cc-tall-btn';
@@ -18452,7 +18452,9 @@ window._ppaChartGet=function(id){return charts[id];};
         if(exp){card.style.removeProperty('gridColumn');}
         try{if(k){localStorage.setItem('cc-exp-'+k,exp?'1':'0');if(exp)localStorage.removeItem('cc-cols-'+k);}}catch(ex){}
         var sec=card.closest('.section');
-        setTimeout(function(){_resizeChart(card);_captureLayout(sec);},60);
+        /* cards do Comparativo têm geometria própria (cmpGeom): ao expandir/recolher, reaplica
+           — expandido ignora a largura salva (cc-expanded=1/-1); recolhido restaura a salva. */
+        setTimeout(function(){_resizeChart(card);_captureLayout(sec);if(typeof _cmpKeepSize==='function')_cmpKeepSize();},60);
       });
       /* cards sem toggle-grp: expand-btn empurrado para o canto direito */
       if(!head.querySelector('.toggle-grp')) btn.style.marginLeft='auto';
