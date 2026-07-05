@@ -5158,6 +5158,9 @@ function renderCmpTotal(type='line'){
   const _fmt=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
   const _fmt0=v=>Number(v).toLocaleString(getDateLocale(),{maximumFractionDigits:0});
   const subj=s.subj;
+  /* legenda dinâmica: Complexo mantém o rótulo padrão; UFV selecionada mostra o nome (ex.: Mauriti 1) */
+  const _lblOns=subj==='Complexo'?_T('ONS Verificada (MWh)'):'ONS · '+subj+' (MWh)';
+  const _lblWay=subj==='Complexo'?_T('Way2 (MWh)'):'Way2 · '+subj+' (MWh)';
   const isBar=type==='bar';
   /* Eixo X: período em UM mês → só os dias (todos, inclusive 30/31) + mês/ano UMA vez ao centro. */
   let xLabels, xTitle='', singleMonth=false;
@@ -5198,8 +5201,8 @@ function renderCmpTotal(type='line'){
       if(box.getAttribute('data-h')!==html){box.setAttribute('data-h',html);box.innerHTML=html;}
     }};
   const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
-    {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
-    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
+    {label:_lblOns,data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
+    {label:_lblWay,data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
