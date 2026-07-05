@@ -5049,6 +5049,11 @@ function _cmpGeomOf(id){
   ['cmpGeom-cCmpTotal','cc-h-cCmpTotal','cc-bh-cCmpTotal','cc-cols-cCmpTotal','cc-gc-cCmpTotal'].forEach(function(k){localStorage.removeItem(k);});
   localStorage.setItem('cmpGeomHReset','3');
 }}catch(e){}})();
+/* Limpeza única: cards analíticos voltam ao layout padrão (largura fixa; só altura persiste). */
+(function(){try{ if(localStorage.getItem('cmpAnalReset')!=='1'){
+  ['ccCmpTable','cCmpRank','ccCmpHeat'].forEach(function(id){['cmpGeom-','cc-h-','cc-bh-','cc-cols-','cc-gc-'].forEach(function(p){localStorage.removeItem(p+id);});});
+  localStorage.setItem('cmpAnalReset','1');
+}}catch(e){}})();
 function _cmpKeepSize(){
   _CMP_CARDS.forEach(function(id){
     var cv=document.getElementById(id); if(!cv) return;
@@ -5056,9 +5061,11 @@ function _cmpKeepSize(){
     var body=cc.querySelector('.cc-body'); var g=_cmpGeomOf(id);
     /* card expandido (botão largura total): não força a largura salva — deixa o cc-expanded (1/-1) valer */
     var _exp=cc.classList.contains('cc-expanded');
-    if(_exp){cc.style.removeProperty('grid-column');}
+    /* cards analíticos: largura FIXA (lado a lado) — só a altura persiste, p/ o layout não quebrar */
+    var _hOnly=(id==='ccCmpTable'||id==='cCmpRank'||id==='ccCmpHeat');
+    if(_exp||_hOnly){cc.style.removeProperty('grid-column');}
     if(g){
-      if(g.gc&&!_exp){cc.style.setProperty('grid-column',g.gc,'important');cc.classList.add('cc-resized');}
+      if(g.gc&&!_exp&&!_hOnly){cc.style.setProperty('grid-column',g.gc,'important');cc.classList.add('cc-resized');}
       if(g.ch){cc.style.setProperty('height',g.ch,'important');cc.style.setProperty('min-height',g.ch,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');}
       if(g.bh&&body){body.style.setProperty('height',g.bh,'important');body.style.setProperty('min-height',g.bh,'important');body.style.setProperty('max-height',g.bh,'important');body.style.setProperty('flex','none','important');}
     }
@@ -5072,9 +5079,10 @@ document.addEventListener('mouseup',function(){
     _CMP_CARDS.forEach(function(id){
       var cv=document.getElementById(id); if(!cv) return;
       var cc=cv.closest?cv.closest('.cc'):null; if(!cc) return;
+      var _hOnly=(id==='ccCmpTable'||id==='cCmpRank'||id==='ccCmpHeat'); /* analíticos: só altura */
       /* salva se foi redimensionado OU se recebeu largura inline (parceiro numa linha de 2 cards) */
-      var gc=cc.style.gridColumn||'';
-      if(!cc.classList.contains('cc-resized') && !gc) return;
+      var gc=_hOnly?'':(cc.style.gridColumn||'');
+      if(!cc.classList.contains('cc-resized') && !gc && !(_hOnly&&cc.style.height)) return;
       var body=cc.querySelector('.cc-body');
       var g={gc:gc,bh:(body&&body.style.height)||'',ch:cc.style.height||''};
       try{localStorage.setItem('cmpGeom-'+id,JSON.stringify(g));
