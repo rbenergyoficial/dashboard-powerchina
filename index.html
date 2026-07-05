@@ -3804,6 +3804,7 @@ function renderDashboardPage(page){
     safeRender(()=>renderCmpTotal(getToggle('cmptot')));
     safeRender(()=>renderCmpScatter());
     safeRender(()=>renderCmpUFV(getToggle('cmpuf')));
+    setTimeout(_cmpKeepSize,50); /* mantém o tamanho que o usuário deixou (resize) após re-render */
     _afterRender('page-cmp');
     return;
   }
@@ -4977,6 +4978,22 @@ function _cmpDiaWrapHTML(d){
     '</select>';
 }
 function _cmpIntervalChange(v){ filters.cmpIntraInterval=v||'30'; clearFilterCache(); renderAll(); }
+/* Re-aplica o tamanho que o usuário deixou (arrastando a alcinha) após cada re-render —
+   sem isso o mkChart recria o gráfico no tamanho padrão ao trocar filtro/intervalo. */
+function _cmpKeepSize(){
+  if(!window._ccKey) return;
+  ['cCmpTotal','cCmpScatter','cCmpUFV'].forEach(function(id){
+    var cv=document.getElementById(id); if(!cv) return;
+    var cc=cv.closest?cv.closest('.cc'):null; if(!cc) return;
+    var body=cc.querySelector('.cc-body'); var key=window._ccKey(cc);
+    try{
+      var cH=localStorage.getItem('cc-h-'+key), bH=localStorage.getItem('cc-bh-'+key);
+      if(cH){cc.style.setProperty('height',cH,'important');cc.style.setProperty('min-height',cH,'important');cc.style.setProperty('align-self','start','important');cc.style.setProperty('flex','none','important');cc.classList.add('cc-resized');}
+      if(bH&&body){body.style.setProperty('height',bH,'important');body.style.setProperty('min-height',bH,'important');body.style.setProperty('max-height',bH,'important');body.style.setProperty('flex','none','important');}
+    }catch(e){}
+    if(typeof Chart!=='undefined'&&Chart.getChart){var ch=Chart.getChart(cv); if(ch){try{ch.resize();}catch(e){}}}
+  });
+}
 const _cmpIntraSeq={};
 async function _cmpRenderIntraday(target,type){
   const g=filters.cmpGran, day=filters.perIniDay;
@@ -5018,6 +5035,7 @@ async function _cmpRenderIntraday(target,type){
         }}},
       scales:{x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'Way2 (MWh/intervalo)',color:'#8090b8',font:{size:9}}},
         y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'ONS (MWh/intervalo)',color:'#8090b8',font:{size:9}}}}}});
+    setTimeout(_cmpKeepSize,60);
     return;
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
@@ -5042,6 +5060,7 @@ async function _cmpRenderIntraday(target,type){
     scales:{x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxTicksLimit:24,maxRotation:45,minRotation:45}},
       y:{...CHART_DEFAULTS.scales.y,title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}}},
       y2:{...CHART_DEFAULTS.scales.y,position:'right',title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false}}}}});
+  setTimeout(_cmpKeepSize,60);
 }
 /* Rótulo do eixo X em 2 linhas conforme a granularidade (dia em cima, mês/ano embaixo) */
 const _CMP_MN=['','jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
