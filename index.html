@@ -5204,6 +5204,8 @@ function renderCmpTotal(type='line'){
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
     layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:20,bottom:_cmpMonths?22:6}},
+    /* remove o cap global de 48px p/ o par ONS×Way2 encostar (barPercentage 1.0 nos datasets) */
+    datasets:{...(CHART_DEFAULTS.datasets||{}),bar:{...((CHART_DEFAULTS.datasets||{}).bar||{}),maxBarThickness:200,barPercentage:1.0,categoryPercentage:0.7}},
     plugins:{...CHART_DEFAULTS.plugins,
       legend:{display:false},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
