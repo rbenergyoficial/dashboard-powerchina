@@ -792,7 +792,7 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 /* cada card analítico mantém a própria altura (não estica junto com o parceiro da linha) */
 .cc.cc-nolift{align-self:start!important}
 /* Análise ONS×Way2 (KPIs + tabela + heatmap) */
-.cmp-anal-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.cmp-anal-kpis{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .cmp-anal-kpi{background:linear-gradient(160deg,#13161f,#0f1118);border:1px solid rgba(107,139,245,.16);border-radius:12px;padding:12px 14px}
 .cmp-anal-kpi .k-lbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:700}
 .cmp-anal-kpi .k-val{font-size:20px;font-weight:800;color:#eef2fb;margin-top:3px;line-height:1.1}
@@ -18875,6 +18875,8 @@ window._ppaChartGet=function(id){return charts[id];};
   /* ── width: altera grid-column span do card no grid de 12 col da .section ── */
   function _applyW(rs,dw){
     if(!rs.colUnit||rs.colUnit<=0) return;
+    /* cards analíticos: largura FIXA — o arraste só muda a altura, nunca a largura (evita quebrar a linha) */
+    if(rs.cc&&rs.cc.classList.contains('cc-nolift')) return;
     /* span alvo = largura arrastada convertida em nº de colunas (2..12) */
     var newSpan=Math.max(2,Math.min(12,Math.round((rs.w0+dw+rs.gap)/rs.colUnit)));
     if(rs.colCount===2){
