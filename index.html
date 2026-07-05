@@ -2047,7 +2047,7 @@ function _themeCharts(light){
             <div><div class="cc-title">Geração do Complexo: ONS × Way2</div><div class="cc-sub">Verificada (ONS) × Way2 (EneatRec) + desvio %</div></div>
             <div class="toggle-grp" id="tg-cmptot"><button class="toggle-btn on" data-chart="cmptot" data-t="line"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><path d="M0.5,11.5 C2,11.5 3,5 5,5 C7,5 7.5,8.5 9.5,8.5 C11.5,8.5 12.5,2 14.5,2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="toggle-btn" data-chart="cmptot" data-t="bar"><svg width="15" height="13" viewBox="0 0 15 13" fill="none" aria-hidden="true"><rect x="0.5" y="6" width="3.5" height="7" rx="0.7" fill="currentColor"/><rect x="5.75" y="2" width="3.5" height="11" rx="0.7" fill="currentColor"/><rect x="11" y="4.5" width="3.5" height="8.5" rx="0.7" fill="currentColor"/></svg></button></div>
           </div>
-          <div class="cc-body" style="height:340px"><canvas id="cCmpTotal"></canvas></div>
+          <div class="cc-body" style="height:340px;margin-top:-16px"><canvas id="cCmpTotal"></canvas></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -5171,7 +5171,7 @@ function renderCmpTotal(type='line'){
     interaction:{mode:'index',intersect:false},
     layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:0,bottom:_cmpMonths?44:0}},
     plugins:{...CHART_DEFAULTS.plugins,
-      legend:{...CHART_DEFAULTS.plugins.legend,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),padding:22}},
+      legend:{...CHART_DEFAULTS.plugins.legend,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),padding:14}},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
           title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
