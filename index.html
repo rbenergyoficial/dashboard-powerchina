@@ -5198,8 +5198,8 @@ function renderCmpTotal(type='line'){
       if(box.getAttribute('data-h')!==html){box.setAttribute('data-h',html);box.innerHTML=html;}
     }};
   const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
-    {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:1.0,categoryPercentage:0.7},
-    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:1.0,categoryPercentage:0.7},
+    {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:1.0,categoryPercentage:0.9},
+    {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:1.0,categoryPercentage:0.9},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
