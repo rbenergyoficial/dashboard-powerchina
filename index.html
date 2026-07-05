@@ -5071,9 +5071,12 @@ document.addEventListener('mouseup',function(){
   setTimeout(function(){
     _CMP_CARDS.forEach(function(id){
       var cv=document.getElementById(id); if(!cv) return;
-      var cc=cv.closest?cv.closest('.cc'):null; if(!cc||!cc.classList.contains('cc-resized')) return;
+      var cc=cv.closest?cv.closest('.cc'):null; if(!cc) return;
+      /* salva se foi redimensionado OU se recebeu largura inline (parceiro numa linha de 2 cards) */
+      var gc=cc.style.gridColumn||'';
+      if(!cc.classList.contains('cc-resized') && !gc) return;
       var body=cc.querySelector('.cc-body');
-      var g={gc:cc.style.gridColumn||'',bh:(body&&body.style.height)||'',ch:cc.style.height||''};
+      var g={gc:gc,bh:(body&&body.style.height)||'',ch:cc.style.height||''};
       try{localStorage.setItem('cmpGeom-'+id,JSON.stringify(g));
         ['cc-cols-','cc-gc-','cc-h-','cc-bh-'].forEach(function(p){localStorage.removeItem(p+id);});
       }catch(e){}
