@@ -5169,8 +5169,9 @@ function renderCmpTotal(type='line'){
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
-    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),bottom:_cmpMonths?36:0}},
+    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:14,bottom:_cmpMonths?36:0}},
     plugins:{...CHART_DEFAULTS.plugins,
+      legend:{...CHART_DEFAULTS.plugins.legend,labels:{...((CHART_DEFAULTS.plugins.legend||{}).labels||{}),padding:22}},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
           title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
