@@ -2049,6 +2049,7 @@ function _themeCharts(light){
           </div>
           <div id="cmpTotLeg" style="display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:2px;padding:0;margin-top:-30px"></div>
           <div class="cc-body" style="height:380px;min-height:380px;max-height:380px;flex:none"><canvas id="cCmpTotal"></canvas></div>
+          <div id="cmpTotMonths" style="position:relative;height:18px;margin-top:1px;pointer-events:none"></div>
         </div>
         <div class="cc">
           <div class="cc-head">
@@ -5133,6 +5134,7 @@ function _cmpHtmlLegend(chart,containerId){
 }
 // Comparativo do complexo (ou UFV): ONS verificada × Way2 líquida, por granularidade + desvio %
 function renderCmpTotal(type='line'){
+  {const _mb=document.getElementById('cmpTotMonths');if(_mb){_mb.innerHTML='';_mb.removeAttribute('data-h');}} /* limpa rótulos HTML de mês (repovoados só no multi-mês) */
   if(!_onsData||!_onsData.length){showNoData('cCmpTotal');return;}
   if(!_cmpSelParks().length){_cmpNote('cCmpTotal','Selecione ao menos uma UFV (ou Complexo)');return;}
   const g=filters.cmpGran||'dia';
@@ -5175,19 +5177,19 @@ function renderCmpTotal(type='line'){
         ctx.fillStyle=_CMP_BANDC[gi%2].fill; ctx.fillRect(a,ca.top,b-a,ca.bottom-ca.top);});
       ctx.restore();
     },
-    /* linha-guia arredondada sob o bloco + rótulo mês/ano centralizado e coordenado */
+    /* mês/ano como TEXTO HTML (fora do canvas) — não consome altura do gráfico.
+       Roda a cada draw/resize, então o rótulo acompanha o período e o zoom do eixo. */
     afterDraw(chart){
-      if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx,ca=chart.chartArea; if(!xs)return;
-      const yLine=ca.bottom+16,yTxt=ca.bottom+26;
-      ctx.save();ctx.lineCap='round';ctx.lineWidth=1.5;ctx.textAlign='center';ctx.textBaseline='top';
-      ctx.font='700 13px Inter, system-ui, sans-serif';
+      const box=document.getElementById('cmpTotMonths'); if(!box)return;
+      if(!_cmpMonths){box.innerHTML='';return;}
+      const xs=chart.scales.x; if(!xs)return;
+      let html='';
       _cmpMonths.forEach((gr,gi)=>{const c=_CMP_BANDC[gi%2];
-        const x0=xs.getPixelForValue(gr.i0),x1=xs.getPixelForValue(gr.i1);
-        const a=Math.max(ca.left,x0-6),b=Math.min(ca.right,x1+6);
-        ctx.strokeStyle=c.line;ctx.beginPath();ctx.moveTo(a,yLine);ctx.lineTo(b,yLine);ctx.stroke();
-        const p=gr.mk.split('-');ctx.fillStyle=c.txt;
-        ctx.fillText(_CMP_MN[+p[1]]+'/'+p[0].slice(2),(a+b)/2,yTxt);});
-      ctx.restore();
+        const cx=xs.getPixelForValue((gr.i0+gr.i1)/2);
+        const p=gr.mk.split('-');
+        html+='<span style="position:absolute;left:'+cx.toFixed(1)+'px;top:0;transform:translateX(-50%);white-space:nowrap;font:700 13px Inter,system-ui,sans-serif;color:'+c.txt+'">'+_CMP_MN[+p[1]]+'/'+p[0].slice(2)+'</span>';
+      });
+      if(box.getAttribute('data-h')!==html){box.setAttribute('data-h',html);box.innerHTML=html;}
     }};
   const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
     {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
@@ -5195,7 +5197,7 @@ function renderCmpTotal(type='line'){
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
-    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:20,bottom:_cmpMonths?38:2}},
+    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:20,bottom:6}},
     plugins:{...CHART_DEFAULTS.plugins,
       legend:{display:false},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
