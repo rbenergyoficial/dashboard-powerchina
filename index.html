@@ -4996,6 +4996,14 @@ function _cmpGeomOf(id){
     return g2;}
   return null;
 }
+/* Migração única: solta a altura salva do card de total (o usuário pediu maior; a altura
+   antiga estava fixada no cmpGeom e sobrescrevendo o padrão). Preserva posição/coluna (gc). */
+(function(){try{ if(localStorage.getItem('cmpGeomHReset')!=='1'){
+  var g=JSON.parse(localStorage.getItem('cmpGeom-cCmpTotal')||'null');
+  if(g){ delete g.bh; delete g.ch; localStorage.setItem('cmpGeom-cCmpTotal',JSON.stringify(g)); }
+  ['cc-h-cCmpTotal','cc-bh-cCmpTotal'].forEach(function(k){localStorage.removeItem(k);});
+  localStorage.setItem('cmpGeomHReset','1');
+}}catch(e){}})();
 function _cmpKeepSize(){
   _CMP_CARDS.forEach(function(id){
     var cv=document.getElementById(id); if(!cv) return;
