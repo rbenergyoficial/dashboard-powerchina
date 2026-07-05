@@ -5129,29 +5129,47 @@ function renderCmpTotal(type='line'){
   let xLabels, xTitle='', singleMonth=false;
   if(g!=='ano'){ /* granularidades diárias (semana/mes/personalizado): se tudo num mês, mostra só os dias + mês/ano ao centro */
     const months=[...new Set(s.labels.map(k=>k.slice(0,7)))];
-    if(months.length===1){ singleMonth=true; xLabels=s.labels.map(k=>k.split('-')[2]); const p=months[0].split('-'); xTitle=p[1]+'/'+p[0]; }
+    if(months.length===1){ singleMonth=true; xLabels=s.labels.map(k=>String(+k.split('-')[2])); const p=months[0].split('-'); xTitle=p[1]+'/'+p[0]; }
     else { /* multi-mês: só o dia no eixo; mês/ano é desenhado centralizado por bloco (plugin _cmpMonthBand) */
-      singleMonth=true; xLabels=s.labels.map(k=>k.split('-')[2]); }
+      singleMonth=true; xLabels=s.labels.map(k=>String(+k.split('-')[2])); }
   } else xLabels=s.labels.map(_cmpAxisLabel);
   /* Blocos de mês p/ desenhar mês/ano centralizado sob os dias daquele mês (só granularidades diárias multi-mês) */
   let _cmpMonths=null;
   if(g!=='ano'){ const _mm=[...new Set(s.labels.map(k=>k.slice(0,7)))];
     if(_mm.length>1){ _cmpMonths=[]; let _c=null; s.labels.forEach((k,i)=>{const mk=k.slice(0,7);if(!_c||_c.mk!==mk){_c={mk,i0:i,i1:i};_cmpMonths.push(_c);}else _c.i1=i;}); } }
-  const _cmpMonthBand={id:'cmpMonthBand',afterDraw(chart){
-    if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx; if(!xs)return;
-    const y=chart.chartArea.bottom+22;
-    ctx.save();ctx.font='700 15px Inter, system-ui, sans-serif';ctx.fillStyle='#aebbe0';ctx.textAlign='center';ctx.textBaseline='top';
-    _cmpMonths.forEach(gr=>{const x0=xs.getPixelForValue(gr.i0),x1=xs.getPixelForValue(gr.i1);const p=gr.mk.split('-');
-      ctx.fillText(_CMP_MN[+p[1]]+'/'+p[0].slice(2),(x0+x1)/2,y);});
-    ctx.restore();
-  }};
+  const _CMP_BANDC=[{fill:'rgba(52,224,161,0.045)',line:'rgba(52,224,161,0.5)',txt:'#7fe6c0'},
+                    {fill:'rgba(122,150,255,0.05)',line:'rgba(122,150,255,0.55)',txt:'#a3b4ee'}];
+  const _cmpMonthBand={id:'cmpMonthBand',
+    /* faixa sutil alternada atrás dos dados p/ agrupar visualmente os dias de cada mês */
+    beforeDatasetsDraw(chart){
+      if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx,ca=chart.chartArea; if(!xs)return;
+      ctx.save();
+      _cmpMonths.forEach((gr,gi)=>{const x0=xs.getPixelForValue(gr.i0),x1=xs.getPixelForValue(gr.i1);
+        const a=Math.max(ca.left,x0-6),b=Math.min(ca.right,x1+6);
+        ctx.fillStyle=_CMP_BANDC[gi%2].fill; ctx.fillRect(a,ca.top,b-a,ca.bottom-ca.top);});
+      ctx.restore();
+    },
+    /* linha-guia arredondada sob o bloco + rótulo mês/ano centralizado e coordenado */
+    afterDraw(chart){
+      if(!_cmpMonths)return; const xs=chart.scales.x,ctx=chart.ctx,ca=chart.chartArea; if(!xs)return;
+      const yLine=ca.bottom+16,yTxt=ca.bottom+21;
+      ctx.save();ctx.lineCap='round';ctx.lineWidth=3;ctx.textAlign='center';ctx.textBaseline='top';
+      ctx.font='700 13px Inter, system-ui, sans-serif';
+      _cmpMonths.forEach((gr,gi)=>{const c=_CMP_BANDC[gi%2];
+        const x0=xs.getPixelForValue(gr.i0),x1=xs.getPixelForValue(gr.i1);
+        const a=Math.max(ca.left,x0-6),b=Math.min(ca.right,x1+6);
+        ctx.strokeStyle=c.line;ctx.beginPath();ctx.moveTo(a,yLine);ctx.lineTo(b,yLine);ctx.stroke();
+        const p=gr.mk.split('-');ctx.fillStyle=c.txt;
+        ctx.fillText(_CMP_MN[+p[1]]+'/'+p[0].slice(2),(a+b)/2,yTxt);});
+      ctx.restore();
+    }};
   mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
     {label:_T('ONS Verificada (MWh)'),data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
     {label:_T('Way2 (MWh)'),data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y'},
     {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
   ]},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
-    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),bottom:_cmpMonths?26:0}},
+    layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),bottom:_cmpMonths?36:0}},
     plugins:{...CHART_DEFAULTS.plugins,
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
