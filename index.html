@@ -4951,7 +4951,11 @@ function renderONSgerUFV(type='bar'){
 const _M2WAY2={1:'m10',2:'m2',3:'m3',4:'m4',5:'m5',6:'m6',7:'m7',8:'m8',9:'m9'};
 // Mensagem "em construção" para o intradiário (30min/1h) — fase seguinte
 function _cmpNote(id,msg){
-  if(charts[id]){try{charts[id].destroy();}catch(e){}delete charts[id];}
+  if(charts[id]){
+    /* preserva quais séries estavam ligadas/desligadas p/ o próximo render restaurar (troca de período) */
+    try{const ex=charts[id],hid={};ex.data.datasets.forEach((ds,i)=>{if(!ex.isDatasetVisible(i))hid[ds.label]=true;});_visibilityState[id]=hid;}catch(e){}
+    try{charts[id].destroy();}catch(e){}delete charts[id];
+  }
   const el=document.getElementById(id); if(!el) return;
   const p=el.parentElement; p.style.position='relative';
   /* mesma classe do showNoData → mkChart/clearNoData removem sozinho quando o gráfico redesenha */
