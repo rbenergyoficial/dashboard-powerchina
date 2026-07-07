@@ -5186,15 +5186,17 @@ function _cmpTitleLabel(key){
    e libera todo o canvas p/ o gráfico. Clique liga/desliga a série (igual à legenda nativa). */
 function _cmpHtmlLegend(chart,containerId){
   const box=document.getElementById(containerId); if(!box||!chart)return;
+  box.setAttribute('draggable','false');
   box.innerHTML='';
   chart.data.datasets.forEach((ds,i)=>{
-    const on=chart.isDatasetVisible(i);
-    const it=document.createElement('span');
-    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 13px;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;color:'+(on?'#cdd9f2':'#6b7690')+';opacity:'+(on?'1':'0.5');
+    const on=chart.isDatasetVisible(i), col=ds.borderColor||'#888';
+    const it=document.createElement('button'); it.type='button'; it.setAttribute('draggable','false');
+    it.title=(on?'Ocultar ':'Mostrar ')+(ds.label||'');
+    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 6px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:600;border-radius:999px;border:1px solid '+(on?'rgba(255,255,255,.12)':'rgba(255,255,255,.06)')+';background:'+(on?'rgba(255,255,255,.04)':'transparent')+';transition:.15s;color:'+(on?'#e6ecfb':'#697089')+';opacity:'+(on?'1':'0.65')+';text-decoration:'+(on?'none':'line-through');
     const sw=document.createElement('span');
-    sw.style.cssText='width:12px;height:12px;border-radius:3px;flex:0 0 auto;background:'+(ds.borderColor||'#888');
+    sw.style.cssText='width:12px;height:12px;border-radius:3px;flex:0 0 auto;'+(on?('background:'+col):('background:transparent;border:1.5px solid '+col));
     it.appendChild(sw); it.appendChild(document.createTextNode(ds.label||''));
-    it.onclick=()=>{chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpHtmlLegend(chart,containerId);};
+    it.addEventListener('click',(e)=>{e.stopPropagation();e.preventDefault();chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpHtmlLegend(chart,containerId);});
     box.appendChild(it);
   });
 }
@@ -5202,17 +5204,19 @@ function _cmpHtmlLegend(chart,containerId){
    traço tracejado p/ a linha ideal 1:1. Clique liga/desliga. */
 function _cmpScatterLegend(chart,containerId){
   const box=document.getElementById(containerId); if(!box){return;} if(!chart){box.innerHTML='';return;}
+  box.setAttribute('draggable','false');
   box.innerHTML='';
   chart.data.datasets.forEach((ds,i)=>{
     const on=chart.isDatasetVisible(i), isLine=ds.type==='line';
     const col=isLine?(ds.borderColor||'#9aa6c8'):(typeof ds.backgroundColor==='string'?ds.backgroundColor:'#34E0A1');
-    const it=document.createElement('span');
-    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 13px;cursor:pointer;font-size:12px;font-weight:600;transition:opacity .15s;color:'+(on?'#cdd9f2':'#6b7690')+';opacity:'+(on?'1':'0.5');
+    const it=document.createElement('button'); it.type='button'; it.setAttribute('draggable','false');
+    it.title=(on?'Ocultar ':'Mostrar ')+(ds.label||'');
+    it.style.cssText='display:inline-flex;align-items:center;gap:7px;margin:0 6px;padding:3px 9px;cursor:pointer;font-size:12px;font-weight:600;border-radius:999px;border:1px solid '+(on?'rgba(255,255,255,.12)':'rgba(255,255,255,.06)')+';background:'+(on?'rgba(255,255,255,.04)':'transparent')+';transition:.15s;color:'+(on?'#e6ecfb':'#697089')+';opacity:'+(on?'1':'0.65')+';text-decoration:'+(on?'none':'line-through');
     const sw=document.createElement('span');
     if(isLine) sw.style.cssText='width:16px;height:0;border-top:2px dashed '+col+';flex:0 0 auto';
-    else sw.style.cssText='width:12px;height:12px;border-radius:50%;flex:0 0 auto;background:'+col;
+    else sw.style.cssText='width:12px;height:12px;border-radius:50%;flex:0 0 auto;'+(on?('background:'+col):('background:transparent;border:1.5px solid '+col));
     it.appendChild(sw); it.appendChild(document.createTextNode(ds.label||''));
-    it.onclick=()=>{chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpScatterLegend(chart,containerId);};
+    it.addEventListener('click',(e)=>{e.stopPropagation();e.preventDefault();chart.setDatasetVisibility(i,!chart.isDatasetVisible(i));chart.update();_cmpScatterLegend(chart,containerId);});
     box.appendChild(it);
   });
 }
