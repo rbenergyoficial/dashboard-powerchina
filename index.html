@@ -4962,6 +4962,9 @@ function _cmpNote(id,msg){
 }
 /* Mauriti N → pontoId Way2 (energia). 6368 = Mauriti 1 (Way2 rotula "M10"). */
 const _MAURITI_PONTO={1:6368,2:6369,3:6373,4:6374,5:6375,6:6376,7:6215,8:6378,9:6219};
+const _PONTO2M={6368:1,6369:2,6373:3,6374:4,6375:5,6376:6,6215:7,6378:8,6219:9};
+/* cor por UFV (mesma dos chips do Comparativo) — usada quando mostra linhas separadas por usina */
+const _CMP_UFVC={1:'#34E0A1',2:'#2DD4BF',3:'#A855F7',4:'#F0598C',5:'#F5A623',6:'#6B7BD6',7:'#C084FC',8:'#6b8bf5',9:'#7DEFC4'};
 /* EneatRec diário (BRUTA) por parque — usado no comparativo 7d+ p/ ficar coerente c/ o ONS.
    Formato: {'YYYY-MM-DD':{1..9: MWh}}. Fonte: blob way2_eneat_diario.json (GitHub reprocessador). */
 let _eneatDiario=null;
@@ -5015,11 +5018,21 @@ async function _cmpIntradayBuild(day){
       wayMap[k]=(wayMap[k]||0)+v.valor/1000; /* kWh → MWh */
     }
   }
+  /* Séries POR UFV (quando 2+ usinas e não Complexo) — cada uma com ONS e Way2 próprios. */
+  let byPark=null;
+  if(!isComplex && parks.length>1){
+    const P={}; parks.forEach(n=>P[n]={ons:{},way:{}});
+    const addOnsP=(map,d,energy)=>{const m=d.getHours()*60+d.getMinutes();if(interval>=30){const k=slotKey(m);map[k]=(map[k]||0)+energy;}else{const h=energy/2,k1=slotKey(m),k2=slotKey(m+15);map[k1]=(map[k1]||0)+h;map[k2]=(map[k2]||0)+h;}};
+    (_onsIrrData||[]).forEach(r=>{if(!dayMatch(r.data))return;parks.forEach(n=>addOnsP(P[n].ons,r.data,num(r['gv'+n])));});
+    for(const item of dados){const n=_PONTO2M[item.pontoId];if(!n||!P[n])continue;for(const v of (item.valores||[])){if(v.valor==null||v.valor<0)continue;const d=new Date(v.data);const m=d.getHours()*60+d.getMinutes()-15;if(m<0)continue;const k=slotKey(m);P[n].way[k]=(P[n].way[k]||0)+v.valor/1000;}}
+    byPark=parks.map(n=>({n,ons:null,way:null,_o:P[n].ons,_w:P[n].way}));
+  }
   /* eixo com o DIA INTEIRO (00:00→último slot) já montado — horários sem dado ficam null
      (a linha para no horário atual e vai preenchendo; o eixo não "cresce" ao longo do dia). */
   const nSlots=Math.floor(1440/interval), keys=[];
   for(let i=0;i<nSlots;i++){const m=i*interval;keys.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));}
-  return {labels:keys, ons:keys.map(k=>k in onsMap?+onsMap[k].toFixed(3):null), way:keys.map(k=>k in wayMap?+wayMap[k].toFixed(3):null), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), interval};
+  if(byPark) byPark.forEach(p=>{p.ons=keys.map(k=>k in p._o?+p._o[k].toFixed(3):null);p.way=keys.map(k=>k in p._w?+p._w[k].toFixed(3):null);delete p._o;delete p._w;});
+  return {labels:keys, ons:keys.map(k=>k in onsMap?+onsMap[k].toFixed(3):null), way:keys.map(k=>k in wayMap?+wayMap[k].toFixed(3):null), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), interval, byPark};
 }
 /* HTML do seletor de data + intervalo (perfil intradiário) — usado no dropdown Dia e nos atalhos Hoje/Ontem */
 function _cmpDiaWrapHTML(d){
@@ -5146,11 +5159,22 @@ async function _cmpRenderIntraday(target,type){
   }
   const dev=s.labels.map((k,i)=>{const o=s.ons[i],w=s.way[i];return w>0?+((o-w)/w*100).toFixed(1):null;});
   const devAbs=dev.map(v=>v==null?null:Math.abs(v)); /* linha sempre positiva (magnitude); direção no tooltip */
-  const _chI=mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:[
-    {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
-    {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
-    {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2'}
-  ]},options:{...CHART_DEFAULTS,
+  let _ds;
+  if(s.byPark){ /* 2+ UFVs → linha de ONS (sólida) e Way2 (tracejada) por usina + desvio (pontilhado), na cor da UFV */
+    _ds=[];
+    s.byPark.forEach(p=>{const c=_CMP_UFVC[p.n]||'#6b8bf5';
+      _ds.push({label:'M'+p.n+' ONS',data:p.ons,borderColor:c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:c,pointHoverBorderColor:'#fff',yAxisID:'y',_m:p.n,_k:'ons'});
+      _ds.push({label:'M'+p.n+' Way2',data:p.way,borderColor:c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:2,borderDash:[6,4],pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:c,pointHoverBorderColor:'#fff',yAxisID:'y',_m:p.n,_k:'way'});});
+    s.byPark.forEach(p=>{const c=_CMP_UFVC[p.n]||'#6b8bf5';const dv=p.ons.map((o,i)=>{const w=p.way[i];return (o!=null&&w>0)?+((o-w)/w*100).toFixed(1):null;});
+      _ds.push({label:'M'+p.n+' Δ%',data:dv.map(v=>v==null?null:Math.abs(v)),borderColor:c,backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1,borderDash:[2,3],pointRadius:0,yAxisID:'y2',_m:p.n,_k:'dev',_dev:dv});});
+  } else {
+    _ds=[
+      {label:'ONS · '+subj+' (MWh)',data:s.ons,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
+      {label:'Way2 · '+subj+' (MWh)',data:s.way,backgroundColor:type==='bar'?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:type==='bar'?false:'origin',tension:.3,borderWidth:2,pointRadius:0,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:4,yAxisID:'y'},
+      {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:.3,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2'}
+    ];
+  }
+  const _chI=mkChart('cCmpTotal',{type:type==='bar'?'bar':'line',data:{labels:s.labels,datasets:_ds},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
     layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:20,bottom:2}},
     plugins:{...CHART_DEFAULTS.plugins,
@@ -5158,8 +5182,14 @@ async function _cmpRenderIntraday(target,type){
       subtitle:{display:!!s._aviso,text:s._aviso?'⚠ '+s._aviso:'',color:'#F0598C',font:{size:10,style:'italic'},padding:{bottom:6}},
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,callbacks:{
         title:items=>items.length?'🕐 '+s.labels[items[0].dataIndex]+' · '+subj:'',
-        label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
+        label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex,_d=ctx.dataset;
           const _f=v=>v==null?'--':Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+          if(_d._k){ /* modo por-UFV */
+            if(_d._k==='ons') return '🟢 M'+_d._m+' ONS: '+_f(ctx.parsed.y)+' MWh';
+            if(_d._k==='way') return '🔵 M'+_d._m+' Way2: '+_f(ctx.parsed.y)+' MWh';
+            const dv=_d._dev?_d._dev[i]:null; if(dv==null) return null;
+            const dr=dv>0.05?' (ONS>Way2)':dv<-0.05?' (Way2>ONS)':'';
+            return '📊 M'+_d._m+' Δ: '+_f(Math.abs(dv))+'%'+dr; }
           if(di===0) return '🟢 ONS: '+_f(s.ons[i])+' MWh';
           if(di===1) return '🔵 Way2: '+_f(s.way[i])+' MWh';
           if(dev[i]==null) return null;
@@ -5286,11 +5316,22 @@ function renderCmpTotal(type='line'){
       });
       if(box.getAttribute('data-h')!==html){box.setAttribute('data-h',html);box.innerHTML=html;}
     }};
-  const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:[
-    {label:_lblOns,data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
-    {label:_lblWay,data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
-    {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
-  ]},options:{...CHART_DEFAULTS,
+  let _dsT;
+  if(s.byPark){ /* 2+ UFVs → ONS (sólida) e Way2 (tracejada) por usina + desvio (pontilhado), na cor da UFV */
+    _dsT=[];
+    s.byPark.forEach(p=>{const c=_CMP_UFVC[p.n]||'#6b8bf5';const oN=p.ons.map(v=>+(v*1000).toFixed(2)),wN=p.way.map(v=>+(v*1000).toFixed(2));
+      _dsT.push({label:'M'+p.n+' ONS',data:oN,backgroundColor:isBar?(ctx=>gradFrom(ctx,c)):'transparent',borderColor:c,fill:false,tension:0,borderWidth:2,pointRadius:isBar?0:2,pointHoverRadius:5,borderRadius:4,yAxisID:'y',barPercentage:0.9,categoryPercentage:0.82,_m:p.n,_k:'ons'});
+      _dsT.push({label:'M'+p.n+' Way2',data:wN,backgroundColor:isBar?(ctx=>gradFrom(ctx,c)):'transparent',borderColor:c,fill:false,tension:0,borderWidth:2,borderDash:isBar?undefined:[6,4],pointRadius:isBar?0:2,pointHoverRadius:5,borderRadius:4,yAxisID:'y',barPercentage:0.9,categoryPercentage:0.82,_m:p.n,_k:'way'});});
+    s.byPark.forEach(p=>{const c=_CMP_UFVC[p.n]||'#6b8bf5';const dv=p.ons.map((o,i)=>{const w=p.way[i];return (o>0.00002&&w>0.00002)?+((o-w)/w*100).toFixed(2):null;});
+      _dsT.push({label:'M'+p.n+' Δ%',data:dv.map(v=>v==null?null:Math.abs(v)),type:'line',borderColor:c,backgroundColor:'transparent',fill:false,tension:0,borderWidth:1,borderDash:[2,3],pointRadius:0,yAxisID:'y2',spanGaps:true,_m:p.n,_k:'dev',_dev:dv});});
+  } else {
+    _dsT=[
+      {label:_lblOns,data:onsMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#34E0A1')):(c=>_w2dAreaGrad(c,'#34E0A1')),borderColor:'#34E0A1',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#34E0A1',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
+      {label:_lblWay,data:wayMW,backgroundColor:isBar?(ctx=>gradFrom(ctx,'#6b8bf5')):(c=>_w2dAreaGrad(c,'#6b8bf5')),borderColor:'#6b8bf5',fill:isBar?false:'origin',tension:0,borderWidth:2,pointRadius:2,pointHoverRadius:6,pointHoverBackgroundColor:'#6b8bf5',pointHoverBorderWidth:2,pointHoverBorderColor:'#ffffff',borderRadius:5,yAxisID:'y',barPercentage:0.86,categoryPercentage:0.72},
+      {label:_T('Desvio (%)'),data:devAbs,type:'line',borderColor:'#F0598C',backgroundColor:'transparent',fill:false,tension:0,borderWidth:1.5,pointRadius:0,pointHoverRadius:5,borderDash:[4,3],yAxisID:'y2',spanGaps:true}
+    ];
+  }
+  const _chT=mkChart('cCmpTotal',{type:isBar?'bar':'line',plugins:_cmpMonths?[_cmpMonthBand]:[],data:{labels:xLabels,datasets:_dsT},options:{...CHART_DEFAULTS,
     interaction:{mode:'index',intersect:false},
     layout:{...(CHART_DEFAULTS.layout||{}),padding:{...((CHART_DEFAULTS.layout||{}).padding||{}),top:20,bottom:_cmpMonths?22:6}},
     /* remove o cap global de 48px p/ o par ONS×Way2 encostar (barPercentage 1.0 nos datasets) */
@@ -5300,7 +5341,13 @@ function renderCmpTotal(type='line'){
       tooltip:{...CHART_DEFAULTS.plugins.tooltip,enabled:true,mode:'index',intersect:false,displayColors:false,
         callbacks:{
           title:items=>items.length?'📅 '+_cmpTitleLabel(s.labels[items[0].dataIndex])+' · '+subj:'',
-          label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex;
+          label:ctx=>{const i=ctx.dataIndex,di=ctx.datasetIndex,_d=ctx.dataset;
+            if(_d._k){ /* modo por-UFV */
+              if(_d._k==='ons') return '🟢 M'+_d._m+' ONS: '+_fmt(ctx.parsed.y)+' MWh';
+              if(_d._k==='way') return '🔵 M'+_d._m+' Way2: '+_fmt(ctx.parsed.y)+' MWh';
+              const dv=_d._dev?_d._dev[i]:null; if(dv==null) return null;
+              const dr=dv>0.05?' (ONS>Way2)':dv<-0.05?' (Way2>ONS)':'';
+              return '📊 M'+_d._m+' Δ: '+_fmt(Math.abs(dv))+'%'+dr; }
             if(di===0) return '🟢 ONS Verificada: '+_fmt(onsMW[i])+' MWh';
             if(di===1) return '🔵 Way2: '+_fmt(wayMW[i])+' MWh';
             if(devReal[i]==null) return null;
@@ -5310,7 +5357,7 @@ function renderCmpTotal(type='line'){
     scales:{
       x:{...CHART_DEFAULTS.scales.x,ticks:{...CHART_DEFAULTS.scales.x.ticks,maxRotation:0,minRotation:0,autoSkip:false,maxTicksLimit:s.labels.length+1,color:'#cdd9f2',font:{size:11,weight:'700'}},title:xTitle?{display:true,text:xTitle,color:'#8090b8',font:{size:11,weight:'600'}}:{display:false}},
       y:{...CHART_DEFAULTS.scales.y,grid:{display:false},title:{display:true,text:'MWh',color:'#8090b8',font:{size:9}},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt0(v)}},
-      y2:{...CHART_DEFAULTS.scales.y,position:'right',min:0,max:_db,title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt(v)+'%'}}}}});
+      y2:{...CHART_DEFAULTS.scales.y,position:'right',min:0,max:s.byPark?undefined:_db,title:{display:true,text:'Desvio %',color:'#F0598C',font:{size:9}},grid:{display:false},ticks:{...CHART_DEFAULTS.scales.y.ticks,callback:v=>_fmt(v)+'%'}}}}});
   _cmpHtmlLegend(_chT,'cmpTotLeg');
 }
 
@@ -8751,8 +8798,18 @@ function _cmpBuildSeries(){
     if(ed) parks.forEach(n=>v+=num(ed[n]));
     else { const r=w2byDay[dk]; if(r) parks.forEach(n=>v+=num(r[_M2WAY2[n]])); }
     wayMap[k]=(wayMap[k]||0)+v/1000;});
+  /* Séries POR UFV (2+ usinas e não Complexo) — ONS e Way2 de cada usina, mesmo bucket. */
+  let byPark=null;
+  if(!isComplex && parks.length>1){
+    const OM={},WM={}; parks.forEach(n=>{OM[n]={};WM[n]={};});
+    _onsGenRows().forEach(r=>{const k=_cmpBucketKey(r.data);if(!k)return;parks.forEach(n=>{OM[n][k]=(OM[n][k]||0)+num(r['gv'+n])/1000;});});
+    wayDays.forEach(dk=>{const p=dk.split('-');const d=new Date(+p[0],+p[1]-1,+p[2]);const k=_cmpBucketKey(d);if(!k)return;const ed=_eneatDiario&&_eneatDiario[dk];
+      parks.forEach(n=>{let v=0;if(ed)v=num(ed[n]);else{const r=w2byDay[dk];if(r)v=num(r[_M2WAY2[n]]);}WM[n][k]=(WM[n][k]||0)+v/1000;});});
+    byPark={_OM:OM,_WM:WM,parks:parks.slice()};
+  }
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+')};
+  const byParkArr=byPark?byPark.parks.map(n=>({n,ons:keys.map(k=>+((byPark._OM[n][k]||0)).toFixed(3)),way:keys.map(k=>+((byPark._WM[n][k]||0)).toFixed(3))})):null;
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), byPark:byParkArr};
 }
 /* ── DRILL-DOWN: a granularidade define QUAL período olho; o eixo X mostra as sub-unidades ──
    Dia→horas · Semana→dias da semana · Mês→dias do mês · Ano→meses · Personalizado→dias.
