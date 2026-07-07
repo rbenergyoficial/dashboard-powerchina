@@ -4414,7 +4414,8 @@ async function _eneatLoadBlob(baseInt,dt){
     const _ctrl=new AbortController(); const _to=setTimeout(()=>_ctrl.abort(),15000);
     try{
       const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store',signal:_ctrl.signal});
-      v=r.ok?await r.json():null;
+      /* alguns blobs (gravados pelo Power Automate) vêm com BOM — remove antes do parse p/ não falhar */
+      if(r.ok){const _t=await r.text();try{v=JSON.parse(_t.replace(/^﻿/,''));}catch(_e){v=null;}}else v=null;
     }catch(e){v=null;}
     finally{clearTimeout(_to);}
     _eneatBlobCache.set(key,{v,t:Date.now(),loading:false});
@@ -5107,6 +5108,7 @@ async function _cmpRenderIntraday(target,type){
   if(seq!==_cmpIntraSeq[target]||filters.cmpGran!==g||filters.perIniDay!==day) return;
   const wayHas=s.way.some(v=>v>0), onsHas=s.ons.some(v=>v>0);
   if(!s.labels.length||(!wayHas&&!onsHas)){
+    if(target==='cCmpTotal'){const _l=document.getElementById('cmpTotLeg');if(_l)_l.innerHTML='';} /* limpa legenda órfã */
     _cmpNote(target,'Sem dado intradiário para '+day+' (nem ONS nem Way2). Escolha outro dia ou use Dia/superior.');
     return;
   }
