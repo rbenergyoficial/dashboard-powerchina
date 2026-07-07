@@ -4413,7 +4413,8 @@ async function _eneatLoadBlob(baseInt,dt){
     let v=null;
     const _ctrl=new AbortController(); const _to=setTimeout(()=>_ctrl.abort(),15000);
     try{
-      const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json',{cache:'no-store',signal:_ctrl.signal});
+      /* cache-buster (?t=) p/ furar Service Worker/HTTP cache — senão o dia atual pode vir vazio (lido cedo) */
+      const r=await fetch(WAY2_BLOB_BASE+'way2_eneat_intradia_'+baseInt+'_'+dt+'.json?t='+Date.now(),{cache:'no-store',signal:_ctrl.signal});
       /* alguns blobs (gravados pelo Power Automate) vêm com BOM — remove antes do parse p/ não falhar */
       if(r.ok){const _t=await r.text();try{v=JSON.parse(_t.replace(/^﻿/,''));}catch(_e){v=null;}}else v=null;
     }catch(e){v=null;}
