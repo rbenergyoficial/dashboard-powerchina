@@ -829,6 +829,20 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-case.crit{border-left:3px solid #f0598c}.audit-case.warn{border-left:3px solid #f5a623}
 .audit-case h4{margin:0 0 4px;font-size:15px;font-weight:800;color:#eaf0fb}
 .audit-case p{margin:0;font-size:12.5px;color:#aeb9d6;line-height:1.5}
+.audit-dl{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#34e0a1,#22c98d);color:#04140d;border:0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-transform:none;box-shadow:0 4px 14px rgba(52,224,161,.28);transition:filter .15s,transform .15s}
+.audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
+/* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
+@media print{
+  body.printing-audit{background:#0a0e17!important}
+  body.printing-audit *{visibility:hidden!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:none!important;transform:none!important}
+  body.printing-audit #page-audit,body.printing-audit #page-audit *{visibility:visible!important}
+  body.printing-audit #page-audit{position:absolute!important;left:0;top:0;width:100%;padding:4px 12px!important;margin:0!important}
+  body.printing-audit #page-audit .cc{background:#111624!important;border-color:rgba(255,255,255,.14)!important;break-inside:avoid}
+  body.printing-audit #page-audit .cmp-anal-kpi{background:#111624!important;border-color:rgba(255,255,255,.14)!important}
+  body.printing-audit #page-audit .section-title{color:#aeb9d6!important}
+  body.printing-audit .audit-dl{display:none!important}
+  @page{size:A4 landscape;margin:8mm}
+}
 #page-must .must-day-nav{height:34px;min-width:34px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
 #page-must .must-day-nav:hover{background:rgba(107,139,245,.18);border-color:rgba(107,139,245,.38)}
 #page-must .must-day-nav:disabled{opacity:.35;cursor:not-allowed}
@@ -2138,9 +2152,10 @@ function _themeCharts(light){
   <!-- PÁGINA: AUDITORIA ONS × WAY2 -->
   <div class="page" id="page-audit">
     <div class="section" id="sec-audit">
-      <div class="section-title">
+      <div class="section-title" style="display:flex;align-items:center;gap:10px">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         AUDITORIA DE QUALIDADE · ONS × WAY2
+        <button class="audit-dl" onclick="_auditPrint()" title="Salvar esta auditoria em PDF (fundo escuro)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar PDF</button>
       </div>
       <div id="auditKpis" class="cmp-anal-kpis"></div>
       <div class="chart-row cols-1">
@@ -5557,6 +5572,12 @@ function _cmpAnalRenderHeatmap(){
   wrap.innerHTML=html;
 }
 /* ===== ABA AUDITORIA · ONS × Way2 (multi-mês, parque a parque) ===== */
+function _auditPrint(){
+  document.body.classList.add('printing-audit');
+  const _clean=()=>{document.body.classList.remove('printing-audit');window.removeEventListener('afterprint',_clean);};
+  window.addEventListener('afterprint',_clean);
+  setTimeout(()=>{try{window.print();}catch(e){}setTimeout(_clean,1500);},60);
+}
 const _auditCache={};
 async function _auditLoadMonth(ym){
   if(_auditCache[ym]) return _auditCache[ym];
