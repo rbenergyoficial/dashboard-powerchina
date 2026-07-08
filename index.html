@@ -855,6 +855,19 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-mpop-top{display:flex;gap:6px;margin-bottom:10px}
 .audit-mpop-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .audit-mpop-grid .audit-mchip{width:100%;justify-content:center;height:30px;padding:0}
+/* Monitor ao vivo */
+body.page-monitor-active #fbar{display:none!important}
+.mon-gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:4px 2px}
+.mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:14px;padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.mon-g .gwrap{position:relative;width:100%;max-width:150px;aspect-ratio:1.6/1}
+.mon-g .gctr{position:absolute;left:0;right:0;bottom:8px;text-align:center;pointer-events:none}
+.mon-g .gpct{font-size:20px;font-weight:800;font-family:var(--display);line-height:1}
+.mon-g .gmw{font-size:11px;color:var(--t3);font-weight:600;margin-top:1px}
+.mon-g .gname{font-size:12px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
+.mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
+.mon-g .gtag{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px}
+.mon-g .gtag.ok{background:rgba(52,224,161,.15);color:#34e0a1}
+.mon-g .gtag.fail{background:rgba(240,89,140,.18);color:#f0598c}
 .audit-dl{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#34e0a1,#22c98d);color:#04140d;border:0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-transform:none;box-shadow:0 4px 14px rgba(52,224,161,.28);transition:filter .15s,transform .15s}
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
 /* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
@@ -1621,6 +1634,7 @@ function _themeCharts(light){
         <button class="page-btn" data-page="pr" onclick="switchPage('pr')" title="PR"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="side-label">PR</span></button>
         <button class="page-btn" data-page="curt" onclick="switchPage('curt')" title="Dados Abertos ONS"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><span class="side-label">Dados Abertos ONS</span></button>
         <button class="page-btn" data-page="cmp" onclick="switchPage('cmp')" title="Comparativo ONS × Way2"><svg viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M21 3l-7 7"/><path d="M3 3l7 7"/><path d="M16 21h5v-5"/><path d="M8 21H3v-5"/><path d="M21 21l-7-7"/><path d="M3 21l7-7"/></svg><span class="side-label">Comparativo</span></button>
+        <button class="page-btn" data-page="monitor" onclick="switchPage('monitor')" title="Monitor ao vivo (Way2)"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span class="side-label">Monitor ao vivo</span></button>
         <button class="page-btn" data-page="audit" onclick="switchPage('audit')" title="Auditoria ONS × Way2"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="11"/><line x1="11" y1="13.5" x2="11" y2="13.6"/></svg><span class="side-label">Auditoria</span></button>
         <button class="page-btn" data-page="saz" onclick="switchPage('saz')" title="Sazonalidade"><svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 17V9"/><path d="M12 17V5"/><path d="M18 17v-7"/></svg><span class="side-label">Sazonalidade</span></button>
         <button class="page-btn" data-page="way" onclick="switchPage('way')" title="UFVs Way2"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="side-label">UFVs Way2</span></button>
@@ -2199,6 +2213,30 @@ function _themeCharts(light){
       </div>
     </div>
   </div><!-- end page-audit -->
+
+  <!-- PÁGINA: MONITOR AO VIVO (Way2 · Demat 5min) -->
+  <div class="page" id="page-monitor">
+    <div class="section" id="sec-monitor">
+      <div class="section-title" style="display:flex;align-items:center;gap:10px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        MONITOR AO VIVO · POTÊNCIA ATIVA WAY2
+        <span id="monStamp" style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0"></span>
+      </div>
+      <div id="monKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
+      <div class="chart-row cols-1">
+        <div class="cc cc-nolift">
+          <div class="cc-head"><div><div class="cc-title">Contribuição por UFV · potência agora</div><div class="cc-sub">% da potência total do complexo · MW no centro · vermelho = 0/sem leitura</div></div></div>
+          <div class="cc-body" style="height:auto;min-height:120px;overflow:auto;flex:none" id="monGauges"></div>
+        </div>
+      </div>
+      <div class="chart-row cols-1">
+        <div class="cc cc-nolift">
+          <div class="cc-head"><div><div class="cc-title">Circuitos · saúde e contribuição</div><div class="cc-sub">22 circuitos (C1/C2/C3) · barra = % do total · ⚠ zerado enquanto o complexo gera = provável falha/comunicação</div></div></div>
+          <div class="cc-body" style="height:520px" id="monCircWrap"><canvas id="cMonCirc"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end page-monitor -->
 
   <!-- PÁGINA 4: SAZONALIDADE -->
   <div class="page" id="page-saz">
@@ -3960,6 +3998,11 @@ function renderDashboardPage(page){
     _afterRender('page-audit');
     return;
   }
+  if(page==='monitor'){
+    renderMonitorPage();
+    _afterRender('page-monitor');
+    return;
+  }
   renderPageWay();
   _afterRender('page-'+page);
 }
@@ -3978,6 +4021,10 @@ function applyPageChrome(page){
   document.body.classList.toggle('page-curt-active',page==='curt');
   document.body.classList.toggle('page-cmp-active',page==='cmp');
   document.body.classList.toggle('page-audit-active',page==='audit');
+  document.body.classList.toggle('page-monitor-active',page==='monitor');
+  /* auto-refresh do monitor ao vivo (a cada 5 min) só enquanto a aba está aberta */
+  if(page==='monitor'){ if(!window._monTimer) window._monTimer=setInterval(()=>{try{if(document.body.classList.contains('page-monitor-active'))renderMonitorPage();}catch(e){}},5*60*1000); }
+  else if(window._monTimer){ clearInterval(window._monTimer); window._monTimer=null; }
   if(isPpa) movePpaCardsSection();
 }
 function switchPage(page){
@@ -5731,6 +5778,45 @@ function _auditRenderAll(){
         ? 'Way2 <b>'+((rmed-1)*100).toFixed(0)+'% acima</b> do ONS de forma constante (correlação '+crmed.toFixed(2).replace('.',',')+'). Assinatura de <b>constante de medição errada</b> numa das pontas — auditar registro/TC do CEFMT'+n+' (ONS) e do ponto Way2.'
         : 'Totais próximos, mas dado diário instável: MAPE médio <b>'+mpmed.toFixed(0)+'%</b> e correlação <b>'+crmed.toFixed(2).replace('.',',')+'</b>. Investigar aquisição/telemetria do parque '+n+'.';
       return '<div class="audit-case '+cl.s+'" style="border-left-color:'+cc+'"><h4><span style="display:inline-block;width:9px;height:18px;border-radius:3px;background:'+cc+';margin-right:9px;vertical-align:-3px"></span>Mauriti '+n+' — '+cl.l+'</h4><p>'+desc+'</p></div>';}).join('');}
+}
+/* ===== MONITOR AO VIVO · Way2 Demat 5min (potência ativa) ===== */
+const _MON_CIRC={6198:{p:1,c:'1C1'},6199:{p:1,c:'1C2'},6200:{p:1,c:'1C3'},6201:{p:2,c:'2C1'},6202:{p:2,c:'2C2'},6203:{p:3,c:'3C1'},6204:{p:3,c:'3C2'},6205:{p:3,c:'3C3'},6206:{p:4,c:'4C1'},6207:{p:4,c:'4C2'},6208:{p:4,c:'4C3'},6209:{p:5,c:'5C1'},6210:{p:5,c:'5C2'},6211:{p:5,c:'5C3'},6212:{p:6,c:'6C1'},6213:{p:6,c:'6C2'},6214:{p:6,c:'6C3'},6215:{p:7,c:'7C1'},6216:{p:8,c:'8C1'},6217:{p:8,c:'8C2'},6218:{p:8,c:'8C3'},6219:{p:9,c:'9C1'}};
+const _MON_TOTAL=6233;
+async function _monLoad(){try{const r=await fetch(WAY2_BLOB_BASE+'way2_monitor.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;return JSON.parse((await r.text()).replace(/^﻿/,''));}catch(e){return null;}}
+function _monLatest(dados,pid){const it=(dados||[]).find(d=>d.pontoId===pid);if(!it)return {v:null,ts:null};let b=null;(it.valores||[]).forEach(x=>{if(x.valor!=null)b=x;});return b?{v:+b.valor,ts:b.data}:{v:null,ts:null};}
+function _monGauge(id,pct,color){const p=Math.max(0,Math.min(100,pct));mkChart(id,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[color,'rgba(255,255,255,.07)'],borderWidth:0,circumference:270,rotation:225}]},options:{cutout:'72%',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:0}}});}
+async function renderMonitorPage(){
+  const gEl=document.getElementById('monGauges'); if(!gEl) return;
+  const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
+  const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
+  if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
+  const _mw=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
+  const circ={}; let lastTs=null;
+  Object.keys(_MON_CIRC).forEach(pid=>{const L=_monLatest(dados,+pid);circ[pid]={v:L.v==null?null:L.v/1000,ts:L.ts};if(L.ts&&(!lastTs||L.ts>lastTs))lastTs=L.ts;});
+  const plant={}; for(let n=1;n<=9;n++)plant[n]={mw:0,fail:0};
+  Object.keys(_MON_CIRC).forEach(pid=>{const m=_MON_CIRC[pid],c=circ[pid];if(c.v==null)plant[m.p].fail++;else plant[m.p].mw+=c.v;});
+  const totMon=_monLatest(dados,_MON_TOTAL); const total=totMon.v!=null?totMon.v/1000:Object.values(plant).reduce((s,p)=>s+p.mw,0);
+  const tr1=_monLatest(dados,6196), tr2=_monLatest(dados,6197), anyGen=total>0.5;
+  const failCirc=Object.keys(_MON_CIRC).filter(pid=>{const c=circ[pid];return anyGen&&(c.v==null||c.v<=0);});
+  if(st) st.textContent=lastTs?('última leitura Way2: '+lastTs.slice(11,16)+' · '+lastTs.slice(8,10)+'/'+lastTs.slice(5,7)):'';
+  if(kpiEl) kpiEl.innerHTML=[
+    {c:'green',col:'#34e0a1',ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',l:'Potência total agora',v:_mw(total),u:'MW',s:'Somatório Way2 (6233)'},
+    {c:failCirc.length?'red':'green',col:failCirc.length?'#f0598c':'#34e0a1',ic:failCirc.length?'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>':'<path d="M20 6L9 17l-5-5"/>',l:'Circuitos OK',v:(22-failCirc.length)+'/22',s:failCirc.length?('⚠ '+failCirc.map(p=>_MON_CIRC[p].c).join(', ')):'todos comunicando'},
+    {c:'blue',col:'#6b8bf5',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR1',v:tr1.v!=null?_mw(tr1.v/1000):'—',u:'MW',s:'transformador 1'},
+    {c:'cyan',col:'#2dd4bf',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR2',v:tr2.v!=null?_mw(tr2.v/1000):'—',u:'MW',s:'transformador 2'}
+  ].map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');
+  gEl.className='mon-gauges'; gEl.innerHTML='';
+  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;
+    const card=document.createElement('div');card.className='mon-g'+(fail?' fail':'');
+    card.innerHTML='<span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(1).replace('.',',')+'%</div><div class="gmw">'+_mw(p.mw)+' MW</div></div></div><div class="gname">M'+n+'</div>';
+    gEl.appendChild(card);}
+  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
+  const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
+  const clabels=cids.map(p=>_MON_CIRC[p].c), cdata=cids.map(p=>{const v=circ[p].v;return total>0&&v!=null?+(v/total*100).toFixed(2):0;});
+  const ccolors=cids.map(p=>{const v=circ[p].v;return (anyGen&&(v==null||v<=0))?'#f0598c':(_CMP_UFVC[_MON_CIRC[p].p]||'#6b8bf5');});
+  mkChart('cMonCirc',{type:'bar',data:{labels:clabels,datasets:[{label:'Contribuição %',data:cdata,backgroundColor:ccolors,borderRadius:4,barPercentage:0.86,categoryPercentage:0.92}]},options:{...CHART_DEFAULTS,indexAxis:'y',
+    plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>{const pid=cids[ctx.dataIndex],c=circ[pid];const mw=c.v==null?'sem leitura':_mw(c.v)+' MW';return [_MON_CIRC[pid].c+' · '+mw,(c.v==null||c.v<=0)&&anyGen?'⚠ possível falha/comunicação':'contribuição '+cdata[ctx.dataIndex].toFixed(2).replace('.',',')+'%'];}}}},
+    scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},title:{display:true,text:'% da potência total',color:'#8090b8',font:{size:9}}},y:{grid:{display:false},ticks:{color:'#cdd9f2',autoSkip:false,font:{size:10,weight:'600'},callback:function(v){return this.getLabelForValue(v);}}}}}});
 }
 // Faixa de KPIs da fonte ONS (período do filtro)
 function renderONSKpis(){
