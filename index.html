@@ -2157,7 +2157,7 @@ function _themeCharts(light){
         AUDITORIA DE QUALIDADE · ONS × WAY2
         <button class="audit-dl" onclick="_auditPrint()" title="Salvar esta auditoria em PDF (fundo escuro)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar PDF</button>
       </div>
-      <div id="auditKpis" class="cmp-anal-kpis"></div>
+      <div id="auditKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
       <div class="chart-row cols-1">
         <div class="cc cc-nolift">
           <div class="cc-head"><div><div class="cc-title">Matriz de divergência · usina × mês</div><div class="cc-sub">MAPE (erro % médio diário) e razão Way2/ONS · verde = fontes batem, vermelho = divergem</div></div></div>
@@ -5614,12 +5614,13 @@ async function renderAuditPage(){
   const cls={}; for(let n=1;n<=9;n++) cls[n]=_auditClass(mArr.map(m=>parks[n][m.ym]));
   const good=Object.values(cls).filter(c=>c.s==='good').length, crit=Object.values(cls).filter(c=>c.s==='crit').length, warn=Object.values(cls).filter(c=>c.s==='warn').length;
   /* KPIs */
-  if(kpiEl) kpiEl.innerHTML=[
-    ['Usinas auditadas','9','9 UFVs · 343,77 MW'],
-    ['Íntegras',good,'MAPE ≤ 4% · razão ~1,00'],
-    ['Com desvio',crit+warn,crit+' sistemático · '+warn+' ruído'],
-    ['Janela',mArr[0].label+' → '+mArr[3].label,'4 meses']
-  ].map(k=>'<div class="cmp-anal-kpi"><div class="k-lbl">'+k[0]+'</div><div class="k-val">'+k[1]+'</div><div class="k-sub">'+k[2]+'</div></div>').join('');
+  if(kpiEl){const _kc=[
+    {c:'blue',  col:'#6b8bf5', ic:'<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>', l:'Usinas auditadas', v:'9', s:'9 UFVs · 343,77 MW'},
+    {c:'green', col:'#34e0a1', ic:'<path d="M20 6L9 17l-5-5"/>', l:'Íntegras', v:good, s:'MAPE ≤ 4% · razão ~1,00'},
+    {c:'red',   col:'#f0598c', ic:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', l:'Com desvio', v:crit+warn, s:crit+' sistemático · '+warn+' ruído'},
+    {c:'cyan',  col:'#2dd4bf', ic:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', l:'Janela auditada', v:'4', u:'meses', s:mArr[0].label+' → '+mArr[3].label}
+  ];
+  kpiEl.innerHTML=_kc.map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');}
   /* Matriz */
   const _f1=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
   let h='<table class="audit-tbl"><thead><tr><th>UFV</th>'+mArr.map(m=>'<th>'+m.label+'</th>').join('')+'<th>Situação</th></tr></thead><tbody>';
