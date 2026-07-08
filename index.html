@@ -8945,8 +8945,9 @@ function _cmpBuildSeries(){
     byPark={_OM:OM,_WM:WM,parks:parks.slice()};
   }
   const keys=[...new Set([...Object.keys(onsMap),...Object.keys(wayMap)])].sort();
-  const byParkArr=byPark?byPark.parks.map(n=>({n,ons:keys.map(k=>+((byPark._OM[n][k]||0)).toFixed(3)),way:keys.map(k=>+((byPark._WM[n][k]||0)).toFixed(3))})):null;
-  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(3)), way:keys.map(k=>+(wayMap[k]||0).toFixed(3)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), byPark:byParkArr};
+  /* precisão em 6 casas de GWh (= 0,001 MWh) p/ preservar os quebrados — 3 casas caía em MWh inteiro */
+  const byParkArr=byPark?byPark.parks.map(n=>({n,ons:keys.map(k=>+((byPark._OM[n][k]||0)).toFixed(6)),way:keys.map(k=>+((byPark._WM[n][k]||0)).toFixed(6))})):null;
+  return {labels:keys, ons:keys.map(k=>+(onsMap[k]||0).toFixed(6)), way:keys.map(k=>+(wayMap[k]||0).toFixed(6)), subj:isComplex?'Complexo':'Mauriti '+parks.join('+'), byPark:byParkArr};
 }
 /* ── DRILL-DOWN: a granularidade define QUAL período olho; o eixo X mostra as sub-unidades ──
    Dia→horas · Semana→dias da semana · Mês→dias do mês · Ano→meses · Personalizado→dias.
