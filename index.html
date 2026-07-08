@@ -844,6 +844,17 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-mchip.on{background:linear-gradient(180deg,rgba(107,139,245,.30),rgba(107,139,245,.18));border-color:rgba(107,139,245,.6);color:#fff}
 .audit-mbtn{height:28px;padding:0 11px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:transparent;color:var(--t3);font-size:11px;font-weight:700;cursor:pointer}
 .audit-mbtn:hover{color:#fff;border-color:rgba(107,139,245,.4)}
+/* dropdown de meses (compacto) */
+.audit-mdrop{position:relative;display:inline-block}
+.audit-mtrigger{height:28px;padding:0 12px;border-radius:8px;border:1px solid rgba(107,139,245,.32);background:rgba(107,139,245,.10);color:#eaf0fb;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.audit-mtrigger:hover{border-color:rgba(107,139,245,.6);background:rgba(107,139,245,.18)}
+.audit-mtrigger svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.audit-mtrigger .cx{color:var(--t3);font-size:10px;margin-left:1px}
+.audit-mback{position:fixed;inset:0;z-index:40}
+.audit-mpop{position:absolute;top:34px;left:0;z-index:41;background:#0f1420;border:1px solid rgba(107,139,245,.28);border-radius:12px;box-shadow:0 16px 46px rgba(0,0,0,.62);padding:12px;min-width:296px}
+.audit-mpop-top{display:flex;gap:6px;margin-bottom:10px}
+.audit-mpop-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.audit-mpop-grid .audit-mchip{width:100%;justify-content:center;height:30px;padding:0}
 .audit-dl{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#34e0a1,#22c98d);color:#04140d;border:0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-transform:none;box-shadow:0 4px 14px rgba(52,224,161,.28);transition:filter .15s,transform .15s}
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
 /* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
@@ -5597,11 +5608,11 @@ function _auditPrint(){
   setTimeout(()=>{try{window.print();}catch(e){}setTimeout(_clean,1500);},80);
 }
 const _auditCache={};
-async function _auditLoadMonth(ym){
-  if(_auditCache[ym]) return _auditCache[ym];
+async function _auditLoadMonth(ym,fresh){
+  if(!fresh && _auditCache[ym]) return _auditCache[ym];
   try{
-    /* meses passados são estáticos → deixa o navegador cachear (atualizar não re-baixa) */
-    const r=await fetch(WAY2_BLOB_BASE+'ons_irradiancia_'+ym+'.json',{cache:'force-cache'});
+    /* passados: estáticos → cache do navegador (rápido). mês corrente: sempre fresco (dias novos) */
+    const r=await fetch(WAY2_BLOB_BASE+'ons_irradiancia_'+ym+'.json'+(fresh?'?t='+Date.now():''),{cache:fresh?'no-store':'force-cache'});
     if(!r.ok) throw 0;
     const j=JSON.parse((await r.text()).replace(/^﻿/,''));
     const o={}; (j.consolidado||[]).forEach(row=>{const d=row.ts.slice(0,10),n=+String(row.u).replace('CEFMT','');if(!n)return;(o[n]=o[n]||{});o[n][d]=(o[n][d]||0)+(+row.gv||0)*0.5;});
@@ -5615,37 +5626,43 @@ function _auditCellBg(m){const a=Math.min(1,m/25),hue=150-150*a;return 'hsla('+h
 let _auditState=null;
 async function renderAuditPage(){
   const body=document.getElementById('auditBody'); if(!body) return;
-  if(!_auditState){
-    body.innerHTML='<div style="padding:28px;color:var(--t3);text-align:center;font-size:13px">Carregando auditoria (set/25 → agora)…</div>';
-    if(_eneatDiario===null){_eneatDiario={};try{await loadEneatDiario();}catch(e){}}
-    const now=new Date(), MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-    /* meses de set/2025 até o mês anterior ao atual */
-    const months=[]; let d=new Date(2025,8,1); const end=new Date(now.getFullYear(),now.getMonth(),1);
-    while(d<end){months.push({ym:d.getFullYear()+'_'+String(d.getMonth()+1).padStart(2,'0'),label:MN[d.getMonth()]+'/'+String(d.getFullYear()).slice(2)});d.setMonth(d.getMonth()+1);}
-    const onsM={}; const _res=await Promise.all(months.map(m=>_auditLoadMonth(m.ym))); /* paralelo = ~10x mais rápido */
-    months.forEach((m,i)=>onsM[m.ym]=_res[i]);
-    const valid=months.filter(m=>{const o=onsM[m.ym];return o&&o[1]&&Object.keys(o[1]).length;});
-    /* métricas por parque (0=Complexo · 1..9) × mês */
-    const parks={}; for(let n=0;n<=9;n++)parks[n]={};
-    valid.forEach(m=>{const ons=onsM[m.ym];
-      const dayset=new Set(); for(let k=1;k<=9;k++)Object.keys(ons[k]||{}).forEach(dd=>dayset.add(dd));
-      const days=[...dayset].sort();
-      for(let n=0;n<=9;n++){const o=[],wv=[];
-        days.forEach(dd=>{const ed=_eneatDiario&&_eneatDiario[dd];
-          if(n===0){let so=0,sw=0;for(let k=1;k<=9;k++){so+=(ons[k]&&ons[k][dd])||0;sw+=ed?num(ed[k]):0;}o.push(so);wv.push(sw);}
-          else{o.push((ons[n]&&ons[n][dd])||0);wv.push(ed?num(ed[n]):0);}});
-        const ot=o.reduce((s,x)=>s+x,0),wt=wv.reduce((s,x)=>s+x,0);
-        const ad=[];days.forEach((dd,i)=>{if(o[i]>0.5)ad.push(Math.abs((wv[i]-o[i])/o[i]*100));});
-        parks[n][m.ym]={ons:ot,way:wt,ratio:ot?wt/ot:0,mape:ad.length?ad.reduce((s,x)=>s+x,0)/ad.length:0,corr:_auditCorr(o,wv),big:ad.filter(x=>x>20).length};
-      }});
-    _auditState={months:valid,parks,sel:new Set(valid.map(m=>m.ym)),uSel:new Set([0,1,2,3,4,5,6,7,8,9])};
-  }
+  const firstLoad=!_auditState;
+  if(firstLoad) body.innerHTML='<div style="padding:28px;color:var(--t3);text-align:center;font-size:13px">Carregando auditoria (set/25 → agora)…</div>';
+  if(_eneatDiario===null){_eneatDiario={};try{await loadEneatDiario();}catch(e){}}
+  const now=new Date(), MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  /* set/2025 até o mês CORRENTE (inclui julho parcial e novos dias assim que publicados) */
+  const months=[]; let d=new Date(2025,8,1); const end=new Date(now.getFullYear(),now.getMonth()+1,1);
+  while(d<end){months.push({ym:d.getFullYear()+'_'+String(d.getMonth()+1).padStart(2,'0'),label:MN[d.getMonth()]+'/'+String(d.getFullYear()).slice(2)});d.setMonth(d.getMonth()+1);}
+  const curYm=now.getFullYear()+'_'+String(now.getMonth()+1).padStart(2,'0');
+  const _res=await Promise.all(months.map(m=>_auditLoadMonth(m.ym, m.ym===curYm))); /* mês corrente = fresco */
+  const onsM={}; months.forEach((m,i)=>onsM[m.ym]=_res[i]);
+  const valid=months.filter(m=>{const o=onsM[m.ym];return o&&o[1]&&Object.keys(o[1]).length;});
+  /* métricas por parque (0=Complexo · 1..9) × mês */
+  const parks={}; for(let n=0;n<=9;n++)parks[n]={};
+  valid.forEach(m=>{const ons=onsM[m.ym];
+    const dayset=new Set(); for(let k=1;k<=9;k++)Object.keys(ons[k]||{}).forEach(dd=>dayset.add(dd));
+    const days=[...dayset].sort();
+    for(let n=0;n<=9;n++){const o=[],wv=[];
+      days.forEach(dd=>{const ed=_eneatDiario&&_eneatDiario[dd];
+        if(n===0){let so=0,sw=0;for(let k=1;k<=9;k++){so+=(ons[k]&&ons[k][dd])||0;sw+=ed?num(ed[k]):0;}o.push(so);wv.push(sw);}
+        else{o.push((ons[n]&&ons[n][dd])||0);wv.push(ed?num(ed[n]):0);}});
+      const ot=o.reduce((s,x)=>s+x,0),wt=wv.reduce((s,x)=>s+x,0);
+      const ad=[];days.forEach((dd,i)=>{if(o[i]>0.5)ad.push(Math.abs((wv[i]-o[i])/o[i]*100));});
+      parks[n][m.ym]={ons:ot,way:wt,ratio:ot?wt/ot:0,mape:ad.length?ad.reduce((s,x)=>s+x,0)/ad.length:0,corr:_auditCorr(o,wv),big:ad.filter(x=>x>20).length};
+    }});
+  /* preserva os filtros ao recomputar (mantém só meses ainda válidos) */
+  const _pSel=_auditState&&_auditState.sel, _pU=_auditState&&_auditState.uSel;
+  let _sel=_pSel?new Set([...(_pSel)].filter(ym=>valid.some(m=>m.ym===ym))):new Set(valid.map(m=>m.ym));
+  if(!_sel.size) _sel=new Set(valid.map(m=>m.ym));
+  _auditState={months:valid,parks,sel:_sel,uSel:_pU||new Set([0,1,2,3,4,5,6,7,8,9]),dropOpen:_auditState&&_auditState.dropOpen};
   _auditRenderAll();
 }
 function _auditToggleMonth(ym){const s=_auditState.sel;if(s.has(ym)){if(s.size>1)s.delete(ym);}else s.add(ym);_auditRenderAll();}
 function _auditMonthsAll(on){const st=_auditState;st.sel=on?new Set(st.months.map(m=>m.ym)):new Set([st.months[st.months.length-1].ym]);_auditRenderAll();}
 function _auditToggleUfv(n){const s=_auditState.uSel;if(s.has(n)){if(s.size>1)s.delete(n);}else s.add(n);_auditRenderAll();}
 function _auditUfvAll(on){_auditState.uSel=on?new Set([0,1,2,3,4,5,6,7,8,9]):new Set([0]);_auditRenderAll();}
+function _auditMonthDrop(e){if(e)e.stopPropagation();_auditState.dropOpen=!_auditState.dropOpen;_auditRenderAll();}
+function _auditCloseDrop(){if(_auditState){_auditState.dropOpen=false;_auditRenderAll();}}
 function _auditRenderAll(){
   const st=_auditState; if(!st) return;
   const sel=st.months.filter(m=>st.sel.has(m.ym)), cols=sel.length?sel:st.months;
@@ -5663,9 +5680,17 @@ function _auditRenderAll(){
   /* filtro de meses */
   const fEl=document.getElementById('auditMonthFilter');
   if(fEl){const _uf=[{n:0,l:'Complexo',c:'#6b8bf5'}];for(let n=1;n<=9;n++)_uf.push({n,l:'M'+n,c:_CMP_UFVC[n]||'#6b8bf5'});
+    const selM=st.months.filter(m=>st.sel.has(m.ym));
+    const summ=selM.length===st.months.length?'Todos · '+st.months.length:selM.length===1?selM[0].label:selM.length?selM[0].label+' → '+selM[selM.length-1].label+' · '+selM.length:'—';
+    const calIc='<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>';
     fEl.innerHTML='<span class="audit-mlabel">Meses</span>'+
-    st.months.map(m=>'<button class="audit-mchip'+(st.sel.has(m.ym)?' on':'')+'" onclick="_auditToggleMonth(\''+m.ym+'\')">'+m.label+'</button>').join('')+
-    '<button class="audit-mbtn" onclick="_auditMonthsAll(1)">Todos</button><button class="audit-mbtn" onclick="_auditMonthsAll(0)">Só último</button>'+
+    '<div class="audit-mdrop">'+
+      '<button class="audit-mtrigger" onclick="_auditMonthDrop(event)">'+calIc+'<span>'+summ+'</span><span class="cx">▾</span></button>'+
+      (st.dropOpen?'<div class="audit-mback" onclick="_auditCloseDrop()"></div><div class="audit-mpop">'+
+        '<div class="audit-mpop-top"><button class="audit-mbtn" onclick="_auditMonthsAll(1)">Todos</button><button class="audit-mbtn" onclick="_auditMonthsAll(0)">Só último</button></div>'+
+        '<div class="audit-mpop-grid">'+st.months.map(m=>'<button class="audit-mchip'+(st.sel.has(m.ym)?' on':'')+'" onclick="_auditToggleMonth(\''+m.ym+'\')">'+m.label+'</button>').join('')+'</div>'+
+      '</div>':'')+
+    '</div>'+
     '<span style="width:1px;height:22px;background:rgba(255,255,255,.14);margin:0 6px;align-self:center"></span>'+
     '<span class="audit-mlabel">UFV</span>'+
     _uf.map(u=>'<button class="w2d-park-chip'+(st.uSel.has(u.n)?' on':'')+'" style="--pk-c:'+u.c+';--pk-bg:'+u.c+'22;padding:3px 11px;font-size:11px;border-radius:999px" onclick="_auditToggleUfv('+u.n+')">'+u.l+'</button>').join('')+
