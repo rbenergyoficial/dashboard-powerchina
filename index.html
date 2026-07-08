@@ -829,6 +829,21 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-case.crit{border-left:3px solid #f0598c}.audit-case.warn{border-left:3px solid #f5a623}
 .audit-case h4{margin:0 0 4px;font-size:15px;font-weight:800;color:#eaf0fb}
 .audit-case p{margin:0;font-size:12.5px;color:#aeb9d6;line-height:1.5}
+/* rótulo de UFV colorido na matriz */
+.audit-ufv{display:inline-flex;align-items:center;gap:8px}
+.audit-ufv .pk{width:9px;height:20px;border-radius:3px;flex:0 0 auto;box-shadow:0 0 8px -1px currentColor}
+.audit-ufv .nm{font-weight:800;color:#eaf0fb;letter-spacing:.3px}
+.audit-tbl tr.row-complex td{background:rgba(107,139,245,.07)}
+.audit-tbl tr.row-complex td:first-child{color:#fff}
+.audit-ufv.complex .pk{width:11px;height:22px;background:linear-gradient(180deg,#34e0a1,#6b8bf5)!important;color:#6b8bf5}
+.audit-ufv.complex .nm{font-size:14px}
+/* chips de mês (filtro) */
+.audit-mlabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);font-weight:700;margin-right:2px}
+.audit-mchip{height:28px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#dfe8ff;font-size:11.5px;font-weight:700;cursor:pointer;transition:.15s;display:inline-flex;align-items:center}
+.audit-mchip:hover{border-color:rgba(107,139,245,.45);background:rgba(107,139,245,.12)}
+.audit-mchip.on{background:linear-gradient(180deg,rgba(107,139,245,.30),rgba(107,139,245,.18));border-color:rgba(107,139,245,.6);color:#fff}
+.audit-mbtn{height:28px;padding:0 11px;border-radius:8px;border:1px solid rgba(255,255,255,.10);background:transparent;color:var(--t3);font-size:11px;font-weight:700;cursor:pointer}
+.audit-mbtn:hover{color:#fff;border-color:rgba(107,139,245,.4)}
 .audit-dl{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#34e0a1,#22c98d);color:#04140d;border:0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-transform:none;box-shadow:0 4px 14px rgba(52,224,161,.28);transition:filter .15s,transform .15s}
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
 /* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
@@ -2158,6 +2173,7 @@ function _themeCharts(light){
         <button class="audit-dl" onclick="_auditPrint()" title="Salvar esta auditoria em PDF (fundo escuro)"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar PDF</button>
       </div>
       <div id="auditKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
+      <div id="auditMonthFilter" style="grid-column:1/-1;display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:0 2px 2px"></div>
       <div class="chart-row cols-1">
         <div class="cc cc-nolift">
           <div class="cc-head"><div><div class="cc-title">Matriz de divergência · usina × mês</div><div class="cc-sub">MAPE (erro % médio diário) e razão Way2/ONS · verde = fontes batem, vermelho = divergem</div></div></div>
@@ -5593,51 +5609,76 @@ function _auditCorr(a,b){const n=a.length;let sa=0,sb=0,saa=0,sbb=0,sab=0;for(le
 function _auditClass(ms){const rd=ms.reduce((s,x)=>s+Math.abs(x.ratio-1),0)/ms.length;const mp=ms.reduce((s,x)=>s+x.mape,0)/ms.length;const cr=ms.reduce((s,x)=>s+x.corr,0)/ms.length;
   if(rd>0.10) return {s:'crit',l:'Viés sistemático'}; if(mp>10||cr<0.9) return {s:'warn',l:'Ruído diário'}; return {s:'good',l:'Íntegro'};}
 function _auditCellBg(m){const a=Math.min(1,m/25),hue=150-150*a;return 'hsla('+hue.toFixed(0)+',62%,45%,'+(0.12+0.5*a).toFixed(2)+')';}
+let _auditState=null;
 async function renderAuditPage(){
   const body=document.getElementById('auditBody'); if(!body) return;
-  const kpiEl=document.getElementById('auditKpis'), casesEl=document.getElementById('auditCases');
-  body.innerHTML='<div style="padding:28px;color:var(--t3);text-align:center;font-size:13px">Carregando auditoria (4 meses)…</div>';
-  if(_eneatDiario===null){_eneatDiario={};try{await loadEneatDiario();}catch(e){}}
-  /* últimos 4 meses completos (antes do mês atual) */
-  const now=new Date(), MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  const mArr=[]; for(let i=4;i>=1;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);mArr.push({ym:d.getFullYear()+'_'+String(d.getMonth()+1).padStart(2,'0'),label:MN[d.getMonth()]+'/'+String(d.getFullYear()).slice(2)});}
-  const onsM={}; for(const m of mArr) onsM[m.ym]=await _auditLoadMonth(m.ym);
-  /* métricas por parque × mês */
-  const parks={}; for(let n=1;n<=9;n++){parks[n]={};
-    for(const m of mArr){const ons=onsM[m.ym][n]||{};const days=Object.keys(ons).sort();
-      const o=days.map(d=>ons[d]||0),wv=days.map(d=>{const ed=_eneatDiario&&_eneatDiario[d];return ed?num(ed[n]):0;});
-      const ot=o.reduce((s,x)=>s+x,0),wt=wv.reduce((s,x)=>s+x,0);
-      const ad=[];days.forEach((d,i)=>{if(o[i]>0.5)ad.push(Math.abs((wv[i]-o[i])/o[i]*100));});
-      const mape=ad.length?ad.reduce((s,x)=>s+x,0)/ad.length:0;
-      parks[n][m.ym]={ons:ot,way:wt,ratio:ot?wt/ot:0,mape,corr:_auditCorr(o,wv),big:ad.filter(x=>x>20).length};
-    }}
-  const cls={}; for(let n=1;n<=9;n++) cls[n]=_auditClass(mArr.map(m=>parks[n][m.ym]));
-  const good=Object.values(cls).filter(c=>c.s==='good').length, crit=Object.values(cls).filter(c=>c.s==='crit').length, warn=Object.values(cls).filter(c=>c.s==='warn').length;
-  /* KPIs */
+  if(!_auditState){
+    body.innerHTML='<div style="padding:28px;color:var(--t3);text-align:center;font-size:13px">Carregando auditoria (set/25 → agora)…</div>';
+    if(_eneatDiario===null){_eneatDiario={};try{await loadEneatDiario();}catch(e){}}
+    const now=new Date(), MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    /* meses de set/2025 até o mês anterior ao atual */
+    const months=[]; let d=new Date(2025,8,1); const end=new Date(now.getFullYear(),now.getMonth(),1);
+    while(d<end){months.push({ym:d.getFullYear()+'_'+String(d.getMonth()+1).padStart(2,'0'),label:MN[d.getMonth()]+'/'+String(d.getFullYear()).slice(2)});d.setMonth(d.getMonth()+1);}
+    const onsM={}; for(const m of months) onsM[m.ym]=await _auditLoadMonth(m.ym);
+    const valid=months.filter(m=>{const o=onsM[m.ym];return o&&o[1]&&Object.keys(o[1]).length;});
+    /* métricas por parque (0=Complexo · 1..9) × mês */
+    const parks={}; for(let n=0;n<=9;n++)parks[n]={};
+    valid.forEach(m=>{const ons=onsM[m.ym];
+      const dayset=new Set(); for(let k=1;k<=9;k++)Object.keys(ons[k]||{}).forEach(dd=>dayset.add(dd));
+      const days=[...dayset].sort();
+      for(let n=0;n<=9;n++){const o=[],wv=[];
+        days.forEach(dd=>{const ed=_eneatDiario&&_eneatDiario[dd];
+          if(n===0){let so=0,sw=0;for(let k=1;k<=9;k++){so+=(ons[k]&&ons[k][dd])||0;sw+=ed?num(ed[k]):0;}o.push(so);wv.push(sw);}
+          else{o.push((ons[n]&&ons[n][dd])||0);wv.push(ed?num(ed[n]):0);}});
+        const ot=o.reduce((s,x)=>s+x,0),wt=wv.reduce((s,x)=>s+x,0);
+        const ad=[];days.forEach((dd,i)=>{if(o[i]>0.5)ad.push(Math.abs((wv[i]-o[i])/o[i]*100));});
+        parks[n][m.ym]={ons:ot,way:wt,ratio:ot?wt/ot:0,mape:ad.length?ad.reduce((s,x)=>s+x,0)/ad.length:0,corr:_auditCorr(o,wv),big:ad.filter(x=>x>20).length};
+      }});
+    _auditState={months:valid,parks,sel:new Set(valid.map(m=>m.ym))};
+  }
+  _auditRenderAll();
+}
+function _auditToggleMonth(ym){const s=_auditState.sel;if(s.has(ym)){if(s.size>1)s.delete(ym);}else s.add(ym);_auditRenderAll();}
+function _auditMonthsAll(on){const st=_auditState;st.sel=on?new Set(st.months.map(m=>m.ym)):new Set([st.months[st.months.length-1].ym]);_auditRenderAll();}
+function _auditRenderAll(){
+  const st=_auditState; if(!st) return;
+  const sel=st.months.filter(m=>st.sel.has(m.ym)), cols=sel.length?sel:st.months;
+  const cls={}; for(let n=0;n<=9;n++) cls[n]=_auditClass(cols.map(m=>st.parks[n][m.ym]));
+  /* KPIs (usinas M1..9) */
+  const good=[],crit=[],warn=[]; for(let n=1;n<=9;n++){(cls[n].s==='good'?good:cls[n].s==='crit'?crit:warn).push(n);}
+  const kpiEl=document.getElementById('auditKpis');
   if(kpiEl){const _kc=[
-    {c:'blue',  col:'#6b8bf5', ic:'<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>', l:'Usinas auditadas', v:'9', s:'9 UFVs · 343,77 MW'},
-    {c:'green', col:'#34e0a1', ic:'<path d="M20 6L9 17l-5-5"/>', l:'Íntegras', v:good, s:'MAPE ≤ 4% · razão ~1,00'},
-    {c:'red',   col:'#f0598c', ic:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', l:'Com desvio', v:crit+warn, s:crit+' sistemático · '+warn+' ruído'},
-    {c:'cyan',  col:'#2dd4bf', ic:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', l:'Janela auditada', v:'4', u:'meses', s:mArr[0].label+' → '+mArr[3].label}
+    {c:'blue', col:'#6b8bf5', ic:'<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>', l:'Usinas auditadas', v:'9', s:'9 UFVs + Complexo · 343,77 MW'},
+    {c:'green',col:'#34e0a1', ic:'<path d="M20 6L9 17l-5-5"/>', l:'Íntegras', v:good.length, s:'MAPE ≤ 4% · razão ~1,00'},
+    {c:'red',  col:'#f0598c', ic:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', l:'Com desvio', v:crit.length+warn.length, s:crit.length+' sistemático · '+warn.length+' ruído'},
+    {c:'cyan', col:'#2dd4bf', ic:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>', l:'Meses na tela', v:cols.length, u:'de '+st.months.length, s:cols[0].label+' → '+cols[cols.length-1].label}
   ];
   kpiEl.innerHTML=_kc.map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');}
-  /* Matriz */
+  /* filtro de meses */
+  const fEl=document.getElementById('auditMonthFilter');
+  if(fEl) fEl.innerHTML='<span class="audit-mlabel">Meses</span>'+
+    st.months.map(m=>'<button class="audit-mchip'+(st.sel.has(m.ym)?' on':'')+'" onclick="_auditToggleMonth(\''+m.ym+'\')">'+m.label+'</button>').join('')+
+    '<button class="audit-mbtn" onclick="_auditMonthsAll(1)">Todos</button><button class="audit-mbtn" onclick="_auditMonthsAll(0)">Só último</button>';
+  /* matriz (Complexo + M1..9, rótulos coloridos) */
   const _f1=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
-  let h='<table class="audit-tbl"><thead><tr><th>UFV</th>'+mArr.map(m=>'<th>'+m.label+'</th>').join('')+'<th>Situação</th></tr></thead><tbody>';
-  for(let n=1;n<=9;n++){h+='<tr><td>M'+n+'</td>';
-    mArr.forEach(m=>{const x=parks[n][m.ym];h+='<td style="background:'+_auditCellBg(x.mape)+'"><div class="audit-cell"><span class="m" style="color:'+(x.mape>12?'#fff':'#eaf0fb')+'">'+_f1(x.mape)+'%</span><span class="r">×'+x.ratio.toFixed(2).replace('.',',')+'</span></div></td>';});
-    h+='<td><span class="audit-st st-'+cls[n].s+'"><span class="d"></span>'+cls[n].l+'</span></td></tr>';}
-  h+='</tbody></table>';
-  body.innerHTML=h;
-  /* Casos em destaque (crit + warn) */
+  const rowHtml=n=>{const isC=n===0,c=_CMP_UFVC[n]||'#6b8bf5';
+    const lbl=isC?'<span class="audit-ufv complex"><span class="pk"></span><span class="nm">Complexo</span></span>':'<span class="audit-ufv"><span class="pk" style="background:'+c+';color:'+c+'"></span><span class="nm">M'+n+'</span></span>';
+    let r='<tr'+(isC?' class="row-complex"':'')+'><td>'+lbl+'</td>';
+    cols.forEach(m=>{const x=st.parks[n][m.ym];r+='<td style="background:'+_auditCellBg(x.mape)+'"><div class="audit-cell"><span class="m" style="color:'+(x.mape>12?'#fff':'#eaf0fb')+'">'+_f1(x.mape)+'%</span><span class="r">×'+x.ratio.toFixed(2).replace('.',',')+'</span></div></td>';});
+    return r+'<td><span class="audit-st st-'+cls[n].s+'"><span class="d"></span>'+cls[n].l+'</span></td></tr>';};
+  let h='<table class="audit-tbl"><thead><tr><th>UFV</th>'+cols.map(m=>'<th>'+m.label+'</th>').join('')+'<th>Situação</th></tr></thead><tbody>';
+  h+=rowHtml(0); for(let n=1;n<=9;n++)h+=rowHtml(n); h+='</tbody></table>';
+  document.getElementById('auditBody').innerHTML=h;
+  /* casos em destaque */
+  const casesEl=document.getElementById('auditCases');
   if(casesEl){const flagged=[];for(let n=1;n<=9;n++)if(cls[n].s!=='good')flagged.push(n);
-    if(!flagged.length){casesEl.innerHTML='<div style="padding:14px;color:var(--t3);font-size:13px">Nenhuma divergência relevante no período — todas as usinas batem &lt; ~5%.</div>';}
-    else casesEl.innerHTML=flagged.map(n=>{const c=cls[n],ms=mArr.map(m=>parks[n][m.ym]);
-      const rmed=(ms.reduce((s,x)=>s+x.ratio,0)/ms.length),mpmed=(ms.reduce((s,x)=>s+x.mape,0)/ms.length),crmed=(ms.reduce((s,x)=>s+x.corr,0)/ms.length);
-      const desc=c.s==='crit'
+    if(!flagged.length){casesEl.innerHTML='<div style="padding:14px;color:var(--t3);font-size:13px">Nenhuma divergência relevante nos meses selecionados — todas as usinas batem &lt; ~5%.</div>';}
+    else casesEl.innerHTML=flagged.map(n=>{const cl=cls[n],ms=cols.map(m=>st.parks[n][m.ym]),cc=_CMP_UFVC[n]||'#f0598c';
+      const rmed=ms.reduce((s,x)=>s+x.ratio,0)/ms.length,mpmed=ms.reduce((s,x)=>s+x.mape,0)/ms.length,crmed=ms.reduce((s,x)=>s+x.corr,0)/ms.length;
+      const desc=cl.s==='crit'
         ? 'Way2 <b>'+((rmed-1)*100).toFixed(0)+'% acima</b> do ONS de forma constante (correlação '+crmed.toFixed(2).replace('.',',')+'). Assinatura de <b>constante de medição errada</b> numa das pontas — auditar registro/TC do CEFMT'+n+' (ONS) e do ponto Way2.'
         : 'Totais próximos, mas dado diário instável: MAPE médio <b>'+mpmed.toFixed(0)+'%</b> e correlação <b>'+crmed.toFixed(2).replace('.',',')+'</b>. Investigar aquisição/telemetria do parque '+n+'.';
-      return '<div class="audit-case '+c.s+'"><h4>Mauriti '+n+' — '+c.l+'</h4><p>'+desc+'</p></div>';}).join('');}
+      return '<div class="audit-case '+cl.s+'" style="border-left-color:'+cc+'"><h4><span style="display:inline-block;width:9px;height:18px;border-radius:3px;background:'+cc+';margin-right:9px;vertical-align:-3px"></span>Mauriti '+n+' — '+cl.l+'</h4><p>'+desc+'</p></div>';}).join('');}
 }
 // Faixa de KPIs da fonte ONS (período do filtro)
 function renderONSKpis(){
