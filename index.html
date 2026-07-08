@@ -5790,7 +5790,7 @@ async function renderMonitorPage(){
   const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
   const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
   if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
-  const _mw=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
+  const _mw=v=>{let x=Number(v);if(Math.abs(x)<0.05)x=0;return x.toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});};
   const circ={}; let lastTs=null;
   Object.keys(_MON_CIRC).forEach(pid=>{const L=_monLatest(dados,+pid);circ[pid]={v:L.v==null?null:L.v,ts:L.ts};if(L.ts&&(!lastTs||L.ts>lastTs))lastTs=L.ts;}); /* _monLatest já converte kW→MW */
   const plant={}; for(let n=1;n<=9;n++)plant[n]={mw:0,fail:0};
