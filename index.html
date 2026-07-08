@@ -856,14 +856,14 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-mpop-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .audit-mpop-grid .audit-mchip{width:100%;justify-content:center;height:30px;padding:0}
 /* Monitor ao vivo */
-body.page-monitor-active #fbar{display:none!important}
+body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!important}
 .mon-gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:4px 2px}
-.mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:14px;padding:12px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:14px;padding:26px 10px 10px;display:flex;flex-direction:column;align-items:center;gap:0}
 .mon-g .gwrap{position:relative;width:100%;max-width:150px;aspect-ratio:1.6/1}
-.mon-g .gctr{position:absolute;left:0;right:0;bottom:8px;text-align:center;pointer-events:none}
-.mon-g .gpct{font-size:20px;font-weight:800;font-family:var(--display);line-height:1}
-.mon-g .gmw{font-size:11px;color:var(--t3);font-weight:600;margin-top:1px}
-.mon-g .gname{font-size:12px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
+.mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.mon-g .gpct{font-size:22px;font-weight:800;font-family:var(--display);line-height:1}
+.mon-g .gmw{font-size:12px;color:var(--t3);font-weight:700;margin-top:2px;letter-spacing:.2px}
+.mon-g .gname{position:absolute;top:9px;left:11px;font-size:13px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
 .mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
 .mon-g .gtag{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px}
 .mon-g .gtag.ok{background:rgba(52,224,161,.15);color:#34e0a1}
@@ -5808,7 +5808,7 @@ async function renderMonitorPage(){
   gEl.className='mon-gauges'; gEl.innerHTML='';
   for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;
     const card=document.createElement('div');card.className='mon-g'+(fail?' fail':'');
-    card.innerHTML='<span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(1).replace('.',',')+'%</div><div class="gmw">'+_mw(p.mw)+' MW</div></div></div><div class="gname">M'+n+'</div>';
+    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(1).replace('.',',')+'%</div></div></div><div class="gmw">'+_mw(p.mw)+' MW</div>';
     gEl.appendChild(card);}
   for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
