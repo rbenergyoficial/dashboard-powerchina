@@ -5638,12 +5638,14 @@ async function renderAuditPage(){
         const ad=[];days.forEach((dd,i)=>{if(o[i]>0.5)ad.push(Math.abs((wv[i]-o[i])/o[i]*100));});
         parks[n][m.ym]={ons:ot,way:wt,ratio:ot?wt/ot:0,mape:ad.length?ad.reduce((s,x)=>s+x,0)/ad.length:0,corr:_auditCorr(o,wv),big:ad.filter(x=>x>20).length};
       }});
-    _auditState={months:valid,parks,sel:new Set(valid.map(m=>m.ym))};
+    _auditState={months:valid,parks,sel:new Set(valid.map(m=>m.ym)),uSel:new Set([0,1,2,3,4,5,6,7,8,9])};
   }
   _auditRenderAll();
 }
 function _auditToggleMonth(ym){const s=_auditState.sel;if(s.has(ym)){if(s.size>1)s.delete(ym);}else s.add(ym);_auditRenderAll();}
 function _auditMonthsAll(on){const st=_auditState;st.sel=on?new Set(st.months.map(m=>m.ym)):new Set([st.months[st.months.length-1].ym]);_auditRenderAll();}
+function _auditToggleUfv(n){const s=_auditState.uSel;if(s.has(n)){if(s.size>1)s.delete(n);}else s.add(n);_auditRenderAll();}
+function _auditUfvAll(on){_auditState.uSel=on?new Set([0,1,2,3,4,5,6,7,8,9]):new Set([0]);_auditRenderAll();}
 function _auditRenderAll(){
   const st=_auditState; if(!st) return;
   const sel=st.months.filter(m=>st.sel.has(m.ym)), cols=sel.length?sel:st.months;
@@ -5660,9 +5662,14 @@ function _auditRenderAll(){
   kpiEl.innerHTML=_kc.map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');}
   /* filtro de meses */
   const fEl=document.getElementById('auditMonthFilter');
-  if(fEl) fEl.innerHTML='<span class="audit-mlabel">Meses</span>'+
+  if(fEl){const _uf=[{n:0,l:'Complexo',c:'#6b8bf5'}];for(let n=1;n<=9;n++)_uf.push({n,l:'M'+n,c:_CMP_UFVC[n]||'#6b8bf5'});
+    fEl.innerHTML='<span class="audit-mlabel">Meses</span>'+
     st.months.map(m=>'<button class="audit-mchip'+(st.sel.has(m.ym)?' on':'')+'" onclick="_auditToggleMonth(\''+m.ym+'\')">'+m.label+'</button>').join('')+
-    '<button class="audit-mbtn" onclick="_auditMonthsAll(1)">Todos</button><button class="audit-mbtn" onclick="_auditMonthsAll(0)">Só último</button>';
+    '<button class="audit-mbtn" onclick="_auditMonthsAll(1)">Todos</button><button class="audit-mbtn" onclick="_auditMonthsAll(0)">Só último</button>'+
+    '<span style="width:1px;height:22px;background:rgba(255,255,255,.14);margin:0 6px;align-self:center"></span>'+
+    '<span class="audit-mlabel">UFV</span>'+
+    _uf.map(u=>'<button class="w2d-park-chip'+(st.uSel.has(u.n)?' on':'')+'" style="--pk-c:'+u.c+';--pk-bg:'+u.c+'22;padding:3px 11px;font-size:11px;border-radius:999px" onclick="_auditToggleUfv('+u.n+')">'+u.l+'</button>').join('')+
+    '<button class="audit-mbtn" onclick="_auditUfvAll(1)">Todas</button>';}
   /* matriz (Complexo + M1..9, rótulos coloridos) */
   const _f1=v=>Number(v).toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
   const rowHtml=n=>{const isC=n===0,c=_CMP_UFVC[n]||'#6b8bf5';
@@ -5670,13 +5677,14 @@ function _auditRenderAll(){
     let r='<tr'+(isC?' class="row-complex"':'')+'><td>'+lbl+'</td>';
     cols.forEach(m=>{const x=st.parks[n][m.ym];r+='<td style="background:'+_auditCellBg(x.mape)+'"><div class="audit-cell"><span class="m" style="color:'+(x.mape>12?'#fff':'#eaf0fb')+'">'+_f1(x.mape)+'%</span><span class="r">×'+x.ratio.toFixed(2).replace('.',',')+'</span></div></td>';});
     return r+'<td><span class="audit-st st-'+cls[n].s+'"><span class="d"></span>'+cls[n].l+'</span></td></tr>';};
+  const urows=[0,1,2,3,4,5,6,7,8,9].filter(n=>st.uSel.has(n));
   let h='<table class="audit-tbl"><thead><tr><th>UFV</th>'+cols.map(m=>'<th>'+m.label+'</th>').join('')+'<th>Situação</th></tr></thead><tbody>';
-  h+=rowHtml(0); for(let n=1;n<=9;n++)h+=rowHtml(n); h+='</tbody></table>';
+  urows.forEach(n=>h+=rowHtml(n)); h+='</tbody></table>';
   document.getElementById('auditBody').innerHTML=h;
   /* casos em destaque */
   const casesEl=document.getElementById('auditCases');
-  if(casesEl){const flagged=[];for(let n=1;n<=9;n++)if(cls[n].s!=='good')flagged.push(n);
-    if(!flagged.length){casesEl.innerHTML='<div style="padding:14px;color:var(--t3);font-size:13px">Nenhuma divergência relevante nos meses selecionados — todas as usinas batem &lt; ~5%.</div>';}
+  if(casesEl){const flagged=[];for(let n=1;n<=9;n++)if(cls[n].s!=='good'&&st.uSel.has(n))flagged.push(n);
+    if(!flagged.length){casesEl.innerHTML='<div style="padding:14px;color:var(--t3);font-size:13px">Nenhuma divergência relevante na seleção — todas as usinas batem &lt; ~5%.</div>';}
     else casesEl.innerHTML=flagged.map(n=>{const cl=cls[n],ms=cols.map(m=>st.parks[n][m.ym]),cc=_CMP_UFVC[n]||'#f0598c';
       const rmed=ms.reduce((s,x)=>s+x.ratio,0)/ms.length,mpmed=ms.reduce((s,x)=>s+x.mape,0)/ms.length,crmed=ms.reduce((s,x)=>s+x.corr,0)/ms.length;
       const desc=cl.s==='crit'
