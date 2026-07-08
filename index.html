@@ -848,12 +848,12 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
 /* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
 @media print{
-  body.printing-audit{background:#0a0e17!important}
+  html,body.printing-audit{background:#0a0e17!important}
   body.printing-audit *{visibility:hidden!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:none!important;transform:none!important}
   body.printing-audit #page-audit,body.printing-audit #page-audit *{visibility:visible!important}
-  body.printing-audit #page-audit{position:absolute!important;left:0;top:0;width:100%;padding:4px 12px!important;margin:0!important}
-  body.printing-audit #page-audit .cc{background:#111624!important;border-color:rgba(255,255,255,.14)!important;break-inside:avoid}
-  body.printing-audit #page-audit .cmp-anal-kpi{background:#111624!important;border-color:rgba(255,255,255,.14)!important}
+  body.printing-audit #page-audit{position:absolute!important;left:0;top:0;width:100%;padding:6px 12px!important;margin:0!important;color:#eaf0fb!important}
+  body.printing-audit #page-audit .cc,body.printing-audit #page-audit .kpi-card{background:#111624!important;border-color:rgba(255,255,255,.14)!important;break-inside:avoid}
+  body.printing-audit #page-audit .kpi-value{color:#eef2fb!important}
   body.printing-audit #page-audit .section-title{color:#aeb9d6!important}
   body.printing-audit .audit-dl{display:none!important}
   @page{size:A4 landscape;margin:8mm}
@@ -5589,16 +5589,19 @@ function _cmpAnalRenderHeatmap(){
 }
 /* ===== ABA AUDITORIA · ONS × Way2 (multi-mês, parque a parque) ===== */
 function _auditPrint(){
+  const _html=document.documentElement, _prev=_html.getAttribute('data-theme');
+  _html.setAttribute('data-theme','dark'); /* imprime sempre em escuro, mesmo se o painel estiver claro */
   document.body.classList.add('printing-audit');
-  const _clean=()=>{document.body.classList.remove('printing-audit');window.removeEventListener('afterprint',_clean);};
+  const _clean=()=>{document.body.classList.remove('printing-audit');if(_prev)_html.setAttribute('data-theme',_prev);else _html.removeAttribute('data-theme');window.removeEventListener('afterprint',_clean);};
   window.addEventListener('afterprint',_clean);
-  setTimeout(()=>{try{window.print();}catch(e){}setTimeout(_clean,1500);},60);
+  setTimeout(()=>{try{window.print();}catch(e){}setTimeout(_clean,1500);},80);
 }
 const _auditCache={};
 async function _auditLoadMonth(ym){
   if(_auditCache[ym]) return _auditCache[ym];
   try{
-    const r=await fetch(WAY2_BLOB_BASE+'ons_irradiancia_'+ym+'.json?t='+Date.now(),{cache:'no-store'});
+    /* meses passados são estáticos → deixa o navegador cachear (atualizar não re-baixa) */
+    const r=await fetch(WAY2_BLOB_BASE+'ons_irradiancia_'+ym+'.json',{cache:'force-cache'});
     if(!r.ok) throw 0;
     const j=JSON.parse((await r.text()).replace(/^﻿/,''));
     const o={}; (j.consolidado||[]).forEach(row=>{const d=row.ts.slice(0,10),n=+String(row.u).replace('CEFMT','');if(!n)return;(o[n]=o[n]||{});o[n][d]=(o[n][d]||0)+(+row.gv||0)*0.5;});
@@ -5619,7 +5622,8 @@ async function renderAuditPage(){
     /* meses de set/2025 até o mês anterior ao atual */
     const months=[]; let d=new Date(2025,8,1); const end=new Date(now.getFullYear(),now.getMonth(),1);
     while(d<end){months.push({ym:d.getFullYear()+'_'+String(d.getMonth()+1).padStart(2,'0'),label:MN[d.getMonth()]+'/'+String(d.getFullYear()).slice(2)});d.setMonth(d.getMonth()+1);}
-    const onsM={}; for(const m of months) onsM[m.ym]=await _auditLoadMonth(m.ym);
+    const onsM={}; const _res=await Promise.all(months.map(m=>_auditLoadMonth(m.ym))); /* paralelo = ~10x mais rápido */
+    months.forEach((m,i)=>onsM[m.ym]=_res[i]);
     const valid=months.filter(m=>{const o=onsM[m.ym];return o&&o[1]&&Object.keys(o[1]).length;});
     /* métricas por parque (0=Complexo · 1..9) × mês */
     const parks={}; for(let n=0;n<=9;n++)parks[n]={};
