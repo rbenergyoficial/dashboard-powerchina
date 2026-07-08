@@ -360,7 +360,7 @@ html[lang='zh-CN'] .kpi-value,html[lang='zh-CN'] .cc-title,html[lang='zh-CN'] .h
   padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;margin-left:auto;transition:all .15s;font-family:var(--font);}
 .btn-clear:hover{border-color:var(--red);color:var(--red);}
 /* Curtailment inline filter — mesmo glassmorphism do MUST */
-#page-curt .curt-top-controls,#page-cmp .curt-top-controls{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding:12px 0 10px;position:sticky;top:54px;z-index:99;background:#090d18;border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 10px 22px -2px rgba(9,13,24,.98),0 2px 0 0 #090d18;}
+#page-curt .curt-top-controls,#page-cmp .curt-top-controls{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding:12px 0 10px;position:sticky;top:54px;z-index:99;background:#090d18;border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 12px 0 0 #090d18,0 20px 22px -4px rgba(9,13,24,.98);}
 html[data-theme="light"] #page-curt .curt-top-controls,html[data-theme="light"] #page-cmp .curt-top-controls{background:#eef1f7;box-shadow:0 10px 22px -2px rgba(238,241,247,.98),0 2px 0 0 #eef1f7;}
 #page-curt .curt-top-controls .fg,#page-cmp .curt-top-controls .fg{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;border:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.03);backdrop-filter:blur(8px);margin-right:0;}
 #page-curt .curt-top-controls .fbar-label,#page-cmp .curt-top-controls .fbar-label{font-size:10px;letter-spacing:.08em;text-transform:none;margin:0;white-space:nowrap;color:var(--t3);}
@@ -2155,7 +2155,7 @@ function _themeCharts(light){
 
       <!-- === ANÁLISE ONS × WAY2 (KPIs + tabela + ranking + heatmap) === -->
       <div class="section-title" style="margin-top:6px">ANÁLISE DE DIVERGÊNCIA · ONS × WAY2</div>
-      <div id="cmpAnalKpis" class="cmp-anal-kpis"></div>
+      <div id="cmpAnalKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
       <div class="chart-row cols-2">
         <div class="cc cc-nolift" id="ccCmpTable">
           <div class="cc-head"><div><div class="cc-title">Tabela comparativa</div><div class="cc-sub">ONS × Way2 por período · clique no cabeçalho p/ ordenar</div></div></div>
@@ -5545,14 +5545,14 @@ function renderCmpAnalytics(){
   const biasPct=tWay>0?(tOns-tWay)/tWay*100:0;
   const biasDir=biasPct>0.05?'ONS > Way2':biasPct<-0.05?'Way2 > ONS':'≈ iguais';
   const kpis=[
-    {l:'Total ONS',v:_cmpAnalNum(tOns,0)+' MWh',s:rows.length+' períodos'},
-    {l:'Total Way2',v:_cmpAnalNum(tWay,0)+' MWh',s:'&nbsp;'},
-    {l:'Desvio médio',v:_cmpAnalNum(desvioMedio)+' %',s:'média assinada'},
-    {l:'MAPE',v:_cmpAnalNum(mape)+' %',s:'erro % médio absoluto'},
-    {l:'Maior desvio',v:_cmpAnalNum(worst.adpct)+' %',s:worst.label},
-    {l:'Viés global',v:_cmpAnalNum(Math.abs(biasPct))+' %',s:biasDir}
+    {c:'green', col:'#34e0a1', ic:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>', l:'Total ONS', v:_cmpAnalNum(tOns,0), u:'MWh', s:rows.length+' períodos'},
+    {c:'blue',  col:'#6b8bf5', ic:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>', l:'Total Way2', v:_cmpAnalNum(tWay,0), u:'MWh', s:'medição Way2'},
+    {c:'orange',col:'#f5a623', ic:'<line x1="6" y1="20" x2="6" y2="15"/><line x1="12" y1="20" x2="12" y2="9"/><line x1="18" y1="20" x2="18" y2="4"/>', l:'Desvio médio', v:_cmpAnalNum(desvioMedio), u:'%', s:'média assinada'},
+    {c:'purple',col:'#a855f7', ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>', l:'MAPE', v:_cmpAnalNum(mape), u:'%', s:'erro % médio abs.'},
+    {c:'red',   col:'#f0598c', ic:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', l:'Maior desvio', v:_cmpAnalNum(worst.adpct), u:'%', s:worst.label},
+    {c:'cyan',  col:'#2dd4bf', ic:'<path d="M12 3v18"/><path d="M5 8l7-5 7 5"/><path d="M5 8v6a7 3 0 0 0 14 0V8"/>', l:'Viés global', v:_cmpAnalNum(Math.abs(biasPct)), u:'%', s:biasDir}
   ];
-  kpiEl.innerHTML=kpis.map(k=>'<div class="cmp-anal-kpi"><div class="k-lbl">'+k.l+'</div><div class="k-val">'+k.v+'</div><div class="k-sub">'+(k.s||'&nbsp;')+'</div></div>').join('');
+  kpiEl.innerHTML=kpis.map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+'<span class="kpi-unit">'+k.u+'</span></div><div class="kpi-sub">'+k.s+'</div></div>').join('');
   _cmpAnalRenderTable(); _cmpAnalRenderRank(); _cmpAnalRenderHeatmap();
   setTimeout(_cmpKeepSize,60); /* reasseverar tamanho/posição salvos após re-render */
 }
