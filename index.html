@@ -9095,7 +9095,17 @@ function _cmpApplyRange(ini,fim){
 }
 /* Seleção de UFV do Comparativo — MULTI-toggle (igual MUST): cada chip liga/desliga sozinho;
    "Complexo" seleciona/limpa todas. Estado em filters.cmpUfvSet (array de 1..9). Vazio = nada. */
-function _cmpSelParks(){ return filters.cmpUfvSet?filters.cmpUfvSet.slice():[1,2,3,4,5,6,7,8,9]; }
+function _cmpSelParks(){
+  /* fonte da verdade = os CHIPS visíveis (evita desync com filters.cmpUfvSet, que às vezes fica preso) */
+  const chips=[...document.querySelectorAll('#cmpUfvGroup .w2d-park-chip')];
+  if(chips.length){
+    const cx=chips.find(c=>c.dataset.cufv==='todas');
+    if(cx&&cx.classList.contains('on')) return [1,2,3,4,5,6,7,8,9];
+    const sel=chips.filter(c=>c.dataset.cufv!=='todas'&&c.classList.contains('on')).map(c=>+c.dataset.cufv);
+    return sel.length?sel:[1,2,3,4,5,6,7,8,9];
+  }
+  return (filters.cmpUfvSet&&filters.cmpUfvSet.length)?filters.cmpUfvSet.slice():[1,2,3,4,5,6,7,8,9];
+}
 /* Multi-toggle dirigido pelo estado dos chips (igual MUST). Complexo = todas (padrão);
    clicar um M sai do Complexo e alterna esse M; se nenhum M fica ligado, volta ao Complexo. */
 function _cmpUfvSel(u,btn){
