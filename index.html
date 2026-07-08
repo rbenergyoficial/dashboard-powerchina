@@ -859,14 +859,14 @@ body:not(.page-curt-active) .cc.cc-nolift:has(.cc-body canvas):hover{transform:n
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
 /* impressão: mostra SÓ a auditoria, fundo escuro forçado, A4 paisagem */
 @media print{
-  html,body.printing-audit{background:#0a0e17!important}
+  html,body,body.printing-audit{background:#0a0e17!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   body.printing-audit *{visibility:hidden!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-shadow:none!important;transform:none!important}
   body.printing-audit #page-audit,body.printing-audit #page-audit *{visibility:visible!important}
-  body.printing-audit #page-audit{position:absolute!important;left:0;top:0;width:100%;padding:6px 12px!important;margin:0!important;color:#eaf0fb!important}
-  body.printing-audit #page-audit .cc,body.printing-audit #page-audit .kpi-card{background:#111624!important;border-color:rgba(255,255,255,.14)!important;break-inside:avoid}
-  body.printing-audit #page-audit .kpi-value{color:#eef2fb!important}
-  body.printing-audit #page-audit .section-title{color:#aeb9d6!important}
-  body.printing-audit .audit-dl{display:none!important}
+  body.printing-audit #page-audit{position:absolute!important;left:0;top:0;width:100%;padding:6px 12px!important;margin:0!important;background:#0a0e17!important;color:#eaf0fb!important}
+  body.printing-audit #page-audit .cc,body.printing-audit #page-audit .kpi-card{background:#111624!important;border-color:rgba(255,255,255,.16)!important;break-inside:avoid}
+  body.printing-audit #page-audit .kpi-value,body.printing-audit #page-audit .audit-cell .m,body.printing-audit #page-audit .audit-tbl td:first-child{color:#eef2fb!important}
+  body.printing-audit #page-audit .kpi-label,body.printing-audit #page-audit .kpi-sub,body.printing-audit #page-audit .section-title,body.printing-audit #page-audit .audit-tbl th{color:#aeb9d6!important}
+  body.printing-audit .audit-dl,body.printing-audit #auditMonthFilter{display:none!important}
   @page{size:A4 landscape;margin:8mm}
 }
 #page-must .must-day-nav{height:34px;min-width:34px;border-radius:10px;border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:#dfe8ff;font-weight:800;cursor:pointer;box-shadow:var(--shadow)}
