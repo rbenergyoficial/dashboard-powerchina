@@ -5230,7 +5230,7 @@ async function _cmpRenderIntraday(target,type){
   const subj=s.subj;
   if(target==='cCmpScatter'){
     const pts=[]; for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:s.way[i],y:s.ons[i],t:s.labels[i]}); }
-    if(!pts.length){_cmpNote('cCmpScatter','Sem pares ONS×Way2 no dia');return;}
+    if(!pts.length){_cmpNote('cCmpScatter',(wayHas&&!onsHas)?_cmpAwaitOnsMsg(_cmpDDMM(day)):'Sem pares ONS×Way2 no dia');return;}
     const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
     const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
     const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
@@ -5458,6 +5458,19 @@ function renderCmpTotal(type='line'){
   _cmpHtmlLegend(_chT,'cmpTotLeg');
 }
 
+/* último dia com geração ONS publicada (agregado ou DETAIL por UFV) */
+function _cmpLastOnsDay(){
+  let last=null; const chk=d=>{if(d&&(!last||d>last))last=d;};
+  (_onsData||[]).forEach(r=>{if(num(r.ger)>0)chk(_cmpFmtD(r.ts));});
+  (_onsIrrData||[]).forEach(r=>{let g=0;for(let i=1;i<=9;i++)g+=num(r['gv'+i]);if(g>0)chk(_cmpFmtD(r.data));});
+  return last;
+}
+function _cmpDDMM(ymd){return ymd?ymd.slice(8,10)+'/'+ymd.slice(5,7)+'/'+ymd.slice(0,4):'—';}
+/* mensagem clara quando falta o ONS do dia/período mas o Way2 já existe */
+function _cmpAwaitOnsMsg(dayLabel){
+  const last=_cmpLastOnsDay();
+  return '⏳ Aguardando ONS'+(dayLabel?' de '+dayLabel:' do período')+' (atraso de ~1–2 dias) · Way2 já disponível · último ONS: '+_cmpDDMM(last);
+}
 // Correlação ONS × Way2 (1 ponto por bucket) + linha ideal 45° + R²
 function renderCmpScatter(){
   {const _sl=document.getElementById('cmpScatterLeg');if(_sl)_sl.innerHTML='';} /* limpa legenda HTML (repovoada ao desenhar) */
@@ -5468,7 +5481,7 @@ function renderCmpScatter(){
   const s=_cmpBuildSeries();
   const pts=[];
   for(let i=0;i<s.labels.length;i++){ if(s.way[i]>0&&s.ons[i]>0) pts.push({x:+(s.way[i]*1000).toFixed(2),y:+(s.ons[i]*1000).toFixed(2),d:s.labels[i]}); } /* MWh + data do ponto */
-  if(!pts.length){showNoData('cCmpScatter');return;}
+  if(!pts.length){const _wh=s.way.some(v=>v>0),_oh=s.ons.some(v=>v>0);if(_wh&&!_oh)_cmpNote('cCmpScatter',_cmpAwaitOnsMsg(''));else showNoData('cCmpScatter');return;}
   const n=pts.length, sx=pts.reduce((a,p)=>a+p.x,0), sy=pts.reduce((a,p)=>a+p.y,0);
   const sxx=pts.reduce((a,p)=>a+p.x*p.x,0), sxy=pts.reduce((a,p)=>a+p.x*p.y,0), syy=pts.reduce((a,p)=>a+p.y*p.y,0);
   const r=(n*sxy-sx*sy)/(Math.sqrt((n*sxx-sx*sx)*(n*syy-sy*sy))||1);
@@ -5536,7 +5549,9 @@ function renderCmpAnalytics(){
     rows.push({key:s.labels[i],label:_cmpTitleLabel(s.labels[i]),ons,way,dmwh:+(ons-way).toFixed(2),dpct,adpct:Math.abs(dpct)});
   }
   _cmpAnalState.rows=rows;
-  if(!rows.length){ kpiEl.innerHTML='<div class="cmp-anal-kpi"><div class="k-lbl">Análise</div><div class="k-val">—</div><div class="k-sub">sem pares ONS×Way2 no período</div></div>';
+  if(!rows.length){ const _wh=s.way.some(v=>v>0),_oh=s.ons.some(v=>v>0);
+    const _msg=(_wh&&!_oh)?_cmpAwaitOnsMsg(''):'sem pares ONS×Way2 no período';
+    kpiEl.innerHTML='<div class="cmp-anal-kpi" style="grid-column:1/-1"><div class="k-lbl">Análise</div><div class="k-val" style="font-size:15px">'+((_wh&&!_oh)?'⏳ Aguardando ONS':'—')+'</div><div class="k-sub">'+_msg.replace('⏳ ','')+'</div></div>';
     const t=document.getElementById('cmpAnalTable'); if(t)t.innerHTML=''; const hm=document.getElementById('cmpHeatmap'); if(hm)hm.innerHTML=''; showNoData('cCmpRank'); return; }
   const tOns=rows.reduce((a,r)=>a+r.ons,0), tWay=rows.reduce((a,r)=>a+r.way,0);
   const mean=arr=>arr.reduce((a,b)=>a+b,0)/arr.length;
