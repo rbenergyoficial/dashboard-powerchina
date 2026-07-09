@@ -5884,11 +5884,11 @@ function _eletTip(ctx){let el=document.getElementById('_eletTip');
   const fp=S.FP[i],fpc=fp==null?lc:fp<0.92?'#f2495c':'#22c55e',dq=S.deseq[i],dqc=dq==null?lc:dq>2?'#f2495c':'#7defc4';
   const row=(c,l,v,vc)=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></span><span style="flex:1;color:${lc}">${l}</span><span style="font-weight:700;color:${vc||'inherit'}">${v}</span></div>`;
   el.innerHTML=`<div style="font-weight:800;font-size:13px;margin-bottom:6px">⚡ ${time}</div>`
-    +row('#e34948','Tensão A',f(S.Va[i],1,'kV'))+row('#f5b820','Tensão B',f(S.Vb[i],1,'kV'))+row('#3987e5','Tensão C',f(S.Vc[i],1,'kV'))
-    +row('#e34948','Corrente A',f(S.Ia[i],1,'A'))+row('#f5b820','Corrente B',f(S.Ib[i],1,'A'))+row('#3987e5','Corrente C',f(S.Ic[i],1,'A'))
+    +row('#e34948','Tensão A',f(S.Va[i],2,'kV'))+row('#f5b820','Tensão B',f(S.Vb[i],2,'kV'))+row('#3987e5','Tensão C',f(S.Vc[i],2,'kV'))
+    +row('#e34948','Corrente A',f(S.Ia[i],2,'A'))+row('#f5b820','Corrente B',f(S.Ib[i],2,'A'))+row('#3987e5','Corrente C',f(S.Ic[i],2,'A'))
     +`<div style="margin-top:5px;padding-top:5px;border-top:1px solid ${isLt?'rgba(0,0,0,.08)':'rgba(255,255,255,.09)'}">`
     +row('#1ed760','Pot. Ativa',f(S.P[i],2,'MW'))+row('#c084fc','Pot. Reativa',f(S.Q[i],2,'MVAr'))
-    +row(fpc,'Fator de Pot.',f(fp,3),fpc)+row(dqc,'Desequilíbrio V',f(dq,2,'%'),dqc)+`</div>`;
+    +row(fpc,'Fator de Pot.',f(fp,2),fpc)+row(dqc,'Desequilíbrio V',f(dq,2,'%'),dqc)+`</div>`;
   const cx=tt.caretX,cy=tt.caretY,cr=ctx.chart.canvas.getBoundingClientRect();
   el.style.opacity='0';const tw=el.offsetWidth||222,th=el.offsetHeight||210;
   let tx=cr.left+cx+14,ty=cr.top+cy-10;if(tx+tw>window.innerWidth-10)tx=cr.left+cx-tw-14;if(ty+th>window.innerHeight-10)ty=window.innerHeight-th-10;if(ty<10)ty=10;
@@ -5927,10 +5927,10 @@ async function renderEletrico(){const kEl=document.getElementById('eletKpis');if
   const f=(v,d)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d});
   const fp=S.FP[k],fpBad=fp!=null&&fp<0.92,dq=S.deseq[k],dqBad=dq!=null&&dq>2;
   const tiles=[
-    {l:'Tensão A',v:f(S.Va[k],1),u:'kV',c:'#e34948'},{l:'Tensão B',v:f(S.Vb[k],1),u:'kV',c:'#f5b820'},{l:'Tensão C',v:f(S.Vc[k],1),u:'kV',c:'#3987e5'},
+    {l:'Tensão A',v:f(S.Va[k],2),u:'kV',c:'#e34948'},{l:'Tensão B',v:f(S.Vb[k],2),u:'kV',c:'#f5b820'},{l:'Tensão C',v:f(S.Vc[k],2),u:'kV',c:'#3987e5'},
     {l:'Desequilíbrio V',v:f(dq,2),u:'%',c:dqBad?'#f0598c':'#7defc4'},
-    {l:'Corrente A',v:f(S.Ia[k],1),u:'A',c:'#e34948'},{l:'Corrente B',v:f(S.Ib[k],1),u:'A',c:'#f5b820'},{l:'Corrente C',v:f(S.Ic[k],1),u:'A',c:'#3987e5'},
-    {l:'Fator de Potência',v:f(fp,3),u:'',c:fpBad?'#f0598c':'#1ed760'},
+    {l:'Corrente A',v:f(S.Ia[k],2),u:'A',c:'#e34948'},{l:'Corrente B',v:f(S.Ib[k],2),u:'A',c:'#f5b820'},{l:'Corrente C',v:f(S.Ic[k],2),u:'A',c:'#3987e5'},
+    {l:'Fator de Potência',v:f(fp,2),u:'',c:fpBad?'#f0598c':'#1ed760'},
     {l:'Potência Ativa',v:f(S.P[k],2),u:'MW',c:'#1ed760'},{l:'Potência Reativa',v:f(S.Q[k],2),u:'MVAr',c:'#c084fc'}
   ];
   kEl.innerHTML=tiles.map(t=>'<div class="elet-kpi"><div class="ek-l">'+t.l+'</div><div class="ek-v" style="color:'+t.c+'">'+t.v+(t.u?'<span class="ek-u">'+t.u+'</span>':'')+'</div></div>').join('');
