@@ -5873,11 +5873,10 @@ async function renderMonitorPage(){
   try{renderEletrico();}catch(e){}
 }
 /* ── Grandezas Elétricas (Monitor ao vivo) ─────────────────────────── */
-const WAY2_ELET_URL=WAY2_BLOB_BASE+'way2_eletrico.json';
 let _eletCache=null,_eletCacheTs=0,_eletScope='geral',_eletSelInit=false;
 const _PARK2CIRC={};Object.keys(_MON_CIRC).forEach(pid=>{const p=_MON_CIRC[pid].p;(_PARK2CIRC[p]=_PARK2CIRC[p]||[]).push(+pid);});
 async function _eletLoad(force){const now=Date.now();if(_eletCache&&!force&&now-_eletCacheTs<270000)return _eletCache;
-  try{const r=await fetch(WAY2_ELET_URL+'?t='+now,{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+  try{const r=await fetch(WAY2_BLOB_BASE+'way2_eletrico.json?t='+now,{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
     const j=JSON.parse(t);const d=(j&&(Array.isArray(j)?j:j.dados))||[];const E={};
     d.forEach(it=>{const pid=it.pontoId,g=it.nomeGrandeza;(E[pid]=E[pid]||{});const m={};(it.valores||[]).forEach(v=>{if(v.valor!=null)m[v.data]=v.valor;});E[pid][g]=m;});
     _eletCache={E};_eletCacheTs=now;return _eletCache;}catch(e){return null;}}
