@@ -5806,14 +5806,15 @@ async function renderMonitorPage(){
     {c:'cyan',col:'#2dd4bf',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR2',v:tr2.v!=null?_mw(tr2.v):'—',u:'MW',s:'transformador 2'}
   ].map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');
   gEl.className='mon-gauges'; gEl.innerHTML='';
-  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;
+  const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* mesma paleta distinta do painel MUST */
+  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;
     const card=document.createElement('div');card.className='mon-g'+(fail?' fail':'');
     card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(1).replace('.',',')+'%</div></div></div><div class="gmw">'+_mw(p.mw)+' MW</div>';
     gEl.appendChild(card);}
-  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_CMP_UFVC[n]||'#6b8bf5',fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
+  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
   const clabels=cids.map(p=>_MON_CIRC[p].c), cdata=cids.map(p=>{const v=circ[p].v;return total>0&&v!=null?+(v/total*100).toFixed(2):0;});
-  const ccolors=cids.map(p=>{const v=circ[p].v;return (anyGen&&(v==null||v<=0))?'#f0598c':(_CMP_UFVC[_MON_CIRC[p].p]||'#6b8bf5');});
+  const ccolors=cids.map(p=>{const v=circ[p].v;return (anyGen&&(v==null||v<=0))?'#f0598c':_monCol(_MON_CIRC[p].p);});
   mkChart('cMonCirc',{type:'bar',data:{labels:clabels,datasets:[{label:'Contribuição %',data:cdata,backgroundColor:ccolors,borderRadius:4,barPercentage:0.86,categoryPercentage:0.92}]},options:{...CHART_DEFAULTS,indexAxis:'y',
     plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>{const pid=cids[ctx.dataIndex],c=circ[pid];const mw=c.v==null?'sem leitura':_mw(c.v)+' MW';return [_MON_CIRC[pid].c+' · '+mw,(c.v==null||c.v<=0)&&anyGen?'⚠ possível falha/comunicação':'contribuição '+cdata[ctx.dataIndex].toFixed(2).replace('.',',')+'%'];}}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},title:{display:true,text:'% da potência total',color:'#8090b8',font:{size:9}}},y:{grid:{display:false},ticks:{color:'#cdd9f2',autoSkip:false,font:{size:10,weight:'600'},callback:function(v){return this.getLabelForValue(v);}}}}}});
