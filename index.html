@@ -5880,10 +5880,10 @@ function _eletTip(ctx){let el=document.getElementById('_eletTip');
   const i=tt.dataPoints[0].dataIndex,isLt=document.documentElement.getAttribute('data-theme')==='light';
   el.style.background=isLt?'rgba(255,255,255,.98)':'rgba(13,19,34,.98)';el.style.border=isLt?'1px solid rgba(0,0,0,.12)':'1px solid rgba(255,255,255,.10)';el.style.color=isLt?'#0f172a':'#dce6f8';
   const f=(v,d,u)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d})+(u?' '+u:'');
-  const lc=isLt?'#475569':'#9fb0d0',time=S.ts[i]?S.ts[i].slice(11,16):'';
+  const lc=isLt?'#475569':'#9fb0d0',tsr=S.ts[i]||'',date=tsr?tsr.slice(8,10)+'/'+tsr.slice(5,7)+'/'+tsr.slice(0,4):'',time=tsr?tsr.slice(11,16):'';
   const fp=S.FP[i],fpc=fp==null?lc:fp<0.92?'#f2495c':'#22c55e',dq=S.deseq[i],dqc=dq==null?lc:dq>2?'#f2495c':'#7defc4';
   const row=(c,l,v,vc)=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></span><span style="flex:1;color:${lc}">${l}</span><span style="font-weight:700;color:${vc||'inherit'}">${v}</span></div>`;
-  el.innerHTML=`<div style="font-weight:800;font-size:13px;margin-bottom:6px">⚡ ${time}</div>`
+  el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:12.5px;margin-bottom:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.85"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${date} · ${time}</div>`
     +row('#e34948','Tensão A',f(S.Va[i],2,'kV'))+row('#f5b820','Tensão B',f(S.Vb[i],2,'kV'))+row('#3987e5','Tensão C',f(S.Vc[i],2,'kV'))
     +row('#e34948','Corrente A',f(S.Ia[i],2,'A'))+row('#f5b820','Corrente B',f(S.Ib[i],2,'A'))+row('#3987e5','Corrente C',f(S.Ic[i],2,'A'))
     +`<div style="margin-top:5px;padding-top:5px;border-top:1px solid ${isLt?'rgba(0,0,0,.08)':'rgba(255,255,255,.09)'}">`
