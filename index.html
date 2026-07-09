@@ -860,7 +860,7 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .mon-gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;padding:4px 2px}
 .mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:16px;padding:30px 12px 16px;display:flex;flex-direction:column;align-items:center;gap:0}
 .mon-g .gwrap{position:relative;width:100%;max-width:220px;aspect-ratio:1.25/1}
-.mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translateY(-4%);pointer-events:none}
 .mon-g .gpct{font-size:23px;font-weight:800;font-family:var(--display);line-height:1;display:flex;align-items:baseline;gap:3px}
 .mon-g .gpu{font-size:11px;font-weight:700;color:var(--t3)}
 .mon-g .gmw{font-size:12px;color:var(--t3);font-weight:700;margin-top:6px;letter-spacing:.2px}
@@ -5825,9 +5825,7 @@ async function renderMonitorPage(){
       fillPct=ratio!=null?Math.max(0,Math.min(100,ratio*100)):0,     /* arco cheio = participação = esperada */
       tag=state==='red'?'⚠':state==='yellow'?(ratio<1?'baixo':'alto'):'ok',
       tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
-    const foot=anyGen
-      ? _f1(actShare*100)+'% do total · esp. '+_f1(expShare*100)+'%'
-      : 'capacidade '+_mw(cap)+' MW';
+    const foot='<b style="color:'+col+'">'+_f1(actShare*100)+'%</b> do total · esp. '+_f1(expShare*100)+'%';
     const card=document.createElement('div');card.className='mon-g'+(state==='red'?' fail':'');
     card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">'+foot+'</div>';
     card._fill=fillPct;card._col=col;gEl.appendChild(card);}
