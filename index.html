@@ -2249,14 +2249,14 @@ function _themeCharts(light){
         <select id="eletScope" onchange="_eletScope=this.value;renderEletrico();" style="margin-left:6px;height:30px;border-radius:8px;background:rgba(255,255,255,.05);color:#dfe8ff;border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700;padding:0 8px;text-transform:none;letter-spacing:0"></select>
         <span id="eletStamp" style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0"></span>
       </div>
-      <div id="eletKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-bottom:8px"></div>
+      <div id="eletKpis" class="kpi-grid" style="margin-bottom:2px"></div>
       <div class="chart-row cols-2">
-        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Tensão por fase</div><div class="cc-sub">kV · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletV"></canvas></div></div>
-        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Corrente por fase</div><div class="cc-sub">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletI"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title">Tensão por fase</div><div class="cc-sub">kV · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletV"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title">Corrente por fase</div><div class="cc-sub">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletI"></canvas></div></div>
       </div>
       <div class="chart-row cols-2">
-        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Potência ativa × reativa</div><div class="cc-sub">P (MW) · Q (MVAr)</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletPQ"></canvas></div></div>
-        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Fator de potência</div><div class="cc-sub">meta ≥ 0,92 (ONS/ANEEL)</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletFP"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title">Potência ativa × reativa</div><div class="cc-sub">P (MW) · Q (MVAr)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletPQ"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title">Fator de potência</div><div class="cc-sub">meta ≥ 0,92 (ONS/ANEEL)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletFP"></canvas></div></div>
       </div>
     </div>
   </div><!-- end page-monitor -->
