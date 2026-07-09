@@ -867,6 +867,10 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .mon-g .gname{position:absolute;top:11px;left:13px;font-size:14px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
 .mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
 .mon-g .gtag{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px}
+.elet-kpi{background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:12px;padding:9px 12px}
+.elet-kpi .ek-l{font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.02em}
+.elet-kpi .ek-v{font-size:19px;font-weight:800;font-family:var(--display);margin-top:3px;line-height:1}
+.elet-kpi .ek-u{font-size:10px;color:var(--t3);font-weight:700;margin-left:3px}
 .mon-g .gtag.ok{background:rgba(52,224,161,.15);color:#34e0a1}
 .mon-g .gtag.warn{background:rgba(245,193,75,.16);color:#f5c14b}
 .mon-g .gtag.fail{background:rgba(240,89,140,.18);color:#f0598c}
@@ -2236,6 +2240,23 @@ function _themeCharts(light){
           <div class="cc-head"><div><div class="cc-title">Circuitos · saúde e contribuição</div><div class="cc-sub">22 circuitos (C1/C2/C3) · barra = % do total · ⚠ zerado enquanto o complexo gera = provável falha/comunicação</div></div></div>
           <div class="cc-body" style="height:520px" id="monCircWrap"><canvas id="cMonCirc"></canvas></div>
         </div>
+      </div>
+    </div>
+    <div class="section" id="sec-eletrico" style="margin-top:22px">
+      <div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+        GRANDEZAS ELÉTRICAS
+        <select id="eletScope" onchange="_eletScope=this.value;renderEletrico();" style="margin-left:6px;height:30px;border-radius:8px;background:rgba(255,255,255,.05);color:#dfe8ff;border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700;padding:0 8px;text-transform:none;letter-spacing:0"></select>
+        <span id="eletStamp" style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0"></span>
+      </div>
+      <div id="eletKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px;margin-bottom:8px"></div>
+      <div class="chart-row cols-2">
+        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Tensão por fase</div><div class="cc-sub">kV · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletV"></canvas></div></div>
+        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Corrente por fase</div><div class="cc-sub">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletI"></canvas></div></div>
+      </div>
+      <div class="chart-row cols-2">
+        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Potência ativa × reativa</div><div class="cc-sub">P (MW) · Q (MVAr)</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletPQ"></canvas></div></div>
+        <div class="cc cc-nolift"><div class="cc-head"><div><div class="cc-title">Fator de potência</div><div class="cc-sub">meta ≥ 0,92 (ONS/ANEEL)</div></div></div><div class="cc-body" style="height:240px;flex:none"><canvas id="cEletFP"></canvas></div></div>
       </div>
     </div>
   </div><!-- end page-monitor -->
@@ -5849,6 +5870,57 @@ async function renderMonitorPage(){
   mkChart('cMonCirc',{type:'bar',data:{labels:clabels,datasets:[{label:'Contribuição %',data:cdata,backgroundColor:ccolors,borderRadius:4,barPercentage:0.86,categoryPercentage:0.92}]},options:{...CHART_DEFAULTS,indexAxis:'y',
     plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{...CHART_DEFAULTS.plugins.tooltip,callbacks:{label:ctx=>{const pid=cids[ctx.dataIndex],c=circ[pid];const mw=c.v==null?'sem leitura':_mw(c.v)+' MW';return [_MON_CIRC[pid].c+' · '+mw,(c.v==null||c.v<=0)&&anyGen?'⚠ possível falha/comunicação':'contribuição '+cdata[ctx.dataIndex].toFixed(2).replace('.',',')+'%'];}}}},
     scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},title:{display:true,text:'% da potência total',color:'#8090b8',font:{size:9}}},y:{grid:{display:false},ticks:{color:'#cdd9f2',autoSkip:false,font:{size:10,weight:'600'},callback:function(v){return this.getLabelForValue(v);}}}}}});
+  try{renderEletrico();}catch(e){}
+}
+/* ── Grandezas Elétricas (Monitor ao vivo) ─────────────────────────── */
+const WAY2_ELET_URL=WAY2_BLOB_BASE+'way2_eletrico.json';
+let _eletCache=null,_eletCacheTs=0,_eletScope='geral',_eletSelInit=false;
+const _PARK2CIRC={};Object.keys(_MON_CIRC).forEach(pid=>{const p=_MON_CIRC[pid].p;(_PARK2CIRC[p]=_PARK2CIRC[p]||[]).push(+pid);});
+async function _eletLoad(force){const now=Date.now();if(_eletCache&&!force&&now-_eletCacheTs<270000)return _eletCache;
+  try{const r=await fetch(WAY2_ELET_URL+'?t='+now,{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+    const j=JSON.parse(t);const d=(j&&(Array.isArray(j)?j:j.dados))||[];const E={};
+    d.forEach(it=>{const pid=it.pontoId,g=it.nomeGrandeza;(E[pid]=E[pid]||{});const m={};(it.valores||[]).forEach(v=>{if(v.valor!=null)m[v.data]=v.valor;});E[pid][g]=m;});
+    _eletCache={E};_eletCacheTs=now;return _eletCache;}catch(e){return null;}}
+function _eletPids(s){if(s==='geral')return[6196,6197];if(s[0]==='M')return _PARK2CIRC[+s.slice(1)]||[];if(s[0]==='C')return[+s.slice(1)];return[6196,6197];}
+function _eletSeries(E,pids){const tsSet=new Set();pids.forEach(p=>{const m=E[p]&&E[p].Demat;if(m)Object.keys(m).forEach(ts=>tsSet.add(ts));});const ts=[...tsSet].sort();
+  const agg=(g,t)=>{let s=0,n=0;pids.forEach(p=>{const v=E[p]&&E[p][g]&&E[p][g][t];if(v!=null){s+=v;n++;}});return{s,n};};
+  const o={ts,Va:[],Vb:[],Vc:[],Ia:[],Ib:[],Ic:[],P:[],Q:[],FP:[],deseq:[]};
+  ts.forEach(t=>{const va=agg('TensaoA',t),vb=agg('TensaoB',t),vc=agg('TensaoC',t);
+    const Va=va.n?va.s/va.n/1000:null,Vb=vb.n?vb.s/vb.n/1000:null,Vc=vc.n?vc.s/vc.n/1000:null;
+    const ia=agg('CorrenteA',t),ib=agg('CorrenteB',t),ic=agg('CorrenteC',t);
+    const P=agg('Demat',t).s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?Math.abs(P)/S:null;
+    let dq=null;if(Va!=null&&Vb!=null&&Vc!=null){const mx=Math.max(Va,Vb,Vc),mn=Math.min(Va,Vb,Vc),av=(Va+Vb+Vc)/3;dq=av>0?(mx-mn)/av*100:0;}
+    o.Va.push(Va);o.Vb.push(Vb);o.Vc.push(Vc);o.Ia.push(ia.n?ia.s:null);o.Ib.push(ib.n?ib.s:null);o.Ic.push(ic.n?ic.s:null);
+    o.P.push(P);o.Q.push(Q);o.FP.push(FP);o.deseq.push(dq);});
+  return o;}
+function _eletLine(id,ts,series,unit,opts){opts=opts||{};const labels=ts.map(t=>t.slice(11,16));
+  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:'transparent',borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
+  if(opts.target!=null)ds.push({label:'Meta '+opts.target,data:ts.map(()=>opts.target),borderColor:'#f0598c',borderWidth:1,borderDash:[5,4],pointRadius:0});
+  mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{...CHART_DEFAULTS.plugins.tooltip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});}
+function _eletFillScope(){const sel=document.getElementById('eletScope');if(!sel||_eletSelInit)return;_eletSelInit=true;
+  let h='<option value="geral">Geral · SE (TR1+TR2)</option><optgroup label="Por UFV">';
+  for(let n=1;n<=9;n++)h+='<option value="M'+n+'">M'+n+'</option>';h+='</optgroup><optgroup label="Por circuito">';
+  const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
+  cids.forEach(pid=>h+='<option value="C'+pid+'">'+_MON_CIRC[pid].c+' (M'+_MON_CIRC[pid].p+')</option>');h+='</optgroup>';
+  sel.innerHTML=h;sel.value=_eletScope;}
+async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
+  const c=await _eletLoad();if(!c){kEl.innerHTML='<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--t3);font-size:13px">⏳ Aguardando <b>way2_eletrico.json</b> — ative o fluxo Way2 Eletrico 5min.</div>';return;}
+  const S=_eletSeries(c.E,_eletPids(_eletScope));let li=S.ts.length-1;while(li>=0&&S.P[li]==null)li--;const k=li<0?S.ts.length-1:li;
+  const f=(v,d)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d});
+  const fp=S.FP[k],fpBad=fp!=null&&fp<0.92,dq=S.deseq[k],dqBad=dq!=null&&dq>2;
+  const tiles=[
+    {l:'Tensão A',v:f(S.Va[k],1),u:'kV',c:'#e34948'},{l:'Tensão B',v:f(S.Vb[k],1),u:'kV',c:'#f5b820'},{l:'Tensão C',v:f(S.Vc[k],1),u:'kV',c:'#3987e5'},
+    {l:'Desequilíbrio V',v:f(dq,2),u:'%',c:dqBad?'#f0598c':'#7defc4'},
+    {l:'Corrente A',v:f(S.Ia[k],1),u:'A',c:'#e34948'},{l:'Corrente B',v:f(S.Ib[k],1),u:'A',c:'#f5b820'},{l:'Corrente C',v:f(S.Ic[k],1),u:'A',c:'#3987e5'},
+    {l:'Fator de Potência',v:f(fp,3),u:'',c:fpBad?'#f0598c':'#1ed760'},
+    {l:'Potência Ativa',v:f(S.P[k],2),u:'MW',c:'#1ed760'},{l:'Potência Reativa',v:f(S.Q[k],2),u:'MVAr',c:'#c084fc'}
+  ];
+  kEl.innerHTML=tiles.map(t=>'<div class="elet-kpi"><div class="ek-l">'+t.l+'</div><div class="ek-v" style="color:'+t.c+'">'+t.v+(t.u?'<span class="ek-u">'+t.u+'</span>':'')+'</div></div>').join('');
+  const st=document.getElementById('eletStamp');if(st)st.textContent=(k>=0&&S.ts[k])?('leitura '+S.ts[k].slice(11,16)):'';
+  _eletLine('cEletV',S.ts,[{l:'Fase A',d:S.Va,c:'#e34948'},{l:'Fase B',d:S.Vb,c:'#f5b820'},{l:'Fase C',d:S.Vc,c:'#3987e5'}],'kV');
+  _eletLine('cEletI',S.ts,[{l:'Fase A',d:S.Ia,c:'#e34948'},{l:'Fase B',d:S.Ib,c:'#f5b820'},{l:'Fase C',d:S.Ic,c:'#3987e5'}],'A');
+  _eletLine('cEletPQ',S.ts,[{l:'P (MW)',d:S.P,c:'#1ed760'},{l:'Q (MVAr)',d:S.Q,c:'#c084fc'}],'');
+  _eletLine('cEletFP',S.ts,[{l:'FP',d:S.FP,c:'#2dd4bf'}],'',{target:0.92});
 }
 // Faixa de KPIs da fonte ONS (período do filtro)
 function renderONSKpis(){
