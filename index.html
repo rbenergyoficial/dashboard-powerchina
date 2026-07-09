@@ -861,12 +861,14 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:16px;padding:30px 12px 16px;display:flex;flex-direction:column;align-items:center;gap:0}
 .mon-g .gwrap{position:relative;width:100%;max-width:220px;aspect-ratio:1.25/1}
 .mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-.mon-g .gpct{font-size:24px;font-weight:800;font-family:var(--display);line-height:1}
-.mon-g .gmw{font-size:14px;color:var(--t3);font-weight:700;margin-top:6px;letter-spacing:.2px}
+.mon-g .gpct{font-size:23px;font-weight:800;font-family:var(--display);line-height:1;display:flex;align-items:baseline;gap:3px}
+.mon-g .gpu{font-size:11px;font-weight:700;color:var(--t3)}
+.mon-g .gmw{font-size:12px;color:var(--t3);font-weight:700;margin-top:6px;letter-spacing:.2px}
 .mon-g .gname{position:absolute;top:11px;left:13px;font-size:14px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
 .mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
 .mon-g .gtag{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px}
 .mon-g .gtag.ok{background:rgba(52,224,161,.15);color:#34e0a1}
+.mon-g .gtag.warn{background:rgba(245,193,75,.16);color:#f5c14b}
 .mon-g .gtag.fail{background:rgba(240,89,140,.18);color:#f0598c}
 .audit-dl{margin-left:auto;display:inline-flex;align-items:center;gap:7px;background:linear-gradient(180deg,#34e0a1,#22c98d);color:#04140d;border:0;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:800;letter-spacing:.02em;cursor:pointer;text-transform:none;box-shadow:0 4px 14px rgba(52,224,161,.28);transition:filter .15s,transform .15s}
 .audit-dl:hover{filter:brightness(1.08);transform:translateY(-1px)}
@@ -2225,7 +2227,7 @@ function _themeCharts(light){
       <div id="monKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
       <div class="chart-row cols-1">
         <div class="cc cc-nolift">
-          <div class="cc-head"><div><div class="cc-title">Contribuição por UFV · potência agora</div><div class="cc-sub">% da potência total do complexo · MW no centro · vermelho = 0/sem leitura</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Potência por UFV · agora</div><div class="cc-sub">MW atual vs capacidade contratada (MUST) · cor = desempenho vs esperado (🟢 ok · 🟡 baixo · 🔴 falha)</div></div></div>
           <div class="cc-body" style="height:auto;min-height:120px;overflow:auto;flex:none" id="monGauges"></div>
         </div>
       </div>
@@ -5784,7 +5786,10 @@ const _MON_CIRC={6198:{p:1,c:'1C1'},6199:{p:1,c:'1C2'},6200:{p:1,c:'1C3'},6201:{
 const _MON_TOTAL=6233;
 async function _monLoad(){try{const r=await fetch(WAY2_BLOB_BASE+'way2_monitor.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);return JSON.parse(t);}catch(e){return null;}}
 function _monLatest(dados,pid){const it=(dados||[]).find(d=>d.pontoId===pid);if(!it)return {v:null,ts:null};let b=null;(it.valores||[]).forEach(x=>{if(x.valor!=null)b=x;});return b?{v:+b.valor/1000,ts:b.data}:{v:null,ts:null};} /* Demat vem em kW → MW */
-function _monGauge(id,pct,color){const p=Math.max(0,Math.min(100,pct));mkChart(id,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[color,'rgba(255,255,255,.07)'],borderWidth:0,circumference:270,rotation:225}]},options:{cutout:'68%',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:0}}});}
+function _monGauge(id,pct,color){const p=Math.max(0,Math.min(100,pct));mkChart(id,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[color,'rgba(255,255,255,.06)'],borderWidth:0,borderRadius:6,circumference:270,rotation:225}]},options:{cutout:'70%',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:0}}});}
+const _MON_CAP_FB={1:48,2:22,3:43,4:40,5:43,6:45,7:11,8:43,9:7}; /* fallback (pico observado) se MUST não carregou */
+const _monCap=n=>{const c=num(dashData?.must?.contrat?.['M'+n]);return c>0?c:(_MON_CAP_FB[n]||0);};
+const _MON_TH_G=0.80,_MON_TH_Y=0.55; /* verde ≥80% do esperado · amarelo ≥55% · senão vermelho */
 async function renderMonitorPage(){
   const gEl=document.getElementById('monGauges'); if(!gEl) return;
   const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
@@ -5806,12 +5811,21 @@ async function renderMonitorPage(){
     {c:'cyan',col:'#2dd4bf',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR2',v:tr2.v!=null?_mw(tr2.v):'—',u:'MW',s:'transformador 2'}
   ].map(k=>'<div class="kpi-card '+k.c+'"><div class="kpi-icon-wrap"><div class="kpi-icon-box"><svg viewBox="0 0 24 24" style="stroke:'+k.col+'">'+k.ic+'</svg></div></div><div class="kpi-label">'+k.l+'</div><div class="kpi-value">'+k.v+(k.u?'<span class="kpi-unit">'+k.u+'</span>':'')+'</div><div class="kpi-sub">'+k.s+'</div></div>').join('');
   gEl.className='mon-gauges'; gEl.innerHTML='';
-  const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* mesma paleta distinta do painel MUST */
-  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;
-    const card=document.createElement('div');card.className='mon-g'+(fail?' fail':'');
-    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(2).replace('.',',')+'%</div></div></div><div class="gmw">'+_mw(p.mw)+' MW</div>';
-    gEl.appendChild(card);}
-  for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
+  const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* cor distinta por UFV (barra de circuitos) */
+  const _GREEN='#34d399',_YELLOW='#f5c14b',_RED='#f0598c',_IDLE='#5b6b8c';
+  let _totCap=num(dashData?.must?.contrat?.total); if(!(_totCap>0)){_totCap=0;for(let n=1;n<=9;n++)_totCap+=_monCap(n);}
+  for(let n=1;n<=9;n++){const p=plant[n],cap=_monCap(n),mw=p.mw,
+      fillPct=cap>0?Math.max(0,Math.min(100,mw/cap*100)):0,
+      failC=anyGen&&p.fail>0,
+      exp=(_totCap>0&&total>0)?cap/_totCap*total:0,
+      ratio=exp>1?mw/exp:null,
+      state=failC?'red':(!anyGen||ratio==null)?'idle':(ratio>=_MON_TH_G?'green':ratio>=_MON_TH_Y?'yellow':'red'),
+      col=state==='red'?_RED:state==='yellow'?_YELLOW:state==='green'?_GREEN:_IDLE,
+      tag=state==='red'?'⚠':state==='yellow'?'baixo':'ok',tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
+    const card=document.createElement('div');card.className='mon-g'+(state==='red'?' fail':'');
+    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">de '+_mw(cap)+' MW · '+(cap>0?(mw/cap*100).toFixed(0):'0')+'%</div>';
+    card._fill=fillPct;card._col=col;gEl.appendChild(card);}
+  Array.from(gEl.children).forEach((card,i)=>{_monGauge('monG'+(i+1),card._fill||0,card._col||_IDLE);});
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
   const clabels=cids.map(p=>_MON_CIRC[p].c), cdata=cids.map(p=>{const v=circ[p].v;return total>0&&v!=null?+(v/total*100).toFixed(2):0;});
   const ccolors=cids.map(p=>{const v=circ[p].v;return (anyGen&&(v==null||v<=0))?'#f0598c':_monCol(_MON_CIRC[p].p);});
