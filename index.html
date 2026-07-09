@@ -5902,11 +5902,12 @@ async function _eletLoad(force){const now=Date.now();if(_eletCache&&!force&&now-
 function _eletPids(s){if(s==='geral')return[6196,6197];if(s[0]==='M')return _PARK2CIRC[+s.slice(1)]||[];if(s[0]==='C')return[+s.slice(1)];return[6196,6197];}
 function _eletSeries(E,pids){const tsSet=new Set();pids.forEach(p=>{const m=E[p]&&E[p].Demat;if(m)Object.keys(m).forEach(ts=>tsSet.add(ts));});const ts=[...tsSet].sort();
   const agg=(g,t)=>{let s=0,n=0;pids.forEach(p=>{const v=E[p]&&E[p][g]&&E[p][g][t];if(v!=null){s+=v;n++;}});return{s,n};};
-  const o={ts,Va:[],Vb:[],Vc:[],Ia:[],Ib:[],Ic:[],P:[],Q:[],FP:[],deseq:[]};
+  const o={ts,Va:[],Vb:[],Vc:[],Ia:[],Ib:[],Ic:[],P:[],Q:[],FP:[],deseq:[],complete:[]};
   ts.forEach(t=>{const va=agg('TensaoA',t),vb=agg('TensaoB',t),vc=agg('TensaoC',t);
     const Va=va.n?va.s/va.n/1000:null,Vb=vb.n?vb.s/vb.n/1000:null,Vc=vc.n?vc.s/vc.n/1000:null;
     const ia=agg('CorrenteA',t),ib=agg('CorrenteB',t),ic=agg('CorrenteC',t);
-    const P=agg('Demat',t).s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?Math.abs(P)/S:null;
+    const pA=agg('Demat',t),P=pA.s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?Math.abs(P)/S:null;
+    o.complete.push(pA.n>0&&pA.n>=pids.length);
     let dq=null;if(Va!=null&&Vb!=null&&Vc!=null){const mx=Math.max(Va,Vb,Vc),mn=Math.min(Va,Vb,Vc),av=(Va+Vb+Vc)/3;dq=av>0?(mx-mn)/av*100:0;}
     o.Va.push(Va);o.Vb.push(Vb);o.Vc.push(Vc);o.Ia.push(ia.n?ia.s:null);o.Ib.push(ib.n?ib.s:null);o.Ic.push(ic.n?ic.s:null);
     o.P.push(P);o.Q.push(Q);o.FP.push(FP);o.deseq.push(dq);});
@@ -5923,7 +5924,7 @@ function _eletFillScope(){const sel=document.getElementById('eletScope');if(!sel
   sel.innerHTML=h;sel.value=_eletScope;}
 async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
   const c=await _eletLoad();if(!c){kEl.innerHTML='<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--t3);font-size:13px">⏳ Aguardando <b>way2_eletrico.json</b> — ative o fluxo Way2 Eletrico 5min.</div>';return;}
-  const S=_eletSeries(c.E,_eletPids(_eletScope));_eletLastS=S;let li=S.ts.length-1;while(li>=0&&S.P[li]==null)li--;const k=li<0?S.ts.length-1:li;
+  const S=_eletSeries(c.E,_eletPids(_eletScope));_eletLastS=S;let li=S.ts.length-1;while(li>=0&&!(S.complete[li]&&S.P[li]!=null))li--;const k=li<0?S.ts.length-1:li;
   const f=(v,d)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d});
   const fp=S.FP[k],fpBad=fp!=null&&fp<0.92,dq=S.deseq[k],dqBad=dq!=null&&dq>2;
   const tiles=[
