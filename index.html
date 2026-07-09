@@ -5923,6 +5923,7 @@ function _eletFillScope(){const sel=document.getElementById('eletScope');if(!sel
   cids.forEach(pid=>h+='<option value="C'+pid+'">'+_MON_CIRC[pid].c+' (M'+_MON_CIRC[pid].p+')</option>');h+='</optgroup>';
   sel.innerHTML=h;sel.value=_eletScope;}
 async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
+  if(!window._eletTipGuard){window._eletTipGuard=1;document.addEventListener('mousemove',ev=>{const el=document.getElementById('_eletTip');if(!el||el.style.opacity==='0')return;const t=ev.target;if(!(t&&/^cElet(V|I|PQ|FP)$/.test(t.id||'')))el.style.opacity='0';});}
   const c=await _eletLoad();if(!c){kEl.innerHTML='<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--t3);font-size:13px">⏳ Aguardando <b>way2_eletrico.json</b> — ative o fluxo Way2 Eletrico 5min.</div>';return;}
   const S=_eletSeries(c.E,_eletPids(_eletScope));_eletLastS=S;let li=S.ts.length-1;while(li>=0&&!(S.complete[li]&&S.P[li]!=null))li--;const k=li<0?S.ts.length-1:li;
   const f=(v,d)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d});
