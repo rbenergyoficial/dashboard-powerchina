@@ -860,8 +860,8 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .mon-gauges{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px;padding:4px 2px}
 .mon-g{position:relative;background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:16px;padding:30px 12px 16px;display:flex;flex-direction:column;align-items:center;gap:0}
 .mon-g .gwrap{position:relative;width:100%;max-width:220px;aspect-ratio:1.25/1}
-.mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
-.mon-g .gpct{font-size:30px;font-weight:800;font-family:var(--display);line-height:1}
+.mon-g .gctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translateY(-6%);pointer-events:none}
+.mon-g .gpct{font-size:24px;font-weight:800;font-family:var(--display);line-height:1}
 .mon-g .gmw{font-size:14px;color:var(--t3);font-weight:700;margin-top:6px;letter-spacing:.2px}
 .mon-g .gname{position:absolute;top:11px;left:13px;font-size:14px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
 .mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
@@ -5790,7 +5790,7 @@ async function renderMonitorPage(){
   const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
   const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
   if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
-  const _mw=v=>{let x=Number(v);if(Math.abs(x)<0.05)x=0;return x.toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});};
+  const _mw=v=>{let x=Number(v);if(Math.abs(x)<0.005)x=0;return x.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});};
   const circ={}; let lastTs=null;
   Object.keys(_MON_CIRC).forEach(pid=>{const L=_monLatest(dados,+pid);circ[pid]={v:L.v==null?null:L.v,ts:L.ts};if(L.ts&&(!lastTs||L.ts>lastTs))lastTs=L.ts;}); /* _monLatest já converte kW→MW */
   const plant={}; for(let n=1;n<=9;n++)plant[n]={mw:0,fail:0};
@@ -5809,7 +5809,7 @@ async function renderMonitorPage(){
   const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* mesma paleta distinta do painel MUST */
   for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;
     const card=document.createElement('div');card.className='mon-g'+(fail?' fail':'');
-    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(1).replace('.',',')+'%</div></div></div><div class="gmw">'+_mw(p.mw)+' MW</div>';
+    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+(fail?'fail':'ok')+'">'+(fail?'⚠ '+p.fail:'ok')+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+(fail?'#f0598c':col)+'">'+pct.toFixed(2).replace('.',',')+'%</div></div></div><div class="gmw">'+_mw(p.mw)+' MW</div>';
     gEl.appendChild(card);}
   for(let n=1;n<=9;n++){const p=plant[n],pct=total>0?p.mw/total*100:0,col=_monCol(n),fail=anyGen&&p.fail>0;_monGauge('monG'+n,pct,fail?'#f0598c':col);}
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
