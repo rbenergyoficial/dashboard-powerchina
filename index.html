@@ -2227,7 +2227,7 @@ function _themeCharts(light){
       <div id="monKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
       <div class="chart-row cols-1">
         <div class="cc cc-nolift">
-          <div class="cc-head"><div><div class="cc-title">Potência por UFV · agora</div><div class="cc-sub">MW atual vs capacidade contratada (MUST) · cor = desempenho vs esperado (🟢 ok · 🟡 baixo · 🔴 falha)</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Potência por UFV · agora</div><div class="cc-sub">MW no centro · % do total agora vs % esperado (proporção da capacidade MUST) · cor = distribuição (🟢 proporcional · 🟡 desviado · 🔴 fora/falha)</div></div></div>
           <div class="cc-body" style="height:auto;min-height:120px;overflow:auto;flex:none" id="monGauges"></div>
         </div>
       </div>
@@ -5814,16 +5814,22 @@ async function renderMonitorPage(){
   const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* cor distinta por UFV (barra de circuitos) */
   const _GREEN='#34d399',_YELLOW='#f5c14b',_RED='#f0598c',_IDLE='#5b6b8c';
   let _totCap=num(dashData?.must?.contrat?.total); if(!(_totCap>0)){_totCap=0;for(let n=1;n<=9;n++)_totCap+=_monCap(n);}
+  const _f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
   for(let n=1;n<=9;n++){const p=plant[n],cap=_monCap(n),mw=p.mw,
-      fillPct=cap>0?Math.max(0,Math.min(100,mw/cap*100)):0,
+      expShare=_totCap>0?cap/_totCap:0,                         /* participação esperada (proporção da capacidade) */
+      actShare=(anyGen&&total>0)?mw/total:0,                    /* participação real no momento */
       failC=anyGen&&p.fail>0,
-      exp=(_totCap>0&&total>0)?cap/_totCap*total:0,
-      ratio=exp>1?mw/exp:null,
-      state=failC?'red':(!anyGen||ratio==null)?'idle':(ratio>=_MON_TH_G?'green':ratio>=_MON_TH_Y?'yellow':'red'),
+      ratio=(anyGen&&expShare>0&&total>0.5)?actShare/expShare:null,   /* 1 = distribuição proporcional */
+      state=failC?'red':(ratio==null)?'idle':((ratio>=0.85&&ratio<=1.15)?'green':(ratio>=0.60&&ratio<=1.40)?'yellow':'red'),
       col=state==='red'?_RED:state==='yellow'?_YELLOW:state==='green'?_GREEN:_IDLE,
-      tag=state==='red'?'⚠':state==='yellow'?'baixo':'ok',tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
+      fillPct=ratio!=null?Math.max(0,Math.min(100,ratio*100)):0,     /* arco cheio = participação = esperada */
+      tag=state==='red'?'⚠':state==='yellow'?(ratio<1?'baixo':'alto'):'ok',
+      tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
+    const foot=anyGen
+      ? _f1(actShare*100)+'% do total · esp. '+_f1(expShare*100)+'%'
+      : 'capacidade '+_mw(cap)+' MW';
     const card=document.createElement('div');card.className='mon-g'+(state==='red'?' fail':'');
-    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">de '+_mw(cap)+' MW · '+(cap>0?(mw/cap*100).toFixed(0):'0')+'%</div>';
+    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">'+foot+'</div>';
     card._fill=fillPct;card._col=col;gEl.appendChild(card);}
   Array.from(gEl.children).forEach((card,i)=>{_monGauge('monG'+(i+1),card._fill||0,card._col||_IDLE);});
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
