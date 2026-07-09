@@ -5822,7 +5822,7 @@ async function renderMonitorPage(){
       ratio=(anyGen&&expShare>0&&total>0.5)?actShare/expShare:null,   /* 1 = distribuição proporcional */
       state=failC?'red':(ratio==null)?'idle':((ratio>=0.85&&ratio<=1.15)?'green':(ratio>=0.60&&ratio<=1.40)?'yellow':'red'),
       col=state==='red'?_RED:state==='yellow'?_YELLOW:state==='green'?_GREEN:_IDLE,
-      fillPct=ratio!=null?Math.max(0,Math.min(100,ratio*100)):0,     /* arco cheio = participação = esperada */
+      fillPct=cap>0?Math.max(0,Math.min(100,mw/cap*100)):0,          /* arco cheio = 100% da capacidade nominal */
       tag=state==='red'?'⚠':state==='yellow'?(ratio<1?'baixo':'alto'):'ok',
       tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
     const foot='<b style="color:'+col+'">'+_f1(actShare*100)+'%</b> do total · esp. '+_f1(expShare*100)+'%';
