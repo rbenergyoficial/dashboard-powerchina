@@ -5796,16 +5796,26 @@ async function renderMonitorPage(){
   const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
   if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
   const _mw=v=>{let x=Number(v);if(Math.abs(x)<0.005)x=0;return x.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});};
-  const circ={}; let lastTs=null;
-  Object.keys(_MON_CIRC).forEach(pid=>{const L=_monLatest(dados,+pid);circ[pid]={v:L.v==null?null:L.v,ts:L.ts};if(L.ts&&(!lastTs||L.ts>lastTs))lastTs=L.ts;}); /* _monLatest já converte kW→MW */
+  /* Alinha TODAS as leituras ao último slot 5-min COMPLETO (evita misturar horários com o slot parcial em enchimento) */
+  const _byPid={}; dados.forEach(it=>{const m={};(it.valores||[]).forEach(v=>{if(v.valor!=null)m[v.data]=v.valor;});_byPid[it.pontoId]=m;});
+  const _circIds=Object.keys(_MON_CIRC).map(Number);
+  const _allTs=new Set(); _circIds.forEach(pid=>{const m=_byPid[pid];if(m)Object.keys(m).forEach(ts=>_allTs.add(ts));});
+  const _tsSorted=[..._allTs].sort();
+  const _cntAt=ts=>_circIds.reduce((c,pid)=>c+((_byPid[pid]&&_byPid[pid][ts]!=null)?1:0),0);
+  let _maxC=0; _tsSorted.forEach(ts=>{const c=_cntAt(ts);if(c>_maxC)_maxC=c;});
+  let refTs=_tsSorted.length?_tsSorted[_tsSorted.length-1]:null;
+  for(let i=_tsSorted.length-1;i>=0;i--){if(_cntAt(_tsSorted[i])>=_maxC){refTs=_tsSorted[i];break;}}
+  const _monRef=pid=>{const m=_byPid[pid];if(!m||refTs==null)return null;if(m[refTs]!=null)return m[refTs]/1000;let best=null;for(const ts in m){if(ts<=refTs&&(best==null||ts>best))best=ts;}return best!=null?m[best]/1000:null;};
+  const circ={}; let lastTs=refTs;
+  Object.keys(_MON_CIRC).forEach(pid=>{const v=_monRef(+pid);circ[pid]={v:(v==null?null:v),ts:refTs};});
   const plant={}; for(let n=1;n<=9;n++)plant[n]={mw:0,fail:0};
   Object.keys(_MON_CIRC).forEach(pid=>{const m=_MON_CIRC[pid],c=circ[pid];if(c.v==null)plant[m.p].fail++;else plant[m.p].mw+=c.v;});
-  const totMon=_monLatest(dados,_MON_TOTAL); const total=totMon.v!=null?totMon.v:Object.values(plant).reduce((s,p)=>s+p.mw,0);
-  const tr1=_monLatest(dados,6196), tr2=_monLatest(dados,6197), anyGen=total>0.5;
+  const total=Object.values(plant).reduce((s,p)=>s+p.mw,0);  /* total = soma dos circuitos no mesmo horário (bate com os TRs) */
+  const tr1={v:_monRef(6196),ts:refTs}, tr2={v:_monRef(6197),ts:refTs}, anyGen=total>0.5;
   const failCirc=Object.keys(_MON_CIRC).filter(pid=>{const c=circ[pid];return anyGen&&(c.v==null||c.v<=0);});
   if(st) st.textContent=lastTs?('última leitura Way2: '+lastTs.slice(11,16)+' · '+lastTs.slice(8,10)+'/'+lastTs.slice(5,7)):'';
   if(kpiEl) kpiEl.innerHTML=[
-    {c:'green',col:'#34e0a1',ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',l:'Potência total agora',v:_mw(total),u:'MW',s:'Somatório Way2 (6233)'},
+    {c:'green',col:'#34e0a1',ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',l:'Potência total agora',v:_mw(total),u:'MW',s:'Soma dos 22 circuitos'},
     {c:failCirc.length?'red':'green',col:failCirc.length?'#f0598c':'#34e0a1',ic:failCirc.length?'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>':'<path d="M20 6L9 17l-5-5"/>',l:'Circuitos OK',v:(22-failCirc.length)+'/22',s:failCirc.length?('⚠ '+failCirc.map(p=>_MON_CIRC[p].c).join(', ')):'todos comunicando'},
     {c:'blue',col:'#6b8bf5',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR1',v:tr1.v!=null?_mw(tr1.v):'—',u:'MW',s:'transformador 1'},
     {c:'cyan',col:'#2dd4bf',ic:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16"/>',l:'SE · TR2',v:tr2.v!=null?_mw(tr2.v):'—',u:'MW',s:'transformador 2'}
