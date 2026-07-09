@@ -5782,7 +5782,7 @@ function _auditRenderAll(){
 /* ===== MONITOR AO VIVO · Way2 Demat 5min (potência ativa) ===== */
 const _MON_CIRC={6198:{p:1,c:'1C1'},6199:{p:1,c:'1C2'},6200:{p:1,c:'1C3'},6201:{p:2,c:'2C1'},6202:{p:2,c:'2C2'},6203:{p:3,c:'3C1'},6204:{p:3,c:'3C2'},6205:{p:3,c:'3C3'},6206:{p:4,c:'4C1'},6207:{p:4,c:'4C2'},6208:{p:4,c:'4C3'},6209:{p:5,c:'5C1'},6210:{p:5,c:'5C2'},6211:{p:5,c:'5C3'},6212:{p:6,c:'6C1'},6213:{p:6,c:'6C2'},6214:{p:6,c:'6C3'},6215:{p:7,c:'7C1'},6216:{p:8,c:'8C1'},6217:{p:8,c:'8C2'},6218:{p:8,c:'8C3'},6219:{p:9,c:'9C1'}};
 const _MON_TOTAL=6233;
-async function _monLoad(){try{const r=await fetch(WAY2_BLOB_BASE+'way2_monitor.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;return JSON.parse((await r.text()).replace(/^﻿/,''));}catch(e){return null;}}
+async function _monLoad(){try{const r=await fetch(WAY2_BLOB_BASE+'way2_monitor.json?t='+Date.now(),{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);return JSON.parse(t);}catch(e){return null;}}
 function _monLatest(dados,pid){const it=(dados||[]).find(d=>d.pontoId===pid);if(!it)return {v:null,ts:null};let b=null;(it.valores||[]).forEach(x=>{if(x.valor!=null)b=x;});return b?{v:+b.valor/1000,ts:b.data}:{v:null,ts:null};} /* Demat vem em kW → MW */
 function _monGauge(id,pct,color){const p=Math.max(0,Math.min(100,pct));mkChart(id,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[color,'rgba(255,255,255,.07)'],borderWidth:0,circumference:270,rotation:225}]},options:{cutout:'72%',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:0}}});}
 async function renderMonitorPage(){
