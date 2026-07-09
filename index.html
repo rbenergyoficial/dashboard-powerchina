@@ -2227,7 +2227,7 @@ function _themeCharts(light){
       <div id="monKpis" class="kpi-grid" style="grid-column:1/-1;margin-bottom:4px"></div>
       <div class="chart-row cols-1">
         <div class="cc cc-nolift">
-          <div class="cc-head"><div><div class="cc-title">Potência por UFV · agora</div><div class="cc-sub">MW no centro · % do total agora vs % esperado (proporção da capacidade MUST) · cor = distribuição (🟢 proporcional · 🟡 desviado · 🔴 fora/falha)</div></div></div>
+          <div class="cc-head"><div><div class="cc-title">Potência por UFV · agora</div><div class="cc-sub">MW no centro · PPA-BRK (M2–M6, M8): proporção entre si (🟢 ok · 🟡 desviado · 🔴 fora) · M1/M7/M9 = não-PPA (limitados a ~1 MW no corte ONS)</div></div></div>
           <div class="cc-body" style="height:auto;min-height:120px;overflow:auto;flex:none" id="monGauges"></div>
         </div>
       </div>
@@ -5823,19 +5823,22 @@ async function renderMonitorPage(){
   gEl.className='mon-gauges'; gEl.innerHTML='';
   const _monCol=n=>(_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;  /* cor distinta por UFV (barra de circuitos) */
   const _GREEN='#1ed760',_YELLOW='#f5b820',_RED='#f0447a',_IDLE='#5b6b8c';
-  let _totCap=num(dashData?.must?.contrat?.total); if(!(_totCap>0)){_totCap=0;for(let n=1;n<=9;n++)_totCap+=_monCap(n);}
+  const _NONPPA={1:1,7:1,9:1};  /* M1/M7/M9 = não-PPA: no corte ONS são limitadas a ~1 MW p/ priorizar o PPA-BRK */
+  let _ppaCap=0,_ppaMw=0; for(let n=1;n<=9;n++){if(!_NONPPA[n]){_ppaCap+=_monCap(n);_ppaMw+=plant[n].mw;}}
   const _f1=v=>v.toLocaleString(getDateLocale(),{minimumFractionDigits:1,maximumFractionDigits:1});
-  for(let n=1;n<=9;n++){const p=plant[n],cap=_monCap(n),mw=p.mw,
-      expShare=_totCap>0?cap/_totCap:0,                         /* participação esperada (proporção da capacidade) */
-      actShare=(anyGen&&total>0)?mw/total:0,                    /* participação real no momento */
+  for(let n=1;n<=9;n++){const p=plant[n],cap=_monCap(n),mw=p.mw,isPPA=!_NONPPA[n],
       failC=anyGen&&p.fail>0,
-      ratio=(anyGen&&expShare>0&&total>0.5)?actShare/expShare:null,   /* 1 = distribuição proporcional */
-      state=failC?'red':(ratio==null)?'idle':((ratio>=0.85&&ratio<=1.15)?'green':(ratio>=0.60&&ratio<=1.40)?'yellow':'red'),
+      expShare=isPPA&&_ppaCap>0?cap/_ppaCap:0,                          /* PPA: proporção esperada DENTRO do grupo PPA */
+      actShare=isPPA&&anyGen&&_ppaMw>0?mw/_ppaMw:0,                     /* PPA: proporção real dentro do grupo PPA */
+      ratio=(isPPA&&anyGen&&expShare>0&&_ppaMw>0.5)?actShare/expShare:null,
+      state=failC?'red':(!anyGen)?'idle':(!isPPA)?'green':(ratio==null)?'idle':((ratio>=0.85&&ratio<=1.15)?'green':(ratio>=0.60&&ratio<=1.40)?'yellow':'red'),
       col=state==='red'?_RED:state==='yellow'?_YELLOW:state==='green'?_GREEN:_IDLE,
       fillPct=cap>0?Math.max(0,Math.min(100,mw/cap*100)):0,          /* arco cheio = 100% da capacidade nominal */
       tag=state==='red'?'⚠':state==='yellow'?(ratio<1?'baixo':'alto'):'ok',
       tagCls=state==='red'?'fail':state==='yellow'?'warn':'ok';
-    const foot='<b style="color:'+col+'">'+_f1(actShare*100)+'%</b> do total · esp. '+_f1(expShare*100)+'%';
+    const foot=isPPA
+      ? '<b style="color:'+col+'">'+_f1(actShare*100)+'%</b> dos PPA · esp. '+_f1(expShare*100)+'%'
+      : '<b style="color:'+col+'">'+_f1(total>0?mw/total*100:0)+'%</b> do total · não-PPA';
     const card=document.createElement('div');card.className='mon-g'+(state==='red'?' fail':'');
     card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">'+foot+'</div>';
     card._fill=fillPct;card._col=col;gEl.appendChild(card);}
