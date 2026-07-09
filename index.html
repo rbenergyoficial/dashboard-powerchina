@@ -5912,7 +5912,7 @@ function _eletSeries(E,pids,vipids){vipids=vipids||pids;const tsSet=new Set();pi
   ts.forEach(t=>{const va=agg('TensaoA',t,vipids),vb=agg('TensaoB',t,vipids),vc=agg('TensaoC',t,vipids);
     const R3=1.7320508,Va=va.n?va.s/va.n/1000*R3:null,Vb=vb.n?vb.s/vb.n/1000*R3:null,Vc=vc.n?vc.s/vc.n/1000*R3:null;  /* tensão de LINHA (fase-neutro × √3), igual ao SCADA */
     const ia=agg('CorrenteA',t,vipids),ib=agg('CorrenteB',t,vipids),ic=agg('CorrenteC',t,vipids);
-    const pA=agg('Demat',t),P=pA.s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?Math.abs(P)/S:null;
+    const pA=agg('Demat',t),P=pA.s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?(Q<0?-1:1)*Math.abs(P)/S:null;  /* sinal do FP acompanha o sinal do Q (reativo) */
     o.complete.push(pA.n>0&&pA.n>=pids.length);
     let dq=null;if(Va!=null&&Vb!=null&&Vc!=null){const mx=Math.max(Va,Vb,Vc),mn=Math.min(Va,Vb,Vc),av=(Va+Vb+Vc)/3;dq=av>0?(mx-mn)/av*100:0;}
     o.Va.push(Va);o.Vb.push(Vb);o.Vc.push(Vc);o.Ia.push(ia.n?ia.s:null);o.Ib.push(ib.n?ib.s:null);o.Ic.push(ic.n?ic.s:null);
