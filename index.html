@@ -5922,7 +5922,7 @@ function _eletSeries(E,pids,vipids){vipids=vipids||pids;const tsSet=new Set();pi
     o.P.push(P);o.Q.push(Q);o.FP.push(FP);o.deseq.push(dq);});
   return o;}
 function _eletLine(id,ts,series,unit,opts){opts=opts||{};const labels=ts.map(t=>t.slice(11,16));
-  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:'transparent',borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
+  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:ctx=>_w2dAreaGrad(ctx,s.c),fill:'origin',borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
   if(opts.target!=null)ds.push({label:'Meta '+opts.target,data:ts.map(()=>opts.target),borderColor:'#f0598c',borderWidth:1,borderDash:[5,4],pointRadius:0});
   mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};}
 function _eletFillScope(){const sel=document.getElementById('eletScope');if(!sel||_eletSelInit)return;_eletSelInit=true;
