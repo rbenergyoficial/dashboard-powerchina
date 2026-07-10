@@ -864,7 +864,7 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .mon-g .gpct{font-size:23px;font-weight:800;font-family:var(--display);line-height:1;display:flex;align-items:baseline;gap:3px}
 .mon-g .gpu{font-size:11px;font-weight:700;color:var(--t3)}
 .mon-g .gmw{font-size:12px;color:var(--t3);font-weight:700;margin-top:6px;letter-spacing:.2px}
-.mon-g .gname{position:absolute;top:11px;left:13px;font-size:14px;font-weight:800;color:#eaf0fb;letter-spacing:.4px}
+.mon-g .gname{position:absolute;top:10px;left:11px;font-size:12px;font-weight:800;color:#0a0e17;letter-spacing:.3px;padding:2px 8px;border-radius:7px;line-height:1.3}
 .mon-g.fail{border-color:rgba(240,89,140,.5);box-shadow:0 0 0 1px rgba(240,89,140,.25),0 0 22px -6px #f0598c}
 .mon-g .gtag{position:absolute;top:8px;right:8px;font-size:9px;font-weight:800;padding:2px 7px;border-radius:999px}
 #eletScope{color-scheme:dark}
@@ -5869,7 +5869,7 @@ async function renderMonitorPage(){
       ? '<b style="color:'+col+'">'+_f1(actShare*100)+'%</b> dos PPA · esp. '+_f1(expShare*100)+'%'
       : '<b style="color:'+col+'">'+_f1(total>0?mw/total*100:0)+'%</b> do total · não-PPA';
     const card=document.createElement('div');card.className='mon-g'+(state==='red'?' fail':'');
-    card.innerHTML='<span class="gname">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">'+foot+'</div>';
+    card.innerHTML='<span class="gname" style="background:'+_monCol(n)+'">M'+n+'</span><span class="gtag '+tagCls+'">'+tag+'</span><div class="gwrap"><canvas id="monG'+n+'"></canvas><div class="gctr"><div class="gpct" style="color:'+col+'">'+_mw(mw)+'<span class="gpu">MW</span></div></div></div><div class="gmw">'+foot+'</div>';
     card._fill=fillPct;card._col=col;gEl.appendChild(card);}
   Array.from(gEl.children).forEach((card,i)=>{_monGauge('monG'+(i+1),card._fill||0,card._col||_IDLE);});
   const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
