@@ -11947,17 +11947,22 @@ async function onRefreshClick(){
     // evitando que o CDN da Microsoft sirva versão em cache após uma modificação recente.
     const metaUrl='https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+'?$select=id,name,lastModifiedDateTime,@microsoft.graph.downloadUrl';
     const metaResp=await fetch(metaUrl,{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
-    let dlResp; let _initModTime=null;
+    let dlResp; let _initModTime=null; let buf=null; let _cacheKey=null;
     if(metaResp.ok){
       const meta=await metaResp.json();
       const directUrl=meta['@microsoft.graph.downloadUrl'];
       _initModTime=meta.lastModifiedDateTime||null;
       const modLabel=_initModTime?'🕐 Dados de '+new Date(_initModTime).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
       progUpdate('Transferindo dados…','Sincronizando base de dados…',60,modLabel);
-      if(directUrl){
-        dlResp=await fetch(directUrl,{cache:'no-store'});
-      } else {
-        dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+      // Cache local por lastModifiedDateTime: evita rebaixar 10MB no F5 quando o arquivo não mudou
+      _cacheKey=_initModTime?('https://mrd.local/base?m='+encodeURIComponent(_initModTime)):null;
+      if(_cacheKey&&('caches'in window)){try{const _cc=await caches.open('mrd-base');const _hit=await _cc.match(_cacheKey);if(_hit){buf=await _hit.arrayBuffer();progUpdate('Transferindo dados…','Base já sincronizada (cache local)',82,modLabel);}}catch(e){}}
+      if(!buf){
+        if(directUrl){
+          dlResp=await fetch(directUrl,{cache:'no-store'});
+        } else {
+          dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+encodeURIComponent(ONEDRIVE_PATH)+':/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
+        }
       }
     } else {
       progUpdate('Buscando dados…','Localizando base de dados na nuvem…',45);
@@ -11968,8 +11973,12 @@ async function onRefreshClick(){
       progUpdate('Transferindo dados…','Sincronizando base de dados…',60);
       dlResp=await fetch('https://graph.microsoft.com/v1.0/me/drive/items/'+fileItem.id+'/content',{headers:{Authorization:'Bearer '+tok},cache:'no-store'});
     }
-    if(!dlResp||!dlResp.ok) throw new Error('Download falhou: '+(dlResp?dlResp.status:'sem resposta'));
-    const buf=await dlResp.arrayBuffer();
+    if(buf==null){
+      if(!dlResp||!dlResp.ok) throw new Error('Download falhou: '+(dlResp?dlResp.status:'sem resposta'));
+      buf=await dlResp.arrayBuffer();
+      // grava no cache local (troca por modTime) para os próximos F5 pularem o download de 10MB
+      if(_cacheKey&&('caches'in window)){try{const _cc=await caches.open('mrd-base');const _ks=await _cc.keys();for(const k of _ks)await _cc.delete(k);await _cc.put(_cacheKey,new Response(buf.slice(0)));}catch(e){}}
+    }
     progUpdate('🔄 Processando…','Lendo planilha e calculando KPIs…',85);
     const wb=XLSX.read(buf,{type:'array',cellDates:true});
     processWb(wb);
