@@ -870,6 +870,24 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 #eletScope{color-scheme:dark}
 #eletScope option,#eletScope optgroup{background:#0d1322;color:#dfe8ff}
 #eletScope optgroup{color:#8090b8;font-weight:700}
+#eletScopeBtn{height:30px;border-radius:8px;background:rgba(255,255,255,.05);color:#dfe8ff;border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700;padding:0 10px;cursor:pointer;text-transform:none;letter-spacing:0;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:7px}
+#eletScopeBtn:hover{background:rgba(255,255,255,.09)}
+.elet-panel{position:absolute;top:35px;left:0;z-index:60;width:296px;max-height:380px;overflow:auto;background:#0d1322;border:1px solid rgba(255,255,255,.12);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.6);padding:6px;text-transform:none;letter-spacing:0}
+.elet-panel .ep-g{color:#8090b8;font-size:10px;font-weight:800;padding:7px 8px 3px;text-transform:uppercase;display:flex;align-items:center;justify-content:space-between}
+.elet-panel .ep-g button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#8090b8;border-radius:5px;font-size:9px;font-weight:800;padding:2px 6px;cursor:pointer}
+.elet-panel .ep-g button:hover{color:#7defc4;border-color:rgba(52,224,161,.45)}
+.elet-panel .ep-i{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;color:#dfe8ff;font-size:12px;font-weight:600}
+.elet-panel .ep-i:hover{background:rgba(255,255,255,.06)}
+.elet-panel .ep-i.on{background:rgba(52,224,161,.14);color:#7defc4}
+.elet-panel .ep-i input{accent-color:#34e0a1;cursor:pointer;margin:0}
+.elet-panel .ep-i .ep-tag{margin-left:auto;font-size:9px;color:#8090b8;font-weight:700}
+.elet-panel .ep-f{display:flex;gap:6px;padding:7px 4px 2px;border-top:1px solid rgba(255,255,255,.08);margin-top:5px;position:sticky;bottom:-6px;background:#0d1322}
+.elet-panel .ep-f button{flex:1;height:27px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#dfe8ff;font-size:11px;font-weight:700;cursor:pointer}
+.elet-panel .ep-f button:hover{background:rgba(255,255,255,.1)}
+.elet-phase{align-items:center;gap:4px}
+.elet-phase .epl{font-size:10px;color:#8090b8;font-weight:800;margin-right:2px}
+.elet-phase button{height:26px;min-width:29px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#8090b8;font-size:11px;font-weight:800;cursor:pointer}
+.elet-phase button.on{background:rgba(52,224,161,.18);border-color:rgba(52,224,161,.5);color:#7defc4}
 .elet-kpi{background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:12px;padding:9px 12px}
 .elet-kpi .ek-l{font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.02em}
 .elet-kpi .ek-v{font-size:19px;font-weight:800;font-family:var(--display);margin-top:3px;line-height:1}
@@ -2249,13 +2267,22 @@ function _themeCharts(light){
       <div class="section-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
         GRANDEZAS ELÉTRICAS
-        <select id="eletScope" onchange="_eletScope=this.value;renderEletrico();" style="margin-left:6px;height:30px;border-radius:8px;background:rgba(255,255,255,.05);color:#dfe8ff;border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700;padding:0 8px;text-transform:none;letter-spacing:0"></select>
+        <div id="eletScopeWrap" style="position:relative;margin-left:6px">
+          <button id="eletScopeBtn" type="button" onclick="_eletTogglePanel(event)"><span id="eletScopeLbl">Geral</span><span style="opacity:.55;font-size:9px">▼</span></button>
+          <div id="eletScopePanel" class="elet-panel" style="display:none"></div>
+        </div>
+        <div id="eletPhaseSel" class="elet-phase" style="display:none">
+          <span class="epl">FASE</span>
+          <button type="button" data-ph="A" onclick="_eletSetPhase('A')">A</button>
+          <button type="button" data-ph="B" onclick="_eletSetPhase('B')">B</button>
+          <button type="button" data-ph="C" onclick="_eletSetPhase('C')">C</button>
+        </div>
         <span id="eletStamp" style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:600;text-transform:none;letter-spacing:0"></span>
       </div>
       <div id="eletKpis" class="kpi-grid" style="margin-bottom:2px"></div>
       <div class="chart-row cols-2">
-        <div class="cc"><div class="cc-head"><div><div class="cc-title">Tensão por fase</div><div class="cc-sub">kV (linha) · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletV"></canvas></div></div>
-        <div class="cc"><div class="cc-head"><div><div class="cc-title">Corrente por fase</div><div class="cc-sub">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletI"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitV">Tensão por fase</div><div class="cc-sub" id="eletSubV">kV (linha) · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletV"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitI">Corrente por fase</div><div class="cc-sub" id="eletSubI">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletI"></canvas></div></div>
       </div>
       <div class="chart-row cols-2">
         <div class="cc"><div class="cc-head"><div><div class="cc-title">Potência ativa × reativa</div><div class="cc-sub">P (MW) · Q (MVAr)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletPQ"></canvas></div></div>
@@ -5894,6 +5921,8 @@ async function renderMonitorPage(){
 }
 /* ── Grandezas Elétricas (Monitor ao vivo) ─────────────────────────── */
 let _eletCache=null,_eletCacheTs=0,_eletScope='geral',_eletSelInit=false,_eletLastS=null;
+let _eletMulti=[],_eletPhase='A';  /* _eletMulti: pids de circuitos p/ sobrepor (>=2 = modo comparar) */
+const _ELET_PAL=['#34E0A1','#6b8bf5','#f5a623','#e34948','#c084fc','#2dd4bf','#f5b820','#3987e5','#f0598c','#7defc4','#ff8fab','#9ae6b4'];
 function _eletTip(ctx){let el=document.getElementById('_eletTip');
   if(!el){el=document.createElement('div');el.id='_eletTip';el.style.cssText='position:fixed;z-index:9999;pointer-events:none;padding:11px 13px;border-radius:12px;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.5;box-shadow:0 8px 26px rgba(0,0,0,.42);min-width:214px;opacity:0;transition:opacity .12s';document.body.appendChild(el);}
   const tt=ctx.tooltip,S=_eletLastS;if(!tt||!tt.dataPoints||!tt.dataPoints.length||!S){el.style.opacity='0';return;}
@@ -5921,32 +5950,72 @@ async function _eletLoad(force){const now=Date.now();if(_eletCache&&!force&&now-
     _eletCache={E,dados:d};_eletCacheTs=now;return _eletCache;}catch(e){return null;}}
 function _eletPids(s){if(s==='geral')return Object.keys(_MON_CIRC).map(Number);if(s[0]==='M')return _PARK2CIRC[+s.slice(1)]||[];if(s[0]==='C')return[+s.slice(1)];return Object.keys(_MON_CIRC).map(Number);}
 function _eletViPids(s){return s==='geral'?[6196,6197]:_eletPids(s);}  /* Geral: P/Q da geração (circuitos), V/I da SE (237 kV) */
-function _eletSeries(E,pids,vipids){vipids=vipids||pids;const tsSet=new Set();pids.forEach(p=>{const m=E[p]&&E[p].Demat;if(m)Object.keys(m).forEach(ts=>tsSet.add(ts));});const ts=[...tsSet].sort();
+function _eletSeries(E,pids,vipids,tsList){vipids=vipids||pids;const tsSet=new Set();pids.forEach(p=>{const m=E[p]&&E[p].Demat;if(m)Object.keys(m).forEach(ts=>tsSet.add(ts));});const ts=tsList||[...tsSet].sort();  /* tsList: eixo comum p/ sobrepor circuitos */
   const agg=(g,t,ps)=>{let s=0,n=0;(ps||pids).forEach(p=>{const v=E[p]&&E[p][g]&&E[p][g][t];if(v!=null){s+=v;n++;}});return{s,n};};
   const o={ts,Va:[],Vb:[],Vc:[],Ia:[],Ib:[],Ic:[],P:[],Q:[],FP:[],deseq:[],complete:[]};
   ts.forEach(t=>{const va=agg('TensaoA',t,vipids),vb=agg('TensaoB',t,vipids),vc=agg('TensaoC',t,vipids);
     const R3=1.7320508,Va=va.n?va.s/va.n/1000*R3:null,Vb=vb.n?vb.s/vb.n/1000*R3:null,Vc=vc.n?vc.s/vc.n/1000*R3:null;  /* tensão de LINHA (fase-neutro × √3), igual ao SCADA */
     const ia=agg('CorrenteA',t,vipids),ib=agg('CorrenteB',t,vipids),ic=agg('CorrenteC',t,vipids);
-    const pA=agg('Demat',t),P=pA.s/1000,Q=agg('Demre',t).s/1000,S=Math.sqrt(P*P+Q*Q),FP=S>0.001?(Q<0?-1:1)*Math.abs(P)/S:null;  /* sinal do FP acompanha o sinal do Q (reativo) */
+    const pA=agg('Demat',t),qA=agg('Demre',t),P=pA.n?pA.s/1000:null,Q=qA.n?qA.s/1000:null;  /* null (não 0) quando falta leitura, p/ não criar queda falsa no eixo comum */
+    const S=(P!=null&&Q!=null)?Math.sqrt(P*P+Q*Q):null,FP=(S!=null&&S>0.001)?(Q<0?-1:1)*Math.abs(P)/S:null;  /* sinal do FP acompanha o sinal do Q (reativo) */
     o.complete.push(pA.n>0&&pA.n>=pids.length);
     let dq=null;if(Va!=null&&Vb!=null&&Vc!=null){const mx=Math.max(Va,Vb,Vc),mn=Math.min(Va,Vb,Vc),av=(Va+Vb+Vc)/3;dq=av>0?(mx-mn)/av*100:0;}
     o.Va.push(Va);o.Vb.push(Vb);o.Vc.push(Vc);o.Ia.push(ia.n?ia.s:null);o.Ib.push(ib.n?ib.s:null);o.Ic.push(ic.n?ic.s:null);
     o.P.push(P);o.Q.push(Q);o.FP.push(FP);o.deseq.push(dq);});
   return o;}
 function _eletLine(id,ts,series,unit,opts){opts=opts||{};const labels=ts.map(t=>t.slice(11,16));
-  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:ctx=>_w2dAreaGrad(ctx,s.c),fill:'origin',borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
+  const _nf=!!opts.noFill;  /* modo comparar: muitas linhas → sem área, senão fica ilegível */
+  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:_nf?'transparent':(ctx=>_w2dAreaGrad(ctx,s.c)),fill:_nf?false:'origin',borderDash:s.dash||undefined,borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
   if(opts.target!=null)ds.push({label:'Meta '+opts.target,data:ts.map(()=>opts.target),borderColor:'#f0598c',borderWidth:1,borderDash:[5,4],pointRadius:0});
   mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};}
-function _eletFillScope(){const sel=document.getElementById('eletScope');if(!sel||_eletSelInit)return;_eletSelInit=true;
-  let h='<option value="geral">Geral · Complexo (P/Q) + SE (V/I)</option><optgroup label="Por UFV">';
-  for(let n=1;n<=9;n++)h+='<option value="M'+n+'">M'+n+'</option>';h+='</optgroup><optgroup label="Por circuito">';
-  const cids=Object.keys(_MON_CIRC).sort((a,b)=>{const A=_MON_CIRC[a],B=_MON_CIRC[b];return A.p-B.p||A.c.localeCompare(B.c);});
-  cids.forEach(pid=>h+='<option value="C'+pid+'">'+_MON_CIRC[pid].c+' (M'+_MON_CIRC[pid].p+')</option>');h+='</optgroup>';
-  sel.innerHTML=h;sel.value=_eletScope;}
+/* ---- seletor de escopo: presets (Geral/UFV) + multi-seleção de circuitos (modo comparar) ---- */
+function _eletCmp(){return _eletMulti.length>=2;}
+function _eletActivePids(){return _eletMulti.length?_eletMulti.slice():_eletPids(_eletScope);}
+function _eletActiveViPids(){return _eletMulti.length?_eletMulti.slice():_eletViPids(_eletScope);}
+function _eletCircName(pid){return _MON_CIRC[pid]?_MON_CIRC[pid].c:('#'+pid);}
+function _eletUfvCol(n){return (_W2D_COLORS['M'+n]||{c:'#6b8bf5'}).c;}  /* _monCol é local da renderMonitorPage */
+function _eletLabel(){
+  if(_eletMulti.length){const n=_eletMulti.length;const names=_eletMulti.map(_eletCircName);
+    return n<=3?names.join(', '):(names.slice(0,2).join(', ')+' +'+(n-2));}
+  if(_eletScope==='geral')return 'Geral · Complexo';
+  if(_eletScope[0]==='M')return _eletScope+' · todos os circuitos';
+  return _eletCircName(+_eletScope.slice(1));}
+function _eletSyncUI(){
+  const b=document.getElementById('eletScopeLbl');if(b)b.textContent=_eletLabel();
+  const ph=document.getElementById('eletPhaseSel');if(ph){ph.style.display=_eletCmp()?'flex':'none';
+    ph.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.ph===_eletPhase));}
+  const p=document.getElementById('eletScopePanel');if(!p)return;
+  p.querySelectorAll('.ep-i[data-preset]').forEach(el=>el.classList.toggle('on',!_eletMulti.length&&el.dataset.preset===_eletScope));
+  p.querySelectorAll('.ep-i[data-pid] input').forEach(cb=>{const on=_eletMulti.indexOf(+cb.dataset.p)>=0;cb.checked=on;cb.closest('.ep-i').classList.toggle('on',on);});}
+function _eletFillScope(){const p=document.getElementById('eletScopePanel');if(!p||_eletSelInit)return;
+  let h='<div class="ep-g">Agregado</div>';
+  h+='<div class="ep-i" data-preset="geral" onclick="_eletPreset(\'geral\')">Geral · Complexo (P/Q) + SE (V/I)</div>';
+  for(let n=1;n<=9;n++)h+='<div class="ep-i" data-preset="M'+n+'" onclick="_eletPreset(\'M'+n+'\')">M'+n+'<span class="ep-tag">'+(_PARK2CIRC[n]||[]).length+' circ.</span></div>';
+  h+='<div class="ep-g"><span>Comparar circuitos</span><button type="button" onclick="_eletClearMulti()">limpar</button></div>';
+  for(let n=1;n<=9;n++){const cs=(_PARK2CIRC[n]||[]).slice().sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));if(!cs.length)continue;
+    h+='<div class="ep-g"><span style="color:'+_eletUfvCol(n)+'">M'+n+'</span><button type="button" onclick="_eletSelPark('+n+')">todos</button></div>';
+    cs.forEach(pid=>h+='<label class="ep-i" data-pid="'+pid+'"><input type="checkbox" data-p="'+pid+'" onchange="_eletToggleCirc('+pid+',this.checked)">'+_eletCircName(pid)+'</label>');}
+  h+='<div class="ep-f"><button type="button" onclick="_eletPreset(\'geral\')">Geral</button><button type="button" onclick="_eletClearMulti()">Limpar</button></div>';
+  p.innerHTML=h;_eletSelInit=true;_eletSyncUI();}  /* flag só após montar: erro no meio não mata o painel */
+function _eletTogglePanel(e){if(e)e.stopPropagation();const p=document.getElementById('eletScopePanel');if(!p)return;
+  p.style.display=p.style.display==='none'?'block':'none';
+  if(p.style.display==='block'&&!window._eletPanelGuard){window._eletPanelGuard=1;
+    document.addEventListener('click',ev=>{const el=document.getElementById('eletScopePanel');if(!el||el.style.display==='none')return;
+      if(!el.contains(ev.target)&&!(ev.target.closest&&ev.target.closest('#eletScopeBtn')))el.style.display='none';});}}
+function _eletPreset(v){_eletScope=v;_eletMulti=[];_eletSyncUI();const p=document.getElementById('eletScopePanel');if(p)p.style.display='none';renderEletrico();}
+function _eletToggleCirc(pid,on){pid=+pid;const i=_eletMulti.indexOf(pid);
+  if(on&&i<0)_eletMulti.push(pid);else if(!on&&i>=0)_eletMulti.splice(i,1);
+  _eletMulti.sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));
+  if(_eletMulti.length===1)_eletScope='C'+_eletMulti[0];  /* 1 circuito = escopo simples (mantém fases A/B/C) */
+  _eletSyncUI();renderEletrico();}
+function _eletSelPark(n){_eletMulti=(_PARK2CIRC[n]||[]).slice().sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));_eletSyncUI();renderEletrico();}
+function _eletClearMulti(){_eletMulti=[];_eletScope='geral';_eletSyncUI();renderEletrico();}
+function _eletSetPhase(ph){_eletPhase=ph;_eletSyncUI();renderEletrico();}
 async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
   if(!window._eletTipGuard){window._eletTipGuard=1;document.addEventListener('mousemove',ev=>{const el=document.getElementById('_eletTip');if(!el||el.style.opacity==='0')return;const t=ev.target;if(!(t&&/^cElet(V|I|PQ|FP)$/.test(t.id||'')))el.style.opacity='0';});}
   const c=await _eletLoad();if(!c){kEl.innerHTML='<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--t3);font-size:13px">⏳ Aguardando <b>way2_eletrico.json</b> — ative o fluxo Way2 Eletrico 5min.</div>';return;}
-  const S=_eletSeries(c.E,_eletPids(_eletScope),_eletViPids(_eletScope));_eletLastS=S;let li=S.ts.length-1;while(li>=0&&!(S.complete[li]&&S.P[li]!=null))li--;const k=li<0?S.ts.length-1:li;
+  const _pids=_eletActivePids();
+  const S=_eletSeries(c.E,_pids,_eletActiveViPids());_eletLastS=S;let li=S.ts.length-1;while(li>=0&&!(S.complete[li]&&S.P[li]!=null))li--;const k=li<0?S.ts.length-1:li;
   const f=(v,d)=>v==null?'—':v.toLocaleString(getDateLocale(),{minimumFractionDigits:d,maximumFractionDigits:d});
   const fp=S.FP[k],fpBad=fp!=null&&Math.abs(fp)<0.92,dq=S.deseq[k],dqBad=dq!=null&&dq>2;
   const tiles=[
@@ -5958,10 +6027,24 @@ async function renderEletrico(){const kEl=document.getElementById('eletKpis');if
   ];
   kEl.innerHTML=tiles.map(t=>'<div class="elet-kpi"><div class="ek-l">'+t.l+'</div><div class="ek-v" style="color:'+t.c+'">'+t.v+(t.u?'<span class="ek-u">'+t.u+'</span>':'')+'</div></div>').join('');
   const st=document.getElementById('eletStamp');if(st)st.textContent=(k>=0&&S.ts[k])?('leitura '+S.ts[k].slice(11,16)):'';
-  _eletLine('cEletV',S.ts,[{l:'Fase A',d:S.Va,c:'#e34948'},{l:'Fase B',d:S.Vb,c:'#f5b820'},{l:'Fase C',d:S.Vc,c:'#3987e5'}],'kV');
-  _eletLine('cEletI',S.ts,[{l:'Fase A',d:S.Ia,c:'#e34948'},{l:'Fase B',d:S.Ib,c:'#f5b820'},{l:'Fase C',d:S.Ic,c:'#3987e5'}],'A');
-  _eletLine('cEletPQ',S.ts,[{l:'P (MW)',d:S.P,c:'#1ed760'},{l:'Q (MVAr)',d:S.Q,c:'#c084fc'}],'');
-  _eletLine('cEletFP',S.ts,[{l:'FP',d:S.FP,c:'#2dd4bf'}],'',{target:0.92});
+  const _sv=document.getElementById('eletSubV'),_si=document.getElementById('eletSubI');
+  if(_eletCmp()){  /* modo comparar: 1 linha por circuito; fase única nos gráficos de fase */
+    const ph=_eletPhase,pl=ph.toLowerCase();
+    const per=_pids.map((p,i)=>({n:_eletCircName(p),c:_ELET_PAL[i%_ELET_PAL.length],S:_eletSeries(c.E,[p],[p],S.ts)}));
+    if(_sv)_sv.textContent='kV (linha) · fase '+ph+' · '+per.length+' circuitos';
+    if(_si)_si.textContent='A · fase '+ph+' · '+per.length+' circuitos';
+    _eletLine('cEletV',S.ts,per.map(x=>({l:x.n,d:x.S['V'+pl],c:x.c})),'kV',{noFill:true});
+    _eletLine('cEletI',S.ts,per.map(x=>({l:x.n,d:x.S['I'+pl],c:x.c})),'A',{noFill:true});
+    _eletLine('cEletPQ',S.ts,per.map(x=>({l:x.n+' P',d:x.S.P,c:x.c})).concat(per.map(x=>({l:x.n+' Q',d:x.S.Q,c:x.c,dash:[5,4]}))),'',{noFill:true});
+    _eletLine('cEletFP',S.ts,per.map(x=>({l:x.n,d:x.S.FP,c:x.c})),'',{target:0.92,noFill:true});
+  } else {
+    if(_sv)_sv.textContent='kV (linha) · 🔴 A · 🟡 B · 🔵 C';
+    if(_si)_si.textContent='A · 🔴 A · 🟡 B · 🔵 C';
+    _eletLine('cEletV',S.ts,[{l:'Fase A',d:S.Va,c:'#e34948'},{l:'Fase B',d:S.Vb,c:'#f5b820'},{l:'Fase C',d:S.Vc,c:'#3987e5'}],'kV');
+    _eletLine('cEletI',S.ts,[{l:'Fase A',d:S.Ia,c:'#e34948'},{l:'Fase B',d:S.Ib,c:'#f5b820'},{l:'Fase C',d:S.Ic,c:'#3987e5'}],'A');
+    _eletLine('cEletPQ',S.ts,[{l:'P (MW)',d:S.P,c:'#1ed760'},{l:'Q (MVAr)',d:S.Q,c:'#c084fc'}],'');
+    _eletLine('cEletFP',S.ts,[{l:'FP',d:S.FP,c:'#2dd4bf'}],'',{target:0.92});
+  }
 }
 // Faixa de KPIs da fonte ONS (período do filtro)
 function renderONSKpis(){
