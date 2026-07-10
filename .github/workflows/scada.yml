@@ -1,0 +1,24 @@
+name: SCADA -> scada_comparativo.json (diario)
+on:
+  schedule:
+    - cron: '30 9 * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: gen-scada
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i xlsx@0.18.5 @azure/storage-blob@12
+      - name: Gerar scada_comparativo.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          OUT_CONTAINER: dados
+          OUT_BLOB: scada_comparativo.json
+        run: node scripts/gen-scada.js
