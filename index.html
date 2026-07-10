@@ -2271,8 +2271,9 @@ function _themeCharts(light){
           <button id="eletScopeBtn" type="button" onclick="_eletTogglePanel(event)"><span id="eletScopeLbl">Geral</span><span style="opacity:.55;font-size:9px">▼</span></button>
           <div id="eletScopePanel" class="elet-panel" style="display:none"></div>
         </div>
-        <div id="eletPhaseSel" class="elet-phase" style="display:none">
-          <span class="epl">FASE</span>
+        <div id="eletPhaseSel" class="elet-phase" style="display:none" title="Tensão e Corrente têm 3 fases (A/B/C). Ao comparar vários circuitos, mostrar as 3 fases de cada um viraria muitas linhas — então escolha a Média das 3 fases ou uma fase específica.">
+          <span class="epl">FASE (V/I)</span>
+          <button type="button" data-ph="M" onclick="_eletSetPhase('M')">Média</button>
           <button type="button" data-ph="A" onclick="_eletSetPhase('A')">A</button>
           <button type="button" data-ph="B" onclick="_eletSetPhase('B')">B</button>
           <button type="button" data-ph="C" onclick="_eletSetPhase('C')">C</button>
@@ -5920,9 +5921,18 @@ async function renderMonitorPage(){
   try{renderEletrico();}catch(e){}
 }
 /* ── Grandezas Elétricas (Monitor ao vivo) ─────────────────────────── */
-let _eletCache=null,_eletCacheTs=0,_eletScope='geral',_eletSelInit=false,_eletLastS=null;
-let _eletMulti=[],_eletPhase='A';  /* _eletMulti: pids de circuitos p/ sobrepor (>=2 = modo comparar) */
+let _eletCache=null,_eletCacheTs=0,_eletScope='geral',_eletSelInit=false,_eletLastS=null,_eletLastCmp=null;
+let _eletMulti=[],_eletPhase='M';  /* _eletMulti: pids p/ sobrepor (>=2 = comparar) · _eletPhase: M=média das 3 fases, ou A/B/C */
+let _eletHidden={};                /* circuitos ocultados via clique na legenda (sincronizado nos 4 gráficos) */
 const _ELET_PAL=['#34E0A1','#6b8bf5','#f5a623','#e34948','#c084fc','#2dd4bf','#f5b820','#3987e5','#f0598c','#7defc4','#ff8fab','#9ae6b4'];
+function _eletKeyOf(ds){return (ds.label||'').split(' ')[0];}  /* '3C1 P' -> '3C1' (P e Q do mesmo circuito somem juntos) */
+function _eletApplyHidden(){['cEletV','cEletI','cEletPQ','cEletFP'].forEach(id=>{const cv=document.getElementById(id);if(!cv)return;const ch=Chart.getChart(cv);if(!ch)return;let dirty=false;
+  ch.data.datasets.forEach((ds,ix)=>{if(/^Meta/.test(ds.label||''))return;const hid=!!_eletHidden[_eletKeyOf(ds)];if(ch.isDatasetVisible(ix)===hid){ch.setDatasetVisibility(ix,!hid);dirty=true;}});
+  if(dirty)ch.update();});}
+function _eletMean(S,pre){return S[pre+'a'].map((v,i)=>{const a=[v,S[pre+'b'][i],S[pre+'c'][i]].filter(x=>x!=null);return a.length?a.reduce((s,x)=>s+x,0)/a.length:null;});}
+function _eletPhaseArr(S,pre){return _eletPhase==='M'?_eletMean(S,pre):S[pre+_eletPhase.toLowerCase()];}
+function _eletPhaseTxt(){return _eletPhase==='M'?'média das 3 fases':('fase '+_eletPhase);}
+function _eletLegendClick(e,item){const key=_eletKeyOf({label:item.text});_eletHidden[key]=!_eletHidden[key];_eletApplyHidden();}
 function _eletTip(ctx){let el=document.getElementById('_eletTip');
   if(!el){el=document.createElement('div');el.id='_eletTip';el.style.cssText='position:fixed;z-index:9999;pointer-events:none;padding:11px 13px;border-radius:12px;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.5;box-shadow:0 8px 26px rgba(0,0,0,.42);min-width:214px;opacity:0;transition:opacity .12s';document.body.appendChild(el);}
   const tt=ctx.tooltip,S=_eletLastS;if(!tt||!tt.dataPoints||!tt.dataPoints.length||!S){el.style.opacity='0';return;}
@@ -5932,12 +5942,18 @@ function _eletTip(ctx){let el=document.getElementById('_eletTip');
   const lc=isLt?'#475569':'#9fb0d0',tsr=S.ts[i]||'',date=tsr?tsr.slice(8,10)+'/'+tsr.slice(5,7)+'/'+tsr.slice(0,4):'',time=tsr?tsr.slice(11,16):'';
   const fp=S.FP[i],fpc=fp==null?lc:Math.abs(fp)<0.92?'#f2495c':'#22c55e',dq=S.deseq[i],dqc=dq==null?lc:dq>2?'#f2495c':'#7defc4';
   const row=(c,l,v,vc)=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="width:8px;height:8px;border-radius:2px;background:${c};flex-shrink:0"></span><span style="flex:1;color:${lc}">${l}</span><span style="font-weight:700;color:${vc||'inherit'}">${v}</span></div>`;
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:12.5px;margin-bottom:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.85"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${date} · ${time}</div>`
+  const hdr=`<div style="display:flex;align-items:center;gap:6px;font-weight:800;font-size:12.5px;margin-bottom:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.85"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>${date} · ${time}</div>`;
+  if(_eletCmp()){  /* comparar: mostra o valor de cada circuito no ponto (só os visíveis, exclui a linha Meta) */
+    const pts=(tt.dataPoints||[]).filter(p=>p.dataset&&!/^Meta/.test(p.dataset.label||''));
+    el.innerHTML=hdr+(pts.length?pts.map(p=>row(p.dataset.borderColor,p.dataset.label,f(p.parsed.y,2,p.dataset._u||''))).join(''):`<div style="color:${lc}">sem leitura</div>`);
+  } else {
+  el.innerHTML=hdr
     +row('#e34948','Tensão A',f(S.Va[i],2,'kV'))+row('#f5b820','Tensão B',f(S.Vb[i],2,'kV'))+row('#3987e5','Tensão C',f(S.Vc[i],2,'kV'))
     +row('#e34948','Corrente A',f(S.Ia[i],2,'A'))+row('#f5b820','Corrente B',f(S.Ib[i],2,'A'))+row('#3987e5','Corrente C',f(S.Ic[i],2,'A'))
     +`<div style="margin-top:5px;padding-top:5px;border-top:1px solid ${isLt?'rgba(0,0,0,.08)':'rgba(255,255,255,.09)'}">`
     +row('#1ed760','Pot. Ativa',f(S.P[i],2,'MW'))+row('#c084fc','Pot. Reativa',f(S.Q[i],2,'MVAr'))
     +row(fpc,'Fator de Pot.',f(fp,2),fpc)+row(dqc,'Desequilíbrio V',f(dq,2,'%'),dqc)+`</div>`;
+  }
   const cx=tt.caretX,cy=tt.caretY,cr=ctx.chart.canvas.getBoundingClientRect();
   el.style.opacity='0';const tw=el.offsetWidth||222,th=el.offsetHeight||210;
   let tx=cr.left+cx+14,ty=cr.top+cy-10;if(tx+tw>window.innerWidth-10)tx=cr.left+cx-tw-14;if(ty+th>window.innerHeight-10)ty=window.innerHeight-th-10;if(ty<10)ty=10;
@@ -5965,9 +5981,9 @@ function _eletSeries(E,pids,vipids,tsList){vipids=vipids||pids;const tsSet=new S
   return o;}
 function _eletLine(id,ts,series,unit,opts){opts=opts||{};const labels=ts.map(t=>t.slice(11,16));
   const _nf=!!opts.noFill;  /* modo comparar: muitas linhas → sem área, senão fica ilegível */
-  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:_nf?'transparent':(ctx=>_w2dAreaGrad(ctx,s.c)),fill:_nf?false:'origin',borderDash:s.dash||undefined,borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true}));
+  const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:_nf?'transparent':(ctx=>_w2dAreaGrad(ctx,s.c)),fill:_nf?false:'origin',borderDash:s.dash||undefined,borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true,_u:s.u||''}));
   if(opts.target!=null)ds.push({label:'Meta '+opts.target,data:ts.map(()=>opts.target),borderColor:'#f0598c',borderWidth:1,borderDash:[5,4],pointRadius:0});
-  mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};}
+  mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',onClick:opts.cmp?_eletLegendClick:undefined,labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};}
 /* ---- seletor de escopo: presets (Geral/UFV) + multi-seleção de circuitos (modo comparar) ---- */
 function _eletCmp(){return _eletMulti.length>=2;}
 function _eletActivePids(){return _eletMulti.length?_eletMulti.slice():_eletPids(_eletScope);}
@@ -6002,14 +6018,14 @@ function _eletTogglePanel(e){if(e)e.stopPropagation();const p=document.getElemen
   if(p.style.display==='block'&&!window._eletPanelGuard){window._eletPanelGuard=1;
     document.addEventListener('click',ev=>{const el=document.getElementById('eletScopePanel');if(!el||el.style.display==='none')return;
       if(!el.contains(ev.target)&&!(ev.target.closest&&ev.target.closest('#eletScopeBtn')))el.style.display='none';});}}
-function _eletPreset(v){_eletScope=v;_eletMulti=[];_eletSyncUI();const p=document.getElementById('eletScopePanel');if(p)p.style.display='none';renderEletrico();}
+function _eletPreset(v){_eletScope=v;_eletMulti=[];_eletHidden={};_eletSyncUI();const p=document.getElementById('eletScopePanel');if(p)p.style.display='none';renderEletrico();}
 function _eletToggleCirc(pid,on){pid=+pid;const i=_eletMulti.indexOf(pid);
-  if(on&&i<0)_eletMulti.push(pid);else if(!on&&i>=0)_eletMulti.splice(i,1);
+  if(on&&i<0)_eletMulti.push(pid);else if(!on&&i>=0){_eletMulti.splice(i,1);delete _eletHidden[_eletCircName(pid)];}
   _eletMulti.sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));
   if(_eletMulti.length===1)_eletScope='C'+_eletMulti[0];  /* 1 circuito = escopo simples (mantém fases A/B/C) */
   _eletSyncUI();renderEletrico();}
-function _eletSelPark(n){_eletMulti=(_PARK2CIRC[n]||[]).slice().sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));_eletSyncUI();renderEletrico();}
-function _eletClearMulti(){_eletMulti=[];_eletScope='geral';_eletSyncUI();renderEletrico();}
+function _eletSelPark(n){_eletMulti=(_PARK2CIRC[n]||[]).slice().sort((a,b)=>_eletCircName(a).localeCompare(_eletCircName(b)));_eletHidden={};_eletSyncUI();renderEletrico();}
+function _eletClearMulti(){_eletMulti=[];_eletScope='geral';_eletHidden={};_eletSyncUI();renderEletrico();}
 function _eletSetPhase(ph){_eletPhase=ph;_eletSyncUI();renderEletrico();}
 async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
   if(!window._eletTipGuard){window._eletTipGuard=1;document.addEventListener('mousemove',ev=>{const el=document.getElementById('_eletTip');if(!el||el.style.opacity==='0')return;const t=ev.target;if(!(t&&/^cElet(V|I|PQ|FP)$/.test(t.id||'')))el.style.opacity='0';});}
@@ -6028,15 +6044,16 @@ async function renderEletrico(){const kEl=document.getElementById('eletKpis');if
   kEl.innerHTML=tiles.map(t=>'<div class="elet-kpi"><div class="ek-l">'+t.l+'</div><div class="ek-v" style="color:'+t.c+'">'+t.v+(t.u?'<span class="ek-u">'+t.u+'</span>':'')+'</div></div>').join('');
   const st=document.getElementById('eletStamp');if(st)st.textContent=(k>=0&&S.ts[k])?('leitura '+S.ts[k].slice(11,16)):'';
   const _sv=document.getElementById('eletSubV'),_si=document.getElementById('eletSubI');
-  if(_eletCmp()){  /* modo comparar: 1 linha por circuito; fase única nos gráficos de fase */
-    const ph=_eletPhase,pl=ph.toLowerCase();
+  if(_eletCmp()){  /* modo comparar: 1 linha por circuito; V/I por fase (ou média) */
     const per=_pids.map((p,i)=>({n:_eletCircName(p),c:_ELET_PAL[i%_ELET_PAL.length],S:_eletSeries(c.E,[p],[p],S.ts)}));
-    if(_sv)_sv.textContent='kV (linha) · fase '+ph+' · '+per.length+' circuitos';
-    if(_si)_si.textContent='A · fase '+ph+' · '+per.length+' circuitos';
-    _eletLine('cEletV',S.ts,per.map(x=>({l:x.n,d:x.S['V'+pl],c:x.c})),'kV',{noFill:true});
-    _eletLine('cEletI',S.ts,per.map(x=>({l:x.n,d:x.S['I'+pl],c:x.c})),'A',{noFill:true});
-    _eletLine('cEletPQ',S.ts,per.map(x=>({l:x.n+' P',d:x.S.P,c:x.c})).concat(per.map(x=>({l:x.n+' Q',d:x.S.Q,c:x.c,dash:[5,4]}))),'',{noFill:true});
-    _eletLine('cEletFP',S.ts,per.map(x=>({l:x.n,d:x.S.FP,c:x.c})),'',{target:0.92,noFill:true});
+    _eletLastCmp=per;const pt=_eletPhaseTxt();
+    if(_sv)_sv.textContent='kV (linha) · '+pt+' · '+per.length+' circuitos';
+    if(_si)_si.textContent='A · '+pt+' · '+per.length+' circuitos';
+    _eletLine('cEletV',S.ts,per.map(x=>({l:x.n,d:_eletPhaseArr(x.S,'V'),c:x.c,u:'kV'})),'kV',{noFill:true,cmp:true});
+    _eletLine('cEletI',S.ts,per.map(x=>({l:x.n,d:_eletPhaseArr(x.S,'I'),c:x.c,u:'A'})),'A',{noFill:true,cmp:true});
+    _eletLine('cEletPQ',S.ts,per.map(x=>({l:x.n+' P',d:x.S.P,c:x.c,u:'MW'})).concat(per.map(x=>({l:x.n+' Q',d:x.S.Q,c:x.c,dash:[5,4],u:'MVAr'}))),'',{noFill:true,cmp:true});
+    _eletLine('cEletFP',S.ts,per.map(x=>({l:x.n,d:x.S.FP,c:x.c,u:''})),'',{target:0.92,noFill:true,cmp:true});
+    _eletApplyHidden();
   } else {
     if(_sv)_sv.textContent='kV (linha) · 🔴 A · 🟡 B · 🔵 C';
     if(_si)_si.textContent='A · 🔴 A · 🟡 B · 🔵 C';
