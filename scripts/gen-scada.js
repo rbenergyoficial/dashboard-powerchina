@@ -123,7 +123,7 @@ async function writeOut(obj) {
 
 (async () => {
   const raws = await loadRawBuffers();
-  if (!raws.length) { console.error('Nenhuma planilha .xlsx encontrada'); process.exit(1); }
+  if (!raws.length) { console.log('Nenhuma planilha .xlsx em "' + RAW_CONTAINER + '" — nada a processar (ok).'); return; }
   const out = await loadExistingOut();
   if (!out.diario) out.diario = {};
   if (!out.intra15) out.intra15 = {};
