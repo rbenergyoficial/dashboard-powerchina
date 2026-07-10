@@ -25,7 +25,8 @@ const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'scada_comparativo.json';
 
 function parkFromName(fn) {
-  const m = String(fn).match(/M0*(\d+)/i);
+  const base = String(fn).split(/[\\/]/).pop();     // ignora caminho 2026/007.jul_26/01/ -> M03.xlsx
+  const m = base.match(/M0*(\d+)/i);
   return m ? 'M' + parseInt(m[1], 10) : null;
 }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
