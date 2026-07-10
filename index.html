@@ -5861,6 +5861,7 @@ const _monCap=n=>{const c=num(dashData?.must?.contrat?.['M'+n]);return c>0?c:(_M
 const _MON_TH_G=0.80,_MON_TH_Y=0.55; /* verde ≥80% do esperado · amarelo ≥55% · senão vermelho */
 async function renderMonitorPage(){
   const gEl=document.getElementById('monGauges'); if(!gEl) return;
+  if(!gEl.querySelector('canvas')){gEl.className='';gEl.innerHTML='<div style="grid-column:1/-1;padding:34px;color:var(--t3);text-align:center;font-size:13px">⏳ Carregando dados do monitor…<div style="font-size:11px;opacity:.7;margin-top:4px">(way2_eletrico.json ~3,7 MB — 1ª carga é mais lenta; F5 seguinte usa cache)</div></div>';}
   const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
   const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
   if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
@@ -5960,7 +5961,9 @@ function _eletTip(ctx){let el=document.getElementById('_eletTip');
   el.style.left=tx+'px';el.style.top=ty+'px';el.style.opacity='1';}
 const _PARK2CIRC={};Object.keys(_MON_CIRC).forEach(pid=>{const p=_MON_CIRC[pid].p;(_PARK2CIRC[p]=_PARK2CIRC[p]||[]).push(+pid);});
 async function _eletLoad(force){const now=Date.now();if(_eletCache&&!force&&now-_eletCacheTs<270000)return _eletCache;
-  try{const r=await fetch(WAY2_BLOB_BASE+'way2_eletrico.json?t='+now,{cache:'no-store'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
+  /* arquivo ~3,7MB sem gzip: bucket de 4min no cache-buster + cache do navegador -> F5 dentro da janela revalida (304) em vez de rebaixar tudo */
+  const bust=force?('t='+now):('b='+Math.floor(now/240000));
+  try{const r=await fetch(WAY2_BLOB_BASE+'way2_eletrico.json?'+bust,{cache:force?'no-store':'default'});if(!r.ok)return null;let t=await r.text();if(t.charCodeAt(0)===0xFEFF)t=t.slice(1);
     const j=JSON.parse(t);const d=(j&&(Array.isArray(j)?j:j.dados))||[];const E={};
     d.forEach(it=>{const pid=it.pontoId,g=it.nomeGrandeza;(E[pid]=E[pid]||{});const m={};(it.valores||[]).forEach(v=>{if(v.valor!=null)m[v.data]=v.valor;});E[pid][g]=m;});
     _eletCache={E,dados:d};_eletCacheTs=now;return _eletCache;}catch(e){return null;}}
@@ -6028,6 +6031,7 @@ function _eletSelPark(n){_eletMulti=(_PARK2CIRC[n]||[]).slice().sort((a,b)=>_ele
 function _eletClearMulti(){_eletMulti=[];_eletScope='geral';_eletHidden={};_eletSyncUI();renderEletrico();}
 function _eletSetPhase(ph){_eletPhase=ph;_eletSyncUI();renderEletrico();}
 async function renderEletrico(){const kEl=document.getElementById('eletKpis');if(!kEl)return;_eletFillScope();
+  if(!kEl.querySelector('.elet-kpi'))kEl.innerHTML='<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--t3);font-size:12px">⏳ Carregando grandezas elétricas…</div>';
   if(!window._eletTipGuard){window._eletTipGuard=1;document.addEventListener('mousemove',ev=>{const el=document.getElementById('_eletTip');if(!el||el.style.opacity==='0')return;const t=ev.target;if(!(t&&/^cElet(V|I|PQ|FP)$/.test(t.id||'')))el.style.opacity='0';});}
   const c=await _eletLoad();if(!c){kEl.innerHTML='<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--t3);font-size:13px">⏳ Aguardando <b>way2_eletrico.json</b> — ative o fluxo Way2 Eletrico 5min.</div>';return;}
   const _pids=_eletActivePids();
