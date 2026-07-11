@@ -2289,8 +2289,8 @@ function _themeCharts(light){
       </div>
       <div id="eletKpis" class="kpi-grid" style="margin-bottom:2px"></div>
       <div class="chart-row cols-2">
-        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitV">Tensão por fase</div><div class="cc-sub" id="eletSubV">kV (linha) · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletV"></canvas></div></div>
-        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitI">Corrente por fase</div><div class="cc-sub" id="eletSubI">A · 🔴 A · 🟡 B · 🔵 C</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletI"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitV">Tensão por fase</div><div class="cc-sub" id="eletSubV">Tensão de linha (kV)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletV"></canvas></div></div>
+        <div class="cc"><div class="cc-head"><div><div class="cc-title" id="eletTitI">Corrente por fase</div><div class="cc-sub" id="eletSubI">Corrente de linha (A)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletI"></canvas></div></div>
       </div>
       <div class="chart-row cols-2">
         <div class="cc"><div class="cc-head"><div><div class="cc-title">Potência ativa × reativa</div><div class="cc-sub">P (MW) · Q (MVAr)</div></div></div><div class="cc-body" style="height:240px"><canvas id="cEletPQ"></canvas></div></div>
@@ -6079,8 +6079,8 @@ async function renderEletrico(){const kEl=document.getElementById('eletKpis');if
     _eletLine('cEletFP',S.ts,per.map(x=>({l:x.n,d:x.S.FP,c:x.c,u:''})),'',{target:0.92,noFill:true,cmp:true});
     _eletApplyHidden();_eletRefreshLegends();
   } else {
-    if(_sv)_sv.textContent='kV (linha) · 🔴 A · 🟡 B · 🔵 C';
-    if(_si)_si.textContent='A · 🔴 A · 🟡 B · 🔵 C';
+    if(_sv)_sv.textContent='Tensão de linha (kV)';
+    if(_si)_si.textContent='Corrente de linha (A)';
     _eletLine('cEletV',S.ts,[{l:'Fase A',d:S.Va,c:'#e34948'},{l:'Fase B',d:S.Vb,c:'#f5b820'},{l:'Fase C',d:S.Vc,c:'#3987e5'}],'kV');
     _eletLine('cEletI',S.ts,[{l:'Fase A',d:S.Ia,c:'#e34948'},{l:'Fase B',d:S.Ib,c:'#f5b820'},{l:'Fase C',d:S.Ic,c:'#3987e5'}],'A');
     _eletLine('cEletPQ',S.ts,[{l:'P (MW)',d:S.P,c:'#1ed760'},{l:'Q (MVAr)',d:S.Q,c:'#c084fc'}],'');
