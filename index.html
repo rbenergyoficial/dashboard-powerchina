@@ -888,6 +888,13 @@ body.page-monitor-active #fbar,body.page-monitor-active #kpiGrid{display:none!im
 .elet-phase .epl{font-size:10px;color:#8090b8;font-weight:800;margin-right:2px}
 .elet-phase button{height:26px;min-width:29px;border-radius:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#8090b8;font-size:11px;font-weight:800;cursor:pointer}
 .elet-phase button.on{background:rgba(52,224,161,.18);border-color:rgba(52,224,161,.5);color:#7defc4}
+/* legenda customizada (clicável no nome E na bolinha; oculto = bolinha oca, sem riscar o nome) */
+.elet-leg{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:2px 6px;padding:2px 8px 7px;text-transform:none;letter-spacing:0}
+.elet-leg-item{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11px;font-weight:600;color:#cdd9f2;padding:4px 9px;border-radius:8px;user-select:none;transition:opacity .15s,background .15s,color .15s}
+.elet-leg-item:hover{background:rgba(255,255,255,.07)}
+.elet-leg-item .dot{width:11px;height:11px;border-radius:50%;background:var(--dc);border:2px solid var(--dc);box-sizing:border-box;flex-shrink:0;transition:background .15s}
+.elet-leg-item.off{color:#5b6785}
+.elet-leg-item.off .dot{background:transparent}
 .elet-kpi{background:rgba(255,255,255,.025);border:1px solid var(--border2);border-radius:12px;padding:9px 12px}
 .elet-kpi .ek-l{font-size:10px;color:var(--t3);font-weight:700;letter-spacing:.02em}
 .elet-kpi .ek-v{font-size:19px;font-weight:800;font-family:var(--display);margin-top:3px;line-height:1}
@@ -5934,6 +5941,18 @@ function _eletMean(S,pre){return S[pre+'a'].map((v,i)=>{const a=[v,S[pre+'b'][i]
 function _eletPhaseArr(S,pre){return _eletPhase==='M'?_eletMean(S,pre):S[pre+_eletPhase.toLowerCase()];}
 function _eletPhaseTxt(){return _eletPhase==='M'?'média das 3 fases':('fase '+_eletPhase);}
 function _eletLegendClick(e,item){const key=_eletKeyOf({label:item.text});_eletHidden[key]=!_eletHidden[key];_eletApplyHidden();}
+/* legenda HTML customizada: chip inteiro clicável (nome + bolinha); oculto = bolinha oca */
+function _eletLegend(chart,canvasId){const cv=document.getElementById(canvasId);if(!cv)return;const cc=cv.closest('.cc');if(!cc)return;
+  let leg=cc.querySelector('.elet-leg');if(!leg){leg=document.createElement('div');leg.className='elet-leg';const head=cc.querySelector('.cc-head')||cc;head.appendChild(leg);}
+  leg.innerHTML='';
+  chart.data.datasets.forEach((ds,i)=>{if(/^Meta/.test(ds.label||''))return;const off=!chart.isDatasetVisible(i);
+    const chip=document.createElement('span');chip.className='elet-leg-item'+(off?' off':'');
+    chip.innerHTML='<span class="dot" style="--dc:'+(ds.borderColor||'#6b8bf5')+'"></span>'+ds.label;
+    chip.onclick=()=>_eletLegToggle(canvasId,i,ds.label);leg.appendChild(chip);});}
+function _eletLegToggle(canvasId,i,label){
+  if(_eletCmp()){const key=_eletKeyOf({label});_eletHidden[key]=!_eletHidden[key];_eletApplyHidden();_eletRefreshLegends();}
+  else{const ch=Chart.getChart(document.getElementById(canvasId));if(!ch)return;ch.setDatasetVisibility(i,!ch.isDatasetVisible(i));ch.update();_eletLegend(ch,canvasId);}}
+function _eletRefreshLegends(){['cEletV','cEletI','cEletPQ','cEletFP'].forEach(id=>{const ch=Chart.getChart(document.getElementById(id));if(ch)_eletLegend(ch,id);});}
 function _eletTip(ctx){let el=document.getElementById('_eletTip');
   if(!el){el=document.createElement('div');el.id='_eletTip';el.style.cssText='position:fixed;z-index:9999;pointer-events:none;padding:11px 13px;border-radius:12px;font-family:Inter,system-ui,sans-serif;font-size:12px;line-height:1.5;box-shadow:0 8px 26px rgba(0,0,0,.42);min-width:214px;opacity:0;transition:opacity .12s';document.body.appendChild(el);}
   const tt=ctx.tooltip,S=_eletLastS;if(!tt||!tt.dataPoints||!tt.dataPoints.length||!S){el.style.opacity='0';return;}
@@ -5986,7 +6005,8 @@ function _eletLine(id,ts,series,unit,opts){opts=opts||{};const labels=ts.map(t=>
   const _nf=!!opts.noFill;  /* modo comparar: muitas linhas → sem área, senão fica ilegível */
   const ds=series.map(s=>({label:s.l,data:s.d,borderColor:s.c,backgroundColor:_nf?'transparent':(ctx=>_w2dAreaGrad(ctx,s.c)),fill:_nf?false:'origin',borderDash:s.dash||undefined,borderWidth:1.8,pointRadius:0,pointHoverRadius:4,tension:.25,spanGaps:true,_u:s.u||''}));
   if(opts.target!=null)ds.push({label:'Meta '+opts.target,data:ts.map(()=>opts.target),borderColor:'#f0598c',borderWidth:1,borderDash:[5,4],pointRadius:0});
-  mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:true,position:'top',...(opts.cmp?{onClick:_eletLegendClick}:{}),labels:{color:'#cdd9f2',boxWidth:10,boxHeight:10,font:{size:10},usePointStyle:true}},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};}
+  mkChart(id,{type:'line',data:{labels,datasets:ds},options:{...CHART_DEFAULTS,interaction:{mode:'index',intersect:false},plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},tooltip:{enabled:false,external:_eletTip}},scales:{x:{...CHART_DEFAULTS.scales.x,grid:{display:false},ticks:{color:'#8090b8',font:{size:9},maxTicksLimit:12,autoSkip:true}},y:{...CHART_DEFAULTS.scales.y,grid:{display:false},ticks:{color:'#8090b8',font:{size:9}},title:{display:!!unit,text:unit,color:'#8090b8',font:{size:9}}}}}});const _cv=document.getElementById(id);if(_cv)_cv.onmouseleave=()=>{const e=document.getElementById('_eletTip');if(e)e.style.opacity='0';};
+  const _chL=Chart.getChart(_cv);if(_chL)_eletLegend(_chL,id);}
 /* ---- seletor de escopo: presets (Geral/UFV) + multi-seleção de circuitos (modo comparar) ---- */
 function _eletCmp(){return _eletMulti.length>=2;}
 function _eletActivePids(){return _eletMulti.length?_eletMulti.slice():_eletPids(_eletScope);}
@@ -6057,7 +6077,7 @@ async function renderEletrico(){const kEl=document.getElementById('eletKpis');if
     _eletLine('cEletI',S.ts,per.map(x=>({l:x.n,d:_eletPhaseArr(x.S,'I'),c:x.c,u:'A'})),'A',{noFill:true,cmp:true});
     _eletLine('cEletPQ',S.ts,per.map(x=>({l:x.n+' P',d:x.S.P,c:x.c,u:'MW'})).concat(per.map(x=>({l:x.n+' Q',d:x.S.Q,c:x.c,dash:[5,4],u:'MVAr'}))),'',{noFill:true,cmp:true});
     _eletLine('cEletFP',S.ts,per.map(x=>({l:x.n,d:x.S.FP,c:x.c,u:''})),'',{target:0.92,noFill:true,cmp:true});
-    _eletApplyHidden();
+    _eletApplyHidden();_eletRefreshLegends();
   } else {
     if(_sv)_sv.textContent='kV (linha) · 🔴 A · 🟡 B · 🔵 C';
     if(_si)_si.textContent='A · 🔴 A · 🟡 B · 🔵 C';
