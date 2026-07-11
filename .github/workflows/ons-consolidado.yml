@@ -1,0 +1,22 @@
+name: ONS consolidado (_all.json diario)
+on:
+  schedule:
+    - cron: '0 18 * * *'   # ~15h Brasilia, depois do ONS publicar
+  workflow_dispatch: {}
+concurrency:
+  group: gen-ons-consolidado
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Consolidar ONS restricao + irradiancia
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+        run: node scripts/gen-ons-consolidado.js
