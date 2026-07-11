@@ -6834,6 +6834,10 @@ let _filtersLoaded=false;
 
 function destroyAllCharts(){
   Object.keys(charts).forEach(function(id){
+    // Gráficos do Monitor ao vivo (gauges monG*, cMonCirc, cElet*) têm render assíncrono próprio
+    // (buscam way2_eletrico.json). Destruí-los aqui deixaria a tela em branco enquanto o fetch
+    // roda no refresh do Way2 — eles se recriam sozinhos via mkChart quando o dado chega.
+    if(/^(monG\d|cMon|cElet)/.test(id)) return;
     try{ if(charts[id]) charts[id].destroy(); }catch(e){}
     delete charts[id];
     const el=document.getElementById(id);
