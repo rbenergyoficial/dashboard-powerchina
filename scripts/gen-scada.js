@@ -24,9 +24,10 @@ const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'scada_comparativo.json';
 
-// O complexo tem 9 parques (M1..M9). "M10" aparece em algumas fontes como sinonimo do M1
-// (mesma usina) — nao e um 10o parque. Ignoramos qualquer parque fora desta lista e removemos
-// residuos nao-canonicos (ex.: M10 do lote antigo pre-correcao) antes de gravar.
+// O complexo tem 9 parques (M1..M9). "M10" e apelido do M1 (mesma usina, Mauriti-1) em
+// algumas fontes do SCADA — nao e um 10o parque. Arquivo M10 e remapeado para M1, mas
+// SO preenche dias que faltam (nao sobrescreve), pra proteger o baseline manual validado
+// (set-fev/mar-jun batem com o ONS). Qualquer parque fora de M1..M9 (apos remap) e ignorado.
 const CANON = new Set(['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9']);
 
 function parkFromName(fn) {
@@ -134,18 +135,25 @@ async function writeOut(obj) {
   if (!out.intra15) out.intra15 = {};
   let parks = 0, days = new Set();
   for (const { name, buf } of raws) {
-    const pk = parkFromName(name);
-    if (!pk) { console.warn('Ignorado (sem parque):', name); continue; }
-    if (!CANON.has(pk)) { console.warn('Ignorado (parque nao-canonico, so M1..M9):', name, '->', pk); continue; }
+    const rawpk = parkFromName(name);
+    if (!rawpk) { console.warn('Ignorado (sem parque):', name); continue; }
+    const gapOnly = (rawpk === 'M10');           // M10 = M1: so preenche buracos, nao sobrescreve
+    const pk = gapOnly ? 'M1' : rawpk;
+    if (!CANON.has(pk)) { console.warn('Ignorado (parque nao-canonico, so M1..M9):', name, '->', rawpk); continue; }
     const { diario, intra15 } = parseParkBuffer(buf);
     if (!out.diario[pk]) out.diario[pk] = {};
-    for (const d in diario) { out.diario[pk][d] = +diario[d].toFixed(2); days.add(d); }
+    let escritos = 0;
+    for (const d in diario) {
+      if (gapOnly && out.diario[pk][d] != null) continue;   // nao sobrescreve dia ja existente
+      out.diario[pk][d] = +diario[d].toFixed(2); days.add(d); escritos++;
+    }
     for (const d in intra15) {
       if (!out.intra15[d]) out.intra15[d] = {};
+      if (gapOnly && out.intra15[d][pk] != null) continue;
       out.intra15[d][pk] = intra15[d].map(v => +v.toFixed(3));
     }
     parks++;
-    console.log('OK', name, '->', pk, '| dias:', Object.keys(diario).length);
+    console.log('OK', name, '->', pk, (gapOnly ? '(M10->M1 so buracos)' : ''), '| dias no arquivo:', Object.keys(diario).length, '| gravados:', escritos);
   }
   // limpeza: remove parques nao-canonicos residuais do blob (ex.: M10 legado = M1)
   const removidos = [];
