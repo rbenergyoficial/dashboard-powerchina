@@ -24,6 +24,11 @@ const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'scada_comparativo.json';
 
+// O complexo tem 9 parques (M1..M9). "M10" aparece em algumas fontes como sinonimo do M1
+// (mesma usina) — nao e um 10o parque. Ignoramos qualquer parque fora desta lista e removemos
+// residuos nao-canonicos (ex.: M10 do lote antigo pre-correcao) antes de gravar.
+const CANON = new Set(['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9']);
+
 function parkFromName(fn) {
   const base = String(fn).split(/[\\/]/).pop();     // ignora caminho 2026/007.jul_26/01/ -> M03.xlsx
   const m = base.match(/M0*(\d+)/i);
@@ -131,6 +136,7 @@ async function writeOut(obj) {
   for (const { name, buf } of raws) {
     const pk = parkFromName(name);
     if (!pk) { console.warn('Ignorado (sem parque):', name); continue; }
+    if (!CANON.has(pk)) { console.warn('Ignorado (parque nao-canonico, so M1..M9):', name, '->', pk); continue; }
     const { diario, intra15 } = parseParkBuffer(buf);
     if (!out.diario[pk]) out.diario[pk] = {};
     for (const d in diario) { out.diario[pk][d] = +diario[d].toFixed(2); days.add(d); }
@@ -141,6 +147,11 @@ async function writeOut(obj) {
     parks++;
     console.log('OK', name, '->', pk, '| dias:', Object.keys(diario).length);
   }
+  // limpeza: remove parques nao-canonicos residuais do blob (ex.: M10 legado = M1)
+  const removidos = [];
+  for (const pk of Object.keys(out.diario)) if (!CANON.has(pk)) { delete out.diario[pk]; removidos.push(pk); }
+  for (const day of Object.keys(out.intra15)) for (const pk of Object.keys(out.intra15[day])) if (!CANON.has(pk)) delete out.intra15[day][pk];
+  if (removidos.length) console.log('Removidos parques nao-canonicos:', [...new Set(removidos)].join(', '));
   await writeOut(out);
   console.log(`Gravado ${OUT_BLOB}: ${parks} parques, ${days.size} dias novos/atualizados, ${Object.keys(out.intra15).length} dias no total.`);
 })().catch(e => { console.error(e); process.exit(1); });
