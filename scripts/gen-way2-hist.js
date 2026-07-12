@@ -106,12 +106,30 @@ function rollupDia(j, day) {
   const eneGer = somaPos(g6233) * 5 / 60 / 1000;
   const eneTr1 = somaPos(g6196) * 5 / 60 / 1000;
   const eneTr2 = somaPos(g6197) * 5 / 60 / 1000;
+
+  // energia LÍQUIDA por UFV — equação MUST (rateio): por slot,
+  // UFV_liq = (bruta_UFV / bruta_total) × líquida_total(6196+6197); integra no dia.
+  const UFV_CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205], M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214], M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };
+  const ALL_CIRC = [6198, 6199, 6200, 6201, 6202, 6203, 6204, 6205, 6206, 6207, 6208, 6209, 6210, 6211, 6212, 6213, 6214, 6215, 6216, 6217, 6218, 6219];
+  const smap = {};   // pontoId -> { data: valor }
+  for (const pid of ALL_CIRC.concat([6196, 6197])) { const m = {}; for (const v of valores(j, pid, 'Demat')) if (v.valor != null) m[v.data] = v.valor; smap[pid] = m; }
+  const tset = new Set(); for (const pid of ALL_CIRC) for (const t in smap[pid]) tset.add(t);
+  const ufvLiq = {}; for (const u in UFV_CIRC) ufvLiq[u] = 0;
+  for (const t of tset) {
+    let brutaTot = 0; for (const pid of ALL_CIRC) brutaTot += (smap[pid][t] || 0);
+    if (brutaTot <= 0) continue;
+    const liqTot = (smap[6196][t] || 0) + (smap[6197][t] || 0);
+    for (const u in UFV_CIRC) { let bu = 0; for (const pid of UFV_CIRC[u]) bu += (smap[pid][t] || 0); ufvLiq[u] += bu / brutaTot * liqTot * 5 / 60 / 1000; }
+  }
+  const ufv_liq_mwh = {}; for (const u in ufvLiq) ufv_liq_mwh[u] = r(ufvLiq[u], 3);
+
   return {
     dia: day,
     ene_ger_mwh: r(eneGer, 3),
     ene_liq_mwh: r(eneTr1 + eneTr2, 3),
     tr1_ene_mwh: r(eneTr1, 3),
     tr2_ene_mwh: r(eneTr2, 3),
+    ufv_liq_mwh,                                   // energia líquida por UFV (rateio MUST) — p/ PPA×ML
     pico_mw: r(maxVal(g6233) / 1000, 3),
     tr1_pico_mw: r(maxVal(g6196) / 1000, 3),
     tr2_pico_mw: r(maxVal(g6197) / 1000, 3),
@@ -155,13 +173,12 @@ async function subirJson(container, nome, obj) {
     const histNome = `${HIST_PREFIX}way2_${day}.json`;
     const histBlob = container.getBlockBlobClient(histNome);
 
-    // idempotência: dia já arquivado e não forçado
+    // idempotência: dia já arquivado e não forçado — recomputa o rollup a partir do hist
+    // (sem gastar API Way2), garantindo que campos novos do rollup entrem nos dias antigos.
     if (!FORCAR && await histBlob.exists()) {
       jaExistiam++;
-      if (!mapa.has(day)) {                         // garante linha no rollup sem gastar API
-        const j = await baixarJson(container, histNome);
-        if (j) mapa.set(day, rollupDia(j, day));
-      }
+      const j = await baixarJson(container, histNome);
+      if (j) mapa.set(day, rollupDia(j, day));
       vaziosSeguidos = 0;
       continue;
     }
