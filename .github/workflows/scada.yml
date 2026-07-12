@@ -1,7 +1,7 @@
 name: SCADA -> scada_comparativo.json (diario)
 on:
   schedule:
-    - cron: '30 9 * * *'
+    - cron: '30 11 * * *' # 08:30 BRT (UTC-3) — operadores sobem as planilhas até 08:00
   workflow_dispatch: {}
 concurrency:
   group: gen-scada
