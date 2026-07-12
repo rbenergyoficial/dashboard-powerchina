@@ -1,0 +1,37 @@
+name: Way2 Histórico (diário + rollup)
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 00:30 BRT (UTC-3) — arquiva o dia anterior já completo
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Quantos dias pra trás processar (backfill). 1 = só ontem.'
+        required: false
+        default: '1'
+      forcar:
+        description: "Re-baixar dias já arquivados? '1' para sim."
+        required: false
+        default: 'false'
+
+concurrency:
+  group: way2-hist
+  cancel-in-progress: false
+
+jobs:
+  hist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i @azure/storage-blob@12
+      - name: Arquivar histórico Way2 + rollup diário
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS: ${{ github.event.inputs.dias || '1' }}
+          FORCAR: ${{ github.event.inputs.forcar || 'false' }}
+        run: node scripts/gen-way2-hist.js
