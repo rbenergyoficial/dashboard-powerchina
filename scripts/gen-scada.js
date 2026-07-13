@@ -133,6 +133,15 @@ async function writeOut(obj) {
   const out = await loadExistingOut();
   if (!out.diario) out.diario = {};
   if (!out.intra15) out.intra15 = {};
+  // Guarda anti-parcial: operadores sobem só o dia ANTERIOR (D-1) até 08:00. Um arquivo de HOJE
+  // (ou futuro) é sempre parcial/em-progresso e pode vir corrompido (ex.: M5 07/13 = 775 MWh,
+  // 3,5x um dia real) — nunca entra no diário/intra15. Também purga dias >= hoje que já tenham
+  // vazado pro blob em runs anteriores (auto-cura). Chaves 'YYYY-MM-DD' comparam lexicograficamente.
+  const hojeBRT = (() => { const x = new Date(Date.now() - 3 * 3600 * 1000); return x.getUTCFullYear() + '-' + pad2(x.getUTCMonth() + 1) + '-' + pad2(x.getUTCDate()); })();
+  let purgados = 0;
+  for (const pk of Object.keys(out.diario)) for (const d of Object.keys(out.diario[pk])) if (d >= hojeBRT) { delete out.diario[pk][d]; purgados++; }
+  for (const d of Object.keys(out.intra15)) if (d >= hojeBRT) delete out.intra15[d];
+  if (purgados) console.log('Purgados', purgados, 'registros de hoje/futuro (>= ' + hojeBRT + ') do blob existente.');
   let parks = 0, days = new Set();
   for (const { name, buf } of raws) {
     const rawpk = parkFromName(name);
@@ -144,10 +153,12 @@ async function writeOut(obj) {
     if (!out.diario[pk]) out.diario[pk] = {};
     let escritos = 0;
     for (const d in diario) {
+      if (d >= hojeBRT) continue;                            // nunca grava hoje/futuro (parcial/corrompido)
       if (gapOnly && out.diario[pk][d] != null) continue;   // nao sobrescreve dia ja existente
       out.diario[pk][d] = +diario[d].toFixed(2); days.add(d); escritos++;
     }
     for (const d in intra15) {
+      if (d >= hojeBRT) continue;
       if (!out.intra15[d]) out.intra15[d] = {};
       if (gapOnly && out.intra15[d][pk] != null) continue;
       out.intra15[d][pk] = intra15[d].map(v => +v.toFixed(3));
