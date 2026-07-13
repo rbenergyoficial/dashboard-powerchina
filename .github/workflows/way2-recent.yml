@@ -1,0 +1,25 @@
+name: Way2 Recent (snapshot + rolante · 5 min)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: way2-recent
+  cancel-in-progress: true
+
+jobs:
+  recent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i @azure/storage-blob@12
+      - name: Snapshot hoje + way2_recent.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-way2-recent.js
