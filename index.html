@@ -5883,7 +5883,14 @@ function _auditRenderAll(){
 /* ===== MONITOR AO VIVO · Way2 Demat 5min (potência ativa) ===== */
 const _MON_CIRC={6198:{p:1,c:'1C1'},6199:{p:1,c:'1C2'},6200:{p:1,c:'1C3'},6201:{p:2,c:'2C1'},6202:{p:2,c:'2C2'},6203:{p:3,c:'3C1'},6204:{p:3,c:'3C2'},6205:{p:3,c:'3C3'},6206:{p:4,c:'4C1'},6207:{p:4,c:'4C2'},6208:{p:4,c:'4C3'},6209:{p:5,c:'5C1'},6210:{p:5,c:'5C2'},6211:{p:5,c:'5C3'},6212:{p:6,c:'6C1'},6213:{p:6,c:'6C2'},6214:{p:6,c:'6C3'},6215:{p:7,c:'7C1'},6216:{p:8,c:'8C1'},6217:{p:8,c:'8C2'},6218:{p:8,c:'8C3'},6219:{p:9,c:'9C1'}};
 const _MON_TOTAL=6233;
-async function _monLoad(){const c=await _eletLoad();return (c&&c.dados)?{dados:c.dados}:null;} /* usa o mesmo blob elétrico (superset com Demat) → monitor e elétrico sempre no mesmo horário */
+let _monCache=null,_monTs=0;
+async function _monLoad(){ /* lê o blob LEVE way2_latest.json (~180KB, últimos slots) — rápido e robusto.
+  Antes lia o way2_eletrico (3,7MB), que às vezes falhava no navegador e deixava o Monitor VAZIO. */
+  const now=Date.now(); if(_monCache&&now-_monTs<60000)return _monCache;
+  try{ const r=await fetch(WAY2_BLOB_BASE+'way2_latest.json?t='+now,{cache:'no-store'}); if(!r.ok)return _monCache;
+    let t=await r.text(); if(t.charCodeAt(0)===0xFEFF)t=t.slice(1); const j=JSON.parse(t);
+    _monCache=(j&&j.dados&&j.dados.length)?{dados:j.dados}:null; _monTs=now; return _monCache;
+  }catch(e){return _monCache;} }
 function _monLatest(dados,pid){const it=(dados||[]).find(d=>d.pontoId===pid);if(!it)return {v:null,ts:null};let b=null;(it.valores||[]).forEach(x=>{if(x.valor!=null)b=x;});return b?{v:+b.valor/1000,ts:b.data}:{v:null,ts:null};} /* Demat vem em kW → MW */
 function _monGauge(id,pct,color){const p=Math.max(0,Math.min(100,pct));mkChart(id,{type:'doughnut',data:{datasets:[{data:[p,100-p],backgroundColor:[color+'A6','rgba(255,255,255,.05)'],borderWidth:0,borderRadius:0,circumference:270,rotation:225}]},options:{cutout:'72%',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{enabled:false}},animation:{duration:0}}});const cv=document.getElementById(id);if(cv)cv.style.filter='drop-shadow(0 0 6px '+color+'40)';}
 const _MON_CAP_FB={1:48,2:22,3:43,4:40,5:43,6:45,7:11,8:43,9:7}; /* fallback (pico observado) se MUST não carregou */
@@ -5891,10 +5898,10 @@ const _monCap=n=>{const c=num(dashData?.must?.contrat?.['M'+n]);return c>0?c:(_M
 const _MON_TH_G=0.80,_MON_TH_Y=0.55; /* verde ≥80% do esperado · amarelo ≥55% · senão vermelho */
 async function renderMonitorPage(){
   const gEl=document.getElementById('monGauges'); if(!gEl) return;
-  if(!gEl.querySelector('canvas')){gEl.className='';gEl.innerHTML='<div style="grid-column:1/-1;padding:34px;color:var(--t3);text-align:center;font-size:13px">⏳ Carregando dados do monitor…<div style="font-size:11px;opacity:.7;margin-top:4px">(way2_eletrico.json ~3,7 MB — 1ª carga é mais lenta; F5 seguinte usa cache)</div></div>';}
+  if(!gEl.querySelector('canvas')){gEl.className='';gEl.innerHTML='<div style="grid-column:1/-1;padding:34px;color:var(--t3);text-align:center;font-size:13px">⏳ Carregando dados do monitor…<div style="font-size:11px;opacity:.7;margin-top:4px">(way2_latest.json ~180 KB — carga rápida)</div></div>';}
   const j=await _monLoad(); const dados=(j&&(Array.isArray(j)?j:j.dados))||[];
   const kpiEl=document.getElementById('monKpis'), st=document.getElementById('monStamp');
-  if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Aguardando dados do monitor — o blob <b>way2_monitor.json</b> ainda não foi publicado.<br>Ative a ação HTTP (ids de geração) + Criar blob no fluxo Power Automate de 5 min.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
+  if(!dados.length){ gEl.className=''; gEl.innerHTML='<div style="padding:30px;color:var(--t3);text-align:center;font-size:13px">⏳ Sem leitura da Way2 no momento — o painel volta sozinho assim que a telemetria retomar.</div>'; if(kpiEl)kpiEl.innerHTML=''; if(st)st.textContent=''; if(charts.cMonCirc){try{charts.cMonCirc.destroy()}catch(e){}delete charts.cMonCirc;} return; }
   const _mw=v=>{let x=Number(v);if(Math.abs(x)<0.005)x=0;return x.toLocaleString(getDateLocale(),{minimumFractionDigits:2,maximumFractionDigits:2});};
   /* Alinha TODAS as leituras ao último slot 5-min COMPLETO (evita misturar horários com o slot parcial em enchimento) */
   const _byPid={}; dados.forEach(it=>{if((it.nomeGrandeza||'Demat')!=='Demat')return;const m={};(it.valores||[]).forEach(v=>{if(v.valor!=null)m[v.data]=v.valor;});_byPid[it.pontoId]=m;});
@@ -5918,7 +5925,8 @@ async function renderMonitorPage(){
   const total=Object.values(plant).reduce((s,p)=>s+p.mw,0);  /* total = soma dos circuitos no mesmo horário (bate com os TRs) */
   const tr1={v:_monRef(6196),ts:refTs}, tr2={v:_monRef(6197),ts:refTs}, anyGen=total>0.5;
   const failCirc=Object.keys(_MON_CIRC).filter(pid=>{const c=circ[pid];return anyGen&&(c.v==null||c.v<=0);});
-  if(st) st.textContent=lastTs?('última leitura Way2: '+lastTs.slice(11,16)+' · '+lastTs.slice(8,10)+'/'+lastTs.slice(5,7)):'';
+  if(st){ if(lastTs){ const _am=Math.max(0,Math.round((Date.now()-new Date(lastTs+'-03:00').getTime())/60000)); const _ac=_am<22?'#34e0a1':(_am<33?'#fbbf24':'#f0598c');
+      st.innerHTML='última leitura Way2: '+lastTs.slice(11,16)+' · '+lastTs.slice(8,10)+'/'+lastTs.slice(5,7)+' <span style="color:'+_ac+';font-weight:700">· há '+_am+' min</span>'; } else st.textContent=''; }
   if(kpiEl) kpiEl.innerHTML=[
     {c:'green',col:'#34e0a1',ic:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',l:'Potência total agora',v:_mw(total),u:'MW',s:'Soma dos 22 circuitos'},
     {c:failCirc.length?'red':'green',col:failCirc.length?'#f0598c':'#34e0a1',ic:failCirc.length?'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>':'<path d="M20 6L9 17l-5-5"/>',l:'Circuitos OK',v:(22-failCirc.length)+'/22',s:failCirc.length?('⚠ '+failCirc.map(p=>_MON_CIRC[p].c).join(', ')):'todos comunicando'},
