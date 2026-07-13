@@ -37,6 +37,20 @@ const parseJson = (buf) => JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
     console.log(`${LIVE_BLOB} não existe — snapshot pulado`);
   }
 
+  // 1b) way2_latest.json — SÓ os últimos N_LATEST slots por série (~130 KB vs 3,7 MB do eletrico).
+  // Os painéis de VALOR ATUAL (gauges, %, carregamento, selo de idade) leem daqui: com 39 painéis
+  // × leitura própria, ler 3,7 MB cada gerava ~145 MB/refresh e derrubava tudo com "No data".
+  // Cache-Control curto p/ os painéis compartilharem 1 download. (Cards de TOTAL DO DIA continuam
+  // no way2_eletrico, que precisa do dia inteiro.)
+  if (eletJson && Array.isArray(eletJson.dados)) {
+    const N_LATEST = 12;
+    const latest = { atualizado: eletJson.dataFim || day, intervalo: eletJson.intervalo || 'CincoMinutos',
+      dados: eletJson.dados.map(s => ({ pontoId: s.pontoId, ultimaColeta: s.ultimaColeta, nomeGrandeza: s.nomeGrandeza, valores: (s.valores || []).slice(-N_LATEST) })) };
+    const lb = JSON.stringify(latest);
+    await container.getBlockBlobClient('way2_latest.json').upload(lb, Buffer.byteLength(lb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
+    console.log(`way2_latest.json OK · ${latest.dados.length} séries × ${N_LATEST} slots · ${(lb.length / 1024).toFixed(0)} KB`);
+  }
+
   // 2) way2_recent.json = últimos N_RECENT dias mesclados (mais antigo -> hoje)
   const dias = [];
   for (let k = N_RECENT - 1; k >= 0; k--) dias.push(diaBRT(k));
