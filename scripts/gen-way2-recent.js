@@ -11,7 +11,7 @@ const { BlobServiceClient } = require('@azure/storage-blob');
 
 const CONTAINER = 'dados';
 const LIVE_BLOB = 'way2_eletrico.json';
-const N_RECENT = 3;                              // dias no blob rolante
+const N_RECENT = 2;                              // dias no blob rolante (ontem+hoje = "≤2d"; menor = download mais leve)
 
 function diaBRT(offset = 0) {                    // dia-calendário BRT (UTC-3), independente do fuso do runner
   const d = new Date(Date.now() - 3 * 3600 * 1000 - offset * 86400 * 1000);
@@ -62,7 +62,9 @@ const parseJson = (buf) => JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
   if (usados > 0) {
     const out = { inicio: dias[0], fim: day, dias_incluidos: dias, intervalo: 'CincoMinutos', dados: [...merged.values()] };
     const rb = JSON.stringify(out);
-    await container.getBlockBlobClient('way2_recent.json').upload(rb, Buffer.byteLength(rb), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+    // max-age 60s: os 13 painéis do Monitor compartilham 1 download no carregamento (em vez de
+    // cada um re-baixar), e o auto-refresh (>60s) ainda pega dado novo. Blob muda a cada 5min.
+    await container.getBlockBlobClient('way2_recent.json').upload(rb, Buffer.byteLength(rb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
     console.log(`way2_recent.json OK · ${usados} dias (${dias.join(', ')}) · ${(rb.length / 1048576).toFixed(1)} MB`);
   } else {
     console.log('nenhum dia disponível — way2_recent.json não gerado');
