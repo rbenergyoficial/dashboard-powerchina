@@ -9545,7 +9545,14 @@ function _cmpLastNBothDays(n){
   const waySet={};
   if(_eneatDiario) Object.keys(_eneatDiario).forEach(dk=>{let v=0;for(let i=1;i<=9;i++)v+=num(_eneatDiario[dk][i]);if(v>0)waySet[dk]=1;});
   (dashData.way2||[]).forEach(r=>{if(r&&r.data)waySet[_cmpFmtD(r.data)]=1;});
-  const days=Object.keys(onsBy).filter(dk=>onsBy[dk]>0&&waySet[dk]).sort();
+  const bothDays=Object.keys(onsBy).filter(dk=>onsBy[dk]>0&&waySet[dk]);
+  /* SCADA é a fonte mais fresca (D-1, vem do SharePoint) — inclui seus dias p/ a janela não
+     parar no ONS (D-2). Assim "7d/30d…" mostra o ponto SCADA do dia mais recente (ONS/Way2 entram
+     depois, quando publicarem). Só até ontem — hoje é sempre parcial. */
+  const _sd=_scadaSrc(), _hoje=_cmpFmtD(new Date());
+  const scadaSet={};
+  if(_sd) for(const pk in _sd) for(const dd in _sd[pk]) if(_sd[pk][dd]!=null && dd<_hoje) scadaSet[dd]=1;
+  const days=[...new Set([...bothDays,...Object.keys(scadaSet)])].sort();
   if(!days.length) return null;
   const last=days.slice(-n);
   return {start:last[0], end:last[last.length-1]};
