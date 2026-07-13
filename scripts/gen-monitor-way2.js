@@ -11,11 +11,12 @@ const IDS = '6196,6197,6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,62
 const GRANDEZA = 'Demat';           // potência ativa medida (MW)
 const INTERVALO = 'CincoMinutos';   // 5 min
 
-// dia-calendário em BRT (UTC-3), sem depender do fuso do runner (UTC)
-function diaBRT() {
-  const d = new Date(Date.now() - 3 * 3600 * 1000);
+// dia-calendário em BRT (UTC-3), sem depender do fuso do runner (UTC). offset=dias pra trás.
+function diaBRT(offset = 0) {
+  const d = new Date(Date.now() - 3 * 3600 * 1000 - offset * 86400 * 1000);
   return d.toISOString().slice(0, 10);
 }
+const N_RECENT = 3;   // dias no blob rolante way2_recent.json (histórico contínuo dos gráficos)
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function apiGet(query, token, timeout = 45000) {
@@ -50,14 +51,49 @@ function apiGet(query, token, timeout = 45000) {
   // Assim o dia de HOJE fica disponível no mesmo padrão de URL do histórico (hist/way2_AAAA-MM-DD.json),
   // permitindo que os gráficos de tensão/corrente/etc. vejam qualquer dia (hoje ao vivo + passado).
   // O rollup diário definitivo (gen-way2-hist.js, 00:30 BRT) sobrescreve depois com a versão completa da API.
+  let eletJson = null;
   try {
     const elet = container.getBlockBlobClient('way2_eletrico.json');
     if (await elet.exists()) {
       const buf = await elet.downloadToBuffer();
       await container.getBlockBlobClient(`hist/way2_${day}.json`).upload(buf, buf.length, { blobHTTPHeaders: { blobContentType: 'application/json' } });
       console.log(`snapshot hist/way2_${day}.json OK · ${(buf.length / 1048576).toFixed(1)} MB`);
+      eletJson = JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
     } else {
       console.log('way2_eletrico.json ainda não existe — snapshot pulado');
     }
   } catch (e) { console.error('snapshot hist falhou (não fatal):', e.message); }
+
+  // way2_recent.json — últimos N_RECENT dias (5-min, todas grandezas) MESCLADOS num só blob,
+  // para os gráficos de série temporal mostrarem histórico CONTÍNUO que cruza a virada do dia
+  // (ex.: "últimos 2 dias" = hoje + ontem juntos). Hoje vem do blob ao vivo; passados do hist/.
+  try {
+    const dias = [];
+    for (let k = N_RECENT - 1; k >= 0; k--) dias.push(diaBRT(k));   // mais antigo -> hoje
+    const merged = new Map();   // "pontoId|grandeza" -> { pontoId, ultimaColeta, nomeGrandeza, valores: [] }
+    let usados = 0;
+    for (const dd of dias) {
+      let jb = null;
+      if (dd === day) { jb = eletJson; }
+      else {
+        const bc = container.getBlockBlobClient(`hist/way2_${dd}.json`);
+        if (await bc.exists()) jb = JSON.parse((await bc.downloadToBuffer()).toString('utf8').replace(/^﻿/, ''));
+      }
+      if (!jb || !jb.dados) continue;
+      usados++;
+      for (const s of jb.dados) {
+        const key = s.pontoId + '|' + s.nomeGrandeza;
+        let m = merged.get(key);
+        if (!m) { m = { pontoId: s.pontoId, ultimaColeta: s.ultimaColeta, nomeGrandeza: s.nomeGrandeza, valores: [] }; merged.set(key, m); }
+        m.ultimaColeta = s.ultimaColeta;
+        for (const v of (s.valores || [])) m.valores.push(v);
+      }
+    }
+    if (usados > 0) {
+      const out = { inicio: dias[0], fim: day, dias_incluidos: dias, intervalo: INTERVALO, dados: [...merged.values()] };
+      const rb = JSON.stringify(out);
+      await container.getBlockBlobClient('way2_recent.json').upload(rb, Buffer.byteLength(rb), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+      console.log(`way2_recent.json OK · ${usados} dias (${dias.join(', ')}) · ${(rb.length / 1048576).toFixed(1)} MB`);
+    }
+  } catch (e) { console.error('way2_recent falhou (não fatal):', e.message); }
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
