@@ -32,8 +32,8 @@ const https = require('https');
 const CONTAINER = 'dados';
 const BLOB_BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const RESOLUCOES = [
-  { blob: 'way2_15min.json', bucketMin: 15, janelaDias: 30, intervalo: 'QuinzeMinutos' },
-  { blob: 'way2_30min.json', bucketMin: 30, janelaDias: 90, intervalo: 'TrintaMinutos' },
+  { blob: 'way2_15min.json', bucketMin: 15, janelaDias: 10, intervalo: 'QuinzeMinutos' },
+  { blob: 'way2_30min.json', bucketMin: 30, janelaDias: 30, intervalo: 'TrintaMinutos' },
   { blob: 'way2_1h.json',    bucketMin: 60, janelaDias: 90, intervalo: 'UmaHora' },
 ];
 const _rd = parseInt(process.env.REFRESH_DIAS || '3', 10);
@@ -199,7 +199,9 @@ async function main() {
 
     const obj = montarBlob(mapaSeries, meta, r.intervalo, cutoffDia);
     const body = JSON.stringify(obj);
-    await bc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'no-cache' } });
+    // max-age 10min: o blob muda de hora em hora, então servir cacheado por ≤10min é fresco o bastante
+    // E deixa os 13 painéis do Monitor compartilharem 1 download (no-cache faria cada um re-baixar).
+    await bc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=600' } });
     const nVals = obj.dados.reduce((a, s) => a + s.valores.length, 0);
     console.log(`[${r.blob}] OK · ${obj.dados.length} séries · ${nVals} pts · ${obj.inicio}..${obj.fim} · ${(body.length / 1e6).toFixed(2)}MB`);
   }
