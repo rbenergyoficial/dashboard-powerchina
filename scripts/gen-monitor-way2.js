@@ -45,4 +45,19 @@ function apiGet(query, token, timeout = 45000) {
   await container.getBlockBlobClient('way2_monitor.json').upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
   let n = 0; (j.dados || []).forEach(it => (it.valores || []).forEach(v => { if (v.valor != null) n++; }));
   console.log(`way2_monitor.json OK · ${(j.dados || []).length} pontos · ${n} leituras (${GRANDEZA} ${INTERVALO}) · ${day}`);
+
+  // Snapshot do blob ELÉTRICO ao vivo (way2_eletrico.json, todas as grandezas) -> hist/way2_<hoje>.json.
+  // Assim o dia de HOJE fica disponível no mesmo padrão de URL do histórico (hist/way2_AAAA-MM-DD.json),
+  // permitindo que os gráficos de tensão/corrente/etc. vejam qualquer dia (hoje ao vivo + passado).
+  // O rollup diário definitivo (gen-way2-hist.js, 00:30 BRT) sobrescreve depois com a versão completa da API.
+  try {
+    const elet = container.getBlockBlobClient('way2_eletrico.json');
+    if (await elet.exists()) {
+      const buf = await elet.downloadToBuffer();
+      await container.getBlockBlobClient(`hist/way2_${day}.json`).upload(buf, buf.length, { blobHTTPHeaders: { blobContentType: 'application/json' } });
+      console.log(`snapshot hist/way2_${day}.json OK · ${(buf.length / 1048576).toFixed(1)} MB`);
+    } else {
+      console.log('way2_eletrico.json ainda não existe — snapshot pulado');
+    }
+  } catch (e) { console.error('snapshot hist falhou (não fatal):', e.message); }
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
