@@ -1,0 +1,30 @@
+name: Way2 Agregados (15/30/60 min)
+on:
+  workflow_dispatch:
+    inputs:
+      forcar:
+        description: 'full rebuild da janela inteira (1 = sim)'
+        default: 'false'
+      resolucoes:
+        description: 'csv de blobs para limitar (vazio = os 3)'
+        default: ''
+  schedule:
+    - cron: '5 * * * *'
+concurrency:
+  group: way2-agg
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar agregados
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          FORCAR: ${{ github.event.inputs.forcar }}
+          RESOLUCOES: ${{ github.event.inputs.resolucoes }}
+        run: node --max-old-space-size=4096 scripts/gen-way2-agg.js
