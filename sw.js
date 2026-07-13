@@ -5,7 +5,7 @@
  *  - CDNs e ícones -> stale-while-revalidate (rápido + funciona offline)
  * skipWaiting + clients.claim = novas versões assumem na hora (atualização automática).
  */
-const VERSION = 'v6';
+const VERSION = 'v7';
 const CACHE = 'pwc-mauriti-' + VERSION;
 const APP_SHELL = [
   '/',
@@ -16,8 +16,10 @@ const APP_SHELL = [
 ];
 
 self.addEventListener('install', e => {
-  // Não chamamos skipWaiting() aqui: o SW novo fica "waiting" até o usuário
-  // confirmar no banner de atualização (envia SKIP_WAITING).
+  // AUTO-UPDATE: o SW novo assume IMEDIATAMENTE (skipWaiting), sem depender de banner —
+  // combinado com clients.claim no activate, cada deploy chega sozinho ao navegador do
+  // usuário (era isso que prendia a aba normal na versão velha; a anônima não tem SW).
+  self.skipWaiting();
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(APP_SHELL).catch(() => {})));
 });
 
@@ -53,7 +55,9 @@ self.addEventListener('fetch', e => {
   if (req.mode === 'navigate' || req.destination === 'document') {
     e.respondWith((async () => {
       try {
-        const res = await fetch(req);
+        // {cache:'no-store'}: nunca aceita o index.html do cache HTTP do navegador — sempre
+        // busca fresco na rede. Garante que o dashboard reflita o último deploy a cada carga.
+        const res = await fetch(req, { cache: 'no-store' });
         const cache = await caches.open(CACHE);
         const cached = await cache.match('/index.html');
         const newLen = res.headers.get('content-length') || res.headers.get('etag') || '';
