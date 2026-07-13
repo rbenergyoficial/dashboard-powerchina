@@ -44,8 +44,14 @@ const parseJson = (buf) => JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
   // no way2_eletrico, que precisa do dia inteiro.)
   if (eletJson && Array.isArray(eletJson.dados)) {
     const N_LATEST = 12;
-    const latest = { atualizado: eletJson.dataFim || day, intervalo: eletJson.intervalo || 'CincoMinutos',
-      dados: eletJson.dados.map(s => ({ pontoId: s.pontoId, ultimaColeta: s.ultimaColeta, nomeGrandeza: s.nomeGrandeza, valores: (s.valores || []).slice(-N_LATEST) })) };
+    // O blob tem os 288 slots do dia, com os FUTUROS = null. refTime = instante mais recente com
+    // dado em QUALQUER série; janela = os N_LATEST slots ATÉ refTime (não os últimos do array, que
+    // seriam 23:xx→00:00 nulos). Mantém a grade alinhada entre séries (null onde a série não reportou).
+    let refTime = '';
+    for (const s of eletJson.dados) { const vs = s.valores || []; for (let i = vs.length - 1; i >= 0; i--) { if (vs[i].valor != null) { if (vs[i].data > refTime) refTime = vs[i].data; break; } } }
+    const latest = { atualizado: refTime || (eletJson.dataFim || day), intervalo: eletJson.intervalo || 'CincoMinutos',
+      dados: eletJson.dados.map(s => ({ pontoId: s.pontoId, ultimaColeta: s.ultimaColeta, nomeGrandeza: s.nomeGrandeza,
+        valores: (s.valores || []).filter(v => !refTime || v.data <= refTime).slice(-N_LATEST) })) };
     const lb = JSON.stringify(latest);
     await container.getBlockBlobClient('way2_latest.json').upload(lb, Buffer.byteLength(lb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
     console.log(`way2_latest.json OK · ${latest.dados.length} séries × ${N_LATEST} slots · ${(lb.length / 1024).toFixed(0)} KB`);
