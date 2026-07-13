@@ -5903,8 +5903,13 @@ async function renderMonitorPage(){
   const _tsSorted=[..._allTs].sort();
   const _cntAt=ts=>_circIds.reduce((c,pid)=>c+((_byPid[pid]&&_byPid[pid][ts]!=null)?1:0),0);
   let _maxC=0; _tsSorted.forEach(ts=>{const c=_cntAt(ts);if(c>_maxC)_maxC=c;});
+  /* Antes exigia _maxC (todos os 22) → no pôr do sol, 1 circuito que reporta ATRASADO deixava os
+     slots novos em 21/22 e o monitor CONGELAVA no último 22/22 (ex.: travar em 16:40 com blob já
+     em 16:50). Agora tolera até 2 circuitos atrasados: usa o slot fresco (o _monRef carrega o
+     último valor dos faltantes); só pula slot muito parcial (aquisição pela metade). */
+  const _thrC=Math.max(1,_maxC-2);
   let refTs=_tsSorted.length?_tsSorted[_tsSorted.length-1]:null;
-  for(let i=_tsSorted.length-1;i>=0;i--){if(_cntAt(_tsSorted[i])>=_maxC){refTs=_tsSorted[i];break;}}
+  for(let i=_tsSorted.length-1;i>=0;i--){if(_cntAt(_tsSorted[i])>=_thrC){refTs=_tsSorted[i];break;}}
   const _monRef=pid=>{const m=_byPid[pid];if(!m||refTs==null)return null;if(m[refTs]!=null)return m[refTs]/1000;let best=null;for(const ts in m){if(ts<=refTs&&(best==null||ts>best))best=ts;}return best!=null?m[best]/1000:null;};
   const circ={}; let lastTs=refTs;
   Object.keys(_MON_CIRC).forEach(pid=>{const v=_monRef(+pid);circ[pid]={v:(v==null?null:v),ts:refTs};});
