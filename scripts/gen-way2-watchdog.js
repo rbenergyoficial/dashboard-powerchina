@@ -58,7 +58,13 @@ function postJson(url, obj) {
   let dados = null;
   for (const nome of ['way2_latest.json', 'way2_eletrico.json']) { const bc = cont.getBlockBlobClient(nome); if (await bc.exists()) { dados = parseJson(await bc.downloadToBuffer()).dados; break; } }
   const nossoTs = dados ? newestTs(dados, PID, GRAND) : null;
-  const idade = nossoTs ? ageMin(nossoTs) : 99999;
+  const semDado = !nossoTs;                    // blob vazio/sem o ponto (ex.: virada do dia) — NÃO é "idade 99999"
+  const idade = nossoTs ? ageMin(nossoTs) : null;
+
+  // Carência pós-meia-noite: nos 1os minutos do dia o blob legitimamente esvazia e reenche
+  // (a Way2 tem ~15 min de latência, então as 1as leituras do dia novo demoram). Não alarmar aí.
+  const minDoDia = (() => { const s = nowBRT().slice(11, 19).split(':').map(Number); return s[0] * 60 + s[1]; })();
+  const carenciaVirada = minDoDia < (LIMIAR + 5);
 
   // 2) estado anterior
   const sbc = cont.getBlockBlobClient('way2_watchdog.json');
@@ -66,26 +72,42 @@ function postJson(url, obj) {
   if (await sbc.exists()) { try { st = parseJson(await sbc.downloadToBuffer()); } catch (e) {} }
 
   let acao = null;
-  if (idade > LIMIAR) {
-    // 3) CONFIRMA a origem: Way2 também está parada?
-    let origem = 'pipeline', way2Ts = null, detalhe = '';
+  // dispara só se: (dado velho) OU (sem dado E fora da carência da virada). Nunca por sentinela.
+  const suspeito = (idade != null && idade > LIMIAR) || (semDado && !carenciaVirada);
+  if (suspeito) {
+    // 3) CONFIRMA a origem consultando a API Way2 DIRETO — é a prova real, não o nosso blob
+    let origem = 'pipeline', way2Ts = null, way2Age = null, detalhe = '';
     try {
       const dia = nowBRT().slice(0, 10);
       const q = `ids=${PID}&grandezas=${GRAND}&contextodasdatas=ConsiderarDiaCheio&intervalo=CincoMinutos&medicao-datainicio=${dia}T00:00:00&medicao-datafim=${dia}T23:59:59&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false`;
       const j = await apiGet(q, token); way2Ts = newestTs(j.dados, PID, GRAND);
-      const way2Age = way2Ts ? ageMin(way2Ts) : 99999;
-      origem = way2Age > (LIMIAR - 5) ? 'way2' : 'pipeline';
-      detalhe = `Way2 (consulta direta) tem dado até ${fmtTs(way2Ts)} (${Math.round(way2Age)} min atrás).`;
+      way2Age = way2Ts ? ageMin(way2Ts) : null;
+      origem = (way2Age == null || way2Age > (LIMIAR - 5)) ? 'way2' : 'pipeline';
+      detalhe = way2Ts ? `Way2 (consulta direta) tem dado até ${fmtTs(way2Ts)} (${Math.round(way2Age)} min atrás).`
+                       : 'Way2 (consulta direta) também não tem dado hoje ainda.';
     } catch (e) { origem = 'way2'; detalhe = 'A API Way2 nem respondeu à confirmação direta (' + e.message + ').'; }
 
-    if (st.estado !== 'falha') st = { estado: 'falha', desde: nossoTs || nowBRT(), origem, idade_disparo: Math.round(idade), alertado_em: null };
+    // ⚑ ANTI-FALSO-POSITIVO: nosso blob sem dado, MAS a Way2 tem dado fresco → é transitório
+    // nosso (virada/pipeline atrasando), não uma queda da fonte. Não alarma; auto-recupera.
+    if (semDado && origem === 'pipeline') {
+      console.log('watchdog: blob sem dado mas Way2 fresca (' + detalhe + ') — transitório, sem alarme.');
+      const body0 = JSON.stringify(st); await sbc.upload(body0, Buffer.byteLength(body0), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+      return;
+    }
+
+    // idade REAL para o texto: se não temos ts, usa a idade que a Way2 reportou (nunca a sentinela)
+    const idadeTxt = idade != null ? Math.round(idade) : (way2Age != null ? Math.round(way2Age) : null);
+    const desdeTxt = nossoTs || way2Ts || nowBRT();
+    if (st.estado !== 'falha') st = { estado: 'falha', desde: desdeTxt, origem, idade_disparo: idadeTxt, alertado_em: null };
+    st.idadeTxt = idadeTxt;
     st.origem = origem;
     if (!st.alertado_em) { // só considera "avisado" quando o POST deu certo (senão re-tenta no próximo run)
       const fonte = origem === 'way2';
+      const haX = st.idadeTxt != null ? 'há ' + st.idadeTxt + ' min' : 'sem leitura hoje ainda';
       acao = {
-        tipo: 'falha', origem, idade_min: Math.round(idade), sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
-        assunto: (fonte ? '🔴' : '🟠') + ' Falha de comunicação Way2 · Mauriti · sem dados há ' + Math.round(idade) + ' min',
-        corpo: '<b>A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + fmtTs(st.desde) + ' (há ' + Math.round(idade) + ' min).</b><br><br>'
+        tipo: 'falha', origem, idade_min: st.idadeTxt, sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
+        assunto: (fonte ? '🔴' : '🟠') + ' Falha de comunicação Way2 · Mauriti · ' + (st.idadeTxt != null ? 'sem dados há ' + st.idadeTxt + ' min' : 'sem dados novos'),
+        corpo: '<b>A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + fmtTs(st.desde) + ' (' + haX + ').</b><br><br>'
           + 'Verificação automática: ' + detalhe + '<br><br>'
           + (fonte
             ? '➡ <b>ORIGEM: FALHA NA FONTE (Way2)</b>. O serviço da Way2 não está entregando dados novos.<br>➡ <b>AÇÃO: contatar o suporte Way2 — ' + SUPORTE + '</b>'
@@ -93,8 +115,8 @@ function postJson(url, obj) {
           + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min)</i>'
       };
     }
-  } else if (st.estado === 'falha') {
-    // 4) NORMALIZOU — dispara com a duração
+  } else if (st.estado === 'falha' && idade != null && idade <= LIMIAR) {
+    // 4) NORMALIZOU — dispara com a duração (só com dado REAL fresco; não "normaliza" no vazio da virada)
     const dur = st.desde ? ageMin(st.desde) : 0;
     const ate = nowBRT();
     acao = {
@@ -131,7 +153,7 @@ function postJson(url, obj) {
    * ──────────────────────────────────────────────────────────────────────────── */
   const LIM_MED = Math.max(30, parseInt(process.env.LIMIAR_MEDIDOR_MIN || '45', 10) || 45);
   st.medidores = st.medidores || {};
-  if (idade <= LIMIAR) {                      // feed saudável -> dá para julgar medidor a medidor
+  if (idade != null && idade <= LIMIAR) {     // feed saudável (com dado real) -> julga medidor a medidor
     let saude = null;
     try {
       const bc = cont.getBlockBlobClient('way2_saude.json');
@@ -198,5 +220,5 @@ function postJson(url, obj) {
   }
 
   const body = JSON.stringify(st); await sbc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
-  console.log('watchdog OK · idade=' + Math.round(idade) + 'min · estado=' + st.estado + (acao ? ' · disparou ' + acao.tipo : ''));
+  console.log('watchdog OK · idade=' + (idade != null ? Math.round(idade) + 'min' : (semDado ? 'SEM DADO' + (carenciaVirada ? ' (carência virada)' : '') : '?')) + ' · estado=' + st.estado + (acao ? ' · disparou ' + acao.tipo : ''));
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
