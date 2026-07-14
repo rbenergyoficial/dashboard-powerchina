@@ -1,14 +1,11 @@
 name: Way2 Recent (snapshot + rolante · 5 min)
-
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch: {}
-
 concurrency:
   group: way2-recent
   cancel-in-progress: true
-
 jobs:
   recent:
     runs-on: ubuntu-latest
@@ -23,3 +20,11 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-way2-recent.js
+      - name: Watchdog frescor Way2 (alerta)
+        if: always()
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          LIMIAR_MIN: '30'
+        run: node scripts/gen-way2-watchdog.js
