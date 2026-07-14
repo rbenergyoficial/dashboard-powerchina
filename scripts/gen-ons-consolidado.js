@@ -62,7 +62,7 @@ async function consolidate({ prefix, out, dedup, slim, sortKey }) {
       rows.push(slim ? slim(r) : r);
     }
   }
-  if (!rows.length) { console.warn(out, '— nenhum dado, pulado.'); return; }
+  if (!rows.length) { console.warn(out, '— nenhum dado, pulado.'); return []; }
   rows.sort(sortKey);
   const obj = {
     fonte: prefix.replace(/_$/, ''),
@@ -72,16 +72,109 @@ async function consolidate({ prefix, out, dedup, slim, sortKey }) {
   const json = JSON.stringify(obj);
   await upload(out, json);
   console.log(`${out}: ${rows.length} linhas, ${okMonths.length} meses (${okMonths[0]}..${okMonths[okMonths.length - 1]}), ${(Buffer.byteLength(json) / 1048576).toFixed(2)} MB`);
+  return rows;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ons_kpis.json — KPIs pré-calculados do complexo (faixa do cabeçalho).
+ *
+ * POR QUE: o cabeçalho do Grafana (10 páginas) precisa desses números. Ler o
+ * ons_restricao_all.json (~14 mil linhas) em cada painel derrubaria o backend
+ * (foi a causa do "No data"). Este arquivo tem < 1 KB e é o mesmo dado.
+ *
+ * FÓRMULAS (idênticas às do index.html · renderONSKpis) — intervalos de 30 min,
+ * potência em MW → energia = MW × 0,5 h:
+ *   gerados    = Σ(ger  × 0,5) / 1000                                    [GWh]
+ *   referencia = Σ(gref × 0,5) / 1000                                    [GWh]
+ *   frustrados = Σ max(0, (gref − ger) × 0,5) / 1000, só onde lim > 0    [GWh]
+ *   restricoes = nº de intervalos com lim > 0
+ *   duracao_h  = restricoes × 0,5
+ *   pr         = gerados / referencia × 100                              [%]
+ *   razoes     = frustrada rateada por cod_razaorestricao (ENE/CNF/REL)
+ *   origens    = idem por cod_origemrestricao (SIS/LOC)
+ * ──────────────────────────────────────────────────────────────────────────── */
+const CAP_MW = 343.77;   // outorga do complexo
+const H = 0.5;           // duração do intervalo ONS (30 min)
+
+async function gerarKpis(rows) {
+  if (!rows.length) { console.warn('ons_kpis.json — sem dados, pulado.'); return; }
+  const ger = r => num(r.ger != null ? r.ger : r.val_geracao);
+  const lim = r => num(r.lim != null ? r.lim : r.val_geracaolimitada);
+  const gref = r => num(r.gref != null ? r.gref : r.val_geracaoreferencia);
+  const disp = r => num(r.disp != null ? r.disp : r.val_disponibilidade);
+  const cod = (v) => String(v || '').trim().toUpperCase() || 'N/D';
+
+  let mwhGer = 0, mwhRef = 0, mwhFru = 0, somaDisp = 0, nRest = 0, ultimo = '';
+  const razoes = {}, origens = {};
+  const bump = (mapa, chave, mwh) => {
+    const o = mapa[chave] || (mapa[chave] = { gwh: 0, intervalos: 0, pct: 0 });
+    o.gwh += mwh; o.intervalos++;
+  };
+
+  for (const r of rows) {
+    mwhGer += ger(r) * H;
+    mwhRef += gref(r) * H;
+    somaDisp += disp(r);
+    if (r.ts > ultimo) ultimo = r.ts;
+    if (lim(r) > 0) {
+      nRest++;
+      const perda = Math.max(0, (gref(r) - ger(r)) * H);   // MWh perdidos no intervalo
+      mwhFru += perda;
+      bump(razoes, cod(r.razao != null ? r.razao : r.cod_razaorestricao), perda);
+      bump(origens, cod(r.orig != null ? r.orig : r.cod_origemrestricao), perda);
+    }
+  }
+  // MWh → GWh e fatia % de cada razão/origem sobre a energia frustrada total
+  const fmt = (mapa) => {
+    for (const k of Object.keys(mapa)) {
+      mapa[k].gwh = +(mapa[k].gwh / 1000).toFixed(2);
+      mapa[k].pct = mwhFru > 0 ? +(mapa[k].gwh * 1000 / mwhFru * 100).toFixed(1) : 0;
+    }
+    return mapa;
+  };
+
+  const kpis = {
+    atualizado: new Date().toISOString(),
+    ultimo_dado: ultimo,
+    intervalos: rows.length,
+    outorga_mw: CAP_MW,
+    gerados_gwh: +(mwhGer / 1000).toFixed(1),
+    referencia_gwh: +(mwhRef / 1000).toFixed(1),
+    frustrados_gwh: +(mwhFru / 1000).toFixed(1),
+    restricoes: nRest,
+    duracao_h: +(nRest * H).toFixed(0),
+    pr_pct: mwhRef > 0 ? +(mwhGer / mwhRef * 100).toFixed(1) : 0,
+    disponibilidade_pct: +(somaDisp / rows.length / CAP_MW * 100).toFixed(1),
+    razoes: fmt(razoes),
+    origens: fmt(origens),
+  };
+  const json = JSON.stringify(kpis, null, 1);
+  await upload('ons_kpis.json', json);
+  console.log('\nons_kpis.json (' + Buffer.byteLength(json) + ' B) — dado até ' + ultimo);
+  console.log('  OUTORGA .......... ' + kpis.outorga_mw + ' MW');
+  console.log('  GERADOS .......... ' + kpis.gerados_gwh + ' GWh');
+  console.log('  REFERÊNCIA ....... ' + kpis.referencia_gwh + ' GWh');
+  console.log('  FRUSTRADOS ....... ' + kpis.frustrados_gwh + ' GWh');
+  console.log('  RESTRIÇÕES ONS ... ' + kpis.restricoes.toLocaleString('pt-BR'));
+  console.log('  DURAÇÃO .......... ' + kpis.duracao_h.toLocaleString('pt-BR') + ' h');
+  console.log('  PR ............... ' + kpis.pr_pct + ' %');
+  console.log('  DISPONIBILIDADE .. ' + kpis.disponibilidade_pct + ' %');
+  console.log('  RAZÕES ...........',
+    Object.entries(kpis.razoes).map(([k, v]) => k + ' ' + v.pct + '% (' + v.gwh + ' GWh)').join(' · '));
+  console.log('  ORIGENS ..........',
+    Object.entries(kpis.origens).map(([k, v]) => k + ' ' + v.pct + '% (' + v.gwh + ' GWh)').join(' · '));
 }
 
 (async () => {
   // Restrição: 1 linha por ts (nível complexo)
-  await consolidate({
+  const restr = await consolidate({
     prefix: 'ons_restricao_',
     out: 'ons_restricao_all.json',
     dedup: r => r.ts,
     sortKey: (a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)
   });
+  // KPIs do cabeçalho (arquivo leve, derivado das MESMAS linhas)
+  await gerarKpis(restr);
   // Irradiância: 1 linha por ts+u (por UFV); enxuga (tira inv, arredonda) p/ reduzir tamanho
   await consolidate({
     prefix: 'ons_irradiancia_',
