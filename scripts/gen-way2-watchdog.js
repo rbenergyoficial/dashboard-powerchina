@@ -96,10 +96,15 @@ function postJson(url, obj) {
   } else if (st.estado === 'falha') {
     // 4) NORMALIZOU — dispara com a duração
     const dur = st.desde ? ageMin(st.desde) : 0;
+    const ate = nowBRT();
     acao = {
-      tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: nowBRT(), origem: st.origem || '—',
+      tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: ate, origem: st.origem || '—',
       assunto: '✅ Way2 NORMALIZADA · Mauriti (ficou fora ' + fmtDur(dur) + ')',
-      corpo: '<b>A telemetria do Complexo Mauriti VOLTOU a atualizar.</b><br><br>Ficou indisponível por <b>' + fmtDur(dur) + '</b> (desde ' + fmtTs(st.desde) + ').<br>Origem da queda: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'pipeline') + '.<br><br><i>(Alerta automático · watchdog Mauriti)</i>'
+      corpo: '<b>A telemetria do Complexo Mauriti VOLTOU a atualizar.</b><br><br>'
+        + 'Ficou indisponível por <b>' + fmtDur(dur) + '</b>.<br>'
+        + '↳ Início da falha: <b>' + fmtTs(st.desde) + '</b><br>'
+        + '↳ Normalização: <b>' + fmtTs(ate) + '</b><br>'
+        + 'Origem da queda: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'nosso pipeline') + '.<br><br><i>(Alerta automático · watchdog Mauriti)</i>'
     };
     st = { estado: 'ok' };
   }
