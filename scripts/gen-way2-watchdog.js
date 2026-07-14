@@ -83,13 +83,13 @@ function postJson(url, obj) {
       const fonte = origem === 'way2';
       acao = {
         tipo: 'falha', origem, idade_min: Math.round(idade), sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
-        assunto: (fonte ? '🔴' : '🟠') + ' Mauriti · sem dados Way2 há ' + Math.round(idade) + ' min',
-        corpo: 'A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + st.desde + ' (há ' + Math.round(idade) + ' min).\n\n'
-          + 'Verificação automática: ' + detalhe + '\n\n'
+        assunto: (fonte ? '🔴' : '🟠') + ' Falha de comunicação Way2 · Mauriti · sem dados há ' + Math.round(idade) + ' min',
+        corpo: '<b>A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + st.desde + ' (há ' + Math.round(idade) + ' min).</b><br><br>'
+          + 'Verificação automática: ' + detalhe + '<br><br>'
           + (fonte
-            ? '➡ ORIGEM: FALHA NA FONTE (Way2). O serviço da Way2 não está entregando dados novos.\n➡ AÇÃO: contatar o suporte Way2 — ' + SUPORTE + '.'
-            : '➡ ORIGEM: NOSSO PIPELINE. A Way2 tem dados novos, mas o fluxo Power Automate parou de gravar o blob.\n➡ AÇÃO: verificar o fluxo "Way2 Eletrico 5min" no Power Automate.')
-          + '\n\n(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min)'
+            ? '➡ <b>ORIGEM: FALHA NA FONTE (Way2)</b>. O serviço da Way2 não está entregando dados novos.<br>➡ <b>AÇÃO: contatar o suporte Way2 — ' + SUPORTE + '</b>.'
+            : '➡ <b>ORIGEM: NOSSO PIPELINE</b>. A Way2 tem dados novos, mas o fluxo Power Automate parou de gravar o blob.<br>➡ <b>AÇÃO: verificar o fluxo "Way2 Eletrico 5min"</b> no Power Automate.')
+          + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min)</i>'
       };
       st.alertado = true;
     }
@@ -98,8 +98,8 @@ function postJson(url, obj) {
     const dur = st.desde ? ageMin(st.desde) : 0;
     acao = {
       tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: nowBRT(), origem: st.origem || '—',
-      assunto: '✅ Mauriti · telemetria Way2 NORMALIZADA (ficou fora ' + fmtDur(dur) + ')',
-      corpo: 'A telemetria do Complexo Mauriti VOLTOU a atualizar.\n\nFicou indisponível por ' + fmtDur(dur) + ' (desde ' + st.desde + ').\nOrigem da queda: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'pipeline') + '.\n\n(Alerta automático · watchdog Mauriti)'
+      assunto: '✅ Way2 NORMALIZADA · Mauriti (ficou fora ' + fmtDur(dur) + ')',
+      corpo: '<b>A telemetria do Complexo Mauriti VOLTOU a atualizar.</b><br><br>Ficou indisponível por <b>' + fmtDur(dur) + '</b> (desde ' + st.desde + ').<br>Origem da queda: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'pipeline') + '.<br><br><i>(Alerta automático · watchdog Mauriti)</i>'
     };
     st = { estado: 'ok' };
   }
