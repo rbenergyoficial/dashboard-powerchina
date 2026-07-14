@@ -116,6 +116,87 @@ function postJson(url, obj) {
     else console.log('ALERTA (sem PA_ALERT_WEBHOOK — só log):', JSON.stringify(acao));
     if (acao.tipo === 'falha' && entregue && st.estado === 'falha') st.alertado_em = nowBRT(); // marca entregue só se o POST deu certo
   }
+
+  /* ────────────────────────────────────────────────────────────────────────────
+   * 6) MEDIDOR INDIVIDUAL SEM COMUNICAÇÃO (lê way2_saude.json)
+   *
+   * Os medidores Way2 caem e voltam o tempo todo, alternando entre si — confirmado na
+   * própria plataforma da Way2. Antes isso passava despercebido (e pior: congelava a
+   * leitura do complexo inteiro, pois a âncora exigia os 22 circuitos).
+   *
+   * ⚠️ GUARDA CONTRA ENXURRADA: só alerta medidor individual se o FEED GERAL estiver
+   * saudável. Se o feed inteiro está parado (ex.: na virada da meia-noite, quando o dado
+   * do dia novo ainda não chegou), TODOS os 25 medidores parecem velhos — sem esta guarda
+   * sairiam 25 e-mails de uma vez. A falha sistêmica já é coberta pelo alerta acima.
+   * ──────────────────────────────────────────────────────────────────────────── */
+  const LIM_MED = Math.max(30, parseInt(process.env.LIMIAR_MEDIDOR_MIN || '45', 10) || 45);
+  st.medidores = st.medidores || {};
+  if (idade <= LIMIAR) {                      // feed saudável -> dá para julgar medidor a medidor
+    let saude = null;
+    try {
+      const bc = cont.getBlockBlobClient('way2_saude.json');
+      if (await bc.exists()) saude = parseJson(await bc.downloadToBuffer());
+    } catch (e) { console.error('saúde: não consegui ler way2_saude.json —', e.message); }
+
+    if (saude && Array.isArray(saude.medidores)) {
+      const fora = saude.medidores.filter(m => m.idade_min >= LIM_MED);
+      const foraPid = new Set(fora.map(m => String(m.pid)));
+
+      // NOVAS quedas (ainda não avisadas)
+      const novos = fora.filter(m => !st.medidores[String(m.pid)]);
+      for (const m of novos) st.medidores[String(m.pid)] = { nome: m.nome, desde: m.ultima, alertado_em: null };
+
+      const pendentes = Object.entries(st.medidores).filter(([pid, o]) => foraPid.has(pid) && !o.alertado_em);
+      if (pendentes.length) {
+        const lista = pendentes.map(([pid, o]) => {
+          const m = fora.find(x => String(x.pid) === pid);
+          return '<li><b>' + o.nome + '</b> (ponto ' + pid + ') — sem dado desde <b>' + fmtTs(o.desde) + '</b> · há <b>' + fmtDur(m ? m.idade_min : 0) + '</b></li>';
+        }).join('');
+        const n = pendentes.length;
+        const acaoMed = {
+          tipo: 'medidor_fora', qtd: n, verificado_em: nowBRT(), contato_suporte: SUPORTE,
+          assunto: '🟠 ' + (n === 1 ? 'Medidor Way2 sem comunicação' : n + ' medidores Way2 sem comunicação') + ' · Mauriti',
+          corpo: '<b>' + (n === 1 ? 'Um medidor parou' : n + ' medidores pararam') + ' de enviar dados para a Way2.</b><br><br>'
+            + '<ul>' + lista + '</ul>'
+            + 'O restante da telemetria do complexo está <b>normal</b> (' + saude.resumo.ok + ' de ' + saude.resumo.total + ' medidores saudáveis) — '
+            + 'ou seja, <b>não é queda geral da Way2</b>, é medidor específico.<br><br>'
+            + '➡ <b>AÇÃO: verificar o medidor em campo</b> e, se necessário, acionar o suporte Way2 — ' + SUPORTE
+            + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIM_MED + ' min)</i>',
+        };
+        let ok = false;
+        if (WEBHOOK) { try { const c = await postJson(WEBHOOK, acaoMed); ok = true; console.log('ALERTA medidor enviado (HTTP ' + c + '): ' + acaoMed.assunto); } catch (e) { console.error('FALHA alerta medidor:', e.message); } }
+        else console.log('ALERTA medidor (sem webhook — só log):', acaoMed.assunto);
+        if (ok) for (const [pid] of pendentes) st.medidores[pid].alertado_em = nowBRT();
+      }
+
+      // RETORNOS (estava avisado, voltou a reportar)
+      const voltaram = Object.entries(st.medidores).filter(([pid, o]) => !foraPid.has(pid) && o.alertado_em);
+      if (voltaram.length) {
+        const lista = voltaram.map(([pid, o]) => {
+          const dur = o.desde ? ageMin(o.desde) : 0;
+          return '<li><b>' + o.nome + '</b> (ponto ' + pid + ') — ficou fora <b>' + fmtDur(dur) + '</b>, desde ' + fmtTs(o.desde) + '</li>';
+        }).join('');
+        const acaoOk = {
+          tipo: 'medidor_normalizado', qtd: voltaram.length, verificado_em: nowBRT(),
+          assunto: '✅ ' + (voltaram.length === 1 ? 'Medidor Way2 NORMALIZADO' : voltaram.length + ' medidores Way2 NORMALIZADOS') + ' · Mauriti',
+          corpo: '<b>' + (voltaram.length === 1 ? 'O medidor voltou' : 'Os medidores voltaram') + ' a enviar dados.</b><br><br><ul>' + lista + '</ul>'
+            + '<i>(Alerta automático · watchdog Mauriti)</i>',
+        };
+        let ok = false;
+        if (WEBHOOK) { try { const c = await postJson(WEBHOOK, acaoOk); ok = true; console.log('ALERTA medidor normalizado (HTTP ' + c + '): ' + acaoOk.assunto); } catch (e) { console.error('FALHA alerta normalizado:', e.message); } }
+        else console.log('ALERTA medidor normalizado (sem webhook — só log):', acaoOk.assunto);
+        if (ok) for (const [pid] of voltaram) delete st.medidores[pid];
+      }
+      // medidor que voltou mas nunca chegou a ser avisado: limpa sem e-mail
+      for (const [pid, o] of Object.entries(st.medidores)) if (!foraPid.has(pid) && !o.alertado_em) delete st.medidores[pid];
+
+      console.log('saúde: ' + saude.resumo.ok + '/' + saude.resumo.total + ' ok · ' + fora.length + ' fora (≥' + LIM_MED + 'min)'
+        + (fora.length ? ' -> ' + fora.map(m => m.nome + '=' + m.idade_min + 'min').join(', ') : ''));
+    }
+  } else {
+    console.log('saúde: pulada (feed geral parado há ' + Math.round(idade) + ' min — falha sistêmica, não medidor)');
+  }
+
   const body = JSON.stringify(st); await sbc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
   console.log('watchdog OK · idade=' + Math.round(idade) + 'min · estado=' + st.estado + (acao ? ' · disparou ' + acao.tipo : ''));
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
