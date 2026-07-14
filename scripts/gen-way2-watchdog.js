@@ -77,9 +77,9 @@ function postJson(url, obj) {
       detalhe = `Way2 (consulta direta) tem dado até ${way2Ts || '—'} (${Math.round(way2Age)} min atrás).`;
     } catch (e) { origem = 'way2'; detalhe = 'A API Way2 nem respondeu à confirmação direta (' + e.message + ').'; }
 
-    if (st.estado !== 'falha') st = { estado: 'falha', desde: nossoTs || nowBRT(), origem, idade_disparo: Math.round(idade), alertado: false };
+    if (st.estado !== 'falha') st = { estado: 'falha', desde: nossoTs || nowBRT(), origem, idade_disparo: Math.round(idade), alertado_em: null };
     st.origem = origem;
-    if (!st.alertado) {
+    if (!st.alertado_em) { // só considera "avisado" quando o POST deu certo (senão re-tenta no próximo run)
       const fonte = origem === 'way2';
       acao = {
         tipo: 'falha', origem, idade_min: Math.round(idade), sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
@@ -91,7 +91,6 @@ function postJson(url, obj) {
             : '➡ <b>ORIGEM: NOSSO PIPELINE</b>. A Way2 tem dados novos, mas o fluxo Power Automate parou de gravar o blob.<br>➡ <b>AÇÃO: verificar o fluxo "Way2 Eletrico 5min"</b> no Power Automate.')
           + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min)</i>'
       };
-      st.alertado = true;
     }
   } else if (st.estado === 'falha') {
     // 4) NORMALIZOU — dispara com a duração
@@ -106,8 +105,10 @@ function postJson(url, obj) {
 
   // 5) dispara + salva estado
   if (acao) {
-    if (WEBHOOK) { try { const code = await postJson(WEBHOOK, acao); console.log('ALERTA enviado (HTTP ' + code + '):', acao.tipo, '·', acao.assunto); } catch (e) { console.error('FALHA ao enviar alerta:', e.message); } }
+    let entregue = false;
+    if (WEBHOOK) { try { const code = await postJson(WEBHOOK, acao); entregue = true; console.log('ALERTA enviado (HTTP ' + code + '):', acao.tipo, '·', acao.assunto); } catch (e) { console.error('FALHA ao enviar alerta:', e.message); } }
     else console.log('ALERTA (sem PA_ALERT_WEBHOOK — só log):', JSON.stringify(acao));
+    if (acao.tipo === 'falha' && entregue && st.estado === 'falha') st.alertado_em = nowBRT(); // marca entregue só se o POST deu certo
   }
   const body = JSON.stringify(st); await sbc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json' } });
   console.log('watchdog OK · idade=' + Math.round(idade) + 'min · estado=' + st.estado + (acao ? ' · disparou ' + acao.tipo : ''));
