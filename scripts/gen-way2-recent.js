@@ -8,6 +8,7 @@
 //      do dia (ex.: "últimos 2 dias" = ontem + hoje juntos).
 // Só usa a connection string (DADOS_STORAGE) — nenhum token Way2. Independente do fluxo PA.
 const { BlobServiceClient } = require('@azure/storage-blob');
+const { gerarClima } = require('./gen-clima');
 
 const CONTAINER = 'dados';
 const LIVE_BLOB = 'way2_eletrico.json';
@@ -126,6 +127,11 @@ function gerarSaude(dados, agoraMs) {
   if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
   const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
   const day = diaBRT();
+
+  // clima.json — some do "No data": em vez de 5 painéis chamarem o Open-Meteo direto (IP
+  // compartilhado do Grafana Cloud → 429), 1 chamada aqui grava no nosso blob. Não bloqueia
+  // o resto se a API externa falhar (só loga).
+  gerarClima(conn).catch(e => console.error('clima.json FALHOU (segue sem bloquear):', e.message));
 
   // 1) snapshot de hoje
   let eletJson = null;
