@@ -41,11 +41,12 @@ const parseJson = (buf) => JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
  * (hist/way2_DIA.json) que perde os últimos ~15-20 min do dia. Marcado à parte p/ não alarmar.
  * ══════════════════════════════════════════════════════════════════════════════ */
 const CIRC = ['1C1','1C2','1C3','2C1','2C2','3C1','3C2','3C3','4C1','4C2','4C3','5C1','5C2','5C3','6C1','6C2','6C3','7C1','8C1','8C2','8C3','9C1'];
+// 24 MEDIDORES FÍSICOS: 22 circuitos coletores (34,5 kV) + 2 transformadores (230 kV).
+// O ponto 6233 (Totalizador) é APENAS a soma dos 22 circuitos — não é medidor, não entra na saúde.
 const MEDIDORES = [
   { pid: 6196, nome: 'SE · TR1', grupo: '230 kV' },
   { pid: 6197, nome: 'SE · TR2', grupo: '230 kV' },
   ...CIRC.map((c, i) => ({ pid: 6198 + i, nome: 'M' + c[0] + ' · C' + c[2], grupo: '34,5 kV' })),
-  { pid: 6233, nome: 'Totalizador', grupo: 'Complexo' },
 ];
 const OK_MIN = 25;        // ≤25 min = saudável (a latência estrutural da Way2 é ~15-16 min)
 const FALHA_MIN = 40;     // >40 min = falha

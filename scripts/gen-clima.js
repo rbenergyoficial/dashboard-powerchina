@@ -17,7 +17,7 @@ const CONTAINER = 'dados';
 const LAT = -7.38, LON = -38.77;
 const API = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON
   + '&current=temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code'
-  + '&timezone=America/Fortaleza';
+  + '&wind_speed_unit=ms&timezone=America/Fortaleza';   // vento em m/s (não km/h)
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
@@ -58,7 +58,7 @@ async function gerarClima(conn) {
     { chave: 'temperatura', rotulo: 'Temperatura', valor: +(+c.temperature_2m).toFixed(1), unidade: '°C', icon: 'temperature', cor: '#E06C3F', sub: 'Sensação ' + Math.round(c.apparent_temperature) + '°' },
     { chave: 'nuvens', rotulo: 'Nuvens', valor: Math.round(c.cloud_cover || 0), unidade: '%', icon: 'cloud', cor: '#9AA4B2' },
     { chave: 'umidade', rotulo: 'Umidade', valor: Math.round(c.relative_humidity_2m || 0), unidade: '%', icon: 'droplet', cor: '#4C9AFF' },
-    { chave: 'vento', rotulo: 'Vento', valor: +(+c.wind_speed_10m).toFixed(1), unidade: 'km/h', icon: 'wind', cor: '#9AA4B2' },
+    { chave: 'vento', rotulo: 'Vento', valor: +(+c.wind_speed_10m).toFixed(1), unidade: 'm/s', icon: 'wind', cor: '#9AA4B2' },
     { chave: 'condicao', rotulo: 'Condição', texto: w.txt, icon: w.icon, cor: w.cor },
   ];
 
