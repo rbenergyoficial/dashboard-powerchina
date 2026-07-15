@@ -75,7 +75,8 @@ function classeP2(nome) { const n = norm(nome).toLowerCase();
   return 'Outros';
 }
 const ehInversor = c => c.startsWith('Inversor');
-const COR = { amber: '#F5A623', amberHi: '#FFB020', ok: '#2FBF71', warn: '#FF8A3D', crit: '#E5484D', blue: '#4C9AFF', teal: '#35C2C1', faint: '#5F6672' };
+// paleta EXECUTIVA (dessaturada, report-by-exception): barra padrão = neutro; cor só na exceção
+const COR = { neutral: '#525C6B', brand: '#D9A441', ok: '#43966B', crit: '#C85C60', blue: '#5C86BE', teal: '#4E9A98', warn: '#C08A45', faint: '#5F6672' };
 const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const mesLbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
 function enrich(arr, colorFn) { const mx = Math.max(...arr.map(x => x.n), 1); arr.forEach((x, i) => { x.pct = Math.max(2, Math.round(x.n / mx * 100)); x.cor = colorFn(x, i, mx); }); }
@@ -119,17 +120,17 @@ function analyze(wb1, wb2) {
     exemplos: hit.map(x => ({ inv: x.parque + '/' + x.ts + '/' + x.inv, modo_troca: x.modo, falhas_p2: p2ByInv.get(x.parque + '/' + x.ts + '/' + x.inv) })).sort((a, b) => b.falhas_p2 - a.falhas_p2).slice(0, 10) };
 
   // enriquecimento p/ render (pct + cor + rótulo)
-  enrich(P1.por_modo, x => x.termico ? (x.n >= 20 ? COR.crit : COR.warn) : COR.amber); P1.por_modo.forEach(x => { if (x.termico) x.modo = '🔥 ' + x.modo; });
-  enrich(P1.por_parque, x => x.parque === 'M6' ? COR.crit : (x.parque === 'M9' ? COR.ok : COR.amber));
-  enrich(P1.por_mes, (x, i, mx) => x.n === mx ? COR.amberHi : COR.amber); P1.por_mes.forEach(x => x.lbl = mesLbl(x.mes));
-  enrich(P2.bad_actors, x => x.inv.startsWith('M1/TS07') ? COR.crit : (x.inv.startsWith('M3/TS04') ? COR.warn : COR.amber));
-  enrich(P2.isolamento_por_mes, x => x.n >= 300 ? COR.crit : (x.n >= 100 ? COR.warn : COR.amber)); P2.isolamento_por_mes.forEach(x => x.lbl = mesLbl(x.mes));
-  { const tot = P2.por_classe.reduce((a, x) => a + x.n, 0) || 1; const cm = { 'Rede': COR.blue, 'Aviso/Sistema': COR.faint, 'Arranjo FV': COR.teal, 'Inversor · anomalia': COR.amber, 'Inversor · isolamento': COR.warn, 'Inversor · corrente': COR.crit };
-    P2.por_classe.forEach(x => { x.pct = Math.round(x.n / tot * 100); x.cor = cm[x.classe] || COR.amber; }); }
-  cruzado.exemplos.forEach(x => { x.cor = /estufado|carboni|superaque|ventoinha/i.test(x.modo_troca) ? COR.crit : (/anomalia/i.test(x.modo_troca) ? COR.amber : COR.faint); });
+  enrich(P1.por_modo, x => x.termico ? COR.crit : COR.neutral); P1.por_modo.forEach(x => { if (x.termico) x.modo = '🔥 ' + x.modo; });
+  enrich(P1.por_parque, x => x.parque === 'M6' ? COR.crit : (x.parque === 'M9' ? COR.ok : COR.neutral));
+  enrich(P1.por_mes, (x, i, mx) => x.n === mx ? COR.brand : COR.neutral); P1.por_mes.forEach(x => x.lbl = mesLbl(x.mes));
+  enrich(P2.bad_actors, x => x.inv.startsWith('M1/TS07') ? COR.crit : (x.inv.startsWith('M3/TS04') ? COR.brand : COR.neutral));
+  enrich(P2.isolamento_por_mes, x => x.n >= 300 ? COR.crit : COR.neutral); P2.isolamento_por_mes.forEach(x => x.lbl = mesLbl(x.mes));
+  { const tot = P2.por_classe.reduce((a, x) => a + x.n, 0) || 1; const cm = { 'Rede': COR.blue, 'Aviso/Sistema': COR.faint, 'Arranjo FV': COR.teal, 'Inversor · anomalia': COR.brand, 'Inversor · isolamento': COR.warn, 'Inversor · corrente': COR.crit };
+    P2.por_classe.forEach(x => { x.pct = Math.round(x.n / tot * 100); x.cor = cm[x.classe] || COR.neutral; }); }
+  cruzado.exemplos.forEach(x => { x.cor = /estufado|carboni|superaque|ventoinha/i.test(x.modo_troca) ? COR.crit : (/anomalia/i.test(x.modo_troca) ? COR.brand : COR.faint); });
   const bp = P1.por_parque.slice().sort((a, b) => b.n - a.n)[0] || { parque: '-', n: 0 };
   const kpiTiles = [
-    { k: 'Trocas registradas', v: String(P1.total), u: '', c: 'P1 · desde ' + ((P1.por_mes[0] || {}).lbl || '?'), cor: COR.amber },
+    { k: 'Trocas registradas', v: String(P1.total), u: '', c: 'P1 · desde ' + ((P1.por_mes[0] || {}).lbl || '?'), cor: COR.brand },
     { k: 'Falhas térmicas', v: String(P1.termico_pct), u: '%', c: P1.termico + ' de ' + P1.total + ' 🔥', cor: COR.crit },
     { k: 'Pior parque', v: bp.parque, u: '', c: bp.n + ' trocas', cor: COR.warn },
     { k: 'Bad-actor', v: String((badActors[0] || {}).n || 0), u: 'falhas', c: (badActors[0] || {}).inv || '—', cor: COR.crit },
