@@ -148,6 +148,21 @@ async function gerarKpis(rows) {
     razoes: fmt(razoes),
     origens: fmt(origens),
   };
+
+  // tiles[] pré-formatados (PT-BR) p/ a faixa de KPIs do cabeçalho (card Business Text).
+  // g='e' KPIs de energia · g='r' restrição POR TIPO (ENE/CNF/REL, % da energia frustrada).
+  const ptbr = (n, dec) => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const rz = (k) => kpis.razoes[k] || { pct: 0, gwh: 0 };
+  kpis.tiles = [
+    { l: 'Outorga', v: ptbr(kpis.outorga_mw, 2), u: 'MW', g: 'e', t: 'Capacidade outorgada do complexo' },
+    { l: 'Gerado', v: ptbr(kpis.gerados_gwh, 1), u: 'GWh', g: 'e', t: 'Energia verificada ONS no período' },
+    { l: 'Frustrado', v: ptbr(kpis.frustrados_gwh, 1), u: 'GWh', g: 'e', t: 'Energia perdida por restrição ONS' },
+    { l: 'Restrições', v: ptbr(kpis.restricoes, 0), u: '', g: 'e', t: 'Intervalos de 30 min com limite ativo' },
+    { l: 'Duração', v: ptbr(kpis.duracao_h, 0), u: 'h', g: 'e', t: 'Horas totais sob restrição' },
+    { l: 'ENE', v: ptbr(rz('ENE').pct, 1), u: '%', g: 'r', sep: 1, t: ptbr(rz('ENE').gwh, 1) + ' GWh — restrição por energia' },
+    { l: 'CNF', v: ptbr(rz('CNF').pct, 1), u: '%', g: 'r', t: ptbr(rz('CNF').gwh, 1) + ' GWh — restrição por confiabilidade' },
+    { l: 'REL', v: ptbr(rz('REL').pct, 1), u: '%', g: 'r', t: ptbr(rz('REL').gwh, 1) + ' GWh — restrição por religamento/outras' },
+  ];
   const json = JSON.stringify(kpis, null, 1);
   await upload('ons_kpis.json', json);
   console.log('\nons_kpis.json (' + Buffer.byteLength(json) + ' B) — dado até ' + ultimo);
