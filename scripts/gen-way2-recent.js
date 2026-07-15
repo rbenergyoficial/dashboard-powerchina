@@ -136,11 +136,20 @@ function gerarSaude(dados, agoraMs) {
   }
   eventos.sort((a, b) => (a.de < b.de ? 1 : -1));
 
+  const idadeAncora = ancora ? Math.round(idade(ancora)) : 99999;
+  // badges[] pré-computados p/ o card de status do cabeçalho (chip + cor do estado)
+  const corIdade = idadeAncora <= OK_MIN ? '#2FBF71' : (idadeAncora <= FALHA_MIN ? '#FF8A3D' : '#E5484D');
+  const corMed = resumo.ok >= resumo.total - 1 ? '#2FBF71' : (resumo.ok >= resumo.total - 4 ? '#FF8A3D' : '#E5484D');
+  const badges = [
+    { ic: '⏱', l: 'Way2', v: String(idadeAncora), u: 'min', c: corIdade },
+    { ic: '📡', l: 'Medidores', v: resumo.ok + '/' + resumo.total, u: '', c: corMed },
+  ];
+
   return {
     atualizado: new Date(agoraMs - 3 * 3600 * 1000).toISOString().slice(0, 19),
-    ancora, idade_min: ancora ? Math.round(idade(ancora)) : 99999,   // <- o que o SELO mostra
+    ancora, idade_min: idadeAncora,   // <- o que o SELO mostra
     limiares: { ok_min: OK_MIN, falha_min: FALHA_MIN },
-    resumo, medidores, serie, timeline,
+    resumo, badges, medidores, serie, timeline,
     eventos: eventos.filter(e => e.tipo === 'falha').slice(0, 40),
     eventos_virada: eventos.filter(e => e.tipo === 'virada').length,
   };
