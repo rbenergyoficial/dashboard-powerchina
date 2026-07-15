@@ -54,6 +54,29 @@ const ASSENTA_MIN = 20;   // um slot só "assenta" depois de ~20 min
 const JANELA_TL_H = 24;   // horas no state timeline
 const MIN_EVENTO = 15;    // ignora buraco de 1 slot (ruído)
 
+// kpis_dia.json — os 4 KPIs do dia (Energia/FC/Pico/Média) pré-calculados p/ os cards minimalist
+// (Business Text). MESMA matemática dos Stat nativos: ponto 6233 (Demat, em kW);
+// energia = Σ(kW>0)×5/60/1000 MWh; horas = nº de slots com dado ×5/60; FC = E/(343,77×horas)×100.
+function kpisDia(eletJson) {
+  const s = (eletJson.dados || []).find(x => x.pontoId === 6233 && x.nomeGrandeza === 'Demat');
+  const vals = ((s && s.valores) || []).filter(v => v.valor != null).map(v => v.valor);
+  const pos = vals.filter(v => v > 0);
+  const energia = pos.reduce((a, v) => a + v, 0) * 5 / 60 / 1000;   // MWh
+  const pico = pos.length ? Math.max.apply(null, pos) / 1000 : 0;   // MW
+  const horas = vals.length * 5 / 60;
+  const fc = horas > 0 ? energia / (343.77 * horas) * 100 : 0;      // %
+  const media = horas > 0 ? energia / horas : 0;                    // MW
+  return {
+    atualizado: new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 19),
+    kpis: [
+      { rotulo: 'Energia hoje', valor: +energia.toFixed(1), unidade: 'MWh', emoji: '⚡', cor: '#FFB020', destaque: 1 },
+      { rotulo: 'Fator de capacidade', valor: +fc.toFixed(1), unidade: '%', emoji: '🎯', cor: '#8B93A1', destaque: 0 },
+      { rotulo: 'Pico de potência', valor: +pico.toFixed(1), unidade: 'MW', emoji: '📈', cor: '#8B93A1', destaque: 0 },
+      { rotulo: 'Potência média', valor: +media.toFixed(1), unidade: 'MW', emoji: '📊', cor: '#8B93A1', destaque: 0 },
+    ],
+  };
+}
+
 function gerarSaude(dados, agoraMs) {
   const idade = (ts) => (agoraMs - Date.parse(ts + '-03:00')) / 60000;
 
@@ -164,6 +187,12 @@ function gerarSaude(dados, agoraMs) {
     const lb = JSON.stringify(latest);
     await container.getBlockBlobClient('way2_latest.json').upload(lb, Buffer.byteLength(lb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
     console.log(`way2_latest.json OK · ${latest.dados.length} séries × ${N_LATEST} slots · ${(lb.length / 1024).toFixed(0)} KB`);
+
+    // kpis_dia.json — 4 KPIs do dia p/ os cards minimalist (mesma matemática dos Stat nativos)
+    const kd = kpisDia(eletJson);
+    const kb = JSON.stringify(kd);
+    await container.getBlockBlobClient('kpis_dia.json').upload(kb, Buffer.byteLength(kb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
+    console.log(`kpis_dia.json OK · energia ${kd.kpis[0].valor} MWh · FC ${kd.kpis[1].valor}% · pico ${kd.kpis[2].valor} MW · média ${kd.kpis[3].valor} MW`);
   }
 
   // 2) way2_recent.json = últimos N_RECENT dias mesclados (mais antigo -> hoje)
