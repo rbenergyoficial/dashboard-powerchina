@@ -16,8 +16,8 @@ const https = require('https');
 const CONTAINER = 'dados';
 const LAT = -7.38, LON = -38.77;
 const API = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON
-  + '&current=temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code'
-  + '&wind_speed_unit=ms&timezone=America/Fortaleza';   // vento em m/s (não km/h)
+  + '&current=temperature_2m,apparent_temperature,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code,is_day'
+  + '&wind_speed_unit=ms&timezone=America/Fortaleza';   // vento em m/s + is_day (dia/noite)
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
@@ -28,12 +28,14 @@ function getJson(url) {
   });
 }
 
-// Código WMO → {texto, ícone Tabler, cor}. Paleta "Terminal Solar": âmbar=sol, cinza/azul=nuvem/chuva.
-function wmo(code) {
+// Código WMO → {texto, ícone, cor}, ciente de DIA/NOITE. Âmbar=sol · índigo=lua/noite · cinza/azul=nuvem/chuva.
+const LUA = '#8B9DFF';   // tom frio de noite
+function wmo(code, isDay) {
   const c = +code;
-  if (c === 0) return { txt: 'Céu limpo', icon: 'sun', cor: '#FFB020' };
-  if (c === 1) return { txt: 'Predom. limpo', icon: 'sun', cor: '#FFB020' };
-  if (c === 2) return { txt: 'Parc. nublado', icon: 'cloud', cor: '#9AA4B2' };
+  // céu limpo / predom. limpo: sol de dia, LUA de noite (o bug que o usuário pegou)
+  if (c === 0) return isDay ? { txt: 'Céu limpo', icon: 'sun', cor: '#FFB020' } : { txt: 'Noite limpa', icon: 'moon', cor: LUA };
+  if (c === 1) return isDay ? { txt: 'Predom. limpo', icon: 'sun', cor: '#FFB020' } : { txt: 'Noite limpa', icon: 'moon', cor: LUA };
+  if (c === 2) return isDay ? { txt: 'Parc. nublado', icon: 'cloud-sun', cor: '#9AA4B2' } : { txt: 'Nuvens à noite', icon: 'cloud-moon', cor: '#9AA4B2' };
   if (c === 3) return { txt: 'Nublado', icon: 'cloud', cor: '#8B93A1' };
   if (c === 45 || c === 48) return { txt: 'Névoa', icon: 'fog', cor: '#8B93A1' };
   if (c >= 51 && c <= 57) return { txt: 'Garoa', icon: 'cloud-rain', cor: '#4C9AFF' };
@@ -49,12 +51,13 @@ async function gerarClima(conn) {
 
   const j = await getJson(API);
   const c = j.current || {};
-  const w = wmo(c.weather_code);
+  const isDay = +c.is_day === 1;
+  const w = wmo(c.weather_code, isDay);
   const nowBRT = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 19);
 
-  // cada métrica já com ícone/cor prontos (a irradiância é o driver solar → âmbar)
+  // cada métrica já com ícone/cor prontos. Irradiância: sol de dia (âmbar), LUA de noite (índigo).
   const metricas = [
-    { chave: 'irradiancia', rotulo: 'Irradiância', valor: Math.round(c.shortwave_radiation || 0), unidade: 'W/m²', icon: 'sun', cor: '#FFB020', destaque: true },
+    { chave: 'irradiancia', rotulo: 'Irradiância', valor: Math.round(c.shortwave_radiation || 0), unidade: 'W/m²', icon: isDay ? 'sun' : 'moon', cor: isDay ? '#FFB020' : LUA, destaque: isDay },
     { chave: 'temperatura', rotulo: 'Temperatura', valor: +(+c.temperature_2m).toFixed(1), unidade: '°C', icon: 'temperature', cor: '#E06C3F', sub: 'Sensação ' + Math.round(c.apparent_temperature) + '°' },
     { chave: 'nuvens', rotulo: 'Nuvens', valor: Math.round(c.cloud_cover || 0), unidade: '%', icon: 'cloud', cor: '#9AA4B2' },
     { chave: 'umidade', rotulo: 'Umidade', valor: Math.round(c.relative_humidity_2m || 0), unidade: '%', icon: 'droplet', cor: '#4C9AFF' },
@@ -66,7 +69,7 @@ async function gerarClima(conn) {
     atualizado: nowBRT,
     fonte: 'Open-Meteo · Mauriti/CE',
     hora_dado: (c.time || '').replace('T', ' '),
-    weather_code: c.weather_code, condicao: w.txt, condicao_icon: w.icon, condicao_cor: w.cor,
+    weather_code: c.weather_code, is_day: +c.is_day, condicao: w.txt, condicao_icon: w.icon, condicao_cor: w.cor,
     // campos planos (fáceis de ler por Stat nativo, se quiser)
     irradiancia: Math.round(c.shortwave_radiation || 0),
     temperatura: +(+c.temperature_2m).toFixed(1),
