@@ -96,7 +96,8 @@ function analyze(wb1, wb2) {
     const iN = row.findIndex(x => x === 'new' || x === 'novo' || x === 'novos'); const iR = row.findIndex(x => /^(repair|reparad)/.test(x));
     const iF = row.findIndex(x => /^spare\s*fuse|fus[ií]ve/.test(x));
     if (iN >= 0 || iR >= 0) { const nx = R1[i + 1] || []; const num = v => { const n = parseInt(norm(v).replace(/[^0-9-]/g, ''), 10); return isNaN(n) ? null : n; };
-      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null, fusivel: iF >= 0 ? num(nx[iF]) : null }; break; } }
+      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null, fusivel: iF >= 0 ? num(nx[iF]) : null };
+      break; } }
   let hr = R1.findIndex(r => cIdx(r, 'FAILURE DESCRIPTION') >= 0 || cIdx(r, 'ITEM') >= 0); if (hr < 0) hr = 5;
   const cIdxAny = (H, ...ns) => { for (const n of ns) { const i = cIdx(H, n); if (i >= 0) return i; } return -1; };
   // cabeçalhos aceitam EN (atual) e PT (versões antigas) — a planilha já mudou de idioma uma vez
@@ -137,6 +138,12 @@ function analyze(wb1, wb2) {
   const perDias = dts1.length ? (HOJE - Math.min(...dts1)) / 864e5 : 0;
   P1.mtbf_anos = round(1155 * perDias / (P1.total || 1) / 365, 2);
   P1.janela_dias = Math.round(perDias);
+  // Ritmo de consumo de sobressalentes — vira o LIMIAR do alerta de estoque (nada de chute):
+  // quantos inversores a planta queima por mês, e quantos meses o estoque atual cobre.
+  P1.consumo_mensal = perDias > 0 ? round(P1.total / (perDias / 30.44), 2) : null;
+  if (estoque && P1.consumo_mensal) { estoque.total = (estoque.novo || 0) + (estoque.reparado || 0);
+    estoque.cobertura_meses = round(estoque.total / P1.consumo_mensal, 2);
+    estoque.cobertura_novos_meses = round((estoque.novo || 0) / P1.consumo_mensal, 2); }
   // taxa NORMALIZADA por parque — a comparação honesta (contagem bruta favorece parque pequeno)
   P1.por_parque.forEach(p => { p.inversores = INV_POR_PARQUE[p.parque] || null;
     p.taxa_100 = p.inversores ? round(100 * p.n / p.inversores, 2) : null; });
@@ -160,6 +167,8 @@ function analyze(wb1, wb2) {
     // Assim o Grafana calcula a taxa com um único "sum" no Group by, e ela respeita os filtros.
     peso_100: (x.parque && INV_POR_PARQUE[x.parque]) ? round(100 / INV_POR_PARQUE[x.parque], 6) : null,
     inversores_parque: (x.parque && INV_POR_PARQUE[x.parque]) || null,
+    // 1º dia do mês como timestamp — permite o SPARKLINE (tendência) atrás do número no Stat
+    mes_ts: x.date ? new Date(Date.UTC(x.date.getFullYear(), x.date.getMonth(), 1)).toISOString() : null,
   }));
   // fato explodido por CÓDIGO (multi-código "10, 36" vira 2 linhas) — p/ Pareto de código filtrável
   P1.fatos_codigo = p1.flatMap(x => x.codigos.map(c => ({ parque: x.parque, ano: x.date ? x.date.getFullYear() : null, modo: x.modo, codigo: c })));
