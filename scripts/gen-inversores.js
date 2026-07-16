@@ -31,6 +31,9 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
 // ---------- utils ----------
 const norm = s => String(s == null ? '' : s).trim();
+// Inversores POR PARQUE (informado pelo usuário 2026-07-16; soma = 1155 ✓). Sem isto a comparação entre
+// parques é INJUSTA: M7 tem 44 inversores e M6 tem 165 — contar troca bruta favorece o parque pequeno.
+const INV_POR_PARQUE = { M1: 165, M2: 88, M3: 165, M4: 165, M5: 165, M6: 165, M7: 44, M8: 165, M9: 33 };
 const normOrig = v => { const s = norm(v).toLowerCase(); if (!s) return ''; if (/reparad|repair/.test(s)) return 'Reparado'; if (/novo|new/.test(s)) return 'Novo'; return norm(v); };
 function parkNorm(v) { const n = parseInt(norm(v).replace(/[^0-9]/g, ''), 10); if (!n) return null; return 'M' + (n === 10 ? 1 : n); } // M02..M10 -> M2..M9,M1 (M10=M1)
 function tsNorm(v) { const n = parseInt(norm(v).replace(/[^0-9]/g, ''), 10); return n ? 'TS' + String(n).padStart(2, '0') : null; }
@@ -134,9 +137,13 @@ function analyze(wb1, wb2) {
   const perDias = dts1.length ? (HOJE - Math.min(...dts1)) / 864e5 : 0;
   P1.mtbf_anos = round(1155 * perDias / (P1.total || 1) / 365, 2);
   P1.janela_dias = Math.round(perDias);
-  // pior parque, com número p/ o Stat nativo mapear (M6 -> 6 -> "M6")
-  const bp0 = P1.por_parque.slice().sort((a, b) => b.n - a.n)[0] || { parque: '-', n: 0 };
-  P1.pior_parque = { parque: bp0.parque, num: parseInt(String(bp0.parque).replace(/\D/g, ''), 10) || 0, n: bp0.n };
+  // taxa NORMALIZADA por parque — a comparação honesta (contagem bruta favorece parque pequeno)
+  P1.por_parque.forEach(p => { p.inversores = INV_POR_PARQUE[p.parque] || null;
+    p.taxa_100 = p.inversores ? round(100 * p.n / p.inversores, 2) : null; });
+  // pior parque PELA TAXA (não pela contagem), com número p/ o Stat nativo mapear (M6 -> 6 -> "M6")
+  const bp0 = P1.por_parque.slice().sort((a, b) => (b.taxa_100 || 0) - (a.taxa_100 || 0))[0] || { parque: '-', n: 0 };
+  P1.pior_parque = { parque: bp0.parque, num: parseInt(String(bp0.parque).replace(/\D/g, ''), 10) || 0, n: bp0.n, taxa_100: bp0.taxa_100 };
+  P1.melhor_parque = (P1.por_parque.filter(p => p.taxa_100 != null).slice().sort((a, b) => a.taxa_100 - b.taxa_100)[0]) || null;
   // TABELA-FATO: 1 linha por substituição. É o que permite FILTRAR/AGREGAR no Grafana (variáveis + Group by),
   // em vez de só exibir agregado pronto. 154 linhas = irrisório no JSON.
   const iso = d => d ? new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : null;
@@ -149,6 +156,10 @@ function analyze(wb1, wb2) {
     codigo: x.codigos.length ? x.codigos.join(', ') : '(sem código)',
     fusiveis: x.fusQtd, origem: x.orig || '(não informado)',
     troca: iso(x.sub), dias_reposicao: (x.date && x.sub && x.sub >= x.date) ? Math.round((x.sub - x.date) / 864e5) : null,
+    // truque p/ taxa normalizada FILTRÁVEL: SOMAR peso_100 por parque == trocas × 100 ÷ inversores.
+    // Assim o Grafana calcula a taxa com um único "sum" no Group by, e ela respeita os filtros.
+    peso_100: (x.parque && INV_POR_PARQUE[x.parque]) ? round(100 / INV_POR_PARQUE[x.parque], 6) : null,
+    inversores_parque: (x.parque && INV_POR_PARQUE[x.parque]) || null,
   }));
   // fato explodido por CÓDIGO (multi-código "10, 36" vira 2 linhas) — p/ Pareto de código filtrável
   P1.fatos_codigo = p1.flatMap(x => x.codigos.map(c => ({ parque: x.parque, ano: x.date ? x.date.getFullYear() : null, modo: x.modo, codigo: c })));
@@ -197,7 +208,7 @@ function analyze(wb1, wb2) {
     { k: 'Alarmes = rede', v: String(P2.rede_pct), u: '%', c: 'não é defeito', cor: COR.faint },
   ];
   return { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
-    escopo: { inversores_planta: 1155, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado };
+    escopo: { inversores_planta: 1155, inversores_por_parque: INV_POR_PARQUE, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado };
 }
 
 (async () => {
