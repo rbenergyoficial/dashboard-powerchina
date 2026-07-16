@@ -151,17 +151,18 @@ async function gerarKpis(rows) {
 
   // tiles[] pré-formatados (PT-BR) p/ a faixa de KPIs do cabeçalho (card Business Text).
   // g='e' KPIs de energia · g='r' restrição POR TIPO (ENE/CNF/REL, % da energia frustrada).
-  const ptbr = (n, dec) => Number(n).toLocaleString('pt-BR', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  // ponto decimal + ponto de milhar; 2 casas nas MEDIDAS (MW/GWh/%), inteiro nas CONTAGENS (padrão do usuário 2026-07-16)
+  const fmtDot = (n, dec) => { const s = Number(n || 0).toFixed(dec); const [i, f] = s.split('.'); const im = i.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return f ? im + '.' + f : im; };
   const rz = (k) => kpis.razoes[k] || { pct: 0, gwh: 0 };
   kpis.tiles = [
-    { l: 'Outorga', v: ptbr(kpis.outorga_mw, 2), u: 'MW', g: 'e', t: 'Capacidade outorgada do complexo' },
-    { l: 'Gerado', v: ptbr(kpis.gerados_gwh, 1), u: 'GWh', g: 'e', t: 'Energia verificada ONS no período' },
-    { l: 'Frustrado', v: ptbr(kpis.frustrados_gwh, 1), u: 'GWh', g: 'e', t: 'Energia perdida por restrição ONS' },
-    { l: 'Restrições', v: ptbr(kpis.restricoes, 0), u: '', g: 'e', t: 'Intervalos de 30 min com limite ativo' },
-    { l: 'Duração', v: ptbr(kpis.duracao_h, 0), u: 'h', g: 'e', t: 'Horas totais sob restrição' },
-    { l: 'ENE', v: ptbr(rz('ENE').pct, 1), u: '%', g: 'r', sep: 1, t: ptbr(rz('ENE').gwh, 1) + ' GWh — restrição por energia' },
-    { l: 'CNF', v: ptbr(rz('CNF').pct, 1), u: '%', g: 'r', t: ptbr(rz('CNF').gwh, 1) + ' GWh — restrição por confiabilidade' },
-    { l: 'REL', v: ptbr(rz('REL').pct, 1), u: '%', g: 'r', t: ptbr(rz('REL').gwh, 1) + ' GWh — restrição por religamento/outras' },
+    { l: 'Outorga', v: fmtDot(kpis.outorga_mw, 2), u: 'MW', g: 'e', t: 'Capacidade outorgada do complexo' },
+    { l: 'Gerado', v: fmtDot(kpis.gerados_gwh, 2), u: 'GWh', g: 'e', t: 'Energia verificada ONS no período' },
+    { l: 'Frustrado', v: fmtDot(kpis.frustrados_gwh, 2), u: 'GWh', g: 'e', t: 'Energia perdida por restrição ONS' },
+    { l: 'Restrições', v: fmtDot(kpis.restricoes, 0), u: '', g: 'e', t: 'Intervalos de 30 min com limite ativo' },
+    { l: 'Duração', v: fmtDot(kpis.duracao_h, 0), u: 'h', g: 'e', t: 'Horas totais sob restrição' },
+    { l: 'ENE', v: fmtDot(rz('ENE').pct, 2), u: '%', g: 'r', sep: 1, t: fmtDot(rz('ENE').gwh, 2) + ' GWh — restrição por energia' },
+    { l: 'CNF', v: fmtDot(rz('CNF').pct, 2), u: '%', g: 'r', t: fmtDot(rz('CNF').gwh, 2) + ' GWh — restrição por confiabilidade' },
+    { l: 'REL', v: fmtDot(rz('REL').pct, 2), u: '%', g: 'r', t: fmtDot(rz('REL').gwh, 2) + ' GWh — restrição por religamento/outras' },
   ];
   const json = JSON.stringify(kpis, null, 1);
   await upload('ons_kpis.json', json);
