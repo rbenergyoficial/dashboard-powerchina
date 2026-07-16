@@ -30,6 +30,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
 // ---------- utils ----------
 const norm = s => String(s == null ? '' : s).trim();
+const normOrig = v => { const s = norm(v).toLowerCase(); if (!s) return ''; if (/reparad|repair/.test(s)) return 'Reparado'; if (/novo|new/.test(s)) return 'Novo'; return norm(v); };
 function parkNorm(v) { const n = parseInt(norm(v).replace(/[^0-9]/g, ''), 10); if (!n) return null; return 'M' + (n === 10 ? 1 : n); } // M02..M10 -> M2..M9,M1 (M10=M1)
 function tsNorm(v) { const n = parseInt(norm(v).replace(/[^0-9]/g, ''), 10); return n ? 'TS' + String(n).padStart(2, '0') : null; }
 function invNorm(v) { const n = parseInt(norm(v).replace(/[^0-9]/g, ''), 10); return n ? 'INV' + String(n).padStart(2, '0') : null; }
@@ -85,10 +86,23 @@ function enrich(arr, colorFn) { const mx = Math.max(...arr.map(x => x.n), 1); ar
 function analyze(wb1, wb2) {
   // P1
   const S1 = wb1.Sheets[wb1.SheetNames[0]]; const R1 = rowsOf(S1);
+  // estoque de sobressalentes: caixa "Spare Parts WareHouse" no topo — rótulos New/Repair (ou Novo/Reparado) + valor na linha seguinte
+  let estoque = null;
+  for (let i = 0; i < Math.min(6, R1.length); i++) { const row = R1[i].map(x => norm(x).toLowerCase());
+    const iN = row.findIndex(x => x === 'new' || x === 'novo' || x === 'novos'); const iR = row.findIndex(x => /^(repair|reparad)/.test(x));
+    if (iN >= 0 || iR >= 0) { const nx = R1[i + 1] || []; const num = v => { const n = parseInt(norm(v).replace(/[^0-9-]/g, ''), 10); return isNaN(n) ? null : n; };
+      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null }; break; } }
   let hr = R1.findIndex(r => cIdx(r, 'FAILURE DESCRIPTION') >= 0 || cIdx(r, 'ITEM') >= 0); if (hr < 0) hr = 5;
-  const H1 = R1[hr]; const c = { item: cIdx(H1, 'ITEM'), spv: cIdx(H1, 'SPV'), ts: cIdx(H1, 'TS'), inv: cIdx(H1, 'INV'), desc: cIdx(H1, 'FAILURE DESCRIPTION'), date: cIdx(H1, 'DATE'), sub: cIdx(H1, 'Data substituição') };
+  const cIdxAny = (H, ...ns) => { for (const n of ns) { const i = cIdx(H, n); if (i >= 0) return i; } return -1; };
+  const H1 = R1[hr]; const c = { item: cIdx(H1, 'ITEM'), spv: cIdx(H1, 'SPV'), ts: cIdx(H1, 'TS'), inv: cIdx(H1, 'INV'), desc: cIdx(H1, 'FAILURE DESCRIPTION'), date: cIdx(H1, 'DATE'), sub: cIdx(H1, 'Data substituição'),
+    fid: cIdx(H1, 'FAILURE ID'), fus: cIdx(H1, 'Fusíveis danificados'), fase: cIdx(H1, 'Fases/fusíveis'),
+    orig: (() => { const o = cIdxAny(H1, 'Novo/Reparado', 'Novo ou Reparado', 'Novo / Reparado', 'Origem', 'Origem do inversor', 'Tipo de substituição', 'New/Repair'); return o >= 0 ? o : H1.findIndex(h => /reparad|repair/i.test(norm(h))); })() };
   const p1 = R1.slice(hr + 1).filter(r => norm(r[c.item]) !== '').map(r => { const { modo, termico } = modoP1(r[c.desc]); const date = toDate(r[c.date]); const fut = date && date > HOJE;
-    return { parque: parkNorm(r[c.spv]), ts: tsNorm(r[c.ts]), inv: invNorm(r[c.inv]), modo, termico, date: (date && !fut) ? date : null, sub: toDate(r[c.sub]) }; });
+    const fidRaw = norm(r[c.fid]); const codigos = (fidRaw && fidRaw !== '-') ? fidRaw.split(/[,;\/]/).map(s => s.trim()).filter(s => /^\d+$/.test(s)) : [];
+    const fusRaw = norm(r[c.fus]); const fusAval = fusRaw !== ''; const dig = fusRaw.replace(/[^0-9]/g, ''); const fusDan = fusAval && !/n[ãa]o/i.test(fusRaw) && +dig > 0;
+    const fases = norm(r[c.fase]) ? norm(r[c.fase]).split(/[\/,;]/).map(s => s.trim().toUpperCase()).filter(Boolean) : [];
+    return { parque: parkNorm(r[c.spv]), ts: tsNorm(r[c.ts]), inv: invNorm(r[c.inv]), modo, termico, date: (date && !fut) ? date : null, sub: toDate(r[c.sub]),
+      codigos, fusAval, fusDan, fusQtd: fusDan ? (+dig || 0) : 0, fases, orig: c.orig >= 0 ? normOrig(r[c.orig]) : '' }; });
   const p1Term = p1.filter(x => x.termico).length;
   const leads = p1.filter(x => x.date && x.sub && x.sub >= x.date && (x.sub - x.date) / 864e5 < 500).map(x => (x.sub - x.date) / 864e5).sort((a, b) => a - b);
   const P1 = { total: p1.length, termico: p1Term, termico_pct: round(100 * p1Term / (p1.length || 1)), com_data: p1.filter(x => x.date).length, com_troca: p1.filter(x => x.sub).length,
@@ -96,6 +110,15 @@ function analyze(wb1, wb2) {
     por_parque: tally(p1.map(x => x.parque).filter(Boolean)).map(([parque, n]) => ({ parque, n })).sort((a, b) => a.parque.localeCompare(b.parque, undefined, { numeric: true })),
     por_mes: tally(p1.map(x => ym(x.date)).filter(Boolean)).map(([mes, n]) => ({ mes, n })).sort((a, b) => a.mes.localeCompare(b.mes)),
     lead_time: leads.length ? { n: leads.length, mediana: Math.round(leads[Math.floor(leads.length / 2)]), media: round(leads.reduce((a, b) => a + b, 0) / leads.length), max: Math.round(leads[leads.length - 1]) } : null };
+  // FAILURE ID (código nativo do inversor) — Pareto; multi-código ("10, 36") conta cada um
+  P1.por_codigo = tally(p1.flatMap(x => x.codigos)).slice(0, 12).map(([codigo, n]) => ({ codigo, n }));
+  P1.com_codigo = p1.filter(x => x.codigos.length).length;
+  // Fusíveis (colunas novas — enchem com o tempo): quantos avaliados, quantos danificaram, fases afetadas
+  const fusAv = p1.filter(x => x.fusAval);
+  P1.fusiveis = { avaliados: fusAv.length, com_dano: fusAv.filter(x => x.fusDan).length, sem_dano: fusAv.filter(x => !x.fusDan).length,
+    fusiveis_total: p1.reduce((a, x) => a + x.fusQtd, 0), por_fase: ['A', 'B', 'C'].map(f => ({ fase: f, n: p1.filter(x => x.fases.includes(f)).length })) };
+  // Origem do inversor de reposição (novo × reparado) — só se a coluna existir na planilha
+  if (c.orig >= 0) P1.por_origem = tally(p1.map(x => x.orig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
 
   // P2
   let ev = []; const parques = [];
@@ -138,7 +161,7 @@ function analyze(wb1, wb2) {
     { k: 'Eventos = rede', v: String(round(100 * P2.rede / (P2.eventos || 1))), u: '%', c: 'não é defeito', cor: COR.faint },
   ];
   return { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
-    escopo: { inversores_planta: 1155, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos }, p1: P1, p2: P2, cruzado };
+    escopo: { inversores_planta: 1155, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado };
 }
 
 (async () => {
