@@ -178,6 +178,15 @@ function analyze(wb1, wb2) {
     modos_inversor: tally(evInv.map(x => x.nome)).map(([nome, n]) => ({ nome, n })),
     por_parque: [...new Set(ev.map(x => x.parque))].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(p => ({ parque: p, eventos: ev.filter(x => x.parque === p).length, falha_inversor: evInv.filter(x => x.parque === p).length, rede: ev.filter(x => x.parque === p && x.classe === 'Rede').length })),
     isolamento_por_mes: tally(evInv.filter(x => x.classe.includes('isolamento')).map(x => ym(x.date)).filter(Boolean)).map(([mes, n]) => ({ mes, n })).sort((a, b) => a.mes.localeCompare(b.mes)) };
+  // TABELA-FATO do P2 — agregada no grão inversor×classe×mês (não as 13.579 linhas cruas!).
+  // Permite os MESMOS filtros $parque/$ano do P1: no Grafana faz-se Group by + SUM(n).
+  { const m = new Map();
+    for (const e of ev) { const mes = ym(e.date); const k = [e.parque, e.inv, e.classe, mes].join('|');
+      if (!m.has(k)) m.set(k, { parque: e.parque, inv: e.inv, ts: (e.inv || '').split('/')[1] || null, classe: e.classe,
+        eh_inversor: ehInversor(e.classe) ? 'Falha do inversor' : 'Rede/aviso',
+        ano: e.date ? e.date.getFullYear() : null, mes, mes_lbl: mes ? mesLbl(mes) : null, n: 0 });
+      m.get(k).n++; }
+    P2.fatos = [...m.values()]; }
   // ATENÇÃO SEMÂNTICA: isto é tempo médio entre ALARMES do SCADA (MTBA), NÃO entre falhas. P2 não significa queima.
   P2.mtba_dias = round(P2.inversores_distintos * per / (P2.falha_inversor || 1), 1);
   P2.rede_pct = round(100 * P2.rede / (P2.eventos || 1));
