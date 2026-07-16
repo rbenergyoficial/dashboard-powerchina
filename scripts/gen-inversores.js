@@ -17,9 +17,10 @@ function streamToBuffer(readable) { return new Promise((resolve, reject) => { co
 async function getBlobClient() { const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido'); return BlobServiceClient.fromConnectionString(conn); }
 async function loadRawBuffers() {
   if (process.env.LOCAL_DIR) { const fs = require('fs'), path = require('path'); const dir = process.env.LOCAL_DIR;
-    return fs.readdirSync(dir).filter(n => /\.xlsx$/i.test(n)).map(n => ({ name: n, buf: fs.readFileSync(path.join(dir, n)) })); }
+    return fs.readdirSync(dir).filter(n => /\.xlsx$/i.test(n)).map(n => ({ name: n, mod: fs.statSync(path.join(dir, n)).mtime, buf: fs.readFileSync(path.join(dir, n)) })); }
   const svc = await getBlobClient(); const cont = svc.getContainerClient(RAW_CONTAINER); const out = [];
-  for await (const b of cont.listBlobsFlat()) { if (!/\.xlsx$/i.test(b.name)) continue; out.push({ name: b.name, buf: await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody) }); }
+  for await (const b of cont.listBlobsFlat()) { if (!/\.xlsx$/i.test(b.name)) continue;
+    out.push({ name: b.name, mod: (b.properties || {}).lastModified, buf: await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody) }); }
   return out;
 }
 async function writeOut(obj) { const json = JSON.stringify(obj);
@@ -187,9 +188,13 @@ function analyze(wb1, wb2) {
 (async () => {
   const raws = await loadRawBuffers();
   if (!raws.length) { console.log('Nenhuma planilha .xlsx em "' + RAW_CONTAINER + '" — nada a processar.'); return; }
-  let wb1, wb2;
-  for (const { name, buf } of raws) { const wb = XLSX.read(buf, { cellDates: true, type: 'buffer' }); const cls = classifyWb(wb);
-    if (cls === 'P1') wb1 = wb; else if (cls === 'P2') wb2 = wb; else console.log('ignorado (não é P1 nem P2):', name); }
+  // se o container acumular versões (nome do arquivo tem data), fica sempre com a MAIS RECENTE de cada tipo
+  let wb1, wb2, m1 = -1, m2 = -1;
+  for (const { name, buf, mod } of raws) { const wb = XLSX.read(buf, { cellDates: true, type: 'buffer' }); const cls = classifyWb(wb);
+    const t = mod ? new Date(mod).getTime() : 0;
+    if (cls === 'P1') { if (t >= m1) { wb1 = wb; m1 = t; console.log('P1 <-', name); } }
+    else if (cls === 'P2') { if (t >= m2) { wb2 = wb; m2 = t; console.log('P2 <-', name); } }
+    else console.log('ignorado (não é P1 nem P2):', name); }
   if (!wb1 || !wb2) throw new Error('faltou ' + (!wb1 ? 'P1 (Failure Control)' : '') + (!wb2 ? ' P2 (Registro Falhas)' : '') + ' no container');
   const out = analyze(wb1, wb2);
   const size = await writeOut(out);
