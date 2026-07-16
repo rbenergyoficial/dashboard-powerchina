@@ -137,6 +137,21 @@ function analyze(wb1, wb2) {
   // pior parque, com número p/ o Stat nativo mapear (M6 -> 6 -> "M6")
   const bp0 = P1.por_parque.slice().sort((a, b) => b.n - a.n)[0] || { parque: '-', n: 0 };
   P1.pior_parque = { parque: bp0.parque, num: parseInt(String(bp0.parque).replace(/\D/g, ''), 10) || 0, n: bp0.n };
+  // TABELA-FATO: 1 linha por substituição. É o que permite FILTRAR/AGREGAR no Grafana (variáveis + Group by),
+  // em vez de só exibir agregado pronto. 154 linhas = irrisório no JSON.
+  const iso = d => d ? new Date(d.getTime() - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10) : null;
+  P1.fatos = p1.map(x => ({
+    parque: x.parque, ts: x.ts, inv: x.inv,
+    local: (x.parque && x.ts && x.inv) ? x.parque + '/' + x.ts + '/' + x.inv : null,
+    modo: x.modo, termico: x.termico ? 'Térmico' : 'Não térmico',
+    data: iso(x.date), ano: x.date ? x.date.getFullYear() : null, mes: x.date ? ym(x.date) : null,
+    mes_lbl: x.date ? mesLbl(ym(x.date)) : null,
+    codigo: x.codigos.length ? x.codigos.join(', ') : '(sem código)',
+    fusiveis: x.fusQtd, origem: x.orig || '(não informado)',
+    troca: iso(x.sub), dias_reposicao: (x.date && x.sub && x.sub >= x.date) ? Math.round((x.sub - x.date) / 864e5) : null,
+  }));
+  // fato explodido por CÓDIGO (multi-código "10, 36" vira 2 linhas) — p/ Pareto de código filtrável
+  P1.fatos_codigo = p1.flatMap(x => x.codigos.map(c => ({ parque: x.parque, ano: x.date ? x.date.getFullYear() : null, modo: x.modo, codigo: c })));
 
   // P2
   let ev = []; const parques = [];
