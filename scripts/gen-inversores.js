@@ -90,13 +90,16 @@ function analyze(wb1, wb2) {
   let estoque = null;
   for (let i = 0; i < Math.min(6, R1.length); i++) { const row = R1[i].map(x => norm(x).toLowerCase());
     const iN = row.findIndex(x => x === 'new' || x === 'novo' || x === 'novos'); const iR = row.findIndex(x => /^(repair|reparad)/.test(x));
+    const iF = row.findIndex(x => /^spare\s*fuse|fus[ií]ve/.test(x));
     if (iN >= 0 || iR >= 0) { const nx = R1[i + 1] || []; const num = v => { const n = parseInt(norm(v).replace(/[^0-9-]/g, ''), 10); return isNaN(n) ? null : n; };
-      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null }; break; } }
+      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null, fusivel: iF >= 0 ? num(nx[iF]) : null }; break; } }
   let hr = R1.findIndex(r => cIdx(r, 'FAILURE DESCRIPTION') >= 0 || cIdx(r, 'ITEM') >= 0); if (hr < 0) hr = 5;
   const cIdxAny = (H, ...ns) => { for (const n of ns) { const i = cIdx(H, n); if (i >= 0) return i; } return -1; };
-  const H1 = R1[hr]; const c = { item: cIdx(H1, 'ITEM'), spv: cIdx(H1, 'SPV'), ts: cIdx(H1, 'TS'), inv: cIdx(H1, 'INV'), desc: cIdx(H1, 'FAILURE DESCRIPTION'), date: cIdx(H1, 'DATE'), sub: cIdx(H1, 'Data substituição'),
-    fid: cIdx(H1, 'FAILURE ID'), fus: cIdx(H1, 'Fusíveis danificados'), fase: cIdx(H1, 'Fases/fusíveis'),
-    orig: (() => { const o = cIdxAny(H1, 'Novo/Reparado', 'Novo ou Reparado', 'Novo / Reparado', 'Origem', 'Origem do inversor', 'Tipo de substituição', 'New/Repair'); return o >= 0 ? o : H1.findIndex(h => /reparad|repair/i.test(norm(h))); })() };
+  // cabeçalhos aceitam EN (atual) e PT (versões antigas) — a planilha já mudou de idioma uma vez
+  const H1 = R1[hr]; const c = { item: cIdx(H1, 'ITEM'), spv: cIdx(H1, 'SPV'), ts: cIdx(H1, 'TS'), inv: cIdx(H1, 'INV'), desc: cIdx(H1, 'FAILURE DESCRIPTION'), date: cIdx(H1, 'DATE'),
+    sub: cIdxAny(H1, 'Replacement Date', 'Data substituição', 'Data de substituição'),
+    fid: cIdx(H1, 'FAILURE ID'), fus: cIdxAny(H1, 'Damaged Fuses', 'Fusíveis danificados'), fase: cIdxAny(H1, 'Phases/Fuses', 'Fases/fusíveis'),
+    orig: (() => { const o = cIdxAny(H1, 'New or Repaired', 'Novo/Reparado', 'Novo ou Reparado', 'Origem', 'Tipo de substituição', 'New/Repair'); return o >= 0 ? o : H1.findIndex(h => /reparad|repair/i.test(norm(h))); })() };
   const p1 = R1.slice(hr + 1).filter(r => norm(r[c.item]) !== '').map(r => { const { modo, termico } = modoP1(r[c.desc]); const date = toDate(r[c.date]); const fut = date && date > HOJE;
     const fidRaw = norm(r[c.fid]); const codigos = (fidRaw && fidRaw !== '-') ? fidRaw.split(/[,;\/]/).map(s => s.trim()).filter(s => /^\d+$/.test(s)) : [];
     const fusRaw = norm(r[c.fus]); const fusAval = fusRaw !== ''; const dig = fusRaw.replace(/[^0-9]/g, ''); const fusDan = fusAval && !/n[ãa]o/i.test(fusRaw) && +dig > 0;
@@ -116,9 +119,23 @@ function analyze(wb1, wb2) {
   // Fusíveis (colunas novas — enchem com o tempo): quantos avaliados, quantos danificaram, fases afetadas
   const fusAv = p1.filter(x => x.fusAval);
   P1.fusiveis = { avaliados: fusAv.length, com_dano: fusAv.filter(x => x.fusDan).length, sem_dano: fusAv.filter(x => !x.fusDan).length,
-    fusiveis_total: p1.reduce((a, x) => a + x.fusQtd, 0), por_fase: ['A', 'B', 'C'].map(f => ({ fase: f, n: p1.filter(x => x.fases.includes(f)).length })) };
+    fusiveis_total: p1.reduce((a, x) => a + x.fusQtd, 0), por_fase: tally(p1.flatMap(x => x.fases)).map(([fase, n]) => ({ fase, n })) };   // dinâmico: A/B/C ou L1/L2/L3
   // Origem do inversor de reposição (novo × reparado) — só se a coluna existir na planilha
   if (c.orig >= 0) P1.por_origem = tally(p1.map(x => x.orig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
+  // Reposição: falha (DATE) → troca (Replacement Date). Maioria é no MESMO DIA = excelência operacional.
+  const comAmbas = p1.filter(x => x.date && x.sub && x.sub >= x.date);
+  const diasRep = comAmbas.map(x => Math.round((x.sub - x.date) / 864e5)).filter(d => d >= 0 && d < 500);
+  const mesmoDia = diasRep.filter(d => d === 0).length;
+  P1.reposicao = { com_ambas: comAmbas.length, mesmo_dia: mesmoDia, pct_mesmo_dia: round(100 * mesmoDia / (diasRep.length || 1)),
+    max_dias: diasRep.length ? Math.max(...diasRep) : null, media_dias: diasRep.length ? round(diasRep.reduce((a, b) => a + b, 0) / diasRep.length, 2) : null };
+  // MTBF da FROTA pelas falhas REAIS (P1) — NÃO pelos alarmes do SCADA (P2 não significa queima).
+  const dts1 = p1.map(x => x.date).filter(Boolean);
+  const perDias = dts1.length ? (HOJE - Math.min(...dts1)) / 864e5 : 0;
+  P1.mtbf_anos = round(1155 * perDias / (P1.total || 1) / 365, 2);
+  P1.janela_dias = Math.round(perDias);
+  // pior parque, com número p/ o Stat nativo mapear (M6 -> 6 -> "M6")
+  const bp0 = P1.por_parque.slice().sort((a, b) => b.n - a.n)[0] || { parque: '-', n: 0 };
+  P1.pior_parque = { parque: bp0.parque, num: parseInt(String(bp0.parque).replace(/\D/g, ''), 10) || 0, n: bp0.n };
 
   // P2
   let ev = []; const parques = [];
@@ -134,7 +151,10 @@ function analyze(wb1, wb2) {
     modos_inversor: tally(evInv.map(x => x.nome)).map(([nome, n]) => ({ nome, n })),
     por_parque: [...new Set(ev.map(x => x.parque))].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(p => ({ parque: p, eventos: ev.filter(x => x.parque === p).length, falha_inversor: evInv.filter(x => x.parque === p).length, rede: ev.filter(x => x.parque === p && x.classe === 'Rede').length })),
     isolamento_por_mes: tally(evInv.filter(x => x.classe.includes('isolamento')).map(x => ym(x.date)).filter(Boolean)).map(([mes, n]) => ({ mes, n })).sort((a, b) => a.mes.localeCompare(b.mes)) };
-  const mtbf = round(P2.inversores_distintos * per / (P2.falha_inversor || 1), 1);
+  // ATENÇÃO SEMÂNTICA: isto é tempo médio entre ALARMES do SCADA (MTBA), NÃO entre falhas. P2 não significa queima.
+  P2.mtba_dias = round(P2.inversores_distintos * per / (P2.falha_inversor || 1), 1);
+  P2.rede_pct = round(100 * P2.rede / (P2.eventos || 1));
+  P2.bad_actor = P2.bad_actors[0] || { inv: '—', n: 0 };
 
   // cruzado
   const p2ByInv = new Map(); for (const e of evInv) p2ByInv.set(e.inv, (p2ByInv.get(e.inv) || 0) + 1);
@@ -151,14 +171,14 @@ function analyze(wb1, wb2) {
   { const tot = P2.por_classe.reduce((a, x) => a + x.n, 0) || 1; const cm = { 'Rede': COR.blue, 'Aviso/Sistema': COR.faint, 'Arranjo FV': COR.teal, 'Inversor · anomalia': COR.brand, 'Inversor · isolamento': COR.warn, 'Inversor · corrente': COR.crit };
     P2.por_classe.forEach(x => { x.pct = Math.round(x.n / tot * 100); x.cor = cm[x.classe] || COR.neutral; }); }
   cruzado.exemplos.forEach(x => { x.cor = /estufado|carboni|superaque|ventoinha/i.test(x.modo_troca) ? COR.crit : (/anomalia/i.test(x.modo_troca) ? COR.brand : COR.faint); });
-  const bp = P1.por_parque.slice().sort((a, b) => b.n - a.n)[0] || { parque: '-', n: 0 };
+  // kpiTiles (legado do ticker HTML). P1 = trocas REAIS · P2 = ALARMES (não é queima) — linguagem separada de propósito.
   const kpiTiles = [
     { k: 'Trocas registradas', v: String(P1.total), u: '', c: 'P1 · desde ' + ((P1.por_mes[0] || {}).lbl || '?'), cor: COR.brand },
     { k: 'Falhas térmicas', v: String(P1.termico_pct), u: '%', c: P1.termico + ' de ' + P1.total + ' 🔥', cor: COR.crit },
-    { k: 'Pior parque', v: bp.parque, u: '', c: bp.n + ' trocas', cor: COR.warn },
-    { k: 'Bad-actor', v: String((badActors[0] || {}).n || 0), u: 'falhas', c: (badActors[0] || {}).inv || '—', cor: COR.crit },
-    { k: 'MTBF frota', v: String(mtbf), u: 'dias', c: 'piloto · ' + P2.parques.length + ' parques', cor: COR.blue },
-    { k: 'Eventos = rede', v: String(round(100 * P2.rede / (P2.eventos || 1))), u: '%', c: 'não é defeito', cor: COR.faint },
+    { k: 'Pior parque', v: P1.pior_parque.parque, u: '', c: P1.pior_parque.n + ' trocas', cor: COR.warn },
+    { k: 'Reposição no mesmo dia', v: String(P1.reposicao.pct_mesmo_dia), u: '%', c: P1.reposicao.mesmo_dia + ' de ' + P1.reposicao.com_ambas + ' · máx ' + P1.reposicao.max_dias + 'd', cor: COR.ok },
+    { k: 'MTBF frota', v: String(P1.mtbf_anos), u: 'anos', c: 'falhas reais (P1) · 1155 inv', cor: COR.blue },
+    { k: 'Alarmes = rede', v: String(P2.rede_pct), u: '%', c: 'não é defeito', cor: COR.faint },
   ];
   return { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
     escopo: { inversores_planta: 1155, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado };
