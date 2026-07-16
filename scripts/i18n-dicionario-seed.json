@@ -1,0 +1,161 @@
+{
+ "_nota": "Dicionario EN/ZH colhido dos dashboards adfmd6en/adfmd6zh (Monitor eletrico antigo, 2026-07-13) ANTES de aposenta-los. Semente para o i18n (PT e a fonte; preencher pt: ao usar).",
+ "colhido_em": "2026-07-16",
+ "pares": [
+  {
+   "id": 81,
+   "en": "☀️ Irradiance",
+   "zh": "☀️ 辐照度"
+  },
+  {
+   "id": 82,
+   "en": "🌡️ Temperature",
+   "zh": "🌡️ 温度"
+  },
+  {
+   "id": 83,
+   "en": "☁️ Clouds",
+   "zh": "☁️ 云量"
+  },
+  {
+   "id": 84,
+   "en": "💧 Humidity",
+   "zh": "💧 湿度"
+  },
+  {
+   "id": 85,
+   "en": "Weather",
+   "zh": "天气状况"
+  },
+  {
+   "id": 42,
+   "en": "Generation · total (gross)",
+   "zh": "发电 · 总计（毛值）"
+  },
+  {
+   "id": 43,
+   "en": "Transformer 1 · gross",
+   "zh": "变压器 1 · 毛值"
+  },
+  {
+   "id": 44,
+   "en": "Transformer 2 · gross",
+   "zh": "变压器 2 · 毛值"
+  },
+  {
+   "id": 101,
+   "en": "🌡️ Loading TR1 (230 MVA)",
+   "zh": "🌡️ 负载 TR1（230 MVA）"
+  },
+  {
+   "id": 90,
+   "en": "⚡ Energy generated today",
+   "zh": "⚡ 今日发电量"
+  },
+  {
+   "id": 92,
+   "en": "🎯 Capacity factor",
+   "zh": "🎯 容量因数"
+  },
+  {
+   "id": 91,
+   "en": "📈 Peak power today",
+   "zh": "📈 今日功率峰值"
+  },
+  {
+   "id": 93,
+   "en": "📊 Average power today",
+   "zh": "📊 今日平均功率"
+  },
+  {
+   "id": 102,
+   "en": "🌡️ Loading TR2 (230 MVA)",
+   "zh": "🌡️ 负载 TR2（230 MVA）"
+  },
+  {
+   "id": 94,
+   "en": "⚡ Generation profile today",
+   "zh": "⚡ 今日发电曲线"
+  },
+  {
+   "id": 11,
+   "en": "Line voltage (kV) · TR1",
+   "zh": "线电压 (kV) · TR1"
+  },
+  {
+   "id": 103,
+   "en": "Line voltage (kV) · TR2",
+   "zh": "线电压 (kV) · TR2"
+  },
+  {
+   "id": 12,
+   "en": "Line current (A) · TR1",
+   "zh": "线电流 (A) · TR1"
+  },
+  {
+   "id": 98,
+   "en": "Line current (A) · TR2",
+   "zh": "线电流 (A) · TR2"
+  },
+  {
+   "id": 14,
+   "en": "Power P·Q · TR1",
+   "zh": "功率 P·Q · TR1"
+  },
+  {
+   "id": 99,
+   "en": "Power P·Q · TR2",
+   "zh": "功率 P·Q · TR2"
+  },
+  {
+   "id": 13,
+   "en": "Power factor · TR1 (target ≥ 0.92)",
+   "zh": "功率因数 · TR1（目标 ≥ 0.92）"
+  },
+  {
+   "id": 100,
+   "en": "Power factor · TR2 (target ≥ 0.92)",
+   "zh": "功率因数 · TR2（目标 ≥ 0.92）"
+  },
+  {
+   "id": 30,
+   "en": "Complex power · Σ 34.5 kV collectors",
+   "zh": "电站群功率 · Σ 34.5 kV 集电线路"
+  },
+  {
+   "id": 31,
+   "en": "Circuits OK",
+   "zh": "线路正常"
+  },
+  {
+   "id": 16,
+   "en": "Active power per circuit",
+   "zh": "各线路有功功率"
+  },
+  {
+   "id": 17,
+   "en": "Reactive power per circuit",
+   "zh": "各线路无功功率"
+  },
+  {
+   "id": 18,
+   "en": "Line voltage · per circuit × phase",
+   "zh": "线电压 · 各线路 × 相"
+  },
+  {
+   "id": 19,
+   "en": "Current · per circuit × phase",
+   "zh": "电流 · 各线路 × 相"
+  },
+  {
+   "id": 111,
+   "en": "🩺 Meter health (Way2)",
+   "zh": "🩺 测量表健康 (Way2)"
+  },
+  {
+   "id": 110,
+   "en": "🩺 Meter health Way2 · telemetry lag (5 min)",
+   "zh": "🩺 测量表健康 Way2 · 遥测延迟（5 分钟）"
+  }
+ ]
+}
