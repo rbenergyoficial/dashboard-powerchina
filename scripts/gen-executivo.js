@@ -214,7 +214,9 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA). Alvos confirmados pelo usuário.
     meta: { fonte: 'PENDENTE — planilha SharePoint (P50/P90/PPA)', p50_gwh: null, p90_gwh: null, ppa_mwh: null, pr_alvo_pct: 90, disp_alvo_pct: 97 },
     estrategia: { ppa: PPA, ml: ML, regra: 'Na limitação do ONS, M1/M7/M9 (fora do PPA) são limitados a ~1 MW para blindar a entrega do PPA. Atingida a meta do PPA no mês, o ML deixa de ser limitado.' },
-    modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.filter(x => x.mes === mesAtual) };
+    // corte_diario: últimos 75 dias, NÃO só o mês corrente — no dia 5 do mês um recorte mensal
+    // deixaria o gráfico praticamente vazio, e a virada de mês é justamente onde a leitura interessa.
+    modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75) };
 
   const size = await writeOut(out);
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
