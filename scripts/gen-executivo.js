@@ -125,9 +125,17 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += v * H;
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       if (util(r)) { irrSoma += irr; irrN++; }
-      const dia = dia_; const grp = PPA.includes(u) ? 'ppa' : 'ml';
-      const pd = porDia[dia] || (porDia[dia] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
-      pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += vv * H;
+      // O registro "M7" do ONS é o circuito 2 do M3 — logo pertence ao PPA, não ao ML. Antes do reparo
+      // do RTC ele carrega metade do c2 e completa o M3; a partir do reparo o ONS_M3 já vem inteiro e
+      // esse registro vira duplicata, então sai da conta. Sem isso o gráfico diário rouba do PPA e
+      // entrega ao ML — justamente os dois grupos que a estratégia compara.
+      let grp = PPA.includes(u) ? 'ppa' : 'ml';
+      let pula = false;
+      if (u === 'M7') { if (dia_ < RTC_M3_REPARO) grp = 'ppa'; else pula = true; }
+      if (!pula) {
+        const pd = porDia[dia_] || (porDia[dia_] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
+        pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += v * H;
+      }
     }
     // ---- M3 × M7: desfaz a mistura de tag do ONS (estrutura descoberta com o usuário, 2026-07-17) ----
     // O registro "M7" do ONS NUNCA foi o M7 — é o CIRCUITO 2 do M3. E o RTC do c2 lia metade. Logo:
