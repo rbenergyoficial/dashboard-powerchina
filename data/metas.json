@@ -1,25 +1,22 @@
 {
-  "_fonte": "Planilha PPA (SharePoint) — linha 'Valor Garantido de <mes>'. ENERGIA LIQUIDA (coluna 'Energia Total de rede').",
+  "_fonte": "Planilha PPA (SharePoint), linha 'Valor Garantido de <mes>'. ENERGIA LIQUIDA (coluna 'Energia Total de rede').",
   "_unidade": "MWh",
-  "_nota": "Arquivo VERSIONADO no repo enquanto o pipeline SharePoint -> Power Automate -> blob nao existe. Meta mensal e INPUT do usuario, nao vem de fonte publica. Uma linha nova por mes (ago/26 entra quando o usuario enviar).",
-  "_mapeamento": "A planilha nomeia os parques Mauriti 2..10 (NAO existe Mauriti 1). 'UFV Mauriti 10' = M1 na nossa base (ONS CEFMT1 / Way2 / SCADA) — inferido pela Energia Equivalente, que e exatamente proporcional a potencia: Mauriti7/ref=0,3000 (14,733/49,11) · Mauriti9/ref=0,1999 (9,822/49,11) · M2/ref=0,4998 (24,555/49,11) · Mauriti10=9.091 -> 49,11 MW. PENDENTE de confirmacao do usuario.",
+  "_nota": "Guarda SO o que a planilha entrega: meta GLOBAL e meta do PPA (por usina). A meta das usinas FORA do PPA (M1/M7/M9) NAO existe na fonte — e DERIVADA pelo gen-executivo.js, nao escrita aqui, p/ recalcular sozinha a cada mes novo.",
+  "_mapeamento": "A planilha nomeia os parques Mauriti 2..10 (NAO existe Mauriti 1). 'UFV Mauriti 10' = M1 na nossa base (ONS CEFMT1 / Way2 / SCADA) — inferido pela Energia Equivalente, exatamente proporcional a potencia (Mauriti7/ref=0,3000 = 14,733/49,11 · Mauriti9/ref=0,1999 = 9,822/49,11 · M2/ref=0,4998 = 24,555/49,11 · Mauriti10=9.091 -> 49,11 MW). PENDENTE de confirmacao do usuario.",
+  "_metodologia_ml": "Meta mensal so e emitida p/ o PPA. Para M1/M7/M9 aplica-se a TAXA DO PPA (garantido_ppa / capacidade_ppa) sobre a potencia de cada um — generalizacao da regra do usuario ('mesma potencia -> mesma meta', que ele usou p/ o M10). Isso poe as 9 usinas na mesma regua (mesmo % do proprio P50). A diferenca p/ (global - ppa) fica em 'nao_alocado', EXPOSTA: o global e ~7% menos conservador que o PPA e essa sobra e uma pergunta p/ quem emite a meta, nao um numero p/ enterrar no M7/M9 (o rateio do resto dava a eles meta 46% ACIMA do proprio P50 = inatingivel por construcao).",
   "meses": {
     "2026-07": {
       "garantido_total": 50592.00,
       "garantido_ppa": 37199.26,
-      "garantido_ml": 13392.74,
-      "equivalente_total": 63634,
-      "por_ufv": {
+      "ppa_por_ufv": {
         "M2": 3380.74,
         "M3": 6763.70,
         "M4": 6763.70,
         "M5": 6763.70,
         "M6": 6763.70,
-        "M8": 6763.70,
-        "M1": 6763.70,
-        "M7": 3977.43,
-        "M9": 2651.62
+        "M8": 6763.70
       },
+      "equivalente_total": 63634,
       "equivalente_por_ufv": {
         "M2": 4544,
         "M3": 9091,

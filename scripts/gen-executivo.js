@@ -32,6 +32,7 @@ const H = 0.5;              // intervalo ONS = 30 min
 const RECONSTRUIR = process.env.RECONSTRUIR === '1';   // reconstrução do ge: DESLIGADA por padrão (ver bloco 2c)
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
+const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };  // outorga por UFV (MW) — soma 343,77
 const INV_POR_PARQUE = { M1: 165, M2: 88, M3: 165, M4: 165, M5: 165, M6: 165, M7: 44, M8: 165, M9: 33 };
 const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const lbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
@@ -284,12 +285,36 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     const dW = w2Mes.length, fatorW = dW > 0 ? diasTotal / dW : 1;
     const mt = METAS.meses[mesAtual] || null;
     const pct = (r, m) => m > 0 ? r2(100 * r / m) : null;
+
+    // ---- meta das usinas FORA do PPA: DERIVADA, porque a fonte não emite ----
+    // A planilha só traz meta p/ o PPA e o total global. Regra (definida com o usuário 2026-07-17):
+    // aplicar a TAXA DO PPA (garantido_ppa ÷ capacidade_ppa = 137,73 MWh/MW) sobre a potência de M1/M7/M9.
+    // É a generalização da regra que o próprio usuário usou p/ o M10 ("mesma potência → mesma meta"):
+    // o que ela diz de fato é "mesma taxa por MW", e assim ela também alcança M7/M9, que não têm par de
+    // potência no PPA. Resultado: as 9 usinas na MESMA régua (74,4% do próprio P50).
+    // POR QUE NÃO ratear (global − PPA − M10) entre M7/M9, como estava: o global é ~7% menos conservador
+    // que o PPA (79,5% vs 74,4% do equivalente) e o rateio despejava essa diferença inteira nos dois
+    // menores parques → meta 145,9% do próprio P50, INATINGÍVEL por construção, com ou sem curtailment.
+    // A diferença vira `nao_alocado`, EXPOSTA: é pergunta p/ quem emite a meta, não número p/ enterrar.
+    let metaUfv = null, naoAlocado = null;
+    if (mt) {
+      const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
+      const taxa = capPpa > 0 ? mt.garantido_ppa / capPpa : 0;     // MWh por MW instalado
+      metaUfv = {}; PPA.forEach(u => { metaUfv[u] = r2((mt.ppa_por_ufv || {})[u] || taxa * CAP_UFV[u]); });
+      ML.forEach(u => { metaUfv[u] = r2(taxa * CAP_UFV[u]); });
+      naoAlocado = r2(mt.garantido_total - mt.garantido_ppa - ML.reduce((a, u) => a + metaUfv[u], 0));
+    }
     mes.liquida = { total_gwh: r2(liq / 1000), ppa_gwh: r2(liqPpa / 1000), ml_gwh: r2(liqMl / 1000),
       dias: dW, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
       projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000) };
     mes.meta = mt ? {
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
-      garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000), ml_gwh: r2(mt.garantido_ml / 1000),
+      garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
+      ml_gwh: r2(ML.reduce((a, u) => a + metaUfv[u], 0) / 1000),
+      ml_fonte: 'DERIVADA — a planilha nao emite meta p/ M1/M7/M9. Taxa do PPA (' + r2(mt.garantido_ppa / PPA.reduce((a, u) => a + CAP_UFV[u], 0)) + ' MWh/MW) x potencia de cada uma.',
+      por_ufv: metaUfv,
+      nao_alocado_gwh: r2(naoAlocado / 1000),
+      nao_alocado_nota: 'Diferenca entre a meta GLOBAL e a soma das 9 usinas na regua do PPA. O global e ~7% menos conservador que o PPA (79,5% vs 74,4% da energia equivalente). Fica EXPOSTA de proposito: e pergunta p/ quem emite a meta. Enterrar no M7/M9 (rateio do resto) dava a eles meta 145,9% do proprio P50 — inatingivel por construcao.',
       atingido_pct: pct(liq, mt.garantido_total), atingido_ppa_pct: pct(liqPpa, mt.garantido_ppa),
       projecao_pct: pct(liq * fatorW, mt.garantido_total), projecao_ppa_pct: pct(liqPpa * fatorW, mt.garantido_ppa),
       sobra_projetada_gwh: r2((liq * fatorW - mt.garantido_total) / 1000),
