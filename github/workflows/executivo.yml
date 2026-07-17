@@ -1,0 +1,24 @@
+name: Executivo -> executivo.json (visao executiva)
+on:
+  schedule:
+    - cron: '30 12 * * *' # 09:30 BRT (depois do ONS consolidado)
+    - cron: '30 18 * * *' # 15:30 BRT
+  workflow_dispatch: {}
+concurrency:
+  group: gen-executivo
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar executivo.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+          OUT_BLOB: executivo.json
+        run: node scripts/gen-executivo.js
