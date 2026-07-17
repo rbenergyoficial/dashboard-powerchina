@@ -52,9 +52,14 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   const M = {};   // mes -> acumuladores
   for (const r of restr.consolidado) {
     const mes = String(r.ts).slice(0, 7); if (!/^\d{4}-\d{2}$/.test(mes)) continue;
-    const m = M[mes] || (M[mes] = { ger: 0, ref: 0, fru: 0, disp: 0, n: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
+    const m = M[mes] || (M[mes] = { ger: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
     const ger = num(r.ger), gref = num(r.gref), lim = num(r.lim);
-    m.ger += ger * H; m.ref += gref * H; m.disp += num(r.disp); m.n++; m.dias.add(String(r.ts).slice(0, 10));
+    // disp=0 é AUSÊNCIA DE PUBLICAÇÃO, não indisponibilidade. A partir de 2026-07-07 o ONS parou de
+    // publicar disp na janela 20h–04h (16 dos 48 intervalos, todo dia). Em 10 meses antes disso houve
+    // ZERO zeros. Contar esses zeros como "usina parada" derrubou jul/26 p/ 79,46% com a planta intacta.
+    // Media sobre os intervalos DECLARADOS; disp_cobertura expõe quantos foram, p/ queda real não se esconder.
+    const dsp = num(r.disp); if (dsp > 0) { m.disp += dsp; m.n_disp++; }
+    m.ger += ger * H; m.ref += gref * H; m.n++; m.dias.add(String(r.ts).slice(0, 10));
     if (lim > 0) { const perda = Math.max(0, (gref - ger) * H);   // <- definição da casa
       m.fru += perda; m.int_restr++;
       if (r.razao) m.raz[r.razao] = (m.raz[r.razao] || 0) + perda;
@@ -140,7 +145,9 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
       frustrada_pct: (m.ger + m.fru) > 0 ? r2(100 * m.fru / (m.ger + m.fru)) : 0,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.ge > 0 ? r2(100 * i.gv / i.ge) : null,
-      disp_pct: m.n ? r2(m.disp / m.n / CAP_MW * 100) : null, irr_media: r2(i.irr_media), ge_reconstruido_pct: i.rec_pct,
+      disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
+      disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
+      irr_media: r2(i.irr_media), ge_reconstruido_pct: i.rec_pct,
       way2_liq_gwh: r2(w2.reduce((a, x) => a + num(x.ene_liq_mwh), 0) / 1000),
       way2_gwh_dia: w2.length ? r2(w2.reduce((a, x) => a + num(x.ene_ger_mwh), 0) / w2.length / 1000) : null,
       pico_mw: w2.length ? Math.round(Math.max(...w2.map(x => num(x.pico_mw)))) : null,
@@ -182,7 +189,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   const outras = r2(Math.max(0, potencial - entregue - cortado));
   const mes = { mes: mesAtual, lbl: cur.lbl, dias_decorridos: cur.dias, dias_total: diasTotal,
     realizado_gwh: entregue, potencial_gwh: potencial, frustrada_gwh: cortado, frustrada_pct: cur.frustrada_pct,
-    pr_pct: cur.pr_pct, disp_pct: cur.disp_pct, irr_media: cur.irr_media, ge_reconstruido_pct: cur.ge_reconstruido_pct,
+    pr_pct: cur.pr_pct, disp_pct: cur.disp_pct, disp_cobertura_pct: cur.disp_cobertura_pct,
+    irr_media: cur.irr_media, ge_reconstruido_pct: cur.ge_reconstruido_pct,
     horas_restricao: cur.horas_restricao, razoes: cur.razoes, origens: cur.origens,
     // PROJEÇÃO: ritmo médio diário × dias restantes. NÃO é previsão do ONS (não existe pública além de D+1).
     projecao: { realizado_gwh: r2(entregue * fator), frustrada_gwh: r2(cortado * fator),
@@ -205,10 +213,23 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   };
 
   // ---------- 5) por UFV (mês corrente) ----------
+  // QUARENTENA DE TAG (informado pela operação em 2026-07-17): o ONS registrava o medidor do M7 como
+  // M3 circuito 2. Corrigido no ONS em 2026-07-16. Efeito visível no dado: M7 com gv/ge = 105% (geração
+  // verificada MAIOR que a estimada — impossível) e M3 com ge ~20% abaixo dos gêmeos de 49,11 MW.
+  // Enquanto não houver dado ONS pós-correção validado, esses dois NÃO publicam corte: 0% falso engana
+  // mais que lacuna assumida. O detector é o próprio dado (gv > ge), não uma data no código.
+  const TAG_ONS_CORRIGIDA = '2026-07-16';
   const porUfv = Object.keys(INV_POR_PARQUE).sort().map(u => { const x = iCur.porUfv[u] || { ge: 0, gv: 0 };
+    const suspeito = (u === 'M7' || u === 'M3') && mesAtual <= TAG_ONS_CORRIGIDA.slice(0, 7);
+    const impossivel = x.ge > 0 && x.gv > x.ge;   // verificada > estimada: as duas pontas vêm de tags diferentes
+    const cego = suspeito || impossivel;
     return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML', inversores: INV_POR_PARQUE[u],
       potencial_gwh: r2(x.ge / 1000), realizado_gwh: r2(x.gv / 1000),
-      corte_gwh: r2(Math.max(0, x.ge - x.gv) / 1000), corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - x.gv) / x.ge) : 0 }; });
+      gv_sobre_ge_pct: x.ge > 0 ? r2(100 * x.gv / x.ge) : null,
+      tag_ons_ok: !cego,
+      nota: cego ? 'Tag do M7 estava cadastrada no ONS como M3 circuito 2 (corrigida em 16/07/2026). Enquanto o dado pos-correcao nao for validado, o corte de M3/M7 nao e publicado — o 0% que aparecia era artefato de gv > ge, nao ausencia de corte. Reconstrucao pelo SCADA em avaliacao.' : null,
+      corte_gwh: cego ? null : r2(Math.max(0, x.ge - x.gv) / 1000),
+      corte_pct: cego ? null : (x.ge > 0 ? r2(100 * Math.max(0, x.ge - x.gv) / x.ge) : 0) }; });
 
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA). Alvos confirmados pelo usuário.
