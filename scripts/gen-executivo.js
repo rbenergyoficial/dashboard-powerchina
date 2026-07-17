@@ -20,6 +20,10 @@
  * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
 const https = require('https');
+// META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
+// Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
+// ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
+const METAS = (() => { try { return require('../data/metas.json'); } catch (e) { return { meses: {} }; } })();
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -267,6 +271,31 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // barchart precisa de um campo string no eixo → grupo vira coluna, não chave de objeto
     grupos: [Object.assign({ grupo: 'PPA' }, grupo('ppa')), Object.assign({ grupo: 'ML' }, grupo('ml'))],
   };
+
+  // ---------- 4b) META × REALIZADO (tudo em energia LÍQUIDA do Way2) ----------
+  // O Valor Garantido da planilha é LÍQUIDO ("Energia Total de rede"), então o realizado tem que ser a
+  // líquida do Way2 (medidor de faturamento) — a mesma base que já sustenta o PPA. Comparar contra a
+  // geração bruta do ONS daria um crédito de ~1% que não existe: é o erro de denominador de sempre.
+  { const w2Mes = daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual);
+    const somaU = us => w2Mes.reduce((a, x) => a + us.reduce((b, u) => b + num((x.ufv_liq_mwh || {})[u]), 0), 0);
+    const liq = w2Mes.reduce((a, x) => a + num(x.ene_liq_mwh), 0);
+    const liqPpa = somaU(PPA), liqMl = somaU(ML);
+    // dias do Way2 ≠ dias do ONS (o Way2 é D+0, o ONS é D+1/D+2) → a projeção usa o ritmo do PRÓPRIO Way2
+    const dW = w2Mes.length, fatorW = dW > 0 ? diasTotal / dW : 1;
+    const mt = METAS.meses[mesAtual] || null;
+    const pct = (r, m) => m > 0 ? r2(100 * r / m) : null;
+    mes.liquida = { total_gwh: r2(liq / 1000), ppa_gwh: r2(liqPpa / 1000), ml_gwh: r2(liqMl / 1000),
+      dias: dW, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
+      projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000) };
+    mes.meta = mt ? {
+      fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
+      garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000), ml_gwh: r2(mt.garantido_ml / 1000),
+      atingido_pct: pct(liq, mt.garantido_total), atingido_ppa_pct: pct(liqPpa, mt.garantido_ppa),
+      projecao_pct: pct(liq * fatorW, mt.garantido_total), projecao_ppa_pct: pct(liqPpa * fatorW, mt.garantido_ppa),
+      sobra_projetada_gwh: r2((liq * fatorW - mt.garantido_total) / 1000),
+      vai_bater: liq * fatorW >= mt.garantido_total ? 1 : 0,
+    } : { fonte: 'PENDENTE — planilha do SharePoint', garantido_gwh: null, atingido_pct: null };
+  }
 
   // ---------- 5) por UFV (mês corrente) ----------
   // QUARENTENA DE TAG (informado pela operação em 2026-07-17): o ONS registrava o medidor do M7 como

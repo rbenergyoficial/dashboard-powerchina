@@ -1,0 +1,36 @@
+{
+  "_fonte": "Planilha PPA (SharePoint) — linha 'Valor Garantido de <mes>'. ENERGIA LIQUIDA (coluna 'Energia Total de rede').",
+  "_unidade": "MWh",
+  "_nota": "Arquivo VERSIONADO no repo enquanto o pipeline SharePoint -> Power Automate -> blob nao existe. Meta mensal e INPUT do usuario, nao vem de fonte publica. Uma linha nova por mes (ago/26 entra quando o usuario enviar).",
+  "_mapeamento": "A planilha nomeia os parques Mauriti 2..10 (NAO existe Mauriti 1). 'UFV Mauriti 10' = M1 na nossa base (ONS CEFMT1 / Way2 / SCADA) — inferido pela Energia Equivalente, que e exatamente proporcional a potencia: Mauriti7/ref=0,3000 (14,733/49,11) · Mauriti9/ref=0,1999 (9,822/49,11) · M2/ref=0,4998 (24,555/49,11) · Mauriti10=9.091 -> 49,11 MW. PENDENTE de confirmacao do usuario.",
+  "meses": {
+    "2026-07": {
+      "garantido_total": 50592.00,
+      "garantido_ppa": 37199.26,
+      "garantido_ml": 13392.74,
+      "equivalente_total": 63634,
+      "por_ufv": {
+        "M2": 3380.74,
+        "M3": 6763.70,
+        "M4": 6763.70,
+        "M5": 6763.70,
+        "M6": 6763.70,
+        "M8": 6763.70,
+        "M1": 6763.70,
+        "M7": 3977.43,
+        "M9": 2651.62
+      },
+      "equivalente_por_ufv": {
+        "M2": 4544,
+        "M3": 9091,
+        "M4": 9091,
+        "M5": 9091,
+        "M6": 9091,
+        "M8": 9091,
+        "M1": 9091,
+        "M7": 2727,
+        "M9": 1817
+      }
+    }
+  }
+}
