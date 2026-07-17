@@ -106,7 +106,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
   // 2c) agrega, reconstruindo ge onde falta
   const IRR = {};             // mes -> { porUfv, ge, gv, irr_media, rec_pct }
-  const RTC_M3_ATE = "2026-07-12"; const RTC_M3_FATOR = 0.80;
+  const RTC_M3_REPARO = "2026-07-12";   // reparo do RTC do c2 -> a estrutura do ONS vira nesta data
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
@@ -121,22 +121,45 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       // out/25-fev/26 o modelo não transfere (dá PR de 115% a 161%, impossível). Reconstruir ali produziria
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
-      // ---- CORREÇÃO DO M3 (RTC) ----
-      // Um cubículo do M3 tinha o RTC pela metade, então ONS/SCADA liam 80% do real. O Way2 lê o
-      // MEDIDOR DE FATURAMENTO e nunca foi afetado — era ele que estava certo. Fator MEDIDO contra o
-      // Way2, não arbitrado: 80/80/80/79/80/80/80/80/81/80% em 10 meses (dp 0,5pp). Corrigido
-      // fisicamente em 12/07/2026 e a razão saltou p/ 100% — é o próprio dado provando o fator.
-      // Prova cruzada: /0,80 leva o ge/MW do M3 de 83,4 p/ 104,3, dentro da faixa dos gêmeos de
-      // 49,11 MW (103,8–110,1), e o corte de 8,1% (fora da curva) p/ 13,1% (junto dos irmãos).
       const dia_ = String(r.ts).slice(0, 10);
-      let vv = v;
-      if (u === 'M3' && dia_ < RTC_M3_ATE) { g = g / RTC_M3_FATOR; vv = v / RTC_M3_FATOR; }
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += vv * H;
-      ge += g * H; gv += vv * H; geTot += g * H; if (rec) geRec += g * H;
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += v * H;
+      ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       if (util(r)) { irrSoma += irr; irrN++; }
       const dia = dia_; const grp = PPA.includes(u) ? 'ppa' : 'ml';
       const pd = porDia[dia] || (porDia[dia] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
       pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += vv * H;
+    }
+    // ---- M3 × M7: desfaz a mistura de tag do ONS (estrutura descoberta com o usuário, 2026-07-17) ----
+    // O registro "M7" do ONS NUNCA foi o M7 — é o CIRCUITO 2 do M3. E o RTC do c2 lia metade. Logo:
+    //     ONS_M3 = c1 + c3 + ½·c2   (= 80% do M3 real)      ONS_M7 = ½·c2   (= 20% do M3 real)
+    //     ONS_M3 + ONS_M7 = M3 inteiro  ← identidade EXATA: o que faltava no M3 era a metade perdida do c2
+    // Validada em 10 meses contra o Way2 (medidor de faturamento, correto):
+    //     97,7 · 100,2 · 99,6 · 98,7 · 99,9 · 100,4 · 99,4 · 100,0 · 100,9 · 100,1 %
+    // Em 12/07/2026 o RTC foi reparado e a estrutura VIROU: ONS_M3 passou a 100% (correto sozinho) e
+    // ONS_M7 dobrou p/ 40% do M3 (o c2 cheio) — virou DUPLICATA. Somar depois disso conta o c2 duas vezes.
+    // Por isso a regra é por DATA, não um fator: antes = soma, depois = M3 sozinho.
+    // O ge segue a mesma regra: o usuário confirmou que ele nasce de cálculo com origem no SCADA
+    // (não no Way2), então herda os dois defeitos. Prova: ge/MW do M3 em jul sai de 83,4 (sozinho)
+    // p/ 104,9 (somado), dentro da faixa dos gêmeos de 49,11 MW (103,8–110,1).
+    { const A = porUfv.M3, B = porUfv.M7;
+      if (A && B && mes < RTC_M3_REPARO.slice(0, 7)) { A.ge += B.ge; A.gv += B.gv; }
+      else if (A && B && mes === RTC_M3_REPARO.slice(0, 7)) {
+        // mês da virada: só os dias ANTERIORES ao reparo somam
+        const antes = C.filter(r => String(r.ts).slice(0, 10) < RTC_M3_REPARO && String(r.u) === 'CEFMT7');
+        A.ge += antes.reduce((a, r) => a + num(r.ge) * H, 0);
+        A.gv += antes.reduce((a, r) => a + num(r.gv) * H, 0);
+      }
+      // O registro M7 do ONS é o c2 em QUALQUER época — antes e depois do reparo. Logo o M7 não tem
+      // NEM realizado NEM potencial no ONS. Realizado vem do Way2. Potencial é ESTIMADO: mediana do
+      // ge/MW dos parques de tag boa × 14,733 MW (a irradiância é a mesma no complexo inteiro, então
+      // o potencial específico escala com a capacidade). É estimativa — vai marcada como tal no painel.
+      if (B) {
+        const CAPS = { M1: 49.11, M2: 24.555, M4: 49.11, M5: 49.11, M6: 49.11, M8: 49.11 };
+        const bons = Object.keys(CAPS).map(k => porUfv[k] && porUfv[k].ge > 0 ? porUfv[k].ge / CAPS[k] : null)
+          .filter(x => x != null).sort((a, b) => a - b);
+        B.ge = bons.length ? bons[Math.floor(bons.length / 2)] * 14.733 : 0;
+        B.ge_estimado = true; B.gv = 0;
+      }
     }
     IRR[mes] = { porUfv, ge, gv, irr_media: irrN ? irrSoma / irrN : 0, rec_pct: geTot > 0 ? r2(100 * geRec / geTot) : 0 };
     Object.entries(porDia).sort().forEach(([dia, x]) => corteDiario.push({ dia, mes,
@@ -246,12 +269,13 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   const porUfv = Object.keys(INV_POR_PARQUE).sort().map(u => { const x = iCur.porUfv[u] || { ge: 0, gv: 0 };
     const gv = realizado(u);
     const viaWay2 = VIA_WAY2.includes(u) && W2_UFV[u] > 0;
-    const m3corr = u === 'M3' && mesAtual <= RTC_M3_ATE.slice(0, 7);
+    const m3corr = u === 'M3' && mesAtual <= RTC_M3_REPARO.slice(0, 7);
     return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML', inversores: INV_POR_PARQUE[u],
       potencial_gwh: r2(x.ge / 1000), realizado_gwh: r2(gv / 1000),
+      potencial_estimado: !!x.ge_estimado,
       fonte_realizado: viaWay2 ? 'Way2 (medidor de faturamento)' : 'ONS (geracao verificada)',
-      nota: viaWay2 ? 'Geracao realizada vem do WAY2, nao do ONS: o ONS cadastrou o medidor do M7 como M3 circuito 2 (corrigido no ONS em 16/07/2026) e publicava 173% do real, o que zerava o corte por construcao (gv > ge). O Way2 le o medidor de faturamento. Validacao: nos 7 parques de tag boa, corte por ONS e por Way2 concordam dentro de 0,2pp. Volta p/ o ONS quando o dado pos-16/07 for validado.'
-        : (m3corr ? 'Potencial e realizado do ONS corrigidos pelo fator MEDIDO de 0,80: um cubiculo do M3 tinha o RTC pela metade, entao ONS/SCADA liam 80% do real (o Way2, que le o medidor de faturamento, sempre esteve certo). Fator estavel em 10 meses (dp 0,5pp) e confirmado pelo salto p/ 100% apos o reparo em 12/07/2026.' : null),
+      nota: viaWay2 ? 'O registro "M7" do ONS NAO e o M7 — e o CIRCUITO 2 do M3 (tag trocada; corrigida no ONS em 16/07/2026). Logo o M7 nao tem nem geracao nem potencial no ONS. REALIZADO vem do Way2 (medidor de faturamento). POTENCIAL e ESTIMADO: mediana do ge/MW dos parques de tag boa x 14,733 MW (a irradiancia e a mesma no complexo, o potencial especifico escala com a capacidade). Volta p/ o ONS quando o dado pos-16/07 for validado.'
+        : (m3corr ? 'Estrutura real do ONS ate 12/07/2026: ONS_M3 = c1 + c3 + metade do c2 (o RTC do c2 lia 50%) e o registro "M7" = a outra metade do c2. Por isso ONS_M3 + ONS_M7 = M3 inteiro — identidade validada em 10 meses contra o Way2 (97,7 a 100,9%). O motor SOMA os dois ate a data do reparo do RTC; a partir de 12/07 o ONS_M3 ja vem inteiro sozinho e somar contaria o c2 duas vezes.' : null),
       corte_gwh: r2(Math.max(0, x.ge - gv) / 1000),
       corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - gv) / x.ge) : 0 }; });
 
