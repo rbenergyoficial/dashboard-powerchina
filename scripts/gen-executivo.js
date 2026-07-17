@@ -193,7 +193,15 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       { etapa: 'Cortado pelo ONS', gwh: cortado, pct: potencial > 0 ? r2(100 * cortado / potencial) : 0 },
       { etapa: 'Outras perdas', gwh: outras, pct: potencial > 0 ? r2(100 * outras / potencial) : 0 },
     ],
+    // planos p/ o Grafana: o Infinity não resolve seletor com índice (cascata[0].pct) nem inventa
+    // rótulo onde o objeto só tem número — o dado tem que nascer pronto aqui.
+    pct_entregue: potencial > 0 ? r2(100 * entregue / potencial) : 0,
+    pct_cortado: potencial > 0 ? r2(100 * cortado / potencial) : 0,
+    pct_outras: potencial > 0 ? r2(100 * outras / potencial) : 0,
+    pico_mw: cur.pico_mw,
     ppa: grupo('ppa'), ml: grupo('ml'),
+    // barchart precisa de um campo string no eixo → grupo vira coluna, não chave de objeto
+    grupos: [Object.assign({ grupo: 'PPA' }, grupo('ppa')), Object.assign({ grupo: 'ML' }, grupo('ml'))],
   };
 
   // ---------- 5) por UFV (mês corrente) ----------
