@@ -135,6 +135,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   const serie = meses.map(mes => { const m = M[mes]; const i = IRR[mes] || { ge: 0, gv: 0, irr_media: 0 };
     const w2 = daily.dias.filter(x => String(x.dia).slice(0, 7) === mes);
     return { mes, lbl: lbl(mes), dias: m.dias.size,
+      // mes_ts: o Grafana só desenha eixo de tempo / sparkline sobre timestamp — "2026-07" sozinho ele lê como texto
+      mes_ts: mes + '-01T00:00:00Z',
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
       frustrada_pct: (m.ger + m.fru) > 0 ? r2(100 * m.fru / (m.ger + m.fru)) : 0,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.ge > 0 ? r2(100 * i.gv / i.ge) : null,
