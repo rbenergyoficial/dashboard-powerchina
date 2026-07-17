@@ -106,6 +106,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
   // 2c) agrega, reconstruindo ge onde falta
   const IRR = {};             // mes -> { porUfv, ge, gv, irr_media, rec_pct }
+  const RTC_M3_ATE = "2026-07-12"; const RTC_M3_FATOR = 0.80;
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
@@ -120,12 +121,22 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       // out/25-fev/26 o modelo não transfere (dá PR de 115% a 161%, impossível). Reconstruir ali produziria
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += v * H;
-      ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
+      // ---- CORREÇÃO DO M3 (RTC) ----
+      // Um cubículo do M3 tinha o RTC pela metade, então ONS/SCADA liam 80% do real. O Way2 lê o
+      // MEDIDOR DE FATURAMENTO e nunca foi afetado — era ele que estava certo. Fator MEDIDO contra o
+      // Way2, não arbitrado: 80/80/80/79/80/80/80/80/81/80% em 10 meses (dp 0,5pp). Corrigido
+      // fisicamente em 12/07/2026 e a razão saltou p/ 100% — é o próprio dado provando o fator.
+      // Prova cruzada: /0,80 leva o ge/MW do M3 de 83,4 p/ 104,3, dentro da faixa dos gêmeos de
+      // 49,11 MW (103,8–110,1), e o corte de 8,1% (fora da curva) p/ 13,1% (junto dos irmãos).
+      const dia_ = String(r.ts).slice(0, 10);
+      let vv = v;
+      if (u === 'M3' && dia_ < RTC_M3_ATE) { g = g / RTC_M3_FATOR; vv = v / RTC_M3_FATOR; }
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += vv * H;
+      ge += g * H; gv += vv * H; geTot += g * H; if (rec) geRec += g * H;
       if (util(r)) { irrSoma += irr; irrN++; }
-      const dia = String(r.ts).slice(0, 10); const grp = PPA.includes(u) ? 'ppa' : 'ml';
+      const dia = dia_; const grp = PPA.includes(u) ? 'ppa' : 'ml';
       const pd = porDia[dia] || (porDia[dia] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
-      pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += v * H;
+      pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += vv * H;
     }
     IRR[mes] = { porUfv, ge, gv, irr_media: irrN ? irrSoma / irrN : 0, rec_pct: geTot > 0 ? r2(100 * geRec / geTot) : 0 };
     Object.entries(porDia).sort().forEach(([dia, x]) => corteDiario.push({ dia, mes,
@@ -179,9 +190,23 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   const diasTotal = new Date(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0).getDate();
   const fator = cur.dias > 0 ? diasTotal / cur.dias : 1;
   const iCur = IRR[mesAtual] || { porUfv: {} };
+
+  // ---- M7: geração realizada vem do WAY2, não do ONS ----
+  // O ONS cadastrou o medidor do M7 como M3 circuito 2 (corrigido no ONS em 16/07/2026). Em jul/26 o
+  // gv do ONS p/ o M7 é 173% do Way2 — e dava gv > ge (105%), o que zerava o corte por construção.
+  // O Way2 lê o medidor de FATURAMENTO e é a verdade comercial. Validação que autoriza a troca: nos 7
+  // parques de tag boa o corte por ONS e por Way2 concordam dentro de 0,2pp (41,7/41,6 · 12,6/12,7 ·
+  // 15,1/15,2 · 14,6/14,6 · 15,6/15,8 · 18,3/18,4 · 48,5/48,3) — o Way2 é substituto medido, não palpite.
+  // Resultado: o corte do M7 aparece em 39,0%, junto dos irmãos de ML (M1 41,6% · M9 48,3%).
+  const W2_UFV = {};
+  daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual)
+    .forEach(x => Object.entries(x.ufv_liq_mwh || {}).forEach(([u, v]) => { W2_UFV[u] = (W2_UFV[u] || 0) + num(v); }));
+  const VIA_WAY2 = ['M7'];   // sai daqui quando o dado ONS pós-16/07 for validado
+  const realizado = u => VIA_WAY2.includes(u) && W2_UFV[u] > 0 ? W2_UFV[u] : ((iCur.porUfv[u] || {}).gv || 0);
+
   const grupo = g => { const us = g === 'ppa' ? PPA : ML;
     const ge = us.reduce((a, u) => a + ((iCur.porUfv[u] || {}).ge || 0), 0);
-    const gv = us.reduce((a, u) => a + ((iCur.porUfv[u] || {}).gv || 0), 0);
+    const gv = us.reduce((a, u) => a + realizado(u), 0);
     return { potencial_gwh: r2(ge / 1000), realizado_gwh: r2(gv / 1000), corte_gwh: r2(Math.max(0, ge - gv) / 1000),
       corte_pct: ge > 0 ? r2(100 * Math.max(0, ge - gv) / ge) : 0 }; };
 
@@ -218,18 +243,17 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   // verificada MAIOR que a estimada — impossível) e M3 com ge ~20% abaixo dos gêmeos de 49,11 MW.
   // Enquanto não houver dado ONS pós-correção validado, esses dois NÃO publicam corte: 0% falso engana
   // mais que lacuna assumida. O detector é o próprio dado (gv > ge), não uma data no código.
-  const TAG_ONS_CORRIGIDA = '2026-07-16';
   const porUfv = Object.keys(INV_POR_PARQUE).sort().map(u => { const x = iCur.porUfv[u] || { ge: 0, gv: 0 };
-    const suspeito = (u === 'M7' || u === 'M3') && mesAtual <= TAG_ONS_CORRIGIDA.slice(0, 7);
-    const impossivel = x.ge > 0 && x.gv > x.ge;   // verificada > estimada: as duas pontas vêm de tags diferentes
-    const cego = suspeito || impossivel;
+    const gv = realizado(u);
+    const viaWay2 = VIA_WAY2.includes(u) && W2_UFV[u] > 0;
+    const m3corr = u === 'M3' && mesAtual <= RTC_M3_ATE.slice(0, 7);
     return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML', inversores: INV_POR_PARQUE[u],
-      potencial_gwh: r2(x.ge / 1000), realizado_gwh: r2(x.gv / 1000),
-      gv_sobre_ge_pct: x.ge > 0 ? r2(100 * x.gv / x.ge) : null,
-      tag_ons_ok: !cego,
-      nota: cego ? 'Tag do M7 estava cadastrada no ONS como M3 circuito 2 (corrigida em 16/07/2026). Enquanto o dado pos-correcao nao for validado, o corte de M3/M7 nao e publicado — o 0% que aparecia era artefato de gv > ge, nao ausencia de corte. Reconstrucao pelo SCADA em avaliacao.' : null,
-      corte_gwh: cego ? null : r2(Math.max(0, x.ge - x.gv) / 1000),
-      corte_pct: cego ? null : (x.ge > 0 ? r2(100 * Math.max(0, x.ge - x.gv) / x.ge) : 0) }; });
+      potencial_gwh: r2(x.ge / 1000), realizado_gwh: r2(gv / 1000),
+      fonte_realizado: viaWay2 ? 'Way2 (medidor de faturamento)' : 'ONS (geracao verificada)',
+      nota: viaWay2 ? 'Geracao realizada vem do WAY2, nao do ONS: o ONS cadastrou o medidor do M7 como M3 circuito 2 (corrigido no ONS em 16/07/2026) e publicava 173% do real, o que zerava o corte por construcao (gv > ge). O Way2 le o medidor de faturamento. Validacao: nos 7 parques de tag boa, corte por ONS e por Way2 concordam dentro de 0,2pp. Volta p/ o ONS quando o dado pos-16/07 for validado.'
+        : (m3corr ? 'Potencial e realizado do ONS corrigidos pelo fator MEDIDO de 0,80: um cubiculo do M3 tinha o RTC pela metade, entao ONS/SCADA liam 80% do real (o Way2, que le o medidor de faturamento, sempre esteve certo). Fator estavel em 10 meses (dp 0,5pp) e confirmado pelo salto p/ 100% apos o reparo em 12/07/2026.' : null),
+      corte_gwh: r2(Math.max(0, x.ge - gv) / 1000),
+      corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - gv) / x.ge) : 0 }; });
 
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA). Alvos confirmados pelo usuário.
