@@ -338,6 +338,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     const liqUfv = {}; Object.keys(CAP_UFV).forEach(u => {
       liqUfv[u] = w2Mes.reduce((a, x) => a + num((x.ufv_liq_mwh || {})[u]), 0); });
 
+    mes.dias_restantes = Math.max(0, diasTotal - cur.dias);
     mes.liquida = { total_gwh: r2(liq / 1000), ppa_gwh: r2(liqPpa / 1000), ml_gwh: r2(liqMl / 1000),
       dias: dW, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
       projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000),
