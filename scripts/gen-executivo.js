@@ -545,6 +545,85 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
       corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0 })) };
 
+  // ---------- 7) CARDS, MANCHETE e CASCATA por UFV (o filtro do painel) ----------
+  // Derivados DEPOIS do objeto pronto, a partir de out.serie_ufv — assim nada precisa ser movido de
+  // lugar e a ordem de avaliação do literal não importa.
+  // Cada estrutura ganha uma linha por usina + 'Complexo'; o painel filtra com [ufv='$ufv'].
+  {
+    const SU = out.serie_ufv;
+    const UFVS = ['Complexo'].concat(Object.keys(CAP_UFV).sort());
+    const dTot = mes.dias_total, dCorr = mes.dias_decorridos;
+    const fatorD = dCorr > 0 ? dTot / dCorr : 1;
+    const LIMIAR = 0.5;
+    const corVar = (bom, delta) => (bom == null || Math.abs(delta || 0) < LIMIAR) ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
+    const seta = v => (v > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(v));
+    const barras = (vals, cor) => { const v = vals.filter(x => x != null);
+      if (v.length < 2) return '';
+      const mn = Math.min(...v), mx = Math.max(...v), amp = (mx - mn) || 1, ult = vals.length - 1;
+      return vals.map((y, i) => y == null
+        ? '<div style="flex:1;background:#2A2E35;height:9%;border-radius:1px"></div>'
+        : '<div style="flex:1;background:' + cor + ';opacity:' + (i === ult ? 1 : 0.42) + ';height:'
+          + (12 + (y - mn) / amp * 88).toFixed(0) + '%;border-radius:1px"></div>').join(''); };
+
+    out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = [];
+
+    UFVS.forEach(u => {
+      const S = SU.filter(x => x.ufv === u);                 // 11 meses dessa usina
+      const cur = S[S.length - 1], ant = S[S.length - 2];
+      if (!cur) return;
+      const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
+      const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
+      const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;
+      const compl = u !== 'Complexo';                        // disp/horas são do complexo nas usinas
+      const projCorte = r2(cur.cortado_gwh * fatorD);
+      const antCorte = ant ? ant.cortado_gwh : null;
+
+      out.cards_ufv.push(
+        { ufv: u, k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
+          var: vPR == null ? '' : seta(vPR) + ' pp', var_cor: corVar(vPR == null ? null : vPR >= 0, vPR),
+          cor: cur.pr_pct == null ? '#8B93A1' : (cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60')),
+          spark: barras(S.map(x => x.pr_pct), '#D9A441'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+        { ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
+          sub: compl ? 'só existe no complexo' : 'alvo 97%',
+          var: compl ? '· complexo' : '', var_cor: '#8B93A1',
+          cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
+          spark: barras(S.map(x => x.disp_pct), '#4E9A98'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+        { ufv: u, k: 'corte', label: 'Curtailment', v: fmt(cur.corte_pct), u: '%',
+          sub: fmt(cur.cortado_gwh) + ' GWh jogados fora',
+          var: vCorte == null ? '' : seta(vCorte) + ' pp', var_cor: corVar(vCorte == null ? null : vCorte <= 0, vCorte),
+          cor: '#C85C60', spark: barras(S.map(x => x.corte_pct), '#C85C60'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+        { ufv: u, k: 'proj', label: 'Projeção de corte', v: fmt(projCorte), u: 'GWh',
+          sub: ant ? ant.lbl + ' fechou em ' + fmt(antCorte) + ' GWh' : 'no fechamento do mês',
+          var: '', var_cor: '#8B93A1', cor: '#5C86BE',
+          spark: barras(S.map(x => x.cortado_gwh), '#5C86BE'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+        { ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
+          sub: compl ? 'só existe no complexo' : 'mês parcial · dia ' + dCorr + ' de ' + dTot,
+          var: compl ? '· complexo' : '', var_cor: '#8B93A1', cor: '#C08A45',
+          spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
+
+      // ---- manchete ----
+      const proj = r2(cur.liquida_gwh * fatorD);
+      const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
+      const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
+      const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
+      out.manchete_ufv.push({ ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
+        dias_restantes: Math.max(0, dTot - dCorr),
+        liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
+        atingido: fmt(at), proj_pct: fmt(pj),
+        realizado_w: at == null ? 0 : r2(at / esc * 100),
+        projecao_w: pj == null ? 0 : r2(Math.max(0, pj - at) / esc * 100),
+        marca100_w: r2(100 / esc * 100),
+        escopo: u === 'Complexo' ? 'Complexo · 343,77 MW · 9 UFVs' : u + ' · ' + fmt(CAP_UFV[u]) + ' MW' });
+
+      // ---- cascata ----
+      const pot = cur.potencial_gwh;
+      out.cascata_ufv.push(
+        { ufv: u, etapa: 'Entregue', gwh: cur.entregue_gwh, pct: pot > 0 ? r2(100 * cur.entregue_gwh / pot) : 0 },
+        { ufv: u, etapa: 'Cortado pelo ONS', gwh: cur.cortado_gwh, pct: pot > 0 ? r2(100 * cur.cortado_gwh / pot) : 0 },
+        { ufv: u, etapa: 'Outras perdas', gwh: cur.outras_gwh, pct: pot > 0 ? r2(100 * cur.outras_gwh / pot) : 0 });
+    });
+  }
+
   const size = await writeOut(out);
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
   console.log('  entregue ' + entregue + ' GWh | potencial ' + potencial + ' | cortado ' + cortado + ' (' + cur.frustrada_pct + '%)');
