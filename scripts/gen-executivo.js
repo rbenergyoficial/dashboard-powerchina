@@ -471,11 +471,12 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       const metaU = metaUfv || {};
       daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual).forEach(x => {
         const d = x.dia;
-        Object.keys(CAP_UFV).sort().forEach(u => out.push({ dia: d, ufv: u,
+        const ts = d + 'T12:00:00-03:00';
+        Object.keys(CAP_UFV).sort().forEach(u => out.push({ dia: d, dia_ts: ts, ufv: u,
           liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
           irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
           meta_dia_mwh: metaU[u] ? r2(metaU[u] / diasTotal) : null }));
-        out.push({ dia: d, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
+        out.push({ dia: d, dia_ts: ts, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
           irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
           meta_dia_mwh: mt ? r2(mt.garantido_total / diasTotal) : null });
       });
