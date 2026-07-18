@@ -63,6 +63,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
   // ---------- 1) complexo por mês, a partir do ons_restricao_all ----------
   const M = {};   // mes -> acumuladores
+  const DIA = {}; // dia -> { ger, fru, horas_restr }  (p/ a curva com o corte pintado)
   for (const r of restr.consolidado) {
     const mes = String(r.ts).slice(0, 7); if (!/^\d{4}-\d{2}$/.test(mes)) continue;
     const m = M[mes] || (M[mes] = { ger: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
@@ -73,7 +74,12 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // Media sobre os intervalos DECLARADOS; disp_cobertura expõe quantos foram, p/ queda real não se esconder.
     const dsp = num(r.disp); if (dsp > 0) { m.disp += dsp; m.n_disp++; }
     m.ger += ger * H; m.ref += gref * H; m.n++; m.dias.add(String(r.ts).slice(0, 10));
+    // série DIÁRIA do complexo — mesma fonte e mesma fórmula da cascata, p/ os números não brigarem
+    const _d = String(r.ts).slice(0, 10);
+    const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0 });
+    dd.ger += ger * H;
     if (lim > 0) { const perda = Math.max(0, (gref - ger) * H);   // <- definição da casa
+      dd.fru += perda; dd.horas_restr += H;
       m.fru += perda; m.int_restr++;
       if (r.razao) m.raz[r.razao] = (m.raz[r.razao] || 0) + perda;
       if (r.orig) m.ori[r.orig] = (m.ori[r.orig] || 0) + perda; }
@@ -369,7 +375,13 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     estrategia: { ppa: PPA, ml: ML, regra: 'Na limitação do ONS, M1/M7/M9 (fora do PPA) são limitados a ~1 MW para blindar a entrega do PPA. Atingida a meta do PPA no mês, o ML deixa de ser limitado.' },
     // corte_diario: últimos 75 dias, NÃO só o mês corrente — no dia 5 do mês um recorte mensal
     // deixaria o gráfico praticamente vazio, e a virada de mês é justamente onde a leitura interessa.
-    modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75) };
+    modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
+    // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
+    // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
+    serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
+      dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
+      potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
+      corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0 })) };
 
   const size = await writeOut(out);
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
