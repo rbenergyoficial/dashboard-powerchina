@@ -317,13 +317,14 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   // O Valor Garantido da planilha é LÍQUIDO ("Energia Total de rede"), então o realizado tem que ser a
   // líquida do Way2 (medidor de faturamento) — a mesma base que já sustenta o PPA. Comparar contra a
   // geração bruta do ONS daria um crédito de ~1% que não existe: é o erro de denominador de sempre.
+  let metaUfv = null, naoAlocado = null, mt = null;
   { const w2Mes = daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual);
     const somaU = us => w2Mes.reduce((a, x) => a + us.reduce((b, u) => b + num((x.ufv_liq_mwh || {})[u]), 0), 0);
     const liq = w2Mes.reduce((a, x) => a + num(x.ene_liq_mwh), 0);
     const liqPpa = somaU(PPA), liqMl = somaU(ML);
     // dias do Way2 ≠ dias do ONS (o Way2 é D+0, o ONS é D+1/D+2) → a projeção usa o ritmo do PRÓPRIO Way2
     const dW = w2Mes.length, fatorW = dW > 0 ? diasTotal / dW : 1;
-    const mt = METAS.meses[mesAtual] || null;
+    mt = METAS.meses[mesAtual] || null;
     const pct = (r, m) => m > 0 ? r2(100 * r / m) : null;
 
     // ---- meta das usinas FORA do PPA: DERIVADA, porque a fonte não emite ----
@@ -336,7 +337,6 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // que o PPA (79,5% vs 74,4% do equivalente) e o rateio despejava essa diferença inteira nos dois
     // menores parques → meta 145,9% do próprio P50, INATINGÍVEL por construção, com ou sem curtailment.
     // A diferença vira `nao_alocado`, EXPOSTA: é pergunta p/ quem emite a meta, não número p/ enterrar.
-    let metaUfv = null, naoAlocado = null;
     if (mt) {
       const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
       const taxa = capPpa > 0 ? mt.garantido_ppa / capPpa : 0;     // MWh por MW instalado
@@ -454,6 +454,32 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
+    // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----
+    // Energia LÍQUIDA (Way2) + IRRADIÂNCIA média do dia + a meta diária. A irradiância é o que explica
+    // a variação: dia fraco com irradiância baixa é nuvem; dia fraco com irradiância ALTA é corte ou
+    // problema de equipamento. Sem ela, o gráfico mostra o "quanto" mas esconde o "por quê".
+    // Inclui a linha ufv='Complexo' no MESMO array p/ o seletor do painel trocar sem query nova.
+    serie_dia_ufv: (() => {
+      const out = [];
+      const cruMes = CRU[mesAtual] || [];
+      const irrDiaU = {}, irrDiaC = {};       // {dia: {u: [irr]}} e {dia: [irr]}
+      cruMes.forEach(r => { if (!util(r)) return;
+        const d = String(r.ts).slice(0, 10), u = String(r.u).replace('CEFMT', 'M');
+        ((irrDiaU[d] = irrDiaU[d] || {})[u] = irrDiaU[d][u] || []).push(num(r.irr));
+        (irrDiaC[d] = irrDiaC[d] || []).push(num(r.irr)); });
+      const med = a => a && a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+      const metaU = metaUfv || {};
+      daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual).forEach(x => {
+        const d = x.dia;
+        Object.keys(CAP_UFV).sort().forEach(u => out.push({ dia: d, ufv: u,
+          liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
+          irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
+          meta_dia_mwh: metaU[u] ? r2(metaU[u] / diasTotal) : null }));
+        out.push({ dia: d, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
+          irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
+          meta_dia_mwh: mt ? r2(mt.garantido_total / diasTotal) : null });
+      });
+      return out; })(),
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
       dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
