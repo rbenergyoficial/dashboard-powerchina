@@ -145,7 +145,9 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
       const dia_ = String(r.ts).slice(0, 10);
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += v * H;
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 });
+      porUfv[u].ge += g * H; porUfv[u].gv += v * H;
+      if (util(r)) { porUfv[u].parN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++; } }
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       // PR PAREADO: soma gv e ge SÓ nos intervalos em que o ONS publicou os dois. Somar o mês inteiro
       // infla o PR quando falta ge (divide por um denominador incompleto) — foi isso que deixou out/25
@@ -459,6 +461,63 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // a variação: dia fraco com irradiância baixa é nuvem; dia fraco com irradiância ALTA é corte ou
     // problema de equipamento. Sem ela, o gráfico mostra o "quanto" mas esconde o "por quê".
     // Inclui a linha ufv='Complexo' no MESMO array p/ o seletor do painel trocar sem query nova.
+    // ================= TUDO POR UFV (o filtro do painel) =================
+    // Um registro por (usina × mês), com 'Complexo' na MESMA lista — assim cada painel filtra com
+    // [ufv='$ufv'] sem precisar de query diferente por seleção.
+    // ⚠️ disp_pct e horas_restricao NÃO existem por usina: o ONS publica os dois para o conjunto
+    // Mauriti inteiro. Nas linhas de usina eles vêm do complexo, marcados com escopo_complexo=1 —
+    // o card mostra "· complexo" em vez de fingir que o número é da usina escolhida.
+    serie_ufv: (() => {
+      const out = [];
+      const w2Mes = m => daily.dias.filter(x => String(x.dia).slice(0, 7) === m);
+      meses.forEach(m => {
+        const S = serie.find(x => x.mes === m); if (!S) return;
+        const I = IRR[m] || { porUfv: {} };
+        const w2 = w2Mes(m);
+        const mtm = METAS.meses[m] || null;
+        const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
+        const taxa = mtm && capPpa > 0 ? mtm.garantido_ppa / capPpa : 0;
+        const linha = (ufv, ge, gv, geP, gvP, parN, parOk, liq, meta) => {
+          const corte = Math.max(0, ge - gv);
+          const pr = geP > 0 ? r2(100 * gvP / geP) : null;
+          const cob = parN ? r2(100 * parOk / parN) : 0;
+          const prOk = !S.ramp_up && cob >= 70 && pr != null && pr >= 50 && pr <= 95;
+          return { ufv, mes: m, mes_ts: S.mes_ts, lbl: S.lbl,
+            liquida_gwh: r2(liq / 1000), meta_gwh: meta == null ? null : r2(meta / 1000),
+            atingido_pct: meta > 0 ? r2(100 * liq / meta) : null,
+            potencial_gwh: r2(ge / 1000), entregue_gwh: r2(gv / 1000), cortado_gwh: r2(corte / 1000),
+            corte_pct: ge > 0 ? r2(100 * corte / ge) : null,
+            outras_gwh: r2(Math.max(0, ge - gv - corte) / 1000),
+            pr_pct: prOk ? pr : null, pr_cobertura_pct: cob,
+            disp_pct: S.disp_pct, horas_restricao: S.horas_restricao, escopo_complexo: 1,
+            nota: prOk ? null : S.nota };
+        };
+        // ---- as 9 usinas ----
+        Object.keys(CAP_UFV).sort().forEach(u => { const x = I.porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 };
+          const liq = w2.reduce((a, d) => a + num((d.ufv_liq_mwh || {})[u]), 0);
+          const meta = mtm ? ((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u]) : null;
+          // M7: o "gv" do ONS é o circuito 2 do M3 (tag trocada), e nós o zeramos — usar ele daria
+          // 100% de corte. O realizado do M7 vem do Way2. O PR fica NULL: comparar líquida do Way2
+          // com potencial ESTIMADO não é Performance Ratio, é mistura de bases.
+          const viaW2 = VIA_WAY2.includes(u) && liq > 0;
+          const l = linha(u, x.ge, viaW2 ? liq : x.gv, x.geP, x.gvP, x.parN, x.parOk, liq, meta);
+          if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
+            l.nota = 'O registro "M7" do ONS e o circuito 2 do M3 — o M7 nao tem geracao nem potencial proprios na fonte. Realizado vem do Way2; potencial e ESTIMADO pela mediana do ge/MW dos parques de tag boa. PR nao se aplica.'; }
+          out.push(l); });
+        // ---- complexo ----
+        { const ge = Object.values(I.porUfv).reduce((a, x) => a + x.ge, 0);
+          const gv = Object.values(I.porUfv).reduce((a, x) => a + x.gv, 0);
+          const geP = Object.values(I.porUfv).reduce((a, x) => a + (x.geP || 0), 0);
+          const gvP = Object.values(I.porUfv).reduce((a, x) => a + (x.gvP || 0), 0);
+          const pN = Object.values(I.porUfv).reduce((a, x) => a + (x.parN || 0), 0);
+          const pK = Object.values(I.porUfv).reduce((a, x) => a + (x.parOk || 0), 0);
+          const liq = w2.reduce((a, d) => a + num(d.ene_liq_mwh), 0);
+          const l = linha('Complexo', ge, gv, geP, gvP, pN, pK, liq, mtm ? mtm.garantido_total : null);
+          // no complexo o corte vem da fórmula da casa (nível da subestação), não da soma dos ge−gv
+          l.cortado_gwh = S.frustrada_gwh; l.corte_pct = S.corte_pct_pot;
+          out.push(l); }
+      });
+      return out; })(),
     serie_dia_ufv: (() => {
       const out = [];
       const cruMes = CRU[mesAtual] || [];
