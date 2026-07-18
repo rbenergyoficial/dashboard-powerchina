@@ -296,6 +296,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     pct_entregue: potencial > 0 ? r2(100 * entregue / potencial) : 0,
     pct_cortado: potencial > 0 ? r2(100 * cortado / potencial) : 0,
     pct_outras: potencial > 0 ? r2(100 * outras / potencial) : 0,
+    outras_gwh: outras,
     pico_mw: cur.pico_mw,
     ppa: grupo('ppa'), ml: grupo('ml'),
     // barchart precisa de um campo string no eixo → grupo vira coluna, não chave de objeto
@@ -403,27 +404,30 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         return v.map((y, i) => { const h = 12 + (y - mn) / amp * 88;         // 12%..100% (o menor ainda aparece)
           const op = i === v.length - 1 ? 1 : 0.42;                          // o mês corrente em destaque
           return '<div style="flex:1;background:' + cor + ';opacity:' + op + ';height:' + h.toFixed(0) + '%;border-radius:1px"></div>'; }).join(''); };
-      const col = (bom) => bom == null ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
+      const LIMIAR = 0.5;   // pp — abaixo disso e ruido, nao tendencia
+      const faixa = (vals) => { const idx = vals.map((v, i) => v == null ? -1 : i).filter(i => i >= 0);
+        return idx.length < 2 ? '' : S[idx[0]].lbl + ' → ' + S[idx[idx.length - 1]].lbl; };
+      const col = (bom, delta) => (bom == null || Math.abs(delta || 0) < LIMIAR) ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
       const S = serie;
       return [
         { k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
           var: cur.var_pr_pp == null ? '' : (cur.var_pr_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_pr_pp)) + ' pp',
-          var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0), cor: cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60'),
-          spark: path(S.map(s => s.pr_pct), '#D9A441') },
+          var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0, cur.var_pr_pp), cor: cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60'),
+          spark: path(S.map(s => s.pr_pct), '#D9A441'), spark_lbl: faixa(S.map(s => s.pr_pct)) },
         { k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
           var: cur.var_disp_pp == null ? '' : (cur.var_disp_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_disp_pp)) + ' pp',
-          var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
-          spark: path(S.map(s => s.disp_pct), '#4E9A98') },
+          var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0, cur.var_disp_pp), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
+          spark: path(S.map(s => s.disp_pct), '#4E9A98'), spark_lbl: faixa(S.map(s => s.disp_pct)) },
         { k: 'corte', label: 'Curtailment', v: fmt(mes.pct_cortado), u: '%', sub: fmt(mes.frustrada_gwh) + ' GWh jogados fora',
           var: cur.var_corte_pp == null ? '' : (cur.var_corte_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_corte_pp)) + ' pp',
-          var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0), cor: '#C85C60',
-          spark: path(S.map(s => s.corte_pct_pot), '#C85C60') },
-        { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: 'no fechamento do mês',
+          var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0, cur.var_corte_pp), cor: '#C85C60',
+          spark: path(S.map(s => s.corte_pct_pot), '#C85C60'), spark_lbl: faixa(S.map(s => s.corte_pct_pot)) },
+        { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: fmt(mes.pct_cortado) + '% do potencial · no fechamento',
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
-          spark: path(S.map(s => s.frustrada_gwh), '#5C86BE') },
+          spark: path(S.map(s => s.frustrada_gwh), '#5C86BE'), spark_lbl: faixa(S.map(s => s.frustrada_gwh)) },
         { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h', sub: 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
           var: '', var_cor: '#8B93A1', cor: '#C08A45',
-          spark: path(S.map(s => s.horas_restricao), '#C08A45') },
+          spark: path(S.map(s => s.horas_restricao), '#C08A45'), spark_lbl: faixa(S.map(s => s.horas_restricao)) },
       ]; })(),
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
