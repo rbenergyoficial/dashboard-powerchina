@@ -597,7 +597,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         : '<div style="flex:1;background:' + cor + ';opacity:' + (i === ult ? 1 : 0.42) + ';height:'
           + (12 + (y - mn) / amp * 88).toFixed(0) + '%;border-radius:1px"></div>').join(''); };
 
-    out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = [];
+    out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = []; out.ytd_ufv = [];
 
     UFVS.forEach(u => {
       const S = SU.filter(x => x.ufv === u);                 // 11 meses dessa usina
@@ -648,6 +648,30 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         projecao_w: pj == null ? 0 : r2(Math.max(0, pj - at) / esc * 100),
         marca100_w: r2(100 / esc * 100),
         escopo: u === 'Complexo' ? 'Complexo · 343,77 MW · 9 UFVs' : u + ' · ' + fmt(CAP_UFV[u]) + ' MW' });
+
+      // ---- ACUMULADO DO ANO (YTD) ----
+      // Investidor pensa em ano, não em mês. Só o ano corrente (2026): 2025 tem os meses de
+      // comissionamento e de dado quebrado, misturar os dois períodos num acumulado seria enganoso.
+      // O mês corrente entra PARCIAL (o ano não acabou) — dito no rótulo.
+      { const ano = mesAtual.slice(0, 4);
+        // SO MESES FECHADOS: incluir o mes corrente compara realizado parcial (dia 17) contra meta
+        // do mes inteiro e derruba o acumulado artificialmente (dava 97% quando o real e 111%).
+        const A = S.filter(x => x.mes.slice(0, 4) === ano && x.mes !== mesAtual);
+        const somaN = (k) => A.reduce((a, x) => a + (x[k] == null ? 0 : x[k]), 0);
+        const temMeta = A.filter(x => x.meta_gwh != null);
+        const metaAcum = temMeta.reduce((a, x) => a + x.meta_gwh, 0);
+        const liqAcum = somaN('liquida_gwh');
+        // meses com corte publicado (os antigos do PPA são null) — a cobertura vai junto
+        const comCorte = A.filter(x => x.cortado_gwh != null);
+        out.ytd_ufv.push({ ufv: u, ano,
+          meses: A.length, primeiro: A[0] ? A[0].lbl : null, ultimo: A[A.length - 1] ? A[A.length - 1].lbl : null,
+          liquida_gwh: r2(liqAcum), meta_gwh: temMeta.length ? r2(metaAcum) : null,
+          atingido_pct: metaAcum > 0 ? r2(100 * liqAcum / metaAcum) : null,
+          meses_com_meta: temMeta.length,
+          bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
+          cortado_gwh: comCorte.length ? r2(comCorte.reduce((a, x) => a + x.cortado_gwh, 0)) : null,
+          meses_com_corte: comCorte.length,
+          nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); }
 
       // ---- cascata ----
       const pot = cur.potencial_gwh;
