@@ -45,6 +45,9 @@ const INV_POR_PARQUE = { M1: 165, M2: 88, M3: 165, M4: 165, M5: 165, M6: 165, M7
 const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const lbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
 const r2 = x => Math.round(x * 100) / 100;
+// padrao numerico da casa: ponto decimal, ponto de milhar, 2 casas nas medidas
+const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFixed(dec == null ? 2 : dec);
+  const [i, f2] = t.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (f2 ? '.' + f2 : ''); };
 const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 
 function getJSON(url) { return new Promise((res, rej) => { https.get(url, x => { if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
@@ -387,6 +390,37 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     estrategia: { ppa: PPA, ml: ML, regra: 'Na limitação do ONS, M1/M7/M9 (fora do PPA) são limitados a ~1 MW para blindar a entrega do PPA. Atingida a meta do PPA no mês, o ML deixa de ser limitado.' },
     // corte_diario: últimos 75 dias, NÃO só o mês corrente — no dia 5 do mês um recorte mensal
     // deixaria o gráfico praticamente vazio, e a virada de mês é justamente onde a leitura interessa.
+    // ---- CARDS (faixa minimalist): o motor calcula TUDO, o template só apresenta ----
+    // Inclui o traçado SVG da sparkline pronto — Handlebars não faz conta, então quem normaliza é aqui.
+    // A variação é vs MÊS ANTERIOR e só aparece nas métricas de TAXA: o mês corrente está pela metade
+    // (dia 16 de 31), então comparar horas/GWh absolutos com um mês inteiro enganaria.
+    cards: (() => {
+      const path = (vals) => { const v = vals.filter(x => x != null);
+        if (v.length < 2) return '';
+        const mn = Math.min(...v), mx = Math.max(...v), amp = (mx - mn) || 1;
+        return v.map((y, i) => (i * 100 / (v.length - 1)).toFixed(1) + ',' + (26 - (y - mn) / amp * 24).toFixed(1)).join(' '); };
+      const col = (bom) => bom == null ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
+      const S = serie;
+      return [
+        { k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
+          var: cur.var_pr_pp == null ? '' : (cur.var_pr_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_pr_pp)) + ' pp',
+          var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0), cor: cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60'),
+          spark: path(S.map(s => s.pr_pct)), spark_cor: '#D9A441' },
+        { k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
+          var: cur.var_disp_pp == null ? '' : (cur.var_disp_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_disp_pp)) + ' pp',
+          var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
+          spark: path(S.map(s => s.disp_pct)), spark_cor: '#4E9A98' },
+        { k: 'corte', label: 'Curtailment', v: fmt(mes.pct_cortado), u: '%', sub: fmt(mes.frustrada_gwh) + ' GWh jogados fora',
+          var: cur.var_corte_pp == null ? '' : (cur.var_corte_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_corte_pp)) + ' pp',
+          var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0), cor: '#C85C60',
+          spark: path(S.map(s => s.corte_pct_pot)), spark_cor: '#C85C60' },
+        { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: 'no fechamento do mês',
+          var: '', var_cor: '#8B93A1', cor: '#5C86BE',
+          spark: path(S.map(s => s.frustrada_gwh)), spark_cor: '#5C86BE' },
+        { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h', sub: 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
+          var: '', var_cor: '#8B93A1', cor: '#C08A45',
+          spark: path(S.map(s => s.horas_restricao)), spark_cor: '#C08A45' },
+      ]; })(),
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
