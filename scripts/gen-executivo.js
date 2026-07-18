@@ -133,6 +133,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
     const porUfv = {}; let ge = 0, gv = 0, irrSoma = 0, irrN = 0, geRec = 0, geTot = 0;
+    let geP = 0, gvP = 0, parN = 0, parOk = 0;   // PR pareado + cobertura
     const porDia = {};
     for (const r of C) {
       const u = String(r.u).replace('CEFMT', 'M');          // CEFMT1..9 == M1..M9 (confirmado pela assinatura de capacidade)
@@ -146,7 +147,11 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       const dia_ = String(r.ts).slice(0, 10);
       (porUfv[u] = porUfv[u] || { ge: 0, gv: 0 }); porUfv[u].ge += g * H; porUfv[u].gv += v * H;
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
-      if (util(r)) { irrSoma += irr; irrN++; }
+      // PR PAREADO: soma gv e ge SÓ nos intervalos em que o ONS publicou os dois. Somar o mês inteiro
+      // infla o PR quando falta ge (divide por um denominador incompleto) — foi isso que deixou out/25
+      // a fev/26 sem PR. Restringindo aos pares válidos, o número volta a ser comparável, e a COBERTURA
+      // (quantos intervalos entraram) vai junto p/ o leitor saber sobre quanto do mês ele está olhando.
+      if (util(r)) { irrSoma += irr; irrN++; parN++; if (g > 0) { geP += g * H; gvP += v * H; parOk++; } }
       // O registro "M7" do ONS é o circuito 2 do M3 — logo pertence ao PPA, não ao ML. Antes do reparo
       // do RTC ele carrega metade do c2 e completa o M3; a partir do reparo o ONS_M3 já vem inteiro e
       // esse registro vira duplicata, então sai da conta. Sem isso o gráfico diário rouba do PPA e
@@ -191,7 +196,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         B.ge_estimado = true; B.gv = 0;
       }
     }
-    IRR[mes] = { porUfv, ge, gv, irr_media: irrN ? irrSoma / irrN : 0, rec_pct: geTot > 0 ? r2(100 * geRec / geTot) : 0 };
+    IRR[mes] = { porUfv, ge, gv, geP, gvP, pr_cob: parN ? r2(100 * parOk / parN) : 0,
+      irr_media: irrN ? irrSoma / irrN : 0, rec_pct: geTot > 0 ? r2(100 * geRec / geTot) : 0 };
     Object.entries(porDia).sort().forEach(([dia, x]) => corteDiario.push({ dia, mes,
       ppa_corte_pct: x.ppa_ge > 0 ? r2(100 * Math.max(0, x.ppa_ge - x.ppa_gv) / x.ppa_ge) : 0,
       ml_corte_pct: x.ml_ge > 0 ? r2(100 * Math.max(0, x.ml_ge - x.ml_gv) / x.ml_ge) : 0 }));
@@ -208,7 +214,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       mes_ts: mes + '-01T00:00:00Z',
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
       frustrada_pct: (m.ger + m.fru) > 0 ? r2(100 * m.fru / (m.ger + m.fru)) : 0,
-      potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.ge > 0 ? r2(100 * i.gv / i.ge) : null,
+      potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.geP > 0 ? r2(100 * i.gvP / i.geP) : null,
+      pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
       disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
       irr_media: r2(i.irr_media), ge_reconstruido_pct: i.rec_pct,
@@ -243,10 +250,13 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     serie.forEach(s => {
       s.ramp_up = !!(medianaDia != null && s.way2_gwh_dia != null && s.way2_gwh_dia < 0.7 * medianaDia);
       s.ge_faltante_pct = r2(100 * (1 - (saude[s.mes] != null ? saude[s.mes] : 0)));
-      s.pr_confiavel = !s.ramp_up && s.ge_faltante_pct < 5 && s.pr_pct != null && s.pr_pct >= 50 && s.pr_pct <= 95;
+      // Com o PR PAREADO, o criterio deixa de ser "o mes tem ge quase completo" e passa a ser
+    // "a amostra pareada e representativa": >= 70% dos intervalos com sol. Assim out/25 em diante
+    // volta a ter PR, com a cobertura declarada no card p/ o leitor pesar o numero.
+    s.pr_confiavel = !s.ramp_up && s.pr_cobertura_pct >= 70 && s.pr_pct != null && s.pr_pct >= 50 && s.pr_pct <= 95;
       if (!s.pr_confiavel) { s.pr_pct = null; s.potencial_irr_gwh = null; }   // não publica o indefensável
       s.nota = s.ramp_up ? 'Planta em ramp-up (comissionamento) — potencial e PR nao sao comparaveis'
-        : (!s.pr_confiavel ? 'ONS nao preencheu a geracao estimada neste mes — PR e potencial indisponiveis' : null);
+        : (!s.pr_confiavel ? 'A geracao estimada do ONS e inconsistente neste mes: mesmo somando SO os intervalos em que ela foi publicada, o PR sai fisicamente impossivel (out/25 216% · nov/25 133% · dez/25 188% · jan/26 180% · fev/26 98%). Nao e apenas dado faltando — o valor publicado esta errado. So a partir de mar/26 o PR fica coerente (76%).' : null);
     }); }
 
   // ---------- 4) mês corrente + projeção + cascata + PPA×ML ----------
@@ -434,7 +444,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           var: cur.var_corte_pp == null ? '' : (cur.var_corte_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_corte_pp)) + ' pp',
           var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0, cur.var_corte_pp), cor: '#C85C60',
           spark: path(S.map(s => s.corte_pct_pot), '#C85C60'), spark_ini: ini, spark_fim: fim },
-        { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: fmt(mes.pct_cortado) + '% do potencial · no fechamento',
+        { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: (function () { const ant = S[S.length - 2]; return ant ? '' + lbl(ant.mes) + ' fechou em ' + fmt(ant.frustrada_gwh) + ' GWh' : 'no fechamento do mes'; })(),
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
           spark: path(S.map(s => s.frustrada_gwh), '#5C86BE'), spark_ini: ini, spark_fim: fim },
         { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h', sub: 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
