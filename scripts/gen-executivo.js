@@ -312,9 +312,14 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       ML.forEach(u => { metaUfv[u] = r2(taxa * CAP_UFV[u]); });
       naoAlocado = r2(mt.garantido_total - mt.garantido_ppa - ML.reduce((a, u) => a + metaUfv[u], 0));
     }
+    // realizado LÍQUIDO por usina (Way2) — a única base comparável com a meta, que também é líquida
+    const liqUfv = {}; Object.keys(CAP_UFV).forEach(u => {
+      liqUfv[u] = w2Mes.reduce((a, x) => a + num((x.ufv_liq_mwh || {})[u]), 0); });
+
     mes.liquida = { total_gwh: r2(liq / 1000), ppa_gwh: r2(liqPpa / 1000), ml_gwh: r2(liqMl / 1000),
       dias: dW, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
-      projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000) };
+      projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000),
+      por_ufv: Object.fromEntries(Object.keys(liqUfv).map(u => [u, r2(liqUfv[u] / 1000)])) };
     mes.meta = mt ? {
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
       garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
@@ -328,6 +333,15 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       sobra_projetada_gwh: r2((liq * fatorW - mt.garantido_total) / 1000),
       vai_bater: liq * fatorW >= mt.garantido_total ? 1 : 0,
     } : { fonte: 'PENDENTE — planilha do SharePoint', garantido_gwh: null, atingido_pct: null };
+
+    // meta × realizado POR USINA — array (barchart precisa de campo string no eixo)
+    mes.meta_ufv = mt ? Object.keys(CAP_UFV).sort().map(u => {
+      const met = metaUfv[u] / 1000, rea = liqUfv[u] / 1000, proj = rea * fatorW;
+      return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML',
+        meta_gwh: r2(met), realizado_gwh: r2(rea), projecao_gwh: r2(proj),
+        atingido_pct: met > 0 ? r2(100 * rea / met) : null,
+        projecao_pct: met > 0 ? r2(100 * proj / met) : null,
+        meta_derivada: !PPA.includes(u) }; }) : [];
   }
 
   // ---------- 5) por UFV (mês corrente) ----------
