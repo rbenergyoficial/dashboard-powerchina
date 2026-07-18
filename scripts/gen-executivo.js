@@ -395,31 +395,35 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
     // A variação é vs MÊS ANTERIOR e só aparece nas métricas de TAXA: o mês corrente está pela metade
     // (dia 16 de 31), então comparar horas/GWh absolutos com um mês inteiro enganaria.
     cards: (() => {
-      const path = (vals) => { const v = vals.filter(x => x != null);
+      // Sparkline em DIVS, não em SVG: o sanitizador do painel dynamictext descarta <svg>.
+      // Só flexbox passa — então a curva vira uma fileira de barrinhas com altura proporcional.
+      const path = (vals, cor) => { const v = vals.filter(x => x != null);
         if (v.length < 2) return '';
         const mn = Math.min(...v), mx = Math.max(...v), amp = (mx - mn) || 1;
-        return v.map((y, i) => (i * 100 / (v.length - 1)).toFixed(1) + ',' + (26 - (y - mn) / amp * 24).toFixed(1)).join(' '); };
+        return v.map((y, i) => { const h = 12 + (y - mn) / amp * 88;         // 12%..100% (o menor ainda aparece)
+          const op = i === v.length - 1 ? 1 : 0.42;                          // o mês corrente em destaque
+          return '<div style="flex:1;background:' + cor + ';opacity:' + op + ';height:' + h.toFixed(0) + '%;border-radius:1px"></div>'; }).join(''); };
       const col = (bom) => bom == null ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
       const S = serie;
       return [
         { k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
           var: cur.var_pr_pp == null ? '' : (cur.var_pr_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_pr_pp)) + ' pp',
           var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0), cor: cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60'),
-          spark: path(S.map(s => s.pr_pct)), spark_cor: '#D9A441' },
+          spark: path(S.map(s => s.pr_pct), '#D9A441') },
         { k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
           var: cur.var_disp_pp == null ? '' : (cur.var_disp_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_disp_pp)) + ' pp',
           var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
-          spark: path(S.map(s => s.disp_pct)), spark_cor: '#4E9A98' },
+          spark: path(S.map(s => s.disp_pct), '#4E9A98') },
         { k: 'corte', label: 'Curtailment', v: fmt(mes.pct_cortado), u: '%', sub: fmt(mes.frustrada_gwh) + ' GWh jogados fora',
           var: cur.var_corte_pp == null ? '' : (cur.var_corte_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_corte_pp)) + ' pp',
           var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0), cor: '#C85C60',
-          spark: path(S.map(s => s.corte_pct_pot)), spark_cor: '#C85C60' },
+          spark: path(S.map(s => s.corte_pct_pot), '#C85C60') },
         { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: 'no fechamento do mês',
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
-          spark: path(S.map(s => s.frustrada_gwh)), spark_cor: '#5C86BE' },
+          spark: path(S.map(s => s.frustrada_gwh), '#5C86BE') },
         { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h', sub: 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
           var: '', var_cor: '#8B93A1', cor: '#C08A45',
-          spark: path(S.map(s => s.horas_restricao)), spark_cor: '#C08A45' },
+          spark: path(S.map(s => s.horas_restricao), '#C08A45') },
       ]; })(),
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
