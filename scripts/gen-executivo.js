@@ -227,6 +227,12 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   //                contra ~1,8 do regime normal; pico 300 MW contra 345.
   // pr_confiavel : o ONS preencheu 'ge' E o PR caiu em faixa fisicamente plausível (50–95%).
   //                out/25–fev/26 dão PR de 97% a 161% = impossível → não publicamos.
+  // variacao vs MES ANTERIOR (o percentChange do Grafana compara com o 1o ponto da serie, o que muda
+  // a regua de card p/ card conforme os nulls). Calculado aqui, explicito e igual p/ todos.
+  serie.forEach((s, i) => { const p = serie[i - 1];
+    const d = (a, b) => (a == null || b == null || b === 0) ? null : r2(a - b);
+    if (p) { s.var_pr_pp = d(s.pr_pct, p.pr_pct); s.var_disp_pp = d(s.disp_pct, p.disp_pct);
+      s.var_corte_pp = d(s.corte_pct_pot, p.corte_pct_pot); s.var_horas = d(s.horas_restricao, p.horas_restricao); } });
   serie.forEach(s => { s.atingido_pct = (s.meta_gwh > 0 && s.way2_liq_gwh != null) ? r2(100 * s.way2_liq_gwh / s.meta_gwh) : null;
     s.bateu = s.atingido_pct == null ? null : (s.atingido_pct >= 100 ? 1 : 0); });
   { const normais = serie.map(s => s.way2_gwh_dia).filter(x => x != null).sort((a, b) => a - b);
