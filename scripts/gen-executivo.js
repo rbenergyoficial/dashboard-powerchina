@@ -209,6 +209,10 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
       disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
       irr_media: r2(i.irr_media), ge_reconstruido_pct: i.rec_pct,
+      // META do mês na série (planilha, jan/26→). set/25–dez/25 ficam null: o usuário não tem PPA de 2025.
+      meta_gwh: (METAS.meses[mes] || {}).garantido_total != null ? r2(METAS.meses[mes].garantido_total / 1000) : null,
+      meta_ppa_gwh: (METAS.meses[mes] || {}).garantido_ppa != null ? r2(METAS.meses[mes].garantido_ppa / 1000) : null,
+      corte_pct_pot: i.ge > 0 ? r2(100 * (m.fru) / (i.ge)) : null,
       way2_liq_gwh: r2(w2.reduce((a, x) => a + num(x.ene_liq_mwh), 0) / 1000),
       way2_gwh_dia: w2.length ? r2(w2.reduce((a, x) => a + num(x.ene_ger_mwh), 0) / w2.length / 1000) : null,
       pico_mw: w2.length ? Math.round(Math.max(...w2.map(x => num(x.pico_mw)))) : null,
@@ -223,6 +227,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   //                contra ~1,8 do regime normal; pico 300 MW contra 345.
   // pr_confiavel : o ONS preencheu 'ge' E o PR caiu em faixa fisicamente plausível (50–95%).
   //                out/25–fev/26 dão PR de 97% a 161% = impossível → não publicamos.
+  serie.forEach(s => { s.atingido_pct = (s.meta_gwh > 0 && s.way2_liq_gwh != null) ? r2(100 * s.way2_liq_gwh / s.meta_gwh) : null;
+    s.bateu = s.atingido_pct == null ? null : (s.atingido_pct >= 100 ? 1 : 0); });
   { const normais = serie.map(s => s.way2_gwh_dia).filter(x => x != null).sort((a, b) => a - b);
     const medianaDia = normais.length ? normais[Math.floor(normais.length / 2)] : null;
     serie.forEach(s => {
