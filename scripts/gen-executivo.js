@@ -610,6 +610,8 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         dias_restantes: Math.max(0, dTot - dCorr),
         liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
         atingido: fmt(at), proj_pct: fmt(pj),
+        // versoes NUMERICAS: a gauge precisa de numero, o texto da manchete precisa de string formatada
+        atingido_n: at, proj_pct_n: pj,
         realizado_w: at == null ? 0 : r2(at / esc * 100),
         projecao_w: pj == null ? 0 : r2(Math.max(0, pj - at) / esc * 100),
         marca100_w: r2(100 / esc * 100),
