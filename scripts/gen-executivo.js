@@ -520,6 +520,11 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
             if (rend.length) { gePot = rend[Math.floor(rend.length / 2)] * CAP_UFV[u]; real = liq; }
           }
           const l = linha(u, gePot, real, x.geP, x.gvP, x.parN, x.parOk, liq, meta);
+          // PPA nos meses de ge ruim: o cálculo dá 0,0% para as seis usinas — FALSO (o complexo cortou
+          // 5,86% em out/25). E aqui não dá para estimar como no ML: as usinas do PPA SÃO a referência,
+          // usá-las contra si mesmas seria circular. Fica VAZIO, com a nota dizendo por quê.
+          if (geRuim && PPA.includes(u)) { l.cortado_gwh = null; l.corte_pct = null; l.outras_gwh = null;
+            l.nota = 'Corte por usina indisponivel neste mes: depende da geracao estimada do ONS, inconsistente antes de mar/26 — o calculo dava 0,0% para as seis usinas do PPA, o que e falso (o complexo cortou neste mes). Nas usinas do ML foi possivel estimar pelas irmas do PPA; para o proprio PPA a referencia seria circular.'; }
           if (usaIrma) { l.potencial_piso = 1;
             l.potencial_fonte = 'mediana do rendimento (MWh/MW) das usinas do PPA, medido pelo Way2 no mesmo mês'; }
           if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
@@ -535,7 +540,9 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           const liq = w2.reduce((a, d) => a + num(d.ene_liq_mwh), 0);
           const l = linha('Complexo', ge, gv, geP, gvP, pN, pK, liq, mtm ? mtm.garantido_total : null);
           // no complexo o corte vem da fórmula da casa (nível da subestação), não da soma dos ge−gv
-          l.cortado_gwh = S.frustrada_gwh; l.corte_pct = S.corte_pct_pot;
+          l.cortado_gwh = S.frustrada_gwh;
+          l.corte_pct = (m < '2026-03') ? S.frustrada_pct : S.corte_pct_pot;
+          if (m < '2026-03') l.corte_base = 'cortado / (gerado + cortado) — nao usa a geracao estimada do ONS, que e inconsistente antes de mar/26';
           out.push(l); }
       });
       return out; })(),
