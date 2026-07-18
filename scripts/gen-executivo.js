@@ -526,7 +526,10 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           if (geRuim && PPA.includes(u)) { l.cortado_gwh = null; l.corte_pct = null; l.outras_gwh = null;
             l.nota = 'Corte por usina indisponivel neste mes: depende da geracao estimada do ONS, inconsistente antes de mar/26 — o calculo dava 0,0% para as seis usinas do PPA, o que e falso (o complexo cortou neste mes). Nas usinas do ML foi possivel estimar pelas irmas do PPA; para o proprio PPA a referencia seria circular.'; }
           if (usaIrma) { l.potencial_piso = 1;
-            l.potencial_fonte = 'mediana do rendimento (MWh/MW) das usinas do PPA, medido pelo Way2 no mesmo mês'; }
+            l.potencial_fonte = 'mediana do rendimento (MWh/MW) das usinas do PPA, medido pelo Way2 no mesmo mês';
+            // VIES MEDIDO contra o gabarito de mar-jul/26 (onde o ge do ONS presta): o metodo SUBESTIMA
+            // o corte em ~10 pp (M1 -11,8 · M9 -8,8). Logo o corte real do ML e MAIOR que o publicado.
+            l.vies_pp = -10; l.vies_nota = 'piso: validado contra os meses de dado bom, este metodo subestima o corte em ~10 pontos percentuais'; }
           if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
             l.nota = 'O registro "M7" do ONS e o circuito 2 do M3 — o M7 nao tem geracao nem potencial proprios na fonte. Realizado vem do Way2; potencial e ESTIMADO pela mediana do ge/MW dos parques de tag boa. PR nao se aplica.'; }
           out.push(l); });
