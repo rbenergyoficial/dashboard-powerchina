@@ -500,7 +500,28 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           // 100% de corte. O realizado do M7 vem do Way2. O PR fica NULL: comparar líquida do Way2
           // com potencial ESTIMADO não é Performance Ratio, é mistura de bases.
           const viaW2 = VIA_WAY2.includes(u) && liq > 0;
-          const l = linha(u, x.ge, viaW2 ? liq : x.gv, x.geP, x.gvP, x.parN, x.parOk, liq, meta);
+          // POTENCIAL DO M7 — não sai do ONS. Eu usava a mediana do `ge` dos parques de tag boa, mas o
+          // `ge` do ONS é inconsistente antes de mar/26 (o mesmo motivo de o PR não existir lá). Isso
+          // subestimava o potencial e ZERAVA o corte de set/25 a jan/26 — falso: o rendimento específico
+          // do M7 (MWh/MW) acompanha o ML em todos esses meses, bem abaixo do PPA.
+          // Referência nova: as USINAS DO PPA MEDIDAS pelo Way2, no mesmo mês, sob o mesmo céu.
+          // É Way2 contra Way2 — não depende de nenhum número do ONS.
+          // ⚠️ É PISO: o PPA também leva corte (8% a 19%), então o corte real do M7 é MAIOR que este.
+          // Vale para os TRÊS parques de Mercado Livre, não só o M7: o `ge` quebrado antes de mar/26
+          // zerava o corte de M1 e M9 também, o que é falso — o rendimento deles despenca em relação
+          // ao PPA nesses meses. Onde o `ge` é confiável (mar/26 em diante) seguimos usando o ONS,
+          // que mede a irradiância do próprio parque e é melhor que qualquer referência de irmã.
+          const geRuim = m < '2026-03';
+          const usaIrma = (viaW2 || (ML.includes(u) && geRuim));
+          let gePot = x.ge, real = viaW2 ? liq : x.gv;
+          if (usaIrma) {
+            const rend = PPA.map(p => { const w = w2.reduce((a, dd) => a + num((dd.ufv_liq_mwh || {})[p]), 0);
+              return w > 0 ? w / CAP_UFV[p] : null; }).filter(v => v != null).sort((a, b) => a - b);
+            if (rend.length) { gePot = rend[Math.floor(rend.length / 2)] * CAP_UFV[u]; real = liq; }
+          }
+          const l = linha(u, gePot, real, x.geP, x.gvP, x.parN, x.parOk, liq, meta);
+          if (usaIrma) { l.potencial_piso = 1;
+            l.potencial_fonte = 'mediana do rendimento (MWh/MW) das usinas do PPA, medido pelo Way2 no mesmo mês'; }
           if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
             l.nota = 'O registro "M7" do ONS e o circuito 2 do M3 — o M7 nao tem geracao nem potencial proprios na fonte. Realizado vem do Way2; potencial e ESTIMADO pela mediana do ge/MW dos parques de tag boa. PR nao se aplica.'; }
           out.push(l); });
