@@ -595,8 +595,6 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   {
     const SU = out.serie_ufv;
     const UFVS = ['Complexo'].concat(Object.keys(CAP_UFV).sort());
-    const dTot = mes.dias_total, dCorr = mes.dias_decorridos;
-    const fatorD = dCorr > 0 ? dTot / dCorr : 1;
     const LIMIAR = 0.5;
     const corVar = (bom, delta) => (bom == null || Math.abs(delta || 0) < LIMIAR) ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
     const seta = v => (v > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(v));
@@ -610,10 +608,19 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
     out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = []; out.ytd_ufv = [];
 
-    UFVS.forEach(u => {
+    // MÊS × USINA. Antes só o mês corrente era montado, então escolher "mês anterior" no painel
+    // trocava o rótulo e não os números. Agora o seletor escolhe as duas dimensões.
+    meses.forEach(mSel => { UFVS.forEach(u => {
       const S = SU.filter(x => x.ufv === u);                 // 11 meses dessa usina
-      const cur = S[S.length - 1], ant = S[S.length - 2];
-      if (!cur) return;
+      const iCur = S.findIndex(x => x.mes === mSel);
+      if (iCur < 0) return;
+      const cur = S[iCur], ant = S[iCur - 1];
+      // dias do mês selecionado e quantos já têm dado. Em mês FECHADO os dois se igualam, o fator vira
+      // 1 e a "projeção" passa a ser o próprio realizado — que é o número certo para um mês passado.
+      const dTot = new Date(+mSel.slice(0, 4), +mSel.slice(5, 7), 0).getDate();
+      const dCorr = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo').length || dTot;
+      const fatorD = dCorr > 0 ? dTot / dCorr : 1;
+      const fechado = dCorr >= dTot ? 1 : 0;
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
       const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;
@@ -622,24 +629,24 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       const antCorte = ant ? ant.cortado_gwh : null;
 
       out.cards_ufv.push(
-        { ufv: u, k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
+        { mes: mSel, ufv: u, k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
           var: vPR == null ? '' : seta(vPR) + ' pp', var_cor: corVar(vPR == null ? null : vPR >= 0, vPR),
           cor: cur.pr_pct == null ? '#8B93A1' : (cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60')),
           spark: barras(S.map(x => x.pr_pct), '#D9A441'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
+        { mes: mSel, ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
           sub: compl ? 'só existe no complexo' : 'alvo 97%',
           var: compl ? '· complexo' : '', var_cor: '#8B93A1',
           cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
           spark: barras(S.map(x => x.disp_pct), '#4E9A98'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { ufv: u, k: 'corte', label: 'Curtailment', v: fmt(cur.corte_pct), u: '%',
+        { mes: mSel, ufv: u, k: 'corte', label: 'Curtailment', v: fmt(cur.corte_pct), u: '%',
           sub: fmt(cur.cortado_gwh) + ' GWh jogados fora',
           var: vCorte == null ? '' : seta(vCorte) + ' pp', var_cor: corVar(vCorte == null ? null : vCorte <= 0, vCorte),
           cor: '#C85C60', spark: barras(S.map(x => x.corte_pct), '#C85C60'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { ufv: u, k: 'proj', label: 'Projeção de corte', v: fmt(projCorte), u: 'GWh',
+        { mes: mSel, ufv: u, k: 'proj', label: 'Projeção de corte', v: fmt(projCorte), u: 'GWh',
           sub: ant ? ant.lbl + ' fechou em ' + fmt(antCorte) + ' GWh' : 'no fechamento do mês',
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
           spark: barras(S.map(x => x.cortado_gwh), '#5C86BE'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
+        { mes: mSel, ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
           sub: compl ? 'só existe no complexo' : 'mês parcial · dia ' + dCorr + ' de ' + dTot,
           var: compl ? '· complexo' : '', var_cor: '#8B93A1', cor: '#C08A45',
           spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
@@ -649,7 +656,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
       const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
       const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
-      out.manchete_ufv.push({ ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
+      out.manchete_ufv.push({ mes: mSel, fechado, ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
         dias_restantes: Math.max(0, dTot - dCorr),
         liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
         atingido: fmt(at), proj_pct: fmt(pj),
@@ -660,6 +667,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         marca100_w: r2(100 / esc * 100),
         escopo: u === 'Complexo' ? 'Complexo · 343,77 MW · 9 UFVs' : u + ' · ' + fmt(CAP_UFV[u]) + ' MW' });
 
+      if (mSel === mesAtual) {   // YTD e ANUAL: monta uma vez so
       // ---- ACUMULADO DO ANO (YTD) ----
       // Investidor pensa em ano, não em mês. Só o ano corrente (2026): 2025 tem os meses de
       // comissionamento e de dado quebrado, misturar os dois períodos num acumulado seria enganoso.
@@ -682,15 +690,18 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
           cortado_gwh: comCorte.length ? r2(comCorte.reduce((a, x) => a + x.cortado_gwh, 0)) : null,
           meses_com_corte: comCorte.length,
-          nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); }
+          nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }
 
       // ---- cascata ----
       const pot = cur.potencial_gwh;
       out.cascata_ufv.push(
-        { ufv: u, etapa: 'Entregue', gwh: cur.entregue_gwh, pct: pot > 0 ? r2(100 * cur.entregue_gwh / pot) : 0 },
-        { ufv: u, etapa: 'Cortado pelo ONS', gwh: cur.cortado_gwh, pct: pot > 0 ? r2(100 * cur.cortado_gwh / pot) : 0 },
-        { ufv: u, etapa: 'Outras perdas', gwh: cur.outras_gwh, pct: pot > 0 ? r2(100 * cur.outras_gwh / pot) : 0 });
-    });
+        { mes: mSel, ufv: u, etapa: 'Entregue', gwh: cur.entregue_gwh, pct: pot > 0 ? r2(100 * cur.entregue_gwh / pot) : 0 },
+        { mes: mSel, ufv: u, etapa: 'Cortado pelo ONS', gwh: cur.cortado_gwh, pct: pot > 0 ? r2(100 * cur.cortado_gwh / pot) : 0 },
+        { mes: mSel, ufv: u, etapa: 'Outras perdas', gwh: cur.outras_gwh, pct: pot > 0 ? r2(100 * cur.outras_gwh / pot) : 0 });
+    }); });
+
+    // lista de meses p/ o seletor do painel (mais novo primeiro)
+    out.meses_opcoes = meses.slice().reverse().map(m => ({ mes: m, lbl: lbl(m), atual: m === mesAtual ? 1 : 0 }));
   }
 
   const size = await writeOut(out);
