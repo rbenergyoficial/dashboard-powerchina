@@ -548,6 +548,21 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           l.corte_pct = (m < '2026-03') ? S.frustrada_pct : S.corte_pct_pot;
           if (m < '2026-03') l.corte_base = 'cortado / (gerado + cortado) — nao usa a geracao estimada do ONS, que e inconsistente antes de mar/26';
           out.push(l); }
+        // ---- grupos PPA e ML como se fossem "usinas" ----
+        // O PPA é o compromisso contratual e o ML é quem absorve o corte: as duas perguntas mais
+        // frequentes do painel. Entrando na mesma lista, viram opção no seletor de usina e alimentam
+        // a gauge de referência sem query especial.
+        [['PPA', PPA], ['ML', ML]].forEach(([g, us]) => {
+          const som = k => us.reduce((a, u) => a + ((I.porUfv[u] || {})[k] || 0), 0);
+          const liqG = us.reduce((a, u) => a + w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0), 0);
+          const metaG = mtm ? us.reduce((a, u) => a + ((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u]), 0) : null;
+          // M7 entra pelo Way2 (o gv do ONS dele é o c2 do M3)
+          const gvG = us.reduce((a, u) => a + (VIA_WAY2.includes(u)
+            ? w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0)
+            : ((I.porUfv[u] || {}).gv || 0)), 0);
+          const lg = linha(g, som('ge'), gvG, som('geP'), som('gvP'), som('parN'), som('parOk'), liqG, metaG);
+          lg.grupo = 1;
+          out.push(lg); });
       });
       return out; })(),
     // TODOS OS MESES, não só o corrente: o painel filtra por [ufv e mes], e o mês vem do seletor de
@@ -594,7 +609,7 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
   // Cada estrutura ganha uma linha por usina + 'Complexo'; o painel filtra com [ufv='$ufv'].
   {
     const SU = out.serie_ufv;
-    const UFVS = ['Complexo'].concat(Object.keys(CAP_UFV).sort());
+    const UFVS = ['Complexo', 'PPA', 'ML'].concat(Object.keys(CAP_UFV).sort());
     const LIMIAR = 0.5;
     const corVar = (bom, delta) => (bom == null || Math.abs(delta || 0) < LIMIAR) ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
     const seta = v => (v > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(v));
