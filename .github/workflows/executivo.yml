@@ -1,8 +1,7 @@
 name: Executivo -> executivo.json (visao executiva)
 on:
   schedule:
-    - cron: '30 12 * * *' # 09:30 BRT
-    - cron: '30 18 * * *' # 15:30 BRT
+    - cron: '0 9-22 * * *' # de hora em hora, 06h-19h BRT
   workflow_dispatch: {}
 concurrency:
   group: gen-executivo
