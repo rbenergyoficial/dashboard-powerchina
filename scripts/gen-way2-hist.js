@@ -153,6 +153,13 @@ async function subirJson(container, nome, obj) {
     { blobHTTPHeaders: { blobContentType: 'application/json' } });
 }
 
+// rollupDia é a UNICA fonte da verdade do rateio MUST (bruta -> liquida por UFV). O painel
+// executivo importa ela p/ montar a barra do dia corrente sem duplicar a equacao: se o rateio
+// mudar, muda nos dois lugares de uma vez. Por isso a IIFE abaixo so roda quando este arquivo
+// e o ponto de entrada — importado, ele apenas exporta.
+module.exports = { rollupDia, valores };
+if (require.main !== module) return;
+
 (async () => {
   const conn = process.env.DADOS_STORAGE, token = process.env.WAY2_TOKEN;
   if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }

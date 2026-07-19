@@ -20,6 +20,8 @@
  * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
 const https = require('https');
+// rateio MUST reaproveitado do arquivador — ver nota em gen-way2-hist.js
+const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
@@ -64,6 +66,29 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 (async () => {
   const restr = await getJSON(BASE + 'ons_restricao_all.json');
   const daily = await getJSON(BASE + 'way2_daily.json');
+
+  // ---------- dia corrente, quase ao vivo ----------
+  // O way2_daily so fecha o dia DEPOIS que ele acaba (o arquivador roda 00:30), entao a serie
+  // diaria morria em ontem. O snapshot 5-min de hoje ja existe desde a meia-noite e e reescrito
+  // a cada ~5 min — da p/ montar a barra de hoje com o MESMO rollup do arquivador.
+  // A linha vai marcada com `parcial`: ela e curta por definicao (metade do dia = metade da
+  // barra) e sem a marca alguem le queda de geracao onde so ha meio-dia decorrido.
+  try {
+    const hojeBRT = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+    if (!daily.dias.some(d => d.dia === hojeBRT)) {
+      const snap = await getJSON(BASE + 'hist/way2_' + hojeBRT + '.json');
+      const linha = rollupDia(snap, hojeBRT);
+      if (linha.slots > 0) {
+        linha.parcial = 1;
+        // ultimo slot COM valor: e o que o painel mostra como "dado ate". Os slots futuros do dia
+        // ja vem criados com qualidade:1 e sem `valor`, entao contar slots nao serve.
+        const g = valoresW2(snap, 6233, 'Demat').filter(v => v.valor != null);
+        linha.ate = g.length ? String(g[g.length - 1].data).slice(11, 16) : null;
+        daily.dias.push(linha);
+        console.log('dia corrente ' + hojeBRT + ' anexado (parcial, ate ' + linha.ate + ', ' + linha.slots + ' slots, ' + linha.ene_liq_mwh + ' MWh)');
+      }
+    }
+  } catch (e) { console.log('dia corrente indisponivel (' + e.message + ') — serie fica ate ontem'); }
 
   // ---------- 1) complexo por mês, a partir do ons_restricao_all ----------
   const M = {};   // mes -> acumuladores
@@ -588,13 +613,16 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         const metaDia = u => mtm ? r2((((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u])) / dias) : null;
         daily.dias.filter(x => String(x.dia).slice(0, 7) === m).forEach(x => {
           const d = x.dia, dnum = +d.slice(8, 10);
+          // `parcial` viaja em cada linha: o painel pinta a barra de hoje diferente e a projecao
+          // desconta esse dia do divisor. `ate` = hora do ultimo dado (so no dia corrente).
+          const pc = x.parcial ? 1 : 0, ate = x.ate || null;
           Object.keys(CAP_UFV).sort().forEach(u => out.push({ mes: m, dia: d, dia_num: dnum, ufv: u,
             liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
             irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
-            meta_dia_mwh: metaDia(u) }));
+            meta_dia_mwh: metaDia(u), parcial: pc, ate }));
           out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
             irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
-            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null });
+            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, ate });
         });
       });
       return out; })(),
@@ -633,9 +661,18 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       // dias do mês selecionado e quantos já têm dado. Em mês FECHADO os dois se igualam, o fator vira
       // 1 e a "projeção" passa a ser o próprio realizado — que é o número certo para um mês passado.
       const dTot = new Date(+mSel.slice(0, 4), +mSel.slice(5, 7), 0).getDate();
-      const dCorr = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo').length || dTot;
+      // SÓ DIAS COMPLETOS. O dia corrente entra na serie (a barra cresce ao longo do dia) mas fica
+      // FORA da projecao: contá-lo como dia inteiro somaria 1 ao divisor sem somar a energia
+      // correspondente ao numerador, e a projecao despencaria toda manha, recuperando a noite.
+      const diasMes = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo');
+      const parc = diasMes.filter(x => x.parcial);
+      const dCorr = diasMes.filter(x => !x.parcial).length || dTot;
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
       const fechado = dCorr >= dTot ? 1 : 0;
+      // energia de hoje, ainda incompleta — some no "ja realizado", nao na base da projecao
+      const hojeGwh = r2(out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === u && x.parcial)
+        .reduce((a, x) => a + num(x.liq_mwh), 0) / 1000);
+      const hojeAte = parc.length ? parc[0].ate : null;
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
       const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;
@@ -667,12 +704,15 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
 
       // ---- manchete ----
-      const proj = r2(cur.liquida_gwh * fatorD);
+      // base = so os dias FECHADOS (tira a energia de hoje, que e de um dia pela metade).
+      // O "ja realizado" logo abaixo continua incluindo hoje — aquilo e energia entregue de fato.
+      const proj = r2((cur.liquida_gwh - hojeGwh) * fatorD);
       const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
       const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
       const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
       out.manchete_ufv.push({ mes: mSel, fechado, ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
         dias_restantes: Math.max(0, dTot - dCorr),
+        ao_vivo: hojeAte ? 1 : 0, ao_vivo_ate: hojeAte, hoje_gwh: fmt(hojeGwh),
         liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
         atingido: fmt(at), proj_pct: fmt(pj),
         // versoes NUMERICAS: a gauge precisa de numero, o texto da manchete precisa de string formatada
