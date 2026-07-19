@@ -54,7 +54,9 @@ const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFix
 const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 
 function getJSON(url) { return new Promise((res, rej) => { https.get(url, x => { if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
-  let s = ''; x.on('data', c => s += c); x.on('end', () => { try { res(JSON.parse(s)); } catch (e) { rej(e); } }); }).on('error', rej); }); }
+  // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os que vem
+  // crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
+  let s = ''; x.on('data', c => s += c); x.on('end', () => { try { res(JSON.parse(s.replace(/^﻿/, ''))); } catch (e) { rej(e); } }); }).on('error', rej); }); }
 async function writeOut(obj) { const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
   const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE;
@@ -670,7 +672,11 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
       const fechado = dCorr >= dTot ? 1 : 0;
       // energia de hoje, ainda incompleta — some no "ja realizado", nao na base da projecao
-      const hojeGwh = r2(out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === u && x.parcial)
+      // PPA e ML sao GRUPOS: nao existem como linha em serie_dia_ufv (que so tem as 9 usinas e o
+      // Complexo), entao filtrar por ufv=u daria 0 e a energia parcial vazaria para a base da
+      // projecao — foi o que aconteceu na primeira versao (PPA saltou 124,68 -> 126,21).
+      const membros = u === 'PPA' ? PPA : u === 'ML' ? ML : [u];
+      const hojeGwh = r2(out.serie_dia_ufv.filter(x => x.mes === mSel && x.parcial && membros.includes(x.ufv))
         .reduce((a, x) => a + num(x.liq_mwh), 0) / 1000);
       const hojeAte = parc.length ? parc[0].ate : null;
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
