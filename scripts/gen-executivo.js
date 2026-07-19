@@ -741,6 +741,16 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         texto: '±' + fmt(h.erro_abs_pp) + ' pp',
         nota: 'Backtest em ' + h.n_meses + ' meses fechados: no dia ' + dHoje + ' a projeção errou em média ' + fmt(h.erro_abs_pp) + ' pontos percentuais, e ' + h.dentro5 + ' dos ' + h.n_meses + ' meses ficaram dentro de 5 pp.',
       } : null;
+
+      // Carimba a confiança DENTRO de manchete_ufv: o painel dynamictext trata cada query como um
+      // quadro separado, então campos vindos de uma 2ª query não existem no contexto do template.
+      // Em mês FECHADO não há projeção a confiar — o selo vira "mês fechado", neutro.
+      const cf = out.confianca_projecao;
+      out.manchete_ufv.forEach(m2 => {
+        if (m2.fechado) { m2.cf_nivel = 'mês fechado'; m2.cf_texto = 'realizado'; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
+        else if (cf) { m2.cf_nivel = cf.nivel; m2.cf_texto = cf.texto; m2.cf_cor = cf.cor; m2.cf_acertos = cf.acertos; }
+        else { m2.cf_nivel = ''; m2.cf_texto = ''; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
+      });
     }
   }
 
