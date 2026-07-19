@@ -550,29 +550,37 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
           out.push(l); }
       });
       return out; })(),
+    // TODOS OS MESES, não só o corrente: o painel filtra por [ufv e mes], e o mês vem do seletor de
+    // tempo do Grafana. Publicando só o mês atual, escolher "mês anterior" trocava o RÓTULO mas não os
+    // dados — o gráfico dizia jun/26 mostrando julho. Cada linha carrega `mes` p/ o filtro casar.
+    // `dia_num` (1..31) alimenta o eixo numérico do painel Trend; `dia_ts` saiu (ninguém mais usa e
+    // multiplicar por 11 meses só engordava o blob).
     serie_dia_ufv: (() => {
       const out = [];
-      const cruMes = CRU[mesAtual] || [];
-      const irrDiaU = {}, irrDiaC = {};       // {dia: {u: [irr]}} e {dia: [irr]}
-      cruMes.forEach(r => { if (!util(r)) return;
-        const d = String(r.ts).slice(0, 10), u = String(r.u).replace('CEFMT', 'M');
-        ((irrDiaU[d] = irrDiaU[d] || {})[u] = irrDiaU[d][u] || []).push(num(r.irr));
-        (irrDiaC[d] = irrDiaC[d] || []).push(num(r.irr)); });
       const med = a => a && a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
-      const metaU = metaUfv || {};
-      daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual).forEach(x => {
-        const d = x.dia;
-        const ts = d + 'T12:00:00-03:00';
-        // dia do mes como NUMERO: alimenta o painel Trend (eixo numerico em vez de tempo).
-        // Com eixo numerico o rotulo cai exatamente sob a barra e nao ha formato MM/DD p/ discutir.
-        const dnum = +d.slice(8, 10);
-        Object.keys(CAP_UFV).sort().forEach(u => out.push({ dia: d, dia_ts: ts, dia_num: dnum, ufv: u,
-          liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
-          irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
-          meta_dia_mwh: metaU[u] ? r2(metaU[u] / diasTotal) : null }));
-        out.push({ dia: d, dia_ts: ts, dia_num: dnum, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
-          irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
-          meta_dia_mwh: mt ? r2(mt.garantido_total / diasTotal) : null });
+      const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
+      meses.forEach(m => {
+        // irradiância do mês, por dia e por usina
+        const irrDiaU = {}, irrDiaC = {};
+        (CRU[m] || []).forEach(r => { if (!util(r)) return;
+          const d = String(r.ts).slice(0, 10), u = String(r.u).replace('CEFMT', 'M');
+          ((irrDiaU[d] = irrDiaU[d] || {})[u] = irrDiaU[d][u] || []).push(num(r.irr));
+          (irrDiaC[d] = irrDiaC[d] || []).push(num(r.irr)); });
+        // meta DAQUELE mês (não a do mês corrente) dividida pelos dias DAQUELE mês
+        const mtm = METAS.meses[m] || null;
+        const dias = new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
+        const taxa = mtm && capPpa > 0 ? mtm.garantido_ppa / capPpa : 0;
+        const metaDia = u => mtm ? r2((((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u])) / dias) : null;
+        daily.dias.filter(x => String(x.dia).slice(0, 7) === m).forEach(x => {
+          const d = x.dia, dnum = +d.slice(8, 10);
+          Object.keys(CAP_UFV).sort().forEach(u => out.push({ mes: m, dia: d, dia_num: dnum, ufv: u,
+            liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
+            irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
+            meta_dia_mwh: metaDia(u) }));
+          out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
+            irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
+            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null });
+        });
       });
       return out; })(),
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
