@@ -702,6 +702,46 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
 
     // lista de meses p/ o seletor do painel (mais novo primeiro)
     out.meses_opcoes = meses.slice().reverse().map(m => ({ mes: m, lbl: lbl(m), atual: m === mesAtual ? 1 : 0 }));
+
+    // ---------- CONFIANÇA DA PROJEÇÃO ----------
+    // Backtest do nosso próprio método: para cada mês FECHADO, reconstrói o que a projeção teria dito
+    // em cada dia (acumulado até o dia ÷ dias × dias do mês) e compara com o fechamento real.
+    // Responde "a partir de que dia esse número pode ser levado a sério?" — sem isso a projeção
+    // aparece com a mesma cara no dia 3 e no dia 28, quando no dia 3 ela é ruído.
+    // set/25 fica FORA: era comissionamento (ramp-up), não representa a operação.
+    { const SD = out.serie_dia_ufv.filter(x => x.ufv === 'Complexo');
+      const diasNo = m => new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
+      const rampUp = new Set(serie.filter(s => s.ramp_up).map(s => s.mes));
+      const fechados = meses.filter(m => !rampUp.has(m) && SD.filter(x => x.mes === m).length >= diasNo(m));
+      const erroNoDia = D => fechados.map(m => {
+        const d = SD.filter(x => x.mes === m).sort((a, b) => a.dia_num - b.dia_num);
+        if (d.length < D) return null;
+        const ac = d.slice(0, D).reduce((a, x) => a + x.liq_mwh, 0);
+        const real = d.reduce((a, x) => a + x.liq_mwh, 0);
+        return real > 0 ? 100 * ((ac / D * diasNo(m)) - real) / real : null;
+      }).filter(e => e != null);
+
+      out.acerto_projecao = [];
+      for (let D = 3; D <= 28; D++) { const e = erroNoDia(D); if (e.length < 3) continue;
+        out.acerto_projecao.push({ dia: D, n_meses: e.length,
+          erro_abs_pp: r2(e.reduce((a, b) => a + Math.abs(b), 0) / e.length),
+          vies_pp: r2(e.reduce((a, b) => a + b, 0) / e.length),
+          pior_pp: r2(Math.max(...e.map(Math.abs))),
+          dentro5: e.filter(x => Math.abs(x) <= 5).length }); }
+
+      // o que vale HOJE (dia decorrido do mês corrente), p/ o card ao lado da projeção
+      const dHoje = SD.filter(x => x.mes === mesAtual).length;
+      const h = out.acerto_projecao.find(x => x.dia === dHoje)
+        || out.acerto_projecao[out.acerto_projecao.length - 1] || null;
+      out.confianca_projecao = h ? {
+        dia: dHoje, erro_pp: h.erro_abs_pp, vies_pp: h.vies_pp, n_meses: h.n_meses,
+        dentro5: h.dentro5, acertos: h.dentro5 + ' de ' + h.n_meses,
+        nivel: h.erro_abs_pp <= 3 ? 'alta' : (h.erro_abs_pp <= 6 ? 'média' : 'baixa'),
+        cor: h.erro_abs_pp <= 3 ? '#43966B' : (h.erro_abs_pp <= 6 ? '#C08A45' : '#C85C60'),
+        texto: '±' + fmt(h.erro_abs_pp) + ' pp',
+        nota: 'Backtest em ' + h.n_meses + ' meses fechados: no dia ' + dHoje + ' a projeção errou em média ' + fmt(h.erro_abs_pp) + ' pontos percentuais, e ' + h.dentro5 + ' dos ' + h.n_meses + ' meses ficaram dentro de 5 pp.',
+      } : null;
+    }
   }
 
   const size = await writeOut(out);
