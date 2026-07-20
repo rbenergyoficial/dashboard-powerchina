@@ -863,9 +863,18 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // hora) e `corte_mw` sai (e a area entre as duas curvas, o grafico ja mostra). 21 mil pontos
       // multiplicam qualquer byte a mais.
       const [hh, mm] = hhmm.split(':').map(Number);
+      // INVARIANTE: o potencial NUNCA pode ser menor que o entregue — a usina nao entrega o que
+      // nao podia gerar. Quando isso acontece, o `ge` do ONS esta furado e nao ha corte nenhum.
+      // Ex. real 16/07 09:30: 8 das 9 usinas com ge=0, soma 7,3 MW contra 92,8 MW entregues.
+      // Somando cru, o potencial despencava a zero em pleno meio-dia de sol.
+      // Nesses slots o potencial vira NULL e a linha abre um buraco (spanNulls off): a leitura
+      // honesta e "aqui nao se sabe", nao "aqui nao havia potencial".
+      // `ge <= 0` sozinho NAO e defeito: de madrugada o potencial e zero mesmo. O defeito e a
+      // CONTRADICAO — entregar mais do que se podia gerar.
+      const ruim = o.ge == null || (o.gv > 0 && o.ge < o.gv);
       perfil.push({ dia, h: hh + mm / 60, ufv,
         irr: o.irr > 0 ? Math.round(o.irr) : null,
-        pot_mw: r2(o.ge), ent_mw: r2(o.gv) });
+        pot_mw: ruim ? null : r2(o.ge), ent_mw: r2(o.gv) });
     };
     for (const dia of Object.keys(porDia).sort()) {
       for (const hhmm of Object.keys(porDia[dia]).sort()) {
