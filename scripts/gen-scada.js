@@ -37,8 +37,14 @@ function parkFromName(fn) {
 }
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 
+// Reparo do RTC do M3: o circuito 2 = cubiculo CUB_10.1 registrou 50% da potencia real ate o
+// conserto fisico em 12/07/2026. SCADA e ONS herdaram o erro; o Way2 nao (RTC de faturamento).
+// Correcao: dobrar SO essa coluna, SO antes de 12/07 — com guard (a coluna tem que estar mesmo
+// em ~50% das irmas) para nao corrigir dado sadio se o cabecalho variar.
+const RTC_M3 = { park: 'M3', colRe: /CUB[_ ]?10[._]1(?![0-9])/i, before: '2026-07-12', factor: 2 };
+
 // Extrai {diario:{dia:MWh}, intra15:{dia:[96]}} de uma planilha (buffer) de um parque.
-function parseParkBuffer(buf) {
+function parseParkBuffer(buf, park) {
   const wb = XLSX.read(buf, { cellDates: true });
   const sn = wb.SheetNames.find(n => /interpola/i.test(n)) || wb.SheetNames[wb.SheetNames.length - 1];
   const ws = wb.Sheets[sn];
@@ -57,11 +63,15 @@ function parseParkBuffer(buf) {
     throw new Error('nenhuma coluna de potencia ativa (CVMMXN1_Wa) na aba "' + sn
       + '". Cabecalho encontrado: ' + (amostra || '(vazio)'));
   }
+  // qual wattCol e o circuito 2 do M3 (CUB_10.1) — so relevante quando park === M3
+  const fixK = (park === RTC_M3.park) ? wattCols.findIndex(c => RTC_M3.colRe.test(String(hdr[c]))) : -1;
+
   const diario = {}, intra15 = {};
-  // energia por COLUNA (circuito) — usado no diagnostico do M3: o circuito com RTC defeituoso
-  // aparece com ~metade da energia dos irmaos. Guarda ate 11/07 (pre-reparo) separado.
-  const porCol = wattCols.map(() => ({ ate11: 0, cabeca: String(hdr[0]) }));
-  wattCols.forEach((c, k) => { porCol[k].cabeca = String(hdr[c]); });
+  // energia por COLUNA ate 11/07 (pre-reparo) — diagnostico e guard do reparo do RTC.
+  const porCol = wattCols.map((c) => ({ ate11: 0, cabeca: String(hdr[c]) }));
+  // contribuicao do circuito defeituoso, por dia/slot, SO pre-reparo — usada p/ aplicar o ×2
+  // depois do guard passar (nao dobro antes, senao um cabecalho errado corromperia o dado).
+  const fixDay = {}, fixIntra = {};
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     let t = row[0];
@@ -69,17 +79,41 @@ function parseParkBuffer(buf) {
     // timestamps vem com fracao de segundo (ex.: 11:44:59.998 = 11:45); arredonda p/ minuto antes de bucketizar
     t = new Date(Math.round(t.getTime() / 60000) * 60000);
     const day = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate());
-    let P = 0;
-    for (let k = 0; k < wattCols.length; k++) { const v = row[wattCols[k]];
-      if (v !== '' && v != null && !isNaN(+v)) { P += +v; if (day < '2026-07-12') porCol[k].ate11 += (+v) * 5 / 60; } }
-    const e = P * 5 / 60; // MWh nesta amostra de 5min
     const idx = Math.floor((t.getHours() * 60 + t.getMinutes()) / 15);
     if (idx < 0 || idx > 95) continue;
+    const pre = day < RTC_M3.before;
+    let P = 0;
+    for (let k = 0; k < wattCols.length; k++) { const v = row[wattCols[k]];
+      if (v === '' || v == null || isNaN(+v)) continue;
+      const e = (+v) * 5 / 60; P += +v;
+      if (pre) porCol[k].ate11 += e;
+      if (k === fixK && pre) { fixDay[day] = (fixDay[day] || 0) + e;
+        (fixIntra[day] = fixIntra[day] || new Array(96).fill(0))[idx] += e; }
+    }
+    const e = P * 5 / 60; // MWh nesta amostra de 5min
     if (!intra15[day]) intra15[day] = new Array(96).fill(0);
     intra15[day][idx] += e;
     diario[day] = (diario[day] || 0) + e;
   }
-  return { diario, intra15, porCol };
+
+  // ---- aplica o reparo do RTC (dobra o circuito 2), com guard ----
+  let rtc = null;
+  if (fixK >= 0) {
+    const alvo = porCol[fixK].ate11;
+    const irmas = porCol.filter((_, k) => k !== fixK).map(c => c.ate11).filter(v => v > 0).sort((a, b) => a - b);
+    const medIrma = irmas.length ? irmas[Math.floor(irmas.length / 2)] : 0;
+    const razao = medIrma > 0 ? alvo / medIrma : null;
+    // guard: so dobra se a coluna estiver entre 35% e 70% das irmas (assinatura do RTC a 50%).
+    // Fora disso, NAO mexe — protege contra cabecalho enganoso ou circuito legitimamente menor.
+    const ok = razao != null && razao >= 0.35 && razao <= 0.70;
+    if (ok) {
+      const f = RTC_M3.factor - 1;
+      for (const d in fixDay) diario[d] += f * fixDay[d];
+      for (const d in fixIntra) for (let i = 0; i < 96; i++) intra15[d][i] += f * fixIntra[d][i];
+    }
+    rtc = { col: porCol[fixK].cabeca, razao, aplicado: ok, dias: Object.keys(fixDay).length };
+  }
+  return { diario, intra15, porCol, rtc };
 }
 
 // ---- IO helpers (blob) ----
@@ -154,6 +188,7 @@ async function writeOut(obj) {
   // vazado pro blob em runs anteriores (auto-cura). Chaves 'YYYY-MM-DD' comparam lexicograficamente.
   const hojeBRT = (() => { const x = new Date(Date.now() - 3 * 3600 * 1000); return x.getUTCFullYear() + '-' + pad2(x.getUTCMonth() + 1) + '-' + pad2(x.getUTCDate()); })();
   const ignorados = [];              // planilhas puladas por cabecalho fora do padrao
+  let rtcAplicados = 0;              // arquivos do M3 em que o reparo do RTC foi aplicado
   let purgados = 0;
   for (const pk of Object.keys(out.diario)) for (const d of Object.keys(out.diario[pk])) if (d >= hojeBRT) { delete out.diario[pk][d]; purgados++; }
   for (const d of Object.keys(out.intra15)) if (d >= hojeBRT) delete out.intra15[d];
@@ -168,16 +203,19 @@ async function writeOut(obj) {
     // O arquivo ruim e PULADO, nao derruba o backfill inteiro: numa carga de centenas de planilhas
     // um cabecalho fora do padrao nao pode custar as outras. Mas aparece no log e no resumo final —
     // o que nunca pode acontecer e passar despercebido virando zero.
-    let diario, intra15, porCol;
-    try { ({ diario, intra15, porCol } = parseParkBuffer(buf)); }
+    let diario, intra15, porCol, rtc;
+    try { ({ diario, intra15, porCol, rtc } = parseParkBuffer(buf, pk)); }
     catch (e) { console.warn('IGNORADO (' + e.message + '):', name); ignorados.push(name); continue; }
-    // DIAGNOSTICO M3: energia por circuito ate 11/07 (pre-reparo do RTC). O circuito 2, com RTC a
-    // 50%, sai com ~metade dos irmaos — e assim eu descubro QUAL coluna escalar, sem adivinhar.
-    if (pk === 'M3' && porCol && porCol.some(c => c.ate11 > 0)) {
-      const tot = porCol.reduce((a, c) => a + c.ate11, 0);
-      console.log('DIAG M3 [' + name + '] energia por circuito ate 11/07 (MWh · % do total):');
-      porCol.forEach((c, k) => console.log('  col' + k + ' [' + c.cabeca + '] = ' + c.ate11.toFixed(0)
-        + ' (' + (tot > 0 ? (100 * c.ate11 / tot).toFixed(1) : '0') + '%)'));
+    // REPARO DO RTC DO M3 (circuito 2 = CUB_10.1, 50% ate 11/07). Loga o que fez, com o guard.
+    if (rtc) {
+      if (rtc.aplicado) { rtcAplicados++;
+        console.log('RTC M3 [' + name + '] circuito 2 dobrado ate 11/07 · col=' + rtc.col
+          + ' · era ' + (rtc.razao * 100).toFixed(0) + '% das irmas · ' + rtc.dias + ' dias'); }
+      else console.warn('RTC M3 [' + name + '] NAO aplicado (guard): col=' + rtc.col
+        + ' estava em ' + (rtc.razao == null ? '?' : (rtc.razao * 100).toFixed(0) + '%')
+        + ' das irmas — fora de 35-70%, nao dobrei para nao corromper.');
+    } else if (pk === 'M3') {
+      console.warn('RTC M3 [' + name + '] coluna CUB_10.1 NAO encontrada neste arquivo.');
     }
     if (!out.diario[pk]) out.diario[pk] = {};
     let escritos = 0;
@@ -202,6 +240,7 @@ async function writeOut(obj) {
   if (removidos.length) console.log('Removidos parques nao-canonicos:', [...new Set(removidos)].join(', '));
   await writeOut(out);
   console.log(`Gravado ${OUT_BLOB}: ${parks} parques, ${days.size} dias novos/atualizados, ${Object.keys(out.intra15).length} dias no total.`);
+  if (rtcAplicados) console.log(`Reparo RTC do M3 aplicado em ${rtcAplicados} arquivo(s) (circuito 2 dobrado ate 11/07).`);
   if (ignorados.length) {
     console.log(`
 ATENCAO: ${ignorados.length} planilha(s) ignorada(s) por nao ter coluna de potencia ativa.`);
