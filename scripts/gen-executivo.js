@@ -629,6 +629,19 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, ate });
         });
+        // COMPLETA O MÊS com os dias que ainda não têm dado (liq null). O eixo do gráfico passa a
+        // sair do DADO: junho vai até 30, julho até 31, fevereiro até 28. Antes o eixo era fixo em
+        // 31,5 (para a última barra não sair cortada) e junho ganhava um dia 31 que não existe.
+        // Dia sem dado vira ponto nulo — não desenha barra, só reserva o lugar no eixo.
+        const jaTem = new Set(out.filter(x => x.mes === m && x.ufv === 'Complexo').map(x => x.dia_num));
+        for (let dn = 1; dn <= dias; dn++) {
+          if (jaTem.has(dn)) continue;
+          const d = m + '-' + String(dn).padStart(2, '0');
+          Object.keys(CAP_UFV).sort().forEach(u => out.push({ mes: m, dia: d, dia_num: dn, ufv: u,
+            liq_mwh: null, irr: null, meta_dia_mwh: metaDia(u), parcial: 0, ate: null }));
+          out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null, irr: null,
+            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: 0, ate: null });
+        }
       });
       return out; })(),
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
@@ -669,7 +682,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // SÓ DIAS COMPLETOS. O dia corrente entra na serie (a barra cresce ao longo do dia) mas fica
       // FORA da projecao: contá-lo como dia inteiro somaria 1 ao divisor sem somar a energia
       // correspondente ao numerador, e a projecao despencaria toda manha, recuperando a noite.
-      const diasMes = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo');
+      // `liq_mwh != null` filtra os dias que so existem para completar o eixo do grafico: contar
+      // linhas ja nao diz quantos dias passaram, porque o mes agora vem preenchido ate o fim.
+      const diasMes = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo' && x.liq_mwh != null);
       const parc = diasMes.filter(x => x.parcial);
       const dCorr = diasMes.filter(x => !x.parcial).length || dTot;
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
@@ -773,7 +788,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // Responde "a partir de que dia esse número pode ser levado a sério?" — sem isso a projeção
     // aparece com a mesma cara no dia 3 e no dia 28, quando no dia 3 ela é ruído.
     // set/25 fica FORA: era comissionamento (ramp-up), não representa a operação.
-    { const SD = out.serie_dia_ufv.filter(x => x.ufv === 'Complexo');
+    { const SD = out.serie_dia_ufv.filter(x => x.ufv === 'Complexo' && x.liq_mwh != null);
       const diasNo = m => new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
       const rampUp = new Set(serie.filter(s => s.ramp_up).map(s => s.mes));
       const fechados = meses.filter(m => !rampUp.has(m) && SD.filter(x => x.mes === m).length >= diasNo(m));
