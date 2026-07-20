@@ -58,23 +58,28 @@ function parseParkBuffer(buf) {
       + '". Cabecalho encontrado: ' + (amostra || '(vazio)'));
   }
   const diario = {}, intra15 = {};
+  // energia por COLUNA (circuito) — usado no diagnostico do M3: o circuito com RTC defeituoso
+  // aparece com ~metade da energia dos irmaos. Guarda ate 11/07 (pre-reparo) separado.
+  const porCol = wattCols.map(() => ({ ate11: 0, cabeca: String(hdr[0]) }));
+  wattCols.forEach((c, k) => { porCol[k].cabeca = String(hdr[c]); });
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     let t = row[0];
     if (!(t instanceof Date) || isNaN(t)) continue;
     // timestamps vem com fracao de segundo (ex.: 11:44:59.998 = 11:45); arredonda p/ minuto antes de bucketizar
     t = new Date(Math.round(t.getTime() / 60000) * 60000);
-    let P = 0;
-    for (const c of wattCols) { const v = row[c]; if (v !== '' && v != null && !isNaN(+v)) P += +v; }
-    const e = P * 5 / 60; // MWh nesta amostra de 5min
     const day = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate());
+    let P = 0;
+    for (let k = 0; k < wattCols.length; k++) { const v = row[wattCols[k]];
+      if (v !== '' && v != null && !isNaN(+v)) { P += +v; if (day < '2026-07-12') porCol[k].ate11 += (+v) * 5 / 60; } }
+    const e = P * 5 / 60; // MWh nesta amostra de 5min
     const idx = Math.floor((t.getHours() * 60 + t.getMinutes()) / 15);
     if (idx < 0 || idx > 95) continue;
     if (!intra15[day]) intra15[day] = new Array(96).fill(0);
     intra15[day][idx] += e;
     diario[day] = (diario[day] || 0) + e;
   }
-  return { diario, intra15 };
+  return { diario, intra15, porCol };
 }
 
 // ---- IO helpers (blob) ----
@@ -163,9 +168,17 @@ async function writeOut(obj) {
     // O arquivo ruim e PULADO, nao derruba o backfill inteiro: numa carga de centenas de planilhas
     // um cabecalho fora do padrao nao pode custar as outras. Mas aparece no log e no resumo final —
     // o que nunca pode acontecer e passar despercebido virando zero.
-    let diario, intra15;
-    try { ({ diario, intra15 } = parseParkBuffer(buf)); }
+    let diario, intra15, porCol;
+    try { ({ diario, intra15, porCol } = parseParkBuffer(buf)); }
     catch (e) { console.warn('IGNORADO (' + e.message + '):', name); ignorados.push(name); continue; }
+    // DIAGNOSTICO M3: energia por circuito ate 11/07 (pre-reparo do RTC). O circuito 2, com RTC a
+    // 50%, sai com ~metade dos irmaos — e assim eu descubro QUAL coluna escalar, sem adivinhar.
+    if (pk === 'M3' && porCol && porCol.some(c => c.ate11 > 0)) {
+      const tot = porCol.reduce((a, c) => a + c.ate11, 0);
+      console.log('DIAG M3 [' + name + '] energia por circuito ate 11/07 (MWh · % do total):');
+      porCol.forEach((c, k) => console.log('  col' + k + ' [' + c.cabeca + '] = ' + c.ate11.toFixed(0)
+        + ' (' + (tot > 0 ? (100 * c.ate11 / tot).toFixed(1) : '0') + '%)'));
+    }
     if (!out.diario[pk]) out.diario[pk] = {};
     let escritos = 0;
     for (const d in diario) {
