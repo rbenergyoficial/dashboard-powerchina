@@ -47,6 +47,16 @@ function parseParkBuffer(buf) {
   const hdr = rows[0];
   const wattCols = [];
   for (let i = 0; i < hdr.length; i++) if (hdr[i] && /CVMMXN1_Wa/i.test(String(hdr[i]))) wattCols.push(i);
+  // SEM COLUNA CASADA = NAO SEI, e nao "gerou zero". Antes o laco abaixo somava P=0 em toda linha
+  // e gravava 0 MWh no dia — silenciosamente. Foi assim que set/25..jun/26 entrou zerado no blob:
+  // as planilhas CHEGARAM e foram lidas, mas com cabecalho diferente do esperado. Zero por falha de
+  // parsing e indistinguivel de usina parada, e contamina qualquer media feita por cima.
+  // Tambem protege contra planilha de outra grandeza (ex.: potencia reativa) entrar como ativa.
+  if (!wattCols.length) {
+    const amostra = hdr.filter(Boolean).slice(0, 6).map(String).join(' | ');
+    throw new Error('nenhuma coluna de potencia ativa (CVMMXN1_Wa) na aba "' + sn
+      + '". Cabecalho encontrado: ' + (amostra || '(vazio)'));
+  }
   const diario = {}, intra15 = {};
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
@@ -138,6 +148,7 @@ async function writeOut(obj) {
   // 3,5x um dia real) — nunca entra no diário/intra15. Também purga dias >= hoje que já tenham
   // vazado pro blob em runs anteriores (auto-cura). Chaves 'YYYY-MM-DD' comparam lexicograficamente.
   const hojeBRT = (() => { const x = new Date(Date.now() - 3 * 3600 * 1000); return x.getUTCFullYear() + '-' + pad2(x.getUTCMonth() + 1) + '-' + pad2(x.getUTCDate()); })();
+  const ignorados = [];              // planilhas puladas por cabecalho fora do padrao
   let purgados = 0;
   for (const pk of Object.keys(out.diario)) for (const d of Object.keys(out.diario[pk])) if (d >= hojeBRT) { delete out.diario[pk][d]; purgados++; }
   for (const d of Object.keys(out.intra15)) if (d >= hojeBRT) delete out.intra15[d];
@@ -149,7 +160,12 @@ async function writeOut(obj) {
     const gapOnly = (rawpk === 'M10');           // M10 = M1: so preenche buracos, nao sobrescreve
     const pk = gapOnly ? 'M1' : rawpk;
     if (!CANON.has(pk)) { console.warn('Ignorado (parque nao-canonico, so M1..M9):', name, '->', rawpk); continue; }
-    const { diario, intra15 } = parseParkBuffer(buf);
+    // O arquivo ruim e PULADO, nao derruba o backfill inteiro: numa carga de centenas de planilhas
+    // um cabecalho fora do padrao nao pode custar as outras. Mas aparece no log e no resumo final —
+    // o que nunca pode acontecer e passar despercebido virando zero.
+    let diario, intra15;
+    try { ({ diario, intra15 } = parseParkBuffer(buf)); }
+    catch (e) { console.warn('IGNORADO (' + e.message + '):', name); ignorados.push(name); continue; }
     if (!out.diario[pk]) out.diario[pk] = {};
     let escritos = 0;
     for (const d in diario) {
@@ -173,4 +189,12 @@ async function writeOut(obj) {
   if (removidos.length) console.log('Removidos parques nao-canonicos:', [...new Set(removidos)].join(', '));
   await writeOut(out);
   console.log(`Gravado ${OUT_BLOB}: ${parks} parques, ${days.size} dias novos/atualizados, ${Object.keys(out.intra15).length} dias no total.`);
+  if (ignorados.length) {
+    console.log(`
+ATENCAO: ${ignorados.length} planilha(s) ignorada(s) por nao ter coluna de potencia ativa.`);
+    console.log('Antes desta correcao elas virariam 0 MWh silenciosamente. Se forem de potencia');
+    console.log('ativa, o cabecalho mudou e o padrao CVMMXN1_Wa precisa ser ajustado:');
+    ignorados.slice(0, 20).forEach(f => console.log('  - ' + f));
+    if (ignorados.length > 20) console.log('  ... e mais ' + (ignorados.length - 20));
+  }
 })().catch(e => { console.error(e); process.exit(1); });
