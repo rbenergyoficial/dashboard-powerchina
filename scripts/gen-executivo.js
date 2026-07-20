@@ -57,12 +57,15 @@ function getJSON(url) { return new Promise((res, rej) => { https.get(url, x => {
   // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os que vem
   // crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
   let s = ''; x.on('data', c => s += c); x.on('end', () => { try { res(JSON.parse(s.replace(/^﻿/, ''))); } catch (e) { rej(e); } }); }).on('error', rej); }); }
-async function writeOut(obj) { const json = JSON.stringify(obj);
-  if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
+async function writeOut(obj, nome) { const json = JSON.stringify(obj);
+  const alvo = nome || OUT_BLOB;
+  if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
+    const f = nome ? process.env.LOCAL_OUT.replace(/\.json$/, '') + '.' + nome : process.env.LOCAL_OUT;
+    require('fs').writeFileSync(f, json); return json.length; }
   const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE;
   if (!conn) throw new Error('DADOS_STORAGE nao definido');
   const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER); await cont.createIfNotExists();
-  await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
+  await cont.getBlockBlobClient(alvo).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
   return json.length; }
 
 (async () => {
@@ -813,6 +816,52 @@ async function writeOut(obj) { const json = JSON.stringify(obj);
         else { m2.cf_nivel = ''; m2.cf_texto = ''; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
       });
     }
+  }
+
+  // ---------- perfil intradiário (blob PRÓPRIO) ----------
+  // 48 slots × 10 séries × 45 dias nao cabe no executivo.json sem dobrar o arquivo que TODOS os
+  // paineis baixam. Blob separado: so quem abre o perfil paga o download.
+  // O ONS entrega irr/ge/gv de 30 em 30 min POR USINA — a area entre `ge` (potencial) e `gv`
+  // (entregue) e a energia cortada naquela meia hora. E o que distingue nuvem de curtailment:
+  // na nuvem as duas curvas caem juntas; no corte o `gv` despenca com o `ge` intacto.
+  {
+    const perfil = [];
+    const diasJan = 30;
+    const corte = new Date(Date.now() - 3 * 3600 * 1000 - diasJan * 86400000).toISOString().slice(0, 10);
+    const porDia = {};   // dia -> hhmm -> ufv -> {irr,ge,gv}
+    for (const m of Object.keys(CRU)) {
+      for (const r of (CRU[m] || [])) {
+        const dia = String(r.ts).slice(0, 10); if (dia < corte) continue;
+        const hhmm = String(r.ts).slice(11, 16); if (!/^\d\d:\d\d$/.test(hhmm)) continue;
+        const u = String(r.u).replace('CEFMT', 'M');
+        ((porDia[dia] = porDia[dia] || {})[hhmm] = porDia[dia][hhmm] || {})[u] = {
+          irr: num(r.irr), ge: num(r.ge), gv: num(r.gv) };
+      }
+    }
+    const emp = (dia, hhmm, ufv, o) => {
+      // so os campos que o painel desenha: `hhmm` sai (redundante com `h`, que o eixo formata como
+      // hora) e `corte_mw` sai (e a area entre as duas curvas, o grafico ja mostra). 21 mil pontos
+      // multiplicam qualquer byte a mais.
+      const [hh, mm] = hhmm.split(':').map(Number);
+      perfil.push({ dia, h: hh + mm / 60, ufv,
+        irr: o.irr > 0 ? Math.round(o.irr) : null,
+        pot_mw: r2(o.ge), ent_mw: r2(o.gv) });
+    };
+    for (const dia of Object.keys(porDia).sort()) {
+      for (const hhmm of Object.keys(porDia[dia]).sort()) {
+        const S = porDia[dia][hhmm];
+        let ge = 0, gv = 0, irrS = 0, irrN = 0;
+        for (const u of Object.keys(S)) { emp(dia, hhmm, u, S[u]);
+          ge += S[u].ge; gv += S[u].gv; if (S[u].irr > 0) { irrS += S[u].irr; irrN++; } }
+        emp(dia, hhmm, 'Complexo', { ge, gv, irr: irrN ? irrS / irrN : 0 });
+      }
+    }
+    const dias = [...new Set(perfil.map(x => x.dia))].sort();
+    const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json');
+    console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
+    // alimenta o seletor de dia SEM baixar o perfil (1 MB). Objetos, nao strings cruas: a variavel
+    // do Infinity le COLUNA de tabela. Mais novo primeiro -> o padrao do seletor e o dia recente.
+    out.perfil_dias = dias.slice().reverse().map(d => ({ dia: d }));
   }
 
   const size = await writeOut(out);
