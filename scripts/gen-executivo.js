@@ -642,6 +642,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null, irr: null,
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: 0, ate: null });
         }
+        // SENTINELA de meia casa. A barra e CENTRADA no dia: com o eixo terminando exatamente no
+        // ultimo dia, metade dela fica para fora e sai cortada. Um ponto nulo em `dias + 0.5`
+        // estica o eixo o suficiente sem criar um dia inteiro — e como e fracionario, o Grafana
+        // nao desenha um tick ali (os ticks continuam 2, 4, ... 30). Tudo null: nao desenha nada,
+        // e os contadores ja ignoram linhas com liq_mwh null.
+        ['Complexo'].concat(Object.keys(CAP_UFV).sort()).forEach(u => out.push({
+          mes: m, dia: null, dia_num: dias + 0.5, ufv: u,
+          liq_mwh: null, irr: null, meta_dia_mwh: null, parcial: 0, ate: null, folga: 1 }));
       });
       return out; })(),
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
