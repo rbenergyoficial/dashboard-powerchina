@@ -642,14 +642,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null, irr: null,
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: 0, ate: null });
         }
-        // SENTINELA de meia casa. A barra e CENTRADA no dia: com o eixo terminando exatamente no
-        // ultimo dia, metade dela fica para fora e sai cortada. Um ponto nulo em `dias + 0.5`
-        // estica o eixo o suficiente sem criar um dia inteiro — e como e fracionario, o Grafana
-        // nao desenha um tick ali (os ticks continuam 2, 4, ... 30). Tudo null: nao desenha nada,
-        // e os contadores ja ignoram linhas com liq_mwh null.
-        ['Complexo'].concat(Object.keys(CAP_UFV).sort()).forEach(u => out.push({
-          mes: m, dia: null, dia_num: dias + 0.5, ufv: u,
-          liq_mwh: null, irr: null, meta_dia_mwh: null, parcial: 0, ate: null, folga: 1 }));
+        // NAO inserir ponto fracionario aqui para "dar folga" no eixo: a largura da barra no
+        // Grafana vem do MENOR intervalo entre pontos do eixo, entao um ponto em `dias + 0.5`
+        // encolhe TODAS as barras pela metade (e ainda faz o eixo mostrar o tick 31 em junho).
+        // A folga do eixo e resolvida no painel, com `max` vindo da variavel $maxdia — ver
+        // out.meses_eixo logo abaixo.
       });
       return out; })(),
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
@@ -885,6 +882,15 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // alimenta o seletor de dia SEM baixar o perfil (1 MB). Objetos, nao strings cruas: a variavel
     // do Infinity le COLUNA de tabela. Mais novo primeiro -> o padrao do seletor e o dia recente.
     out.perfil_dias = dias.slice().reverse().map(d => ({ dia: d }));
+  }
+
+  // limite direito do eixo do grafico diario, POR MES. A barra e centrada no dia: com o eixo
+  // terminando no ultimo dia, metade dela fica de fora. Meia casa a mais resolve — mas tem que
+  // vir como `max` do eixo, nao como ponto no dado (ponto fracionario encolhe as barras).
+  // A variavel $maxdia le daqui e o override do painel usa o valor.
+  {
+    out.meses_eixo = meses.map(m => ({ mes: m,
+      max_dia: new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate() + 0.5 }));
   }
 
   const size = await writeOut(out);
