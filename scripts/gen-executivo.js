@@ -885,6 +885,53 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         emp(dia, hhmm, 'Complexo', { ge, gv, irr: irrN ? irrS / irrN : 0 });
       }
     }
+    // ---- reconstrucao do potencial nos buracos do ONS ----
+    // A saida de um painel e praticamente LINEAR na irradiancia, entao pot = k x irr. O k sai dos
+    // proprios slots bons DAQUELE dia e DAQUELA usina (mesmo ceu, mesma sujeira, mesma temperatura),
+    // por mediana — imune aos outliers que criaram o problema. Medido nos slots bons: erro mediano
+    // 1,9%, p90 7,5%. Nos 91 buracos diurnos a irradiancia EXISTE em todos, entao ha insumo.
+    // Vai em campo SEPARADO (`pot_est_mw`): estimativa nunca se mistura com medicao no mesmo campo.
+    // Se o dia tem poucos slots bons, cai para o k mediano dos ultimos 30 dias daquela usina.
+    {
+      const kGlobal = {};                                    // ufv -> k de referencia
+      const porUfvDia = {};                                  // ufv|dia -> k
+      const razoes = {};
+      perfil.forEach(x => { if (x.irr > 50 && x.pot_mw > 0) {
+        (razoes[x.ufv + '|' + x.dia] = razoes[x.ufv + '|' + x.dia] || []).push(x.pot_mw / x.irr);
+        (kGlobal[x.ufv] = kGlobal[x.ufv] || []).push(x.pot_mw / x.irr); } });
+      const mediana = a => { if (!a || !a.length) return null;
+        const s = a.slice().sort((p, q) => p - q); return s[Math.floor(s.length / 2)]; };
+      Object.keys(razoes).forEach(k => { if (razoes[k].length >= 10) porUfvDia[k] = mediana(razoes[k]); });
+      Object.keys(kGlobal).forEach(u => { kGlobal[u] = mediana(kGlobal[u]); });
+      // k LOCAL no tempo, nao do dia inteiro: de manha o painel esta frio e rende mais por W/m2,
+      // entao um k medio do dia subestima justamente nos buracos da manha — e o piso (potencial
+      // nunca abaixo do entregue) disparava, fazendo o grafico AFIRMAR corte zero naquela meia
+      // hora. Janela de +-2h, caindo para o dia e depois para o global quando falta vizinho.
+      const bons = {};
+      perfil.forEach(x => { if (x.irr > 50 && x.pot_mw > 0)
+        (bons[x.ufv + '|' + x.dia] = bons[x.ufv + '|' + x.dia] || []).push(x); });
+      const kLocal = (x) => {
+        const viz = (bons[x.ufv + '|' + x.dia] || []).filter(b => Math.abs(b.h - x.h) <= 2);
+        if (viz.length >= 4) return mediana(viz.map(b => b.pot_mw / b.irr));
+        return porUfvDia[x.ufv + '|' + x.dia] != null ? porUfvDia[x.ufv + '|' + x.dia] : kGlobal[x.ufv];
+      };
+      let est = 0, piso = 0;
+      perfil.forEach(x => {
+        x.pot_est_mw = null;
+        if (x.pot_mw != null || !(x.irr > 50)) return;        // so buraco diurno
+        const k = kLocal(x); if (k == null) return;
+        const bruto = k * x.irr, ent = num(x.ent_mw);
+        // Estimativa ABAIXO do entregue nao carrega informacao: "potencial = entregue" AFIRMA corte
+        // zero naquela meia hora, e isso seria uma conclusao inventada. Nesses slots o buraco FICA.
+        // O holdout (1,8% mediano) mede o metodo em dado BOM — nao valida os buracos, porque a
+        // falta nao e aleatoria: ela acontece onde o ONS degradou, e ali a propria irradiancia vem
+        // de um subconjunto de usinas, enxergando menos sol que o complexo.
+        if (bruto <= ent) { piso++; return; }
+        x.pot_est_mw = r2(bruto);
+        est++; });
+      console.log('  potencial reconstruido em ' + est + ' slots (k local +-2h) · piso acionado em ' + piso);
+    }
+
     const dias = [...new Set(perfil.map(x => x.dia))].sort();
     const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json');
     console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
