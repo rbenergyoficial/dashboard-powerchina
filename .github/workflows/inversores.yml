@@ -1,8 +1,8 @@
 name: Inversores -> inversores.json (confiabilidade)
 on:
   schedule:
-    - cron: '0 12 * * *' # 09:00 BRT
-    - cron: '0 18 * * *' # 15:00 BRT
+    - cron: '22 12 * * *' # 09:00 BRT · min 22 foge do :00
+    - cron: '22 18 * * *' # 15:00 BRT
   workflow_dispatch: {}
 concurrency:
   group: gen-inversores
