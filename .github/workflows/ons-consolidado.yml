@@ -1,7 +1,7 @@
 name: ONS consolidado (_all.json diario)
 on:
   schedule:
-    - cron: '0 18 * * *'   # ~15h Brasilia, depois do ONS publicar
+        - cron: '17 18 * * *'   # ~15h Brasilia, depois do ONS publicar · min 17 foge do :00
   workflow_dispatch: {}
 concurrency:
   group: gen-ons-consolidado
