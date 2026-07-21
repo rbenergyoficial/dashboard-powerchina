@@ -1,7 +1,7 @@
 name: Executivo -> executivo.json (visao executiva)
 on:
   schedule:
-    - cron: '0 9-22 * * *' # de hora em hora, 06h-19h BRT
+          - cron: '13 4,9-22 * * *' # 01h BRT (fecha o dia anterior) + 06h-19h BRT · min 13 foge do congestionamento do :00
   workflow_dispatch: {}
 concurrency:
   group: gen-executivo
