@@ -53,6 +53,20 @@ function parseParkBuffer(buf, park) {
   const hdr = rows[0];
   const wattCols = [];
   for (let i = 0; i < hdr.length; i++) if (hdr[i] && /CVMMXN1_Wa/i.test(String(hdr[i]))) wattCols.push(i);
+  // DIAGNOSTICO DA POTENCIA REATIVA: lista as colunas que NAO sao potencia ativa, para eu
+  // descobrir o nome da coluna de reativa (provavelmente CVMMXN1_VAr) sem adivinhar — mesma
+  // abordagem do CUB_10.1. So loga uma vez por parque, so quando pedido (DIAG_COLS=1).
+  if (process.env.DIAG_COLS && park) {
+    const outras = [];
+    for (let i = 1; i < hdr.length; i++) {
+      if (!hdr[i] || wattCols.includes(i)) continue;
+      outras.push(String(hdr[i]));
+    }
+    console.log('DIAG_COLS [' + park + '] ' + wattCols.length + ' colunas de potencia ativa (Watt). '
+      + 'Outras ' + outras.length + ' colunas:');
+    outras.slice(0, 12).forEach(h => console.log('    ' + h));
+    if (outras.length > 12) console.log('    ... e mais ' + (outras.length - 12));
+  }
   // SEM COLUNA CASADA = NAO SEI, e nao "gerou zero". Antes o laco abaixo somava P=0 em toda linha
   // e gravava 0 MWh no dia — silenciosamente. Foi assim que set/25..jun/26 entrou zerado no blob:
   // as planilhas CHEGARAM e foram lidas, mas com cabecalho diferente do esperado. Zero por falha de

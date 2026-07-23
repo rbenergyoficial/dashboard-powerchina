@@ -1,0 +1,214 @@
+{
+  "_fonte": "Apuracao_Pre_Pos_COD_MRD_PT-EN.xlsx (aba Linha do Tempo), Portaria MME 140/2026, emissao 23/07/2026",
+  "_nota": "Fases operacionais oficiais por UFV. teste=comissionamento/energizacao; performance=geracao plena antes da operacao comercial; cod=Data de Operacao Comercial (despacho ANEEL). Antes do COD a usina esta em pre-COD.",
+  "_atualizado": "2026-07-23",
+  "ufvs": {
+    "M1": {
+      "nome": "UFV Mauriti 1",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.732/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.924/2024",
+        "sgi": "00.001.290-25",
+        "inicio": "2025-01-27",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.980-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-11"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.720/2025",
+        "cod": "2025-09-10"
+      }
+    },
+    "M2": {
+      "nome": "UFV Mauriti 2",
+      "potencia_mw": 24.555,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.733/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.907/2024",
+        "sgi": "00.001.285-25",
+        "inicio": "2025-01-25",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.968-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-04"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.654/2025",
+        "cod": "2025-09-04"
+      }
+    },
+    "M3": {
+      "nome": "UFV Mauriti 3",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.734/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.925/2024",
+        "sgi": "00.001.342-25",
+        "inicio": "2025-01-21",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.971-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-08"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.685/2025",
+        "cod": "2025-09-05"
+      }
+    },
+    "M4": {
+      "nome": "UFV Mauriti 4",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.735/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.904/2024",
+        "sgi": "00.001.282-25",
+        "inicio": "2025-01-22",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.983-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-04"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.655/2025",
+        "cod": "2025-09-04"
+      }
+    },
+    "M5": {
+      "nome": "UFV Mauriti 5",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.736/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.905/2024",
+        "sgi": "00.001.294-25",
+        "inicio": "2025-01-28",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.994-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-08"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.684/2025",
+        "cod": "2025-09-05"
+      }
+    },
+    "M6": {
+      "nome": "UFV Mauriti 6",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.737/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.926/2024",
+        "sgi": "00.001.345-25",
+        "inicio": "2025-01-28",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.976-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-08"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.682/2025",
+        "cod": "2025-09-05"
+      }
+    },
+    "M7": {
+      "nome": "UFV Mauriti 7",
+      "potencia_mw": 14.733,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.738/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.927/2024",
+        "sgi": "00.001.338-25",
+        "inicio": "2025-01-23",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.977-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-04"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.653/2025",
+        "cod": "2025-09-04"
+      }
+    },
+    "M8": {
+      "nome": "UFV Mauriti 8",
+      "potencia_mw": 49.11,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.739/2019"
+      },
+      "teste": {
+        "despacho": "DSP 3.906/2024",
+        "sgi": "00.001.343-25",
+        "inicio": "2025-01-23",
+        "fim": "2025-07-09"
+      },
+      "performance": {
+        "sgi": "00.041.979-25",
+        "inicio": "2025-07-09",
+        "fim": "2025-09-08"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 2.683/2025",
+        "cod": "2025-09-05"
+      }
+    },
+    "M9": {
+      "nome": "UFV Mauriti 9",
+      "potencia_mw": 9.822,
+      "outorga": {
+        "data": "2019-04-09",
+        "ato": "REA ANEEL nº 7.740/2019"
+      },
+      "teste": {
+        "despacho": "DSP 2.437/2025",
+        "sgi": "00.050.704-25",
+        "inicio": "2025-08-19",
+        "fim": "2025-09-22"
+      },
+      "performance": {
+        "sgi": "00.070.199-25",
+        "inicio": "2025-11-05",
+        "fim": "2025-11-25"
+      },
+      "operacao_comercial": {
+        "despacho": "DSP ANEEL nº 3.454/2025",
+        "cod": "2025-11-22"
+      }
+    }
+  }
+}
