@@ -57,6 +57,15 @@ function parseParkBuffer(buf, park) {
   // descobrir o nome da coluna de reativa (provavelmente CVMMXN1_VAr) sem adivinhar — mesma
   // abordagem do CUB_10.1. So loga uma vez por parque, so quando pedido (DIAG_COLS=1).
   if (process.env.DIAG_COLS && park) {
+    // ABAS da planilha: se a reativa estiver numa 2a aba (nao na "Interpolacao"), aparece aqui.
+    console.log('DIAG_ABAS [' + park + '] abas do arquivo: ' + wb.SheetNames.join(' | '));
+    // colunas que casam VAr/reativa em QUALQUER aba (nao so na lida) — pega a reativa onde estiver
+    for (const aba of wb.SheetNames) {
+      const h0 = (XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, raw: true })[0]) || [];
+      const var_ = h0.filter(x => x && /VAr|reativ|reactive/i.test(String(x)));
+      if (var_.length) console.log('DIAG_VAR [' + park + '] aba "' + aba + '" tem ' + var_.length
+        + ' coluna(s) de reativa. Ex.: ' + var_.slice(0, 3).map(String).join(' , '));
+    }
     const outras = [];
     for (let i = 1; i < hdr.length; i++) {
       if (!hdr[i] || wattCols.includes(i)) continue;
