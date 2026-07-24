@@ -53,6 +53,11 @@ function parseParkBuffer(buf, park) {
   const hdr = rows[0];
   const wattCols = [];
   for (let i = 0; i < hdr.length; i++) if (hdr[i] && /CVMMXN1_Wa/i.test(String(hdr[i]))) wattCols.push(i);
+  // POTENCIA REATIVA: coluna CVMMXN1_VolAmpr (Volt-Ampere reativo, MVAr). Vem de dois lugares —
+  // inline nos arquivos novos (junto do Watt) e sozinha nos arquivos da pasta P_RE. A presenca
+  // das colunas decide o papel do arquivo: tem Watt -> ativa (+reativa se houver); so VolAmpr -> P_RE.
+  const varCols = [];
+  for (let i = 0; i < hdr.length; i++) if (hdr[i] && /CVMMXN1_VolAmpr/i.test(String(hdr[i]))) varCols.push(i);
   // DIAGNOSTICO DA POTENCIA REATIVA: lista as colunas que NAO sao potencia ativa, para eu
   // descobrir o nome da coluna de reativa (provavelmente CVMMXN1_VAr) sem adivinhar — mesma
   // abordagem do CUB_10.1. So loga uma vez por parque, so quando pedido (DIAG_COLS=1).
@@ -81,9 +86,9 @@ function parseParkBuffer(buf, park) {
   // as planilhas CHEGARAM e foram lidas, mas com cabecalho diferente do esperado. Zero por falha de
   // parsing e indistinguivel de usina parada, e contamina qualquer media feita por cima.
   // Tambem protege contra planilha de outra grandeza (ex.: potencia reativa) entrar como ativa.
-  if (!wattCols.length) {
+  if (!wattCols.length && !varCols.length) {
     const amostra = hdr.filter(Boolean).slice(0, 6).map(String).join(' | ');
-    throw new Error('nenhuma coluna de potencia ativa (CVMMXN1_Wa) na aba "' + sn
+    throw new Error('nenhuma coluna de potencia ativa (CVMMXN1_Wa) nem reativa (VolAmpr) na aba "' + sn
       + '". Cabecalho encontrado: ' + (amostra || '(vazio)'));
   }
   // qual wattCol e o circuito 2 do M3 (CUB_10.1) — so relevante quando park === M3
@@ -95,6 +100,9 @@ function parseParkBuffer(buf, park) {
   // contribuicao do circuito defeituoso, por dia/slot, SO pre-reparo — usada p/ aplicar o ×2
   // depois do guard passar (nao dobro antes, senao um cabecalho errado corromperia o dado).
   const fixDay = {}, fixIntra = {};
+  // REATIVA: acumuladores de SOMA e CONTAGEM por slot (a reativa vira MEDIA de MVAr, nao energia
+  // integrada como a ativa) e por dia (media/min/max do dia).
+  const reaSum = {}, reaN = {}, reaDia = {};
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r];
     let t = row[0];
@@ -105,18 +113,32 @@ function parseParkBuffer(buf, park) {
     const idx = Math.floor((t.getHours() * 60 + t.getMinutes()) / 15);
     if (idx < 0 || idx > 95) continue;
     const pre = day < RTC_M3.before;
-    let P = 0;
-    for (let k = 0; k < wattCols.length; k++) { const v = row[wattCols[k]];
-      if (v === '' || v == null || isNaN(+v)) continue;
-      const e = (+v) * 5 / 60; P += +v;
-      if (pre) porCol[k].ate11 += e;
-      if (k === fixK && pre) { fixDay[day] = (fixDay[day] || 0) + e;
-        (fixIntra[day] = fixIntra[day] || new Array(96).fill(0))[idx] += e; }
+    // ---- potencia ATIVA (energia MWh, somada) ----
+    if (wattCols.length) {
+      let P = 0, algum = false;
+      for (let k = 0; k < wattCols.length; k++) { const v = row[wattCols[k]];
+        if (v === '' || v == null || isNaN(+v)) continue;
+        algum = true; const e = (+v) * 5 / 60; P += +v;
+        if (pre) porCol[k].ate11 += e;
+        if (k === fixK && pre) { fixDay[day] = (fixDay[day] || 0) + e;
+          (fixIntra[day] = fixIntra[day] || new Array(96).fill(0))[idx] += e; }
+      }
+      if (algum) {
+        const e = P * 5 / 60; // MWh nesta amostra de 5min
+        if (!intra15[day]) intra15[day] = new Array(96).fill(0);
+        intra15[day][idx] += e;
+        diario[day] = (diario[day] || 0) + e;
+      }
     }
-    const e = P * 5 / 60; // MWh nesta amostra de 5min
-    if (!intra15[day]) intra15[day] = new Array(96).fill(0);
-    intra15[day][idx] += e;
-    diario[day] = (diario[day] || 0) + e;
+    // ---- potencia REATIVA (MVAr instantaneo, MEDIA) ----
+    if (varCols.length) {
+      let Q = 0, algum = false;
+      for (const c of varCols) { const v = row[c]; if (v === '' || v == null || isNaN(+v)) continue; algum = true; Q += +v; }
+      if (algum) {
+        if (!reaSum[day]) { reaSum[day] = new Array(96).fill(0); reaN[day] = new Array(96).fill(0); reaDia[day] = []; }
+        reaSum[day][idx] += Q; reaN[day][idx]++; reaDia[day].push(Q);
+      }
+    }
   }
 
   // ---- aplica o reparo do RTC (dobra o circuito 2), com guard ----
@@ -136,7 +158,21 @@ function parseParkBuffer(buf, park) {
     }
     rtc = { col: porCol[fixK].cabeca, razao, aplicado: ok, dias: Object.keys(fixDay).length };
   }
-  return { diario, intra15, porCol, rtc };
+
+  // ---- consolida a reativa: media MVAr por slot (soma/contagem) e resumo diario ----
+  let reativa = null;
+  if (varCols.length) {
+    const r3 = (x) => Math.round(x * 1000) / 1000;   // MVAr com 3 casas
+    const intra = {}, dia = {};
+    for (const d in reaSum) {
+      intra[d] = reaSum[d].map((s, i) => reaN[d][i] ? r3(s / reaN[d][i]) : null);
+      const vs = reaDia[d];
+      dia[d] = { media: r3(vs.reduce((a, b) => a + b, 0) / vs.length),
+        min: r3(Math.min(...vs)), max: r3(Math.max(...vs)), n: vs.length };
+    }
+    reativa = { intra15: intra, diario: dia, circuitos: varCols.length };
+  }
+  return { diario, intra15, porCol, rtc, reativa };
 }
 
 // ---- IO helpers (blob) ----
@@ -205,6 +241,9 @@ async function writeOut(obj) {
   const out = await loadExistingOut();
   if (!out.diario) out.diario = {};
   if (!out.intra15) out.intra15 = {};
+  // estruturas PARALELAS de potencia reativa (MVAr medio) — mesma forma da ativa
+  if (!out.diario_reativa) out.diario_reativa = {};
+  if (!out.intra15_reativa) out.intra15_reativa = {};
   // Guarda anti-parcial: operadores sobem só o dia ANTERIOR (D-1) até 08:00. Um arquivo de HOJE
   // (ou futuro) é sempre parcial/em-progresso e pode vir corrompido (ex.: M5 07/13 = 775 MWh,
   // 3,5x um dia real) — nunca entra no diário/intra15. Também purga dias >= hoje que já tenham
@@ -215,6 +254,9 @@ async function writeOut(obj) {
   let purgados = 0;
   for (const pk of Object.keys(out.diario)) for (const d of Object.keys(out.diario[pk])) if (d >= hojeBRT) { delete out.diario[pk][d]; purgados++; }
   for (const d of Object.keys(out.intra15)) if (d >= hojeBRT) delete out.intra15[d];
+  // mesma purga anti-parcial na reativa
+  for (const pk of Object.keys(out.diario_reativa)) for (const d of Object.keys(out.diario_reativa[pk])) if (d >= hojeBRT) delete out.diario_reativa[pk][d];
+  for (const d of Object.keys(out.intra15_reativa)) if (d >= hojeBRT) delete out.intra15_reativa[d];
   if (purgados) console.log('Purgados', purgados, 'registros de hoje/futuro (>= ' + hojeBRT + ') do blob existente.');
   let parks = 0, days = new Set();
   for (const { name, buf } of raws) {
@@ -226,9 +268,10 @@ async function writeOut(obj) {
     // O arquivo ruim e PULADO, nao derruba o backfill inteiro: numa carga de centenas de planilhas
     // um cabecalho fora do padrao nao pode custar as outras. Mas aparece no log e no resumo final —
     // o que nunca pode acontecer e passar despercebido virando zero.
-    let diario, intra15, porCol, rtc;
-    try { ({ diario, intra15, porCol, rtc } = parseParkBuffer(buf, pk)); }
+    let diario, intra15, porCol, rtc, reativa;
+    try { ({ diario, intra15, porCol, rtc, reativa } = parseParkBuffer(buf, pk)); }
     catch (e) { console.warn('IGNORADO (' + e.message + '):', name); ignorados.push(name); continue; }
+    const temAtiva = Object.keys(diario).length > 0;
     // REPARO DO RTC DO M3 (circuito 2 = CUB_10.1, 50% ate 11/07). Loga o que fez, com o guard.
     if (rtc) {
       if (rtc.aplicado) { rtcAplicados++;
@@ -237,7 +280,7 @@ async function writeOut(obj) {
       else console.warn('RTC M3 [' + name + '] NAO aplicado (guard): col=' + rtc.col
         + ' estava em ' + (rtc.razao == null ? '?' : (rtc.razao * 100).toFixed(0) + '%')
         + ' das irmas — fora de 35-70%, nao dobrei para nao corromper.');
-    } else if (pk === 'M3') {
+    } else if (pk === 'M3' && temAtiva) {   // so avisa em arquivo de ATIVA do M3 (P_RE nao tem CUB)
       console.warn('RTC M3 [' + name + '] coluna CUB_10.1 NAO encontrada neste arquivo.');
     }
     if (!out.diario[pk]) out.diario[pk] = {};
@@ -253,8 +296,25 @@ async function writeOut(obj) {
       if (gapOnly && out.intra15[d][pk] != null) continue;
       out.intra15[d][pk] = intra15[d].map(v => +v.toFixed(3));
     }
+    // ---- grava a REATIVA (do arquivo P_RE OU inline dos arquivos novos) ----
+    let reaEscritos = 0;
+    if (reativa) {
+      if (!out.diario_reativa[pk]) out.diario_reativa[pk] = {};
+      for (const d in reativa.diario) {
+        if (d >= hojeBRT) continue;
+        if (gapOnly && out.diario_reativa[pk][d] != null) continue;
+        out.diario_reativa[pk][d] = reativa.diario[d]; reaEscritos++;
+      }
+      for (const d in reativa.intra15) {
+        if (d >= hojeBRT) continue;
+        if (!out.intra15_reativa[d]) out.intra15_reativa[d] = {};
+        if (gapOnly && out.intra15_reativa[d][pk] != null) continue;
+        out.intra15_reativa[d][pk] = reativa.intra15[d];
+      }
+    }
     parks++;
-    console.log('OK', name, '->', pk, (gapOnly ? '(M10->M1 so buracos)' : ''), '| dias no arquivo:', Object.keys(diario).length, '| gravados:', escritos);
+    console.log('OK', name, '->', pk, (gapOnly ? '(M10->M1 so buracos)' : ''),
+      '| ativa:', escritos, 'dias', reativa ? ('| reativa: ' + reaEscritos + ' dias') : '');
   }
   // limpeza: remove parques nao-canonicos residuais do blob (ex.: M10 legado = M1)
   const removidos = [];
