@@ -839,6 +839,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         spark_liq: barras(S.slice(0, iCur + 1).map(x => x.liquida_gwh), '#43966B'),
         spark_meta: barras(S.slice(0, iCur + 1).map(x => x.meta_gwh), '#8B93A1'),
         spark_n: S.slice(0, iCur + 1).filter(x => x.liquida_gwh != null).length,
+        // O QUE PRECISA ACONTECER — a pergunta que um card executivo tem que responder e nenhum
+        // dos números acima responde: "de quanto por dia eu preciso, e é mais ou menos do que
+        // venho fazendo?". Tudo derivado, sem fonte nova.
+        falta_gwh: (() => { const f = cur.meta_gwh - cur.liquida_gwh; return f > 0 ? fmt(r2(f)) : '0.00'; })(),
+        ritmo_nec: (() => { const f = cur.meta_gwh - cur.liquida_gwh, d = Math.max(0, dTot - dCorr);
+          return (f > 0 && d > 0) ? fmt(r2(f / d)) : null; })(),
+        ritmo_atual: dCorr > 0 ? fmt(r2(cur.liquida_gwh / dCorr)) : null,
+        // acelerar ou desacelerar: quantos % o ritmo precisa mudar
+        ritmo_delta_pct: (() => { const f = cur.meta_gwh - cur.liquida_gwh, d = Math.max(0, dTot - dCorr);
+          if (!(f > 0 && d > 0 && dCorr > 0 && cur.liquida_gwh > 0)) return null;
+          return fmt(r2(100 * ((f / d) / (cur.liquida_gwh / dCorr) - 1))); })(),
         // versoes NUMERICAS: a gauge precisa de numero, o texto da manchete precisa de string formatada
         atingido_n: at, proj_pct_n: pj,
         realizado_w: at == null ? 0 : r2(at / esc * 100),
