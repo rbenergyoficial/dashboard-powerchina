@@ -92,6 +92,8 @@ function valores(j, pid, g) {
   return (s && s.valores) || [];
 }
 const somaPos = (vs) => vs.reduce((a, v) => a + (v.valor > 0 ? v.valor : 0), 0);
+// soma TUDO, inclusive negativo. Num medidor de fluxo o sinal é informação: negativo = consumindo.
+const soma = (vs) => vs.reduce((a, v) => a + (v.valor != null ? v.valor : 0), 0);
 const maxVal = (vs) => vs.reduce((m, v) => (v.valor != null && v.valor > m ? v.valor : m), 0);
 const nNaoNulo = (vs) => vs.filter(v => v.valor != null).length;
 const r = (x, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
@@ -103,9 +105,16 @@ function rollupDia(j, day) {
   const g6197 = valores(j, 6197, 'Demat');       // TR2
   const nn = nNaoNulo(g6233);
   const horas = nn * 5 / 60;
+  // BRUTA: fica com somaPos. É a referência de GERAÇÃO (alimenta PR e potencial) e o consumo
+  // noturno do trafo não é "geração negativa" — somá-lo aqui distorceria o PR.
   const eneGer = somaPos(g6233) * 5 / 60 / 1000;
-  const eneTr1 = somaPos(g6196) * 5 / 60 / 1000;
-  const eneTr2 = somaPos(g6197) * 5 / 60 / 1000;
+  // LÍQUIDA: soma COMPLETA, com os slots negativos. À noite o transformador CONSOME da rede
+  // (magnetização + auxiliares): ~0,26 MW por trafo, ~12 MWh/dia no complexo. Descartar isso com
+  // somaPos inflava a líquida em 0,72% — e era exatamente o desvio contra a planilha da PowerChina,
+  // que usa a EneatLiquida da própria Way2. Medido em 25/07/2026: 40,914 GWh publicados contra
+  // 40,623 corretos em jul/26 (dias 01–25).
+  const eneTr1 = soma(g6196) * 5 / 60 / 1000;
+  const eneTr2 = soma(g6197) * 5 / 60 / 1000;
 
   // energia LÍQUIDA por UFV — equação MUST (rateio): por slot,
   // UFV_liq = (bruta_UFV / bruta_total) × líquida_total(6196+6197); integra no dia.
@@ -113,14 +122,23 @@ function rollupDia(j, day) {
   const ALL_CIRC = [6198, 6199, 6200, 6201, 6202, 6203, 6204, 6205, 6206, 6207, 6208, 6209, 6210, 6211, 6212, 6213, 6214, 6215, 6216, 6217, 6218, 6219];
   const smap = {};   // pontoId -> { data: valor }
   for (const pid of ALL_CIRC.concat([6196, 6197])) { const m = {}; for (const v of valores(j, pid, 'Demat')) if (v.valor != null) m[v.data] = v.valor; smap[pid] = m; }
-  const tset = new Set(); for (const pid of ALL_CIRC) for (const t in smap[pid]) tset.add(t);
-  const ufvLiq = {}; for (const u in UFV_CIRC) ufvLiq[u] = 0;
+  // os slots dos TRAFOS entram no conjunto: à noite os circuitos ficam em zero e, se o tset saísse
+  // só deles, os slots de consumo do trafo não existiriam para ninguém.
+  const tset = new Set(); for (const pid of ALL_CIRC.concat([6196, 6197])) for (const t in smap[pid]) tset.add(t);
+  const ufvLiq = {}, brutaDiaU = {}; for (const u in UFV_CIRC) { ufvLiq[u] = 0; brutaDiaU[u] = 0; }
+  let noturno = 0;                       // consumo dos slots SEM geração (negativo)
   for (const t of tset) {
     let brutaTot = 0; for (const pid of ALL_CIRC) brutaTot += (smap[pid][t] || 0);
-    if (brutaTot <= 0) continue;
     const liqTot = (smap[6196][t] || 0) + (smap[6197][t] || 0);
-    for (const u in UFV_CIRC) { let bu = 0; for (const pid of UFV_CIRC[u]) bu += (smap[pid][t] || 0); ufvLiq[u] += bu / brutaTot * liqTot * 5 / 60 / 1000; }
+    // sem geração no slot não há proporção para ratear: junta num balde e distribui no fim.
+    if (brutaTot <= 0) { noturno += liqTot * 5 / 60 / 1000; continue; }
+    for (const u in UFV_CIRC) { let bu = 0; for (const pid of UFV_CIRC[u]) bu += (smap[pid][t] || 0);
+      brutaDiaU[u] += bu; ufvLiq[u] += bu / brutaTot * liqTot * 5 / 60 / 1000; }
   }
+  // rateia o consumo noturno proporcionalmente à energia BRUTA do dia de cada UFV. Mantém a soma
+  // das 9 igual ao total (eneTr1+eneTr2) sem inventar critério de alocação.
+  const brDia = Object.values(brutaDiaU).reduce((a, b) => a + b, 0);
+  if (brDia > 0 && noturno !== 0) for (const u in ufvLiq) ufvLiq[u] += noturno * brutaDiaU[u] / brDia;
   const ufv_liq_mwh = {}; for (const u in ufvLiq) ufv_liq_mwh[u] = r(ufvLiq[u], 3);
 
   return {

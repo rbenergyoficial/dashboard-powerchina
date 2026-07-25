@@ -98,6 +98,41 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     }
   } catch (e) { console.log('dia corrente indisponivel (' + e.message + ') — serie fica ate ontem'); }
 
+  // ---------- ENERGIA LIQUIDA OFICIAL: ler, nao calcular ----------
+  // O rollup do way2_daily INTEGRA POTENCIA (Demat, 5 min) — e uma aproximacao. A Way2 publica a
+  // energia LIQUIDADA por UFV na grandeza `EneatLiquida` (pontos de energia, um por usina), e essa e
+  // a mesma que a planilha da PowerChina usa: batimento EXATO em jul/26, delta 0,00 nas 9 usinas e
+  // 39.607,78 contra 39.607,77 MWh no total (dias 01-24).
+  // REGRA (definida com o usuario em 25/07/2026): dia ja liquidado -> LE o valor, sem conta nenhuma.
+  // O dia corrente ainda nao tem liquidada (a Way2 fecha 1-2 dias depois) e continua vindo do
+  // snapshot 5-min, ja com as perdas descontadas (ver `soma` vs `somaPos` em gen-way2-hist.js).
+  // LIMITE: `way2_energia_mes.json` cobre apenas o MES CORRENTE. Os meses fechados da serie
+  // historica continuam com o rollup, ~0,7% acima — pendente estender a busca da EneatLiquida.
+  const PT_ENE = { 6368: 'M1', 6369: 'M2', 6373: 'M3', 6374: 'M4', 6375: 'M5',
+                   6376: 'M6', 6215: 'M7', 6378: 'M8', 6219: 'M9' };
+  try {
+    const em = await getJSON(BASE + 'way2_energia_mes.json');
+    const L = {};                                  // dia -> { UFV: MWh }
+    (em.dados || []).forEach(d => { const u = PT_ENE[d.pontoId]; if (!u) return;
+      (d.valores || []).forEach(v => { if (v.valor == null) return;
+        (L[String(v.data).slice(0, 10)] = L[String(v.data).slice(0, 10)] || {})[u] = v.valor / 1000; }); });
+    let n = 0, ig = [];
+    daily.dias.forEach(x => {
+      const l = L[x.dia]; if (!l) return;
+      if (x.parcial) { ig.push(x.dia + ' (dia em curso)'); return; }
+      // exige as 9 usinas e total positivo: dia meio-liquidado daria numero menor que o real
+      const us = Object.keys(l);
+      const tot = us.reduce((a, u) => a + l[u], 0);
+      if (us.length < 9 || tot <= 0) { ig.push(x.dia + ' (nao liquidado)'); return; }
+      x.ufv_liq_mwh = Object.fromEntries(us.map(u => [u, r2(l[u])]));
+      x.ene_liq_mwh = r2(tot);
+      x.liq_fonte = 'EneatLiquida';
+      n++;
+    });
+    console.log('energia liquida OFICIAL (EneatLiquida) em ' + n + ' dias'
+      + (ig.length ? ' · fora: ' + ig.join(', ') : ''));
+  } catch (e) { console.log('way2_energia_mes.json indisponivel (' + e.message + ') — segue com o rollup'); }
+
   // ---------- 1) complexo por mês, a partir do ons_restricao_all ----------
   const M = {};   // mes -> acumuladores
   const DIA = {}; // dia -> { ger, fru, horas_restr }  (p/ a curva com o corte pintado)
