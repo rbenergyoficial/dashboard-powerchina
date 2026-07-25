@@ -15,6 +15,7 @@ const SISTEMA = {
   '#2E5845': 'verde fill (positivo/entregue)', '#43966B': 'verde acento',
   '#703B3F': 'vermelho fill (negativo/cortado)', '#C85C60': 'vermelho acento',
   '#48668E': 'azul fill (neutro/medição)', '#5C86BE': 'azul acento',
+  '#5C462C': 'âmbar fill (meta/comissionamento)',
   '#F5A623': 'âmbar destaque/meta',
   '#525C6B': 'cinza neutro', '#8B93A1': 'texto secundário', '#F2F4F7': 'texto primário',
   '#5F6672': 'texto terciário', '#333841': 'borda', '#14161A': 'fundo card',

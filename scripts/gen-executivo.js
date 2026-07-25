@@ -359,7 +359,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     const liq = w2Mes.reduce((a, x) => a + num(x.ene_liq_mwh), 0);
     const liqPpa = somaU(PPA), liqMl = somaU(ML);
     // dias do Way2 ≠ dias do ONS (o Way2 é D+0, o ONS é D+1/D+2) → a projeção usa o ritmo do PRÓPRIO Way2
-    const dW = w2Mes.length, fatorW = dW > 0 ? diasTotal / dW : 1;
+    // ⚠️ O DIA CORRENTE É PARCIAL (chega meia jornada) — se ele entrar no divisor, puxa a média diária
+    // para baixo e a projeção SUBESTIMA. Em 25/07/2026 isso dava 31/25=1,240 aqui contra 31/24=1,292
+    // na manchete: a mesma usina aparecia com 80,0% em um painel e 83,1% no outro. A manchete
+    // (`serie_dia_ufv`, ~linha 697) já fazia certo; a correção não tinha sido propagada para cá.
+    // REGRA: projetar pelo ritmo dos dias COMPLETOS; o realizado continua incluindo hoje.
+    const cheios = w2Mes.filter(x => !x.parcial);
+    const somaUC = us => cheios.reduce((a, x) => a + us.reduce((b, u) => b + num((x.ufv_liq_mwh || {})[u]), 0), 0);
+    const liqC = cheios.reduce((a, x) => a + num(x.ene_liq_mwh), 0);
+    const liqPpaC = somaUC(PPA);
+    const dW = w2Mes.length, dWc = cheios.length || dW;
+    const fatorW = dWc > 0 ? diasTotal / dWc : 1;
     mt = METAS.meses[mesAtual] || null;
     const pct = (r, m) => m > 0 ? r2(100 * r / m) : null;
 
@@ -381,13 +391,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       naoAlocado = r2(mt.garantido_total - mt.garantido_ppa - ML.reduce((a, u) => a + metaUfv[u], 0));
     }
     // realizado LÍQUIDO por usina (Way2) — a única base comparável com a meta, que também é líquida
-    const liqUfv = {}; Object.keys(CAP_UFV).forEach(u => {
-      liqUfv[u] = w2Mes.reduce((a, x) => a + num((x.ufv_liq_mwh || {})[u]), 0); });
+    const liqUfv = {}, liqUfvC = {}; Object.keys(CAP_UFV).forEach(u => {
+      liqUfv[u] = w2Mes.reduce((a, x) => a + num((x.ufv_liq_mwh || {})[u]), 0);
+      liqUfvC[u] = cheios.reduce((a, x) => a + num((x.ufv_liq_mwh || {})[u]), 0); });
 
     mes.dias_restantes = Math.max(0, diasTotal - cur.dias);
     mes.liquida = { total_gwh: r2(liq / 1000), ppa_gwh: r2(liqPpa / 1000), ml_gwh: r2(liqMl / 1000),
-      dias: dW, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
-      projecao_total_gwh: r2(liq * fatorW / 1000), projecao_ppa_gwh: r2(liqPpa * fatorW / 1000),
+      dias: dW, dias_completos: dWc, ultimo_dia: dW ? w2Mes[dW - 1].dia : null,
+      projecao_total_gwh: r2(liqC * fatorW / 1000), projecao_ppa_gwh: r2(liqPpaC * fatorW / 1000),
       por_ufv: Object.fromEntries(Object.keys(liqUfv).map(u => [u, r2(liqUfv[u] / 1000)])) };
     mes.meta = mt ? {
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
@@ -398,12 +409,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       nao_alocado_gwh: r2(naoAlocado / 1000),
       nao_alocado_nota: 'Diferenca entre a meta GLOBAL e a soma das 9 usinas na regua do PPA. O global e ~7% menos conservador que o PPA (79,5% vs 74,4% da energia equivalente). Fica EXPOSTA de proposito: e pergunta p/ quem emite a meta. Enterrar no M7/M9 (rateio do resto) dava a eles meta 145,9% do proprio P50 — inatingivel por construcao.',
       atingido_pct: pct(liq, mt.garantido_total), atingido_ppa_pct: pct(liqPpa, mt.garantido_ppa),
-      projecao_pct: pct(liq * fatorW, mt.garantido_total), projecao_ppa_pct: pct(liqPpa * fatorW, mt.garantido_ppa),
-      sobra_projetada_gwh: r2((liq * fatorW - mt.garantido_total) / 1000),
-      vai_bater: liq * fatorW >= mt.garantido_total ? 1 : 0,
+      projecao_pct: pct(liqC * fatorW, mt.garantido_total), projecao_ppa_pct: pct(liqPpaC * fatorW, mt.garantido_ppa),
+      sobra_projetada_gwh: r2((liqC * fatorW - mt.garantido_total) / 1000),
+      vai_bater: liqC * fatorW >= mt.garantido_total ? 1 : 0,
       // geometria da BARRA DE PROGRESSO DA META (a manchete é 100% líquida: mesma grandeza da meta).
       // Escala vai até 120% ou até a projeção, o que for maior, p/ a marca dos 100% nunca sair da barra.
-      barra: (() => { const at = pct(liq, mt.garantido_total) || 0, pj = pct(liq * fatorW, mt.garantido_total) || 0;
+      barra: (() => { const at = pct(liq, mt.garantido_total) || 0, pj = pct(liqC * fatorW, mt.garantido_total) || 0;
         const esc = Math.max(120, Math.ceil(pj / 10) * 10);
         return { escala_pct: esc, realizado_w: r2(at / esc * 100),
           projecao_w: r2(Math.max(0, pj - at) / esc * 100), marca100_w: r2(100 / esc * 100) }; })(),
@@ -411,7 +422,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
 
     // meta × realizado POR USINA — array (barchart precisa de campo string no eixo)
     mes.meta_ufv = mt ? Object.keys(CAP_UFV).sort().map(u => {
-      const met = metaUfv[u] / 1000, rea = liqUfv[u] / 1000, proj = rea * fatorW;
+      // projeta pelos dias COMPLETOS (liqUfvC), não pelo realizado que inclui hoje parcial
+      const met = metaUfv[u] / 1000, rea = liqUfv[u] / 1000, proj = liqUfvC[u] / 1000 * fatorW;
       return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML',
         meta_gwh: r2(met), realizado_gwh: r2(rea), projecao_gwh: r2(proj),
         atingido_pct: met > 0 ? r2(100 * rea / met) : null,
@@ -702,8 +714,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // Complexo), entao filtrar por ufv=u daria 0 e a energia parcial vazaria para a base da
       // projecao — foi o que aconteceu na primeira versao (PPA saltou 124,68 -> 126,21).
       const membros = u === 'PPA' ? PPA : u === 'ML' ? ML : [u];
-      const hojeGwh = r2(out.serie_dia_ufv.filter(x => x.mes === mSel && x.parcial && membros.includes(x.ufv))
-        .reduce((a, x) => a + num(x.liq_mwh), 0) / 1000);
+      // duas versões de propósito: a CRUA entra na conta da projeção, a arredondada é a que se exibe.
+      // Arredondar antes de projetar custava até 0,6 pp nas usinas pequenas (M7 tem 0,99 GWh no mês:
+      // 2 casas ali são ~0,5% da base), e era o que sobrava de divergência contra `mes.meta_ufv`.
+      const hojeCru = out.serie_dia_ufv.filter(x => x.mes === mSel && x.parcial && membros.includes(x.ufv))
+        .reduce((a, x) => a + num(x.liq_mwh), 0) / 1000;
+      const hojeGwh = r2(hojeCru);
       const hojeAte = parc.length ? parc[0].ate : null;
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
@@ -738,7 +754,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // ---- manchete ----
       // base = so os dias FECHADOS (tira a energia de hoje, que e de um dia pela metade).
       // O "ja realizado" logo abaixo continua incluindo hoje — aquilo e energia entregue de fato.
-      const proj = r2((cur.liquida_gwh - hojeGwh) * fatorD);
+      const proj = r2((cur.liquida_gwh - hojeCru) * fatorD);
       const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
       const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
       const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);

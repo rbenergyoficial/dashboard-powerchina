@@ -18,7 +18,7 @@ barchart com cor `X` e `fillOpacity: 50` renderiza o fill como a coluna "fill" a
 | **positivo** · entregue, meta batida | `#2E5845` | `#43966B` |
 | **negativo** · cortado, abaixo da meta | `#703B3F` | `#C85C60` |
 | **neutro** · medição, referência | `#48668E` | `#5C86BE` |
-| **atenção** · meta, marco, destaque | — | `#F5A623` |
+| **atenção** · meta, marco, destaque, comissionamento | `#5C462C` | `#F5A623` |
 | **irradiância** (série própria) | — | `#E0B050` |
 | **outras perdas** / cinza de dado | — | `#525C6B` |
 
@@ -141,3 +141,31 @@ E no POST: `Buffer.from(JSON.stringify(body),'utf8')` + `Content-Type: applicati
 
 **Detecção:** rodar `scripts/varre-encoding.js` após qualquer escrita em lote — ele procura o
 replacement character (code point `FFFD`) em títulos, descrições e options de todos os dashboards.
+
+## 10. Painel HTML (`marcusolsson-dynamictext-panel`) — quando o nativo não dá
+
+Use quando o painel nativo **não consegue** o layout pedido (ex.: texto ao lado de um gauge, dentro do
+mesmo card). Não use para o que um `stat`/`barchart` já faz bem.
+
+| Regra | Por quê |
+|---|---|
+| `height: <px>`, nunca `height:100%` | o container do plugin não tem altura → o card encolhe. `px = h*(30+8)-8`, menos ~20 de padding (h10 → 352px) |
+| `const hb = context.handlebars` | `handlebars` solto dá "handlebars is not defined". É o que libera aritmética no `helpers` |
+| frames em `context.panelData.series` | `context.data` é só o frame *selecionado*, já achatado. Para 2+ queries, leia `panelData` |
+| `renderMode: 'data'` com 2+ queries | com `allRows` o plugin desenha um **dropdown de frame** no pé do painel |
+| helpers leem tudo, template só chama helper | o template deixa de depender de como o plugin achata os frames |
+| formate na query (`$formatNumber(x,"0.00")`) | Handlebars não formata, e `$round(73.70,2)` → `73.7` quebra o alinhamento entre cards irmãos |
+
+**Gauge em CSS** (`conic-gradient`) funciona e não é sanitizado — é o caminho para pôr texto ao lado do
+anel no mesmo card. Mande do backend a **string formatada** para o texto e o **número** para o CSS:
+
+```html
+<div style="width:196px;height:196px;border-radius:50%;
+  background:conic-gradient(#F5A623 0% {{arco}}%, #2A2E37 {{arco}}% 100%)">
+  <div style="position:absolute;inset:19px;border-radius:50%;background:#14161A">{{mw}}</div></div>
+```
+
+**O parser backend do Infinity nem sempre é JSONata.** No blob Way2 aceita `$sum`/`:=`/filtros; no
+endpoint do ONS (`tr.ons.org.br`) a mesma sintaxe devolve `null` — ali é GJSON (caminho direto e
+multipath `{"k":path}`, sem aritmética). **Teste no `/api/ds/query` antes de gravar** — e valide a
+FAIXA do valor, não só se veio algo.
