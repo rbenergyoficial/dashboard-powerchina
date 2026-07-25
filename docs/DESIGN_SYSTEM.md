@@ -22,6 +22,22 @@ barchart com cor `X` e `fillOpacity: 50` renderiza o fill como a coluna "fill" a
 | **irradiância** (série própria) | — | `#E0B050` |
 | **outras perdas** / cinza de dado | — | `#525C6B` |
 
+### Paleta categórica — só para gráfico multi-série
+Quando o gráfico compara **categorias** (não estados), cada série precisa de cor própria. Usar
+**nesta ordem fixa**, nunca ciclando nem inventando um 7º tom:
+
+| ordem | cor | |
+|---|---|---|
+| 1 | `#43966B` | verde |
+| 2 | `#5C86BE` | azul |
+| 3 | `#C08A45` | âmbar escuro |
+| 4 | `#C85C60` | vermelho |
+| 5 | `#4E9A98` | teal |
+| 6 | `#5F6672` | cinza (sempre para "outros/aviso") |
+
+> `#C08A45` existe **só aqui**. Fora de gráfico multi-série, âmbar é sempre `#F5A623`.
+> Se precisar de uma 7ª série: agrupar em "Outros", facetar, ou trocar de visualização.
+
 ### Variantes com propósito (tokens legítimos, não duplicatas)
 | cor | uso exclusivo |
 |---|---|
