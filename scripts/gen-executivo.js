@@ -88,12 +88,22 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const linha = rollupDia(snap, hojeBRT);
       if (linha.slots > 0) {
         linha.parcial = 1;
+        // DIA ENCERRADO PARA GERAÇÃO: depois do pôr do sol o dia nao rende mais nada — o que vem
+        // ate a meia-noite e so consumo do trafo (~0,5 MW). Enquanto o dia era tratado como
+        // "pela metade" ate 23:59, a projecao ficava presa em "dia 24 de 31" as 18h, ignorando um
+        // dia de geracao que JA aconteceu. Critério pelo DADO, nao por hora fixa (o pôr do sol
+        // muda ao longo do ano): 6 slots seguidos com |potencia| < 1% da instalada, depois do meio-dia.
+        const g = valoresW2(snap, 6233, 'Demat').filter(v => v.valor != null);
+        const u6 = g.slice(-6);
+        linha.encerrado = (u6.length === 6 && g.length > 144
+          && u6.every(v => Math.abs(v.valor / 1000) < 0.01 * 343.77)) ? 1 : 0;
         // ultimo slot COM valor: e o que o painel mostra como "dado ate". Os slots futuros do dia
         // ja vem criados com qualidade:1 e sem `valor`, entao contar slots nao serve.
-        const g = valoresW2(snap, 6233, 'Demat').filter(v => v.valor != null);
         linha.ate = g.length ? String(g[g.length - 1].data).slice(11, 16) : null;
         daily.dias.push(linha);
-        console.log('dia corrente ' + hojeBRT + ' anexado (parcial, ate ' + linha.ate + ', ' + linha.slots + ' slots, ' + linha.ene_liq_mwh + ' MWh)');
+        console.log('dia corrente ' + hojeBRT + ' anexado (parcial, ate ' + linha.ate + ', ' + linha.slots
+          + ' slots, ' + linha.ene_liq_mwh + ' MWh'
+          + (linha.encerrado ? ' · GERACAO ENCERRADA: conta como dia decorrido' : '') + ')');
       }
     }
   } catch (e) { console.log('dia corrente indisponivel (' + e.message + ') — serie fica ate ontem'); }
@@ -670,25 +680,29 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           const d = x.dia, dnum = +d.slice(8, 10);
           // `parcial` viaja em cada linha: o painel pinta a barra de hoje diferente e a projecao
           // desconta esse dia do divisor. `ate` = hora do ultimo dado (so no dia corrente).
-          const pc = x.parcial ? 1 : 0, ate = x.ate || null;
+          // `enc`: a geração do dia já terminou (pôr do sol). O dia segue `parcial` porque a
+          // liquidada da Way2 ainda não saiu e vai substituir o valor — mas para a PROJEÇÃO ele já
+          // é um dia decorrido, e no gráfico já pinta como barra fechada.
+          const pc = x.parcial ? 1 : 0, enc = x.encerrado ? 1 : 0, ate = x.ate || null;
           // `liq_mwh` continua sendo a energia do dia, qualquer dia — é o que as somas usam.
           // Além dela, a MESMA energia sai repartida em dois campos COMPLEMENTARES (um sempre null):
           //   liq_fechada_mwh = dias que já acabaram · liq_hoje_mwh = o dia em curso
           // Assim o gráfico desenha duas SÉRIES vindas do MESMO frame: a barra de hoje ganha cor
           // própria sem virar um frame de ponto único (o que fazia o trend esticá-la, parecendo 6
           // dias de largura, e foi por isso que a barra parcial tinha sido removida antes).
-          const parte = (v) => pc ? [null, v] : [v, null];
+          // barra translúcida SÓ enquanto o dia ainda pode render: depois do pôr do sol ela fecha.
+          const parte = (v) => (pc && !enc) ? [null, v] : [v, null];
           Object.keys(CAP_UFV).sort().forEach(u => {
             const v = r2(num((x.ufv_liq_mwh || {})[u])), [fe, ho] = parte(v);
             out.push({ mes: m, dia: d, dia_num: dnum, ufv: u, liq_mwh: v,
               liq_fechada_mwh: fe, liq_hoje_mwh: ho,
               irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
-              meta_dia_mwh: metaDia(u), parcial: pc, ate }); });
+              meta_dia_mwh: metaDia(u), parcial: pc, encerrado: enc, ate }); });
           const vC = r2(num(x.ene_liq_mwh)), [feC, hoC] = parte(vC);
           out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: vC,
             liq_fechada_mwh: feC, liq_hoje_mwh: hoC,
             irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
-            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, ate });
+            meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, encerrado: enc, ate });
         });
         // COMPLETA O MÊS com os dias que ainda não têm dado (liq null). O eixo do gráfico passa a
         // sair do DADO: junho vai até 30, julho até 31, fevereiro até 28. Antes o eixo era fixo em
@@ -753,8 +767,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // `liq_mwh != null` filtra os dias que so existem para completar o eixo do grafico: contar
       // linhas ja nao diz quantos dias passaram, porque o mes agora vem preenchido ate o fim.
       const diasMes = out.serie_dia_ufv.filter(x => x.mes === mSel && x.ufv === 'Complexo' && x.liq_mwh != null);
-      const parc = diasMes.filter(x => x.parcial);
-      const dCorr = diasMes.filter(x => !x.parcial).length || dTot;
+      // "aberto" = ainda pode gerar hoje. Depois do pôr do sol o dia entra na conta: a geração dele
+      // já aconteceu e deixá-lo fora fazia a projeção anunciar "dia 24 de 31" às 18h.
+      const parc = diasMes.filter(x => x.parcial && !x.encerrado);
+      const dCorr = diasMes.filter(x => !x.parcial || x.encerrado).length || dTot;
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
       const fechado = dCorr >= dTot ? 1 : 0;
       // energia de hoje, ainda incompleta — some no "ja realizado", nao na base da projecao
@@ -765,10 +781,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // duas versões de propósito: a CRUA entra na conta da projeção, a arredondada é a que se exibe.
       // Arredondar antes de projetar custava até 0,6 pp nas usinas pequenas (M7 tem 0,99 GWh no mês:
       // 2 casas ali são ~0,5% da base), e era o que sobrava de divergência contra `mes.meta_ufv`.
-      const hojeCru = out.serie_dia_ufv.filter(x => x.mes === mSel && x.parcial && membros.includes(x.ufv))
-        .reduce((a, x) => a + num(x.liq_mwh), 0) / 1000;
+      // só desconta o dia que AINDA está rendendo. Encerrado já conta como dia cheio na projeção.
+      const hojeCru = out.serie_dia_ufv.filter(x => x.mes === mSel && x.parcial && !x.encerrado
+        && membros.includes(x.ufv)).reduce((a, x) => a + num(x.liq_mwh), 0) / 1000;
       const hojeGwh = r2(hojeCru);
-      const hojeAte = parc.length ? parc[0].ate : null;
+      // o "dado até HH:MM" vale mesmo com o dia encerrado — é a hora do último dado, não um selo de
+      // "ainda crescendo". Sem isso o painel perdia a marca de atualidade depois do pôr do sol.
+      const parcQq = diasMes.filter(x => x.parcial);
+      const hojeAte = parcQq.length ? parcQq[0].ate : null;
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
       const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;
@@ -795,7 +815,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
           spark: barras(S.map(x => x.cortado_gwh), '#5C86BE'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
         { mes: mSel, ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
-          sub: compl ? 'só existe no complexo' : 'mês parcial · dia ' + dCorr + ' de ' + dTot,
+          // dias do ONS (`mes.dias_decorridos`), NAO do Way2 (`dCorr`): este valor vem do ONS, que
+          // publica D+1/D+2. Usar dCorr faria o rotulo dizer "dia 25" com dado de 24 dias.
+          sub: compl ? 'só existe no complexo' : 'mês parcial · dia ' + mes.dias_decorridos + ' de ' + dTot,
           var: compl ? '· complexo' : '', var_cor: '#8B93A1', cor: '#C08A45',
           spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
 
