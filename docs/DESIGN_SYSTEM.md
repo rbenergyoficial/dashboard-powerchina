@@ -139,4 +139,5 @@ x => { const ch = []; x.on('data', c => ch.push(c));
 ```
 E no POST: `Buffer.from(JSON.stringify(body),'utf8')` + `Content-Type: application/json; charset=utf-8`.
 
-**Detecção:** varrer `�` em títulos, descrições e options após qualquer escrita em lote.
+**Detecção:** rodar `scripts/varre-encoding.js` após qualquer escrita em lote — ele procura o
+replacement character (code point `FFFD`) em títulos, descrições e options de todos os dashboards.
