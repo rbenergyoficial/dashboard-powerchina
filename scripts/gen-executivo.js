@@ -636,11 +636,22 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           // `parcial` viaja em cada linha: o painel pinta a barra de hoje diferente e a projecao
           // desconta esse dia do divisor. `ate` = hora do ultimo dado (so no dia corrente).
           const pc = x.parcial ? 1 : 0, ate = x.ate || null;
-          Object.keys(CAP_UFV).sort().forEach(u => out.push({ mes: m, dia: d, dia_num: dnum, ufv: u,
-            liq_mwh: r2(num((x.ufv_liq_mwh || {})[u])),
-            irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
-            meta_dia_mwh: metaDia(u), parcial: pc, ate }));
-          out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: r2(num(x.ene_liq_mwh)),
+          // `liq_mwh` continua sendo a energia do dia, qualquer dia — é o que as somas usam.
+          // Além dela, a MESMA energia sai repartida em dois campos COMPLEMENTARES (um sempre null):
+          //   liq_fechada_mwh = dias que já acabaram · liq_hoje_mwh = o dia em curso
+          // Assim o gráfico desenha duas SÉRIES vindas do MESMO frame: a barra de hoje ganha cor
+          // própria sem virar um frame de ponto único (o que fazia o trend esticá-la, parecendo 6
+          // dias de largura, e foi por isso que a barra parcial tinha sido removida antes).
+          const parte = (v) => pc ? [null, v] : [v, null];
+          Object.keys(CAP_UFV).sort().forEach(u => {
+            const v = r2(num((x.ufv_liq_mwh || {})[u])), [fe, ho] = parte(v);
+            out.push({ mes: m, dia: d, dia_num: dnum, ufv: u, liq_mwh: v,
+              liq_fechada_mwh: fe, liq_hoje_mwh: ho,
+              irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
+              meta_dia_mwh: metaDia(u), parcial: pc, ate }); });
+          const vC = r2(num(x.ene_liq_mwh)), [feC, hoC] = parte(vC);
+          out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: vC,
+            liq_fechada_mwh: feC, liq_hoje_mwh: hoC,
             irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, ate });
         });
@@ -653,8 +664,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           if (jaTem.has(dn)) continue;
           const d = m + '-' + String(dn).padStart(2, '0');
           Object.keys(CAP_UFV).sort().forEach(u => out.push({ mes: m, dia: d, dia_num: dn, ufv: u,
-            liq_mwh: null, irr: null, meta_dia_mwh: metaDia(u), parcial: 0, ate: null }));
-          out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null, irr: null,
+            liq_mwh: null, liq_fechada_mwh: null, liq_hoje_mwh: null,
+            irr: null, meta_dia_mwh: metaDia(u), parcial: 0, ate: null }));
+          out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null,
+            liq_fechada_mwh: null, liq_hoje_mwh: null, irr: null,
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: 0, ate: null });
         }
         // NAO inserir ponto fracionario aqui para "dar folga" no eixo: a largura da barra no
