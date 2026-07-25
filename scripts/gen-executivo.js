@@ -26,6 +26,9 @@ const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
 const METAS = (() => { try { return require('../data/metas.json'); } catch (e) { return { meses: {} }; } })();
+// fases operacionais oficiais (teste/performance/COD por UFV) — extraídas dos despachos ANEEL e
+// dos SGIs. Usadas para separar pré-COD de pós-COD sem heurística.
+const FASES = (() => { try { return require('../data/fases_operacao.json').ufvs; } catch (e) { return {}; } })();
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -836,6 +839,79 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         else { m2.cf_nivel = ''; m2.cf_texto = ''; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
       });
     }
+  }
+
+  // ---------- VIDA INTEIRA DA USINA: pré-COD × pós-COD ----------
+  // O painel mostrava só o pós-COD (o ONS começa em 04/09/2025), escondendo os ~304 GWh que o
+  // complexo gerou em teste e performance. Mas o Way2 mede desde 23/01/2025 — a energia SEMPRE
+  // existiu, só não estava publicada aqui.
+  //
+  // Estrutura SEPARADA de propósito: não toco em `serie`/`meses`, que dirigem projeção, backtest e
+  // metas (todos dependem de existir meta PPA, que só começa em jan/26). Aqui é a série longa,
+  // com a fase de cada mês e o corte pré/pós COD.
+  //
+  // O COD é POR USINA (M2/M4/M7 em 04/09, M3/M5/M6/M8 em 05/09, M1 em 10/09, M9 só em 22/11).
+  // Cada UFV é classificada contra o SEU próprio COD — não contra uma data única do complexo.
+  {
+    const codDe = u => (FASES[u] && FASES[u].operacao_comercial && FASES[u].operacao_comercial.cod) || null;
+    const faseNoDia = (u, dia) => {
+      const f = FASES[u]; if (!f) return null;
+      const cod = f.operacao_comercial.cod;
+      if (cod && dia >= cod) return 'comercial';
+      if (f.performance && f.performance.inicio && dia >= f.performance.inicio) return 'performance';
+      if (f.teste && f.teste.inicio && dia >= f.teste.inicio) return 'teste';
+      return 'pre-teste';
+    };
+    const UF = Object.keys(CAP_UFV).sort();
+    const porMes = {};          // mes -> { pre, pos, fases:{}, ufv:{} }
+    const tot = { pre: 0, pos: 0, por_fase: {}, dias_pre: new Set(), dias_pos: new Set() };
+
+    for (const d of daily.dias) {
+      const dia = String(d.dia); if (dia < '2025-01-01') continue;
+      const mes = dia.slice(0, 7);
+      const m = porMes[mes] || (porMes[mes] = { mes, pre: 0, pos: 0, fases: {}, ufv: {} });
+      for (const u of UF) {
+        const v = num((d.ufv_liq_mwh || {})[u]); if (!(v > 0)) continue;
+        const cod = codDe(u), ehPre = cod && dia < cod;
+        const fase = faseNoDia(u, dia) || 'indefinida';
+        m.ufv[u] = (m.ufv[u] || 0) + v;
+        m.fases[fase] = (m.fases[fase] || 0) + v;
+        tot.por_fase[fase] = (tot.por_fase[fase] || 0) + v;
+        if (ehPre) { m.pre += v; tot.pre += v; tot.dias_pre.add(dia); }
+        else { m.pos += v; tot.pos += v; tot.dias_pos.add(dia); }
+      }
+    }
+
+    out.serie_vida = Object.keys(porMes).sort().map(mes => {
+      const m = porMes[mes];
+      // fase PREDOMINANTE do mês (a que gerou mais energia) — o mês da virada é misto
+      const domin = Object.keys(m.fases).sort((a, b) => m.fases[b] - m.fases[a])[0] || null;
+      const misto = Object.keys(m.fases).length > 1;
+      const S = serie.find(x => x.mes === mes) || null;   // dado do ONS, se existir p/ este mês
+      return { mes, lbl: lbl(mes),
+        total_gwh: r2((m.pre + m.pos) / 1000),
+        pre_cod_gwh: r2(m.pre / 1000), pos_cod_gwh: r2(m.pos / 1000),
+        fase: domin, fase_mista: misto ? 1 : 0,
+        // o ONS (e portanto corte/irradiância) só existe no pós-COD; deixo explícito em vez de zerar
+        tem_ons: S ? 1 : 0,
+        cortado_gwh: S ? S.frustrada_gwh : null,
+        horas_restricao: S ? S.horas_restricao : null };
+    });
+
+    out.totais_vida = {
+      pre_cod_gwh: r2(tot.pre / 1000), pos_cod_gwh: r2(tot.pos / 1000),
+      total_gwh: r2((tot.pre + tot.pos) / 1000),
+      pre_pct: (tot.pre + tot.pos) > 0 ? r2(100 * tot.pre / (tot.pre + tot.pos)) : null,
+      dias_pre: tot.dias_pre.size, dias_pos: tot.dias_pos.size,
+      por_fase_gwh: Object.fromEntries(Object.entries(tot.por_fase).map(([k, v]) => [k, r2(v / 1000)])),
+      primeiro_dia: out.serie_vida.length ? out.serie_vida[0].mes : null,
+      // datas oficiais, para o painel rotular sem chumbar nada no HTML
+      teste_ini: '2025-01-21', performance_ini: '2025-07-09',
+      cod_primeiro: '2025-09-04', cod_ultimo: '2025-11-22',
+      fonte: 'energia líquida medida pelo Way2 (medidor de faturamento); fases dos despachos ANEEL e SGIs',
+    };
+    console.log('vida da usina: ' + out.serie_vida.length + ' meses · pré-COD ' + out.totais_vida.pre_cod_gwh
+      + ' GWh (' + out.totais_vida.pre_pct + '%) · pós-COD ' + out.totais_vida.pos_cod_gwh + ' GWh');
   }
 
   // ---------- perfil intradiário (blob PRÓPRIO) ----------
