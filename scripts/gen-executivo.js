@@ -923,6 +923,30 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         if (m2.fechado) { m2.cf_nivel = 'mês fechado'; m2.cf_texto = 'realizado'; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
         else if (cf) { m2.cf_nivel = cf.nivel; m2.cf_texto = cf.texto; m2.cf_cor = cf.cor; m2.cf_acertos = cf.acertos; }
         else { m2.cf_nivel = ''; m2.cf_texto = ''; m2.cf_cor = '#5F6672'; m2.cf_acertos = ''; }
+
+        // ---- COR DO SELO DA PROJEÇÃO ----
+        // Verde fixo mentia: anunciava "PROJEÇÃO 99,57% DA META" em verde de meta batida.
+        // A régua NÃO é o 100% seco, é o 100% ± o erro do próprio método (backtest). Com projeção
+        // 99,57% e erro ±1,72 pp a meta continua ALCANÇÁVEL — pintar de vermelho seria tão errado
+        // quanto pintar de verde. Três faixas:
+        //   >= 100 + erro  -> verde    (bate com margem)
+        //   dentro de ±erro -> âmbar   (no limite: a incerteza cobre os 100%)
+        //   <  100 - erro  -> vermelho (não bate)
+        // Fundos em HEX SÓLIDO, não rgba: rgba compõe com o fundo do card e o mesmo selo sai
+        // diferente em painel de fundo diferente (§1 do design system).
+        const pj2 = m2.proj_pct_n, erro = cf ? num(cf.erro_pp) : 0;
+        if (m2.fechado || pj2 == null) {
+          m2.proj_fundo = '#1F2228'; m2.proj_texto_cor = '#8B93A1'; m2.proj_rotulo = 'REALIZADO';
+        } else if (pj2 >= 100 + erro) {
+          m2.proj_fundo = '#1D2D29'; m2.proj_texto_cor = '#7FC49C'; m2.proj_rotulo = 'ACIMA DA META';
+        } else if (pj2 >= 100 - erro) {
+          m2.proj_fundo = '#3C301C'; m2.proj_texto_cor = '#F7D9A6'; m2.proj_rotulo = 'NO LIMITE DA META';
+        } else {
+          m2.proj_fundo = '#342327'; m2.proj_texto_cor = '#E8A0A2'; m2.proj_rotulo = 'ABAIXO DA META';
+        }
+        // faixa da projeção: é o que responde "ainda dá?" melhor que qualquer cor
+        m2.proj_faixa = (m2.fechado || pj2 == null || !erro) ? ''
+          : fmt(r2(pj2 - erro)) + '–' + fmt(r2(pj2 + erro)) + '%';
       });
     }
   }
