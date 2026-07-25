@@ -110,3 +110,33 @@ fill+acento de um barchart. (Custou 11 iterações descobrir.)
 3. Rodar a auditoria             (scripts de auditoria-visual)
 4. Conferir: cor tem significado? unidade? descrição com fonte? decimals?
 ```
+
+
+## 8. Forma e layout (consistência visual)
+
+- **`barRadius: 0.03`** em TODOS os barcharts. Cantos quase retos; 0.15 arredonda demais e destoa.
+- **Largura w24 só se justifica por quantidade de pontos:** histórico de 11 meses, 90 dias, 48 slots.
+  Um gráfico de 2 ou 3 categorias em w24 é desperdício — usar w12 e emparelhar com painel do mesmo tema.
+- **Eixo categórico usa STRING, nunca timestamp.** Um barchart com campo `timestamp` no eixo X
+  desloca as barras dos rótulos e duplica os períodos (`2025-07, 2025-07, 2025-08…`). Usar o rótulo
+  pronto (`lbl` = "set/25").
+- **Ao converter timeseries → barchart, limpar a herança:** `drawStyle`, `lineWidth`, `lineStyle`,
+  `showPoints`, `spanNulls`, `pointSize` nos overrides. Sobra de `drawStyle:line` renderiza a barra
+  como contorno vazio.
+- **Override de cor fixa vence o threshold.** Para a cor informar status, remover o override `byName`
+  com `fixedColor`.
+
+## 9. ⚠️ BUG DE ENCODING — nunca mais
+
+Helper HTTP que faz `s += chunk` **corrompe caracteres multi-byte** (`—`, `ê`, `á`, `ç`) quando eles
+caem na fronteira entre dois pacotes TCP. O caractere vira `U+FFFD` e o texto é perdido de forma
+irreversível. Aconteceu de verdade: 6 strings destruídas em 3 dashboards, uma delas perdeu 30 caracteres.
+
+**SEMPRE:**
+```js
+x => { const ch = []; x.on('data', c => ch.push(c));
+       x.on('end', () => JSON.parse(Buffer.concat(ch).toString('utf8'))); }
+```
+E no POST: `Buffer.from(JSON.stringify(body),'utf8')` + `Content-Type: application/json; charset=utf-8`.
+
+**Detecção:** varrer `�` em títulos, descrições e options após qualquer escrita em lote.
