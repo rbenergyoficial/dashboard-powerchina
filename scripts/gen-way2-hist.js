@@ -125,20 +125,24 @@ function rollupDia(j, day) {
   // os slots dos TRAFOS entram no conjunto: à noite os circuitos ficam em zero e, se o tset saísse
   // só deles, os slots de consumo do trafo não existiriam para ninguém.
   const tset = new Set(); for (const pid of ALL_CIRC.concat([6196, 6197])) for (const t in smap[pid]) tset.add(t);
-  const ufvLiq = {}, brutaDiaU = {}; for (const u in UFV_CIRC) { ufvLiq[u] = 0; brutaDiaU[u] = 0; }
-  let noturno = 0;                       // consumo dos slots SEM geração (negativo)
+  // EQUAÇÃO OFICIAL DA WAY2 (conferida no print do cadastro em 25/07/2026, UFV Mauriti 1):
+  //   ((P1+P2+P3) / (P1+P4+…+P22)) × (P23+P24)
+  //   numerador   = circuitos DAQUELA usina · denominador = os 22 circuitos
+  //   P23,P24     = SE Mauriti TR1 e TR2  ·  aplicada na INTEGRALIZAÇÃO (por slot)
+  // A estrutura confere com UFV_CIRC: 3+2+3+3+3+3+1+3+1 = 22 circuitos.
+  //
+  // ATENÇÃO ao denominador à noite: ele NÃO é zero, é NEGATIVO (~−813 kW no complexo) — os próprios
+  // circuitos consomem. Logo a razão existe e a equação continua valendo, distribuindo o consumo
+  // noturno na proporção do consumo de cada usina. Um guard `brutaTot <= 0` mandava esses 144 slots
+  // (metade do dia!) para um rateio alternativo pela bruta diurna — desvio da equação, corrigido.
+  const ufvLiq = {}; for (const u in UFV_CIRC) ufvLiq[u] = 0;
   for (const t of tset) {
     let brutaTot = 0; for (const pid of ALL_CIRC) brutaTot += (smap[pid][t] || 0);
+    if (brutaTot === 0) continue;                 // só o 0/0 real fica de fora
     const liqTot = (smap[6196][t] || 0) + (smap[6197][t] || 0);
-    // sem geração no slot não há proporção para ratear: junta num balde e distribui no fim.
-    if (brutaTot <= 0) { noturno += liqTot * 5 / 60 / 1000; continue; }
     for (const u in UFV_CIRC) { let bu = 0; for (const pid of UFV_CIRC[u]) bu += (smap[pid][t] || 0);
-      brutaDiaU[u] += bu; ufvLiq[u] += bu / brutaTot * liqTot * 5 / 60 / 1000; }
+      ufvLiq[u] += bu / brutaTot * liqTot * 5 / 60 / 1000; }
   }
-  // rateia o consumo noturno proporcionalmente à energia BRUTA do dia de cada UFV. Mantém a soma
-  // das 9 igual ao total (eneTr1+eneTr2) sem inventar critério de alocação.
-  const brDia = Object.values(brutaDiaU).reduce((a, b) => a + b, 0);
-  if (brDia > 0 && noturno !== 0) for (const u in ufvLiq) ufvLiq[u] += noturno * brutaDiaU[u] / brDia;
   const ufv_liq_mwh = {}; for (const u in ufvLiq) ufv_liq_mwh[u] = r(ufvLiq[u], 3);
 
   return {
