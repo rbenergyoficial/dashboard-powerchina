@@ -38,6 +38,28 @@ const RECONSTRUIR = process.env.RECONSTRUIR === '1';   // reconstrução do ge: 
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
 const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };  // outorga por UFV (MW) — soma 343,77
+
+// META POR USINA — FONTE ÚNICA DA VERDADE. Esta regra estava DUPLICADA (aqui e na serie_ufv), e a
+// correção de 25/07/2026 só pegou numa das cópias: o painel seguiu mostrando a meta antiga do ML.
+// É o mesmo tipo de erro do divisor da projeção. Agora existe um lugar só.
+//
+// A REGRA (informada pelo usuário): a planilha emite DUAS metas — a do complexo e a do PPA.
+//   PPA  -> vem pronta por usina em `ppa_por_ufv`
+//   ML   -> é O RESTO (garantido_total − garantido_ppa), rateado entre M1/M7/M9 pela ENERGIA
+//           EQUIVALENTE (o P50 de cada uma, que a planilha traz para as 9). O equivalente é régua
+//           melhor que a potência: já embute o fator de capacidade daquela usina naquele mês.
+// Consequência que vale saber: como a meta global é menos conservadora que a do PPA, a diferença
+// de critério recai TODA no ML — ele fica com meta ~98% do próprio P50 contra ~74% do PPA.
+function metasPorUfv(mtm) {
+  if (!mtm) return null;
+  const eq = mtm.equivalente_por_ufv || {}, n = v => Number(v) || 0;
+  const out = {};
+  PPA.forEach(u => { out[u] = (mtm.ppa_por_ufv || {})[u] != null ? Number(mtm.ppa_por_ufv[u]) : 0; });
+  const metaMl = n(mtm.garantido_total) - n(mtm.garantido_ppa);
+  const eqMl = ML.reduce((a, u) => a + n(eq[u]), 0);
+  ML.forEach(u => { out[u] = eqMl > 0 ? metaMl * n(eq[u]) / eqMl : 0; });
+  return out;
+}
 // ⚠️ NOMENCLATURA: a planilha PPA do SharePoint chama as usinas de "Mauriti 2..10" — NÃO EXISTE Mauriti 1.
 // "UFV Mauriti 10" É O MESMO PARQUE que o nosso M1 (CEFMT1 no ONS · M1 no Way2 e no SCADA).
 // CONFIRMADO PELO USUÁRIO em 2026-07-17. Antes disso já era o que a aritmética dizia: a Energia
@@ -429,11 +451,15 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // menores parques → meta 145,9% do próprio P50, INATINGÍVEL por construção, com ou sem curtailment.
     // A diferença vira `nao_alocado`, EXPOSTA: é pergunta p/ quem emite a meta, não número p/ enterrar.
     if (mt) {
-      const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
-      const taxa = capPpa > 0 ? mt.garantido_ppa / capPpa : 0;     // MWh por MW instalado
-      metaUfv = {}; PPA.forEach(u => { metaUfv[u] = r2((mt.ppa_por_ufv || {})[u] || taxa * CAP_UFV[u]); });
-      ML.forEach(u => { metaUfv[u] = r2(taxa * CAP_UFV[u]); });
-      naoAlocado = r2(mt.garantido_total - mt.garantido_ppa - ML.reduce((a, u) => a + metaUfv[u], 0));
+      // CORRIGIDO em 25/07/2026, informado pelo usuário: a planilha emite DUAS metas — a do
+      // complexo e a do PPA. Logo a meta do ML não é derivada de taxa nenhuma, ela É O RESTO:
+      //     meta_ML = garantido_total − garantido_ppa
+      // O método anterior (taxa do PPA × potência de cada uma) deixava 3,25 GWh sem dono, e esse
+      // "não alocado" era só o sintoma de estar inventando uma meta que a fonte já determinava.
+      const mpu = metasPorUfv(mt);                 // <- fonte unica (ver topo do arquivo)
+      metaUfv = {}; Object.keys(mpu).forEach(u => { metaUfv[u] = r2(mpu[u]); });
+      // agora fecha: sobra só arredondamento
+      naoAlocado = r2(mt.garantido_total - Object.values(metaUfv).reduce((a, b) => a + b, 0));
     }
     // realizado LÍQUIDO por usina (Way2) — a única base comparável com a meta, que também é líquida
     const liqUfv = {}, liqUfvC = {}; Object.keys(CAP_UFV).forEach(u => {
@@ -449,10 +475,20 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
       garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
       ml_gwh: r2(ML.reduce((a, u) => a + metaUfv[u], 0) / 1000),
-      ml_fonte: 'DERIVADA — a planilha nao emite meta p/ M1/M7/M9. Taxa do PPA (' + r2(mt.garantido_ppa / PPA.reduce((a, u) => a + CAP_UFV[u], 0)) + ' MWh/MW) x potencia de cada uma.',
+      ml_fonte: 'O RESTO: meta do complexo (' + r2(mt.garantido_total / 1000) + ' GWh) menos a do PPA ('
+        + r2(mt.garantido_ppa / 1000) + ' GWh). A planilha emite so essas duas; a do ML e o que sobra, '
+        + 'rateado entre M1/M7/M9 pela Energia Equivalente (P50) de cada uma.',
       por_ufv: metaUfv,
       nao_alocado_gwh: r2(naoAlocado / 1000),
-      nao_alocado_nota: 'Diferenca entre a meta GLOBAL e a soma das 9 usinas na regua do PPA. O global e ~7% menos conservador que o PPA (79,5% vs 74,4% da energia equivalente). Fica EXPOSTA de proposito: e pergunta p/ quem emite a meta. Enterrar no M7/M9 (rateio do resto) dava a eles meta 145,9% do proprio P50 — inatingivel por construcao.',
+      nao_alocado_nota: 'Zero por construcao: PPA + ML fecham a meta do complexo. Ate 25/07/2026 aqui '
+        + 'sobravam 3,25 GWh, porque a meta do ML era inventada por uma taxa em vez de sair do resto.',
+      // dureza relativa: a diferenca de criterio entre a meta global e a do PPA recai TODA no ML
+      ml_pct_p50: (() => { const eq = mt.equivalente_por_ufv || {};
+        const e = ML.reduce((a, u) => a + num(eq[u]), 0);
+        return e > 0 ? r2(100 * (mt.garantido_total - mt.garantido_ppa) / e) : null; })(),
+      ppa_pct_p50: (() => { const eq = mt.equivalente_por_ufv || {};
+        const e = PPA.reduce((a, u) => a + num(eq[u]), 0);
+        return e > 0 ? r2(100 * mt.garantido_ppa / e) : null; })(),
       atingido_pct: pct(liq, mt.garantido_total), atingido_ppa_pct: pct(liqPpa, mt.garantido_ppa),
       projecao_pct: pct(liqC * fatorW, mt.garantido_total), projecao_ppa_pct: pct(liqPpaC * fatorW, mt.garantido_ppa),
       sobra_projetada_gwh: r2((liqC * fatorW - mt.garantido_total) / 1000),
@@ -566,8 +602,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         const I = IRR[m] || { porUfv: {} };
         const w2 = w2Mes(m);
         const mtm = METAS.meses[m] || null;
-        const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
-        const taxa = mtm && capPpa > 0 ? mtm.garantido_ppa / capPpa : 0;
+        const MPU = metasPorUfv(mtm);
         const linha = (ufv, ge, gv, geP, gvP, parN, parOk, liq, meta) => {
           const corte = Math.max(0, ge - gv);
           const pr = geP > 0 ? r2(100 * gvP / geP) : null;
@@ -586,7 +621,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         // ---- as 9 usinas ----
         Object.keys(CAP_UFV).sort().forEach(u => { const x = I.porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 };
           const liq = w2.reduce((a, d) => a + num((d.ufv_liq_mwh || {})[u]), 0);
-          const meta = mtm ? ((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u]) : null;
+          const meta = MPU ? MPU[u] : null;          // <- mesma fonte unica do bloco acima
           // M7: o "gv" do ONS é o circuito 2 do M3 (tag trocada), e nós o zeramos — usar ele daria
           // 100% de corte. O realizado do M7 vem do Way2. O PR fica NULL: comparar líquida do Way2
           // com potencial ESTIMADO não é Performance Ratio, é mistura de bases.
@@ -645,7 +680,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         [['PPA', PPA], ['ML', ML]].forEach(([g, us]) => {
           const som = k => us.reduce((a, u) => a + ((I.porUfv[u] || {})[k] || 0), 0);
           const liqG = us.reduce((a, u) => a + w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0), 0);
-          const metaG = mtm ? us.reduce((a, u) => a + ((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u]), 0) : null;
+          const metaG = MPU ? us.reduce((a, u) => a + MPU[u], 0) : null;   // <- fonte unica
           // M7 entra pelo Way2 (o gv do ONS dele é o c2 do M3)
           const gvG = us.reduce((a, u) => a + (VIA_WAY2.includes(u)
             ? w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0)
@@ -674,8 +709,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         // meta DAQUELE mês (não a do mês corrente) dividida pelos dias DAQUELE mês
         const mtm = METAS.meses[m] || null;
         const dias = new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
-        const taxa = mtm && capPpa > 0 ? mtm.garantido_ppa / capPpa : 0;
-        const metaDia = u => mtm ? r2((((mtm.ppa_por_ufv || {})[u] != null ? mtm.ppa_por_ufv[u] : taxa * CAP_UFV[u])) / dias) : null;
+        const MPUd = metasPorUfv(mtm);                    // <- fonte unica
+        const metaDia = u => MPUd ? r2(MPUd[u] / dias) : null;
         daily.dias.filter(x => String(x.dia).slice(0, 7) === m).forEach(x => {
           const d = x.dia, dnum = +d.slice(8, 10);
           // `parcial` viaja em cada linha: o painel pinta a barra de hoje diferente e a projecao
