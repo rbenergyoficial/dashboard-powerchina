@@ -833,6 +833,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         ao_vivo: hojeAte ? 1 : 0, ao_vivo_ate: hojeAte, hoje_gwh: fmt(hojeGwh),
         liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
         atingido: fmt(at), proj_pct: fmt(pj),
+        // SPARKLINE DA MANCHETE: os meses ATÉ o selecionado (não o histórico inteiro — num mês
+        // passado a curva não pode mostrar o futuro dele). Vai desenhada ATRÁS do número no card,
+        // que é justamente o que o `stat` nativo não faz: ele divide o cartão em número|curva.
+        spark_liq: barras(S.slice(0, iCur + 1).map(x => x.liquida_gwh), '#43966B'),
+        spark_meta: barras(S.slice(0, iCur + 1).map(x => x.meta_gwh), '#8B93A1'),
+        spark_n: S.slice(0, iCur + 1).filter(x => x.liquida_gwh != null).length,
         // versoes NUMERICAS: a gauge precisa de numero, o texto da manchete precisa de string formatada
         atingido_n: at, proj_pct_n: pj,
         realizado_w: at == null ? 0 : r2(at / esc * 100),
