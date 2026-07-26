@@ -757,7 +757,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         // NAO inserir ponto fracionario aqui para "dar folga" no eixo: a largura da barra no
         // Grafana vem do MENOR intervalo entre pontos do eixo, entao um ponto em `dias + 0.5`
         // encolhe TODAS as barras pela metade (e ainda faz o eixo mostrar o tick 31 em junho).
-        // A folga do eixo e resolvida no painel, com `max` vindo da variavel $maxdia — ver
+        // A folga do eixo e resolvida no painel por SEGUNDA QUERY + `configFromData` (nao por
+        // variavel do Grafana, que nao interpola em campo numerico) — ver
         // out.meses_eixo logo abaixo.
       });
       return out; })(),
@@ -1366,7 +1367,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // limite direito do eixo do grafico diario, POR MES. A barra e centrada no dia: com o eixo
   // terminando no ultimo dia, metade dela fica de fora. Meia casa a mais resolve — mas tem que
   // vir como `max` do eixo, nao como ponto no dado (ponto fracionario encolhe as barras).
-  // A variavel $maxdia le daqui e o override do painel usa o valor.
+  // QUEM CONSOME (conferido em 26/07/2026, porque este comentario dizia "variavel $maxdia" e me
+  // levou a caçar uma variavel que nunca existiu): o painel [977] tem um SEGUNDO target
+  //   root_selector: meses_eixo[mes='$mes']   coluna: max_dia
+  // e a transformacao `configFromData` aplica esse valor como `max` do campo "Dia":
+  //   { applyTo: byName "Dia", configRefId: 'B', mappings: [{ fieldName:'max_dia', handlerKey:'max' }] }
+  // NAO e variavel do Grafana — variavel nao interpola em campo numerico de fieldConfig. Se um dia
+  // este bloco sair, o eixo volta a terminar no ultimo dia e a ultima barra perde metade.
   {
     out.meses_eixo = meses.map(m => ({ mes: m,
       max_dia: new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate() + 0.5 }));
