@@ -19,6 +19,7 @@ barchart com cor `X` e `fillOpacity: 50` renderiza o fill como a coluna "fill" a
 | **negativo** · cortado, abaixo da meta | `#703B3F` | `#C85C60` |
 | **neutro** · medição, referência | `#48668E` | `#5C86BE` |
 | **atenção** · meta, marco, destaque, comissionamento | `#5C462C` | `#F5A623` |
+| **restrição** · curtailment, corte imposto pelo ONS | `#453C6E` | `#8B7FD4` |
 | **irradiância** (série própria) | — | `#E0B050` |
 | **outras perdas** / cinza de dado | — | `#525C6B` |
 
@@ -36,6 +37,9 @@ Quando o gráfico compara **categorias** (não estados), cada série precisa de 
 | 6 | `#5F6672` | cinza (sempre para "outros/aviso") |
 
 > `#C08A45` existe **só aqui**. Fora de gráfico multi-série, âmbar é sempre `#F5A623`.
+
+> **Por que curtailment é ROXO e não vermelho** (decidido em 26/07/2026): vermelho comunica falha, problema NOSSO, algo a corrigir. Curtailment não é falha — é o ONS mandando cortar por excesso de geração no sistema; a usina fez tudo certo. Pintar isso da mesma cor de "abaixo da meta" mistura o que erramos com o que nos foi imposto. Roxo/violeta é a convenção para restrição regulatória.
+> **Continua vermelho:** não atingimento de meta, erro alto da projeção, falha de equipamento.
 > Se precisar de uma 7ª série: agrupar em "Outros", facetar, ou trocar de visualização.
 
 ### Variantes com propósito (tokens legítimos, não duplicatas)
@@ -58,6 +62,16 @@ Quando o gráfico compara **categorias** (não estados), cada série precisa de 
 | fundo alternativo | `#131519` | chip/pílula dentro do card |
 | borda | `#333841` | contorno de card |
 | divisor | `#23262C` | separador interno |
+
+**Degraus extra para TABELA densa** (matriz do executivo, 26/07/2026) — 4 níveis não bastavam quando rótulo de coluna, rótulo de linha, número e unidade precisam se distinguir na mesma célula:
+
+| token | uso |
+|---|---|
+| `#C5CBD4` | rótulo de LINHA em tabela (nome do grupo) — mais forte que o secundário |
+| `#A8B0BC` | rótulo de COLUNA (cabeçalho da tabela) |
+| `#171A1F` | fundo da linha destacada (o titular da tabela) |
+
+> Regra: rótulo que nomeia número grande **nunca** usa `#5F6672`. Custou três rodadas de ajuste até chegar aqui — texto secundário deve RECUAR, não desaparecer.
 
 ## 3. Tipografia
 
