@@ -1126,6 +1126,21 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       + ' GWh (' + out.totais_vida.pre_pct + '%) · pós-COD ' + out.totais_vida.pos_cod_gwh + ' GWh');
   }
 
+  // CAPACIDADE INSTALADA em cada ponto do perfil. Parece desperdício gravar uma constante 14 mil
+  // vezes, mas resolve DOIS problemas com um mecanismo só, e sem variável nova no Grafana:
+  //  1) É A LINHA DE REFERÊNCIA. Sem ela não se lê restrição nos dias que vêm do Way2, que não têm
+  //     a linha de POTENCIAL do ONS: o eixo se ajustava à própria curva e um platô de 80 MW
+  //     preenchia o gráfico inteiro, parecendo dia cheio. (25/07/2026 foi exatamente isso.)
+  //  2) ANCORA O EIXO. Série constante em 343,77 força o eixo a chegar lá — então TODOS os dias
+  //     passam a ter a MESMA escala. Antes era 200 MW num dia e 300 no outro, e comparar dois dias
+  //     a olho não valia.
+  // POR QUE NO DADO e não como `max`/threshold no painel: o painel é por $ufv e a capacidade muda
+  // com a seleção; campo numérico de fieldConfig não interpola variável do Grafana. Vindo do dado
+  // já filtrado, o valor certo aparece sozinho para cada usina.
+  const CAPACIDADE = (u) => u === 'Complexo'
+    ? r2(Object.values(CAP_UFV).reduce((a, b) => a + b, 0))
+    : (CAP_UFV[u] != null ? CAP_UFV[u] : null);
+
   // ---------- perfil intradiário (blob PRÓPRIO) ----------
   // 48 slots × 10 séries × 45 dias nao cabe no executivo.json sem dobrar o arquivo que TODOS os
   // paineis baixam. Blob separado: so quem abre o perfil paga o download.
@@ -1162,7 +1177,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const ruim = o.ge == null || (o.gv > 0 && o.ge < o.gv);
       perfil.push({ dia, h: hh + mm / 60, ufv,
         irr: o.irr > 0 ? Math.round(o.irr) : null,
-        pot_mw: ruim ? null : r2(o.ge), ent_mw: r2(o.gv) });
+        pot_mw: ruim ? null : r2(o.ge), ent_mw: r2(o.gv), cap_mw: CAPACIDADE(ufv) });
     };
     for (const dia of Object.keys(porDia).sort()) {
       for (const hhmm of Object.keys(porDia[dia]).sort()) {
@@ -1264,7 +1279,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             const [hh, mm] = chave.split(':').map(Number), o = medias[chave];
             const põe = (ufv, mw) => { if (mw == null) return;
               perfil.push({ dia, h: hh + mm / 60, ufv, irr: null,
-                pot_mw: null, pot_est_mw: null, ent_mw: r2(mw), fonte: 'way2' }); };
+                pot_mw: null, pot_est_mw: null, ent_mw: r2(mw), cap_mw: CAPACIDADE(ufv),
+                fonte: 'way2' }); };
             // o Complexo vem do PRÓPRIO medidor, não da soma dos 22 circuitos: uma medição só,
             // sem acumular o erro de 22. (Conferido: as duas dão o mesmo, 0,00% de diferença.)
             põe('Complexo', mediaDe(o, 6233));
