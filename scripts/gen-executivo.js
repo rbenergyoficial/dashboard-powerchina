@@ -890,7 +890,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         realizado_w: at == null ? 0 : r2(at / esc * 100),
         projecao_w: pj == null ? 0 : r2(Math.max(0, pj - at) / esc * 100),
         marca100_w: r2(100 / esc * 100),
-        escopo: u === 'Complexo' ? 'Complexo · 343,77 MW · 9 UFVs' : u + ' · ' + fmt(CAP_UFV[u]) + ' MW' });
+        // ESCOPO ADAPTATIVO: o cabeçalho do painel já mostra OUTORGA 343,77 MW, então repetir a
+        // potência aqui quando o filtro é "Complexo" é ruído. Mas o campo não pode sair: ele é a
+        // única indicação de QUAL filtro está ativo, e para uma usina a potência é informação nova.
+        // Então ele se adapta em vez de desaparecer — nunca repete, e sempre informa.
+        escopo: u === 'Complexo' ? 'Complexo · 9 UFVs'
+          : (u === 'PPA' ? 'Grupo PPA · 6 UFVs · ' + fmt(r2(PPA.reduce((a, x) => a + CAP_UFV[x], 0))) + ' MW'
+          : (u === 'ML' ? 'Mercado Livre · 3 UFVs · ' + fmt(r2(ML.reduce((a, x) => a + CAP_UFV[x], 0))) + ' MW'
+          : u + ' · ' + fmt(CAP_UFV[u]) + ' MW · ' + (INV_POR_PARQUE[u] || '?') + ' inversores')) });
 
       if (mSel === mesAtual) {   // YTD e ANUAL: monta uma vez so
       // ---- ACUMULADO DO ANO (YTD) ----
@@ -1024,7 +1031,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           C['ctr_' + k + '_liq'] = m.liq_gwh;
           C['ctr_' + k + '_proj'] = m.liq_proj;
           C['ctr_' + k + '_meta'] = m.meta_gwh;
-          C['ctr_' + k + '_pct'] = m.proj_pct;
+          C['ctr_' + k + '_ating'] = m.atingido;          // % da meta JÁ realizado
+          C['ctr_' + k + '_pct'] = m.proj_pct;            // % da meta PROJETADO no fechamento
           C['ctr_' + k + '_gwh'] = d(m);                       // sobra (+) ou deficit (-)
           C['ctr_' + k + '_ritmo'] = m.ritmo_nec;
           // VEREDITO CURTO por grupo, na MESMA regua de 3 faixas do selo do complexo (100% ± erro
