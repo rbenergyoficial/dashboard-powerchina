@@ -1010,6 +1010,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // Os dois grupos entram na linha do Complexo porque o painel filtra UMA entidade por vez.
       const porMes = {};
       out.manchete_ufv.forEach(m2 => { (porMes[m2.mes] = porMes[m2.mes] || {})[m2.ufv] = m2; });
+      // o erro do backtest e a regua das 3 faixas; vive em `confianca_projecao`, nao neste escopo
+      const erroBT = cf ? num(cf.erro_pp) : 0;
       out.manchete_ufv.filter(m2 => m2.ufv === 'Complexo').forEach(C => {
         const P = (porMes[C.mes] || {}).PPA, L = (porMes[C.mes] || {}).ML;
         if (!P || !L) { C.ctr = 0; return; }
@@ -1025,10 +1027,20 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           C['ctr_' + k + '_pct'] = m.proj_pct;
           C['ctr_' + k + '_gwh'] = d(m);                       // sobra (+) ou deficit (-)
           C['ctr_' + k + '_ritmo'] = m.ritmo_nec;
-          C['ctr_' + k + '_cor'] = num(m.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
+          // VEREDITO CURTO por grupo, na MESMA regua de 3 faixas do selo do complexo (100% ± erro
+          // do backtest). O selo antigo dizia so "NO LIMITE DA META", falando do complexo e
+          // escondendo que os grupos estao em situacoes OPOSTAS: o PPA bate com folga e o ML nao
+          // bate de jeito nenhum. Tres chips resolvem — cada grupo com seu proprio veredito.
+          const pv = num(m.proj_pct_n);
+          const faixa = pv >= 100 + erroBT ? 'bate' : (pv >= 100 - erroBT ? 'limite' : 'nao');
+          C['ctr_' + k + '_rot'] = { bate: 'BATE', limite: 'NO LIMITE', nao: 'NÃO BATE' }[faixa];
+          C['ctr_' + k + '_cor'] = { bate: '#7FC49C', limite: '#F7D9A6', nao: '#E8A0A2' }[faixa];
+          C['ctr_' + k + '_fundo'] = { bate: '#1D2D29', limite: '#3C301C', nao: '#342327' }[faixa];
         });
         // o veredito em palavras: e o que a diretoria le primeiro
         C.ctr_texto = num(P.proj_pct_n) >= 100 ? 'contrato PPA seguro' : 'contrato PPA em risco';
+        // rotulo curto do complexo, sem o "DA META" que se repetiria nos tres chips
+        C.ctr_cpx_rot = String(C.proj_rotulo || '').replace(' DA META', '');
       });
     }
   }
