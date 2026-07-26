@@ -852,7 +852,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         { mes: mSel, ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
           // dias do ONS (`mes.dias_decorridos`), NAO do Way2 (`dCorr`): este valor vem do ONS, que
           // publica D+1/D+2. Usar dCorr faria o rotulo dizer "dia 25" com dado de 24 dias.
-          sub: compl ? 'só existe no complexo' : 'mês parcial · dia ' + mes.dias_decorridos + ' de ' + dTot,
+          sub: compl ? 'só existe no complexo' : 'ONS · dia ' + mes.dias_decorridos + ' de ' + dTot + ' (D+1)',
           var: compl ? '· complexo' : '', var_cor: '#8B93A1', cor: '#C08A45',
           spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
 
