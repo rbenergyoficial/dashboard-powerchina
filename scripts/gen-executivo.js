@@ -1000,6 +1000,29 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         m2.proj_faixa = (m2.fechado || pj2 == null || !erro) ? ''
           : fmt(r2(pj2 - erro)) + '–' + fmt(r2(pj2 + erro)) + '%';
       });
+
+      // ---- FAIXA DE CONTRATO (só na linha do Complexo) ----
+      // O card do Complexo esconde a informação que decide: ele e a MEDIA de duas situacoes
+      // opostas. Em jul/26 o PPA projeta 115,4% (+5,74 GWh acima do contratado) e o ML 55,5%
+      // (−5,96 GWh); a sobra de um quase anula o deficit do outro, e o Complexo aparece "quase
+      // batendo" por COMPENSACAO, nao por equilibrio. Quem le so o Complexo conclui "falta pouco";
+      // a leitura certa e "o contrato esta garantido e o ML nao tem como recuperar".
+      // Os dois grupos entram na linha do Complexo porque o painel filtra UMA entidade por vez.
+      const porMes = {};
+      out.manchete_ufv.forEach(m2 => { (porMes[m2.mes] = porMes[m2.mes] || {})[m2.ufv] = m2; });
+      out.manchete_ufv.filter(m2 => m2.ufv === 'Complexo').forEach(C => {
+        const P = (porMes[C.mes] || {}).PPA, L = (porMes[C.mes] || {}).ML;
+        if (!P || !L) { C.ctr = 0; return; }
+        const d = (m) => { const p = num(m.liq_proj) - num(m.meta_gwh);
+          return (p >= 0 ? '+' : '') + fmt(r2(p)); };
+        C.ctr = 1;
+        C.ctr_ppa_pct = P.proj_pct;  C.ctr_ppa_gwh = d(P);
+        C.ctr_ml_pct = L.proj_pct;   C.ctr_ml_gwh = d(L);
+        C.ctr_ppa_cor = num(P.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
+        C.ctr_ml_cor = num(L.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
+        // o veredito em palavras: e o que a diretoria le primeiro
+        C.ctr_texto = num(P.proj_pct_n) >= 100 ? 'contrato PPA seguro' : 'contrato PPA em risco';
+      });
     }
   }
 
