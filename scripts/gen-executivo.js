@@ -1016,10 +1016,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         const d = (m) => { const p = num(m.liq_proj) - num(m.meta_gwh);
           return (p >= 0 ? '+' : '') + fmt(r2(p)); };
         C.ctr = 1;
-        C.ctr_ppa_pct = P.proj_pct;  C.ctr_ppa_gwh = d(P);
-        C.ctr_ml_pct = L.proj_pct;   C.ctr_ml_gwh = d(L);
-        C.ctr_ppa_cor = num(P.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
-        C.ctr_ml_cor = num(L.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
+        // a linha do Complexo carrega a linha do PPA e a do ML nas MESMAS metricas, para o card
+        // virar uma matriz (grupo x metrica) em vez de comprimir tudo numa faixa de rodape.
+        [['ppa', P], ['ml', L]].forEach(([k, m]) => {
+          C['ctr_' + k + '_liq'] = m.liq_gwh;
+          C['ctr_' + k + '_proj'] = m.liq_proj;
+          C['ctr_' + k + '_meta'] = m.meta_gwh;
+          C['ctr_' + k + '_pct'] = m.proj_pct;
+          C['ctr_' + k + '_gwh'] = d(m);                       // sobra (+) ou deficit (-)
+          C['ctr_' + k + '_ritmo'] = m.ritmo_nec;
+          C['ctr_' + k + '_cor'] = num(m.proj_pct_n) >= 100 ? '#7FC49C' : '#E8A0A2';
+        });
         // o veredito em palavras: e o que a diretoria le primeiro
         C.ctr_texto = num(P.proj_pct_n) >= 100 ? 'contrato PPA seguro' : 'contrato PPA em risco';
       });
