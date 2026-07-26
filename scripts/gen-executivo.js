@@ -1220,6 +1220,67 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       console.log('  potencial reconstruido em ' + est + ' slots (k local +-2h) · piso acionado em ' + piso);
     }
 
+    // ---- OS DIAS QUE O ONS AINDA NÃO PUBLICOU, pelo Way2 ----
+    // O perfil vinha 100% do ONS, que publica D+1/D+2 — então o dia de hoje e o de ontem não
+    // existiam no seletor, e quem abria o painel via anteontem como "o mais recente". O Way2 é D+0
+    // (snapshot de 5 min) e cobre esse vão.
+    // O QUE VEM: a potência ENTREGUE, agregada em 30 min para casar com o passo do ONS.
+    // O QUE NÃO VEM: irradiância e potencial — os dois só existem no ONS. Ficam null, e o gráfico
+    // abre buraco em vez de fingir dado. Cada ponto leva `fonte`, para o painel poder rotular.
+    {
+      const ultOns = [...new Set(perfil.map(x => x.dia))].sort().pop() || '0000-00-00';
+      const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+      const faltam = [];
+      for (let d = new Date(ultOns + 'T12:00:00Z'); ; ) {
+        d = new Date(d.getTime() + 86400000);
+        const s = d.toISOString().slice(0, 10);
+        if (s > hoje) break; faltam.push(s);
+      }
+      let novos = 0;
+      for (const dia of faltam) {
+        try {
+          const snap = await getJSON(BASE + 'hist/way2_' + dia + '.json');
+          const arr = snap.dados || [];
+          const val = (pid) => { const s = arr.find(x => x.pontoId === pid && x.nomeGrandeza === 'Demat');
+            const m = {}; (s ? s.valores : []).forEach(v => { if (v.valor != null) m[String(v.data).slice(11, 16)] = v.valor; });
+            return m; };
+          const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205],
+            M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214],
+            M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };
+          const mapa = { 6233: val(6233) };   // 6233 = medidor do COMPLEXO
+          Object.values(CIRC).flat().forEach(p => { mapa[p] = val(p); });
+          // MÉDIA POR PONTO, e só depois a soma. Somar leituras e dividir pela contagem total
+          // erraria sempre que um circuito faltasse um slot: o divisor mudava e o resultado escorria.
+          // Cada ponto vira a sua própria média na janela; depois somam-se as médias.
+          const medias = {};   // '15:30' -> pontoId -> MW médios na meia hora
+          for (const pid in mapa) for (const hm in mapa[pid]) {
+            const [hh, mi] = hm.split(':').map(Number);
+            const ch = String(hh).padStart(2, '0') + ':' + (mi < 30 ? '00' : '30');
+            ((medias[ch] = medias[ch] || {})[pid] = medias[ch][pid] || []).push(mapa[pid][hm]);
+          }
+          const mediaDe = (o, pid) => { const a = o[pid];
+            return a && a.length ? a.reduce((x, y) => x + y, 0) / a.length / 1000 : null; };
+          Object.keys(medias).sort().forEach(chave => {
+            const [hh, mm] = chave.split(':').map(Number), o = medias[chave];
+            const põe = (ufv, mw) => { if (mw == null) return;
+              perfil.push({ dia, h: hh + mm / 60, ufv, irr: null,
+                pot_mw: null, pot_est_mw: null, ent_mw: r2(mw), fonte: 'way2' }); };
+            // o Complexo vem do PRÓPRIO medidor, não da soma dos 22 circuitos: uma medição só,
+            // sem acumular o erro de 22. (Conferido: as duas dão o mesmo, 0,00% de diferença.)
+            põe('Complexo', mediaDe(o, 6233));
+            Object.keys(CIRC).forEach(u => {
+              let s = 0, achou = false;
+              CIRC[u].forEach(p => { const v = mediaDe(o, p); if (v != null) { s += v; achou = true; } });
+              põe(u, achou ? s : null);
+            });
+          });
+          novos++;
+        } catch (e) { /* snapshot do dia nao existe: segue */ }
+      }
+      if (novos) console.log('  perfil estendido pelo Way2 em ' + novos + ' dia(s) apos o ONS ('
+        + faltam.join(', ') + ') — sem irradiancia/potencial, que so o ONS tem');
+    }
+
     const dias = [...new Set(perfil.map(x => x.dia))].sort();
     const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json');
     console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
@@ -1227,6 +1288,64 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // do Infinity le COLUNA de tabela. Mais novo primeiro -> o padrao do seletor e o dia recente.
     out.perfil_dias = dias.slice().reverse().map(d => ({ dia: d }));
   }
+
+  // ---------- irradiância estimada por satélite, SÓ onde o ONS ainda não publicou ----------
+  // O PROBLEMA: a irradiância do gráfico diário vem do ONS, que publica em D+1/D+2. Os dois últimos
+  // dias ficam sem a linha âmbar justamente quando alguém pergunta "a geração caiu por causa do
+  // sol ou por causa nossa?".
+  //
+  // O QUE FOI MEDIDO ANTES DE ESCREVER ISTO (61 dias de sobreposição, 25/05 a 24/07):
+  //   irr_ONS ~ 1,5154 x irr_OpenMeteo - 132,8   ->  R² 0,73 · erro médio 14% · pior dia 71%
+  //   pelo índice de claridade (Kt = recebida / topo da atmosfera)  ->  R² 0,75 · erro médio 14%
+  //   ORDENAÇÃO dos dias: Spearman 0,887 · mesma faixa sol/médio/nuvem em 82% dos dias
+  // CONCLUSÃO: o satélite acerta QUAL dia foi de sol, não QUANTO. O ONS mede o plano do módulo com
+  // piranômetro; a Open-Meteo modela o plano horizontal. Não são a mesma grandeza e nenhum fator
+  // fixo as reconcilia — a razão crua varia de 0,74 a 1,48 nos mesmos 61 dias.
+  //
+  // POR ISSO: campo SEPARADO (`irr_sat`), preenchido SÓ nos dias sem `irr` do ONS, e o painel o
+  // desenha como ESTIMATIVA (ponto vazado, sem linha). Quando o ONS publica, `irr` aparece e o
+  // `irr_sat` daquele dia deixa de ser emitido — a troca é automática, sem nada a mexer.
+  // O erro do ajuste vai junto (`irr_sat_erro_pct`), para o painel poder declará-lo.
+  // O ajuste é REFEITO a cada execução sobre os dias sobrepostos, então acompanha a estação.
+  try {
+    const OM = 'https://api.open-meteo.com/v1/forecast?latitude=-7.38&longitude=-38.77'
+      + '&hourly=shortwave_radiation,terrestrial_radiation&past_days=92&forecast_days=1'
+      + '&timezone=America/Fortaleza';
+    const om = await getJSON(OM);
+    const ts = om.hourly.time, sw = om.hourly.shortwave_radiation, tr = om.hourly.terrestrial_radiation;
+    const pd = {};                                   // dia -> soma de recebida e do topo, com sol
+    ts.forEach((t, i) => { if (sw[i] == null || sw[i] <= 5 || !tr[i]) return;
+      const d = t.slice(0, 10); (pd[d] = pd[d] || { sw: 0, tr: 0, n: 0 });
+      pd[d].sw += sw[i]; pd[d].tr += tr[i]; pd[d].n++; });
+
+    // calibra Kt do satélite -> irr/topo do ONS nos dias em que os dois existem
+    const cx = out.serie_dia_ufv.filter(x => x.ufv === 'Complexo');
+    const par = [];
+    cx.forEach(x => { const o = pd[x.dia];
+      if (o && x.irr != null && x.irr > 0) par.push({ kt: o.sw / o.tr, y: x.irr / (o.tr / o.n) }); });
+    if (par.length >= 20) {
+      const n = par.length;
+      const sx = par.reduce((a, p) => a + p.kt, 0), sy = par.reduce((a, p) => a + p.y, 0);
+      const sxy = par.reduce((a, p) => a + p.kt * p.y, 0), sxx = par.reduce((a, p) => a + p.kt * p.kt, 0);
+      const b = (n * sxy - sx * sy) / (n * sxx - sx * sx), a = (sy - b * sx) / n;
+      const err = par.reduce((s, p) => s + Math.abs((a + b * p.kt) / p.y - 1), 0) / n * 100;
+      const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+      let posto = 0;
+      cx.forEach(x => {
+        if (x.irr != null || x.dia > hoje) return;    // já tem o ONS, ou é dia futuro
+        const o = pd[x.dia]; if (!o) return;
+        const est = (a + b * (o.sw / o.tr)) * (o.tr / o.n);
+        if (!(est > 0)) return;
+        x.irr_sat = r2(est); posto++;
+      });
+      out.irr_sat_erro_pct = r2(err);
+      out.irr_sat_ajuste = { n_dias: n, a: r2(a), b: r2(b), dias_estimados: posto };
+      console.log('  irr_sat: ' + posto + ' dia(s) estimado(s) por satélite · ajuste sobre ' + n
+        + ' dias sobrepostos · erro médio ' + r2(err) + '%');
+    } else {
+      console.log('  irr_sat: só ' + par.length + ' dias sobrepostos (<20), estimativa NÃO publicada');
+    }
+  } catch (e) { console.log('  irr_sat: Open-Meteo indisponível (' + e.message + ') — segue sem estimativa'); }
 
   // limite direito do eixo do grafico diario, POR MES. A barra e centrada no dia: com o eixo
   // terminando no ultimo dia, metade dela fica de fora. Meia casa a mais resolve — mas tem que
