@@ -20,7 +20,7 @@ barchart com cor `X` e `fillOpacity: 50` renderiza o fill como a coluna "fill" a
 | **neutro** · medição, referência | `#48668E` | `#5C86BE` |
 | **atenção** · meta, marco, destaque, comissionamento | `#5C462C` | `#F5A623` |
 | **restrição** · curtailment, corte imposto pelo ONS | `#453C6E` | `#8B7FD4` |
-| **irradiância** (série própria) | — | `#E0B050` |
+| **irradiância** (série própria) | — | `#E0B050` medida · `#C79A4A` estimada |
 | **outras perdas** / cinza de dado | — | `#525C6B` |
 
 ### Paleta categórica — só para gráfico multi-série
@@ -48,6 +48,7 @@ Quando o gráfico compara **categorias** (não estados), cada série precisa de 
 | `#1E3A2D` | fill do trecho "projeção" (mais escuro que o realizado, na barra da manchete) |
 | `#FFD98A` | fim do gradiente do título ("Mauriti") |
 | `#8B6B6B` | série **reconstruída/estimada** (pontilhada) — nunca para dado medido |
+| `#C79A4A` | **irradiância estimada** por satélite — mesma família da medida `#E0B050`, dessaturada, e sempre tracejada. Justificativa em §11. |
 | `#7FC49C` | rótulo textual sobre fill verde |
 | `#9AA4B2` | linha de meta tracejada |
 
@@ -183,3 +184,35 @@ anel no mesmo card. Mande do backend a **string formatada** para o texto e o **n
 endpoint do ONS (`tr.ons.org.br`) a mesma sintaxe devolve `null` — ali é GJSON (caminho direto e
 multipath `{"k":path}`, sem aritmética). **Teste no `/api/ds/query` antes de gravar** — e valide a
 FAIXA do valor, não só se veio algo.
+
+## 11. Medição × estimativa — como distinguir sem mentir
+
+Regra que já existia (§4.8) mas que a irradiância por satélite obrigou a detalhar: **quando o painel
+mostra uma estimativa ao lado de uma medição da mesma grandeza, a diferença tem que ser óbvia sem
+ler a legenda.**
+
+Três níveis, do mais forte ao mais fraco. Use SEMPRE o primeiro; a cor é o último recurso.
+
+1. **Campo separado no dado.** Nunca escreva estimativa e medição no mesmo campo. Se o gerador
+   preenche `irr` (ONS) e `irr_sat` (satélite), o painel consegue estilizar cada um e a troca é
+   automática: quando a medição chega, a estimativa daquele dia deixa de ser emitida.
+2. **Traço tracejado + linha fina.** É o que o olho pega primeiro. `custom.lineStyle: {dash:[2,3]}`,
+   `lineWidth: 1`, `fillOpacity: 0`. A "Meta do dia" e o "Potencial (estimado)" já usam isso — o
+   tracejado no painel significa "não é dado medido".
+3. **Cor da mesma família, dessaturada.** Mesma grandeza pede mesma família (`#E0B050` medida →
+   `#C79A4A` estimada). Cor de família DIFERENTE seria pior: sugeriria grandeza diferente.
+
+**Declare o erro na `description`.** Estimativa sem erro declarado não é auditável. A da Open-Meteo
+diz o número medido: 14% de erro médio, pior dia 71%, e o que ela de fato acerta (a faixa
+sol/médio/nuvem em 82% dos dias). Ver a memória `project_irradiancia_satelite`.
+
+**Cuidado com `unit`:** o Grafana agrupa eixo por **string de unidade**. `'suffix: MW'` e
+`'suffix:  MW'` (dois espaços) são unidades diferentes e geram DOIS eixos — a série vai para uma
+escala própria e qualquer comparação visual morre. Ao criar série nova no mesmo eixo, **herde** a
+unidade do painel em vez de redeclarar.
+
+### Régua de escala
+Série constante vinda do dado (ex. `cap_mw` = capacidade instalada em cada ponto do perfil) faz duas
+coisas com um mecanismo só: desenha a linha de referência **e** força o eixo a chegar nela, igualando
+a escala entre todos os períodos. Preferir isso a `max`/threshold no `fieldConfig` quando o valor
+depende de variável — **campo numérico de `fieldConfig` não interpola `$var`**.

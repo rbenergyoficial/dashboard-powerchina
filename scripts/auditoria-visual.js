@@ -26,6 +26,10 @@ const SISTEMA = {
   '#9AA4B2': 'meta tracejada', '#7FC49C': 'verde claro (label projeção)',
   '#C08A45': 'âmbar escuro (categórica #3)', '#4E9A98': 'teal (categórica #5)',
   '#FFD98A': 'fim do gradiente do título', '#1E3A2D': 'fill projeção', '#8B6B6B': 'série estimada',
+  // par da irradiância: #E0B050 é a MEDIDA (piranômetro do ONS) e #C79A4A a ESTIMADA (satélite).
+  // Mesma família porque é a mesma grandeza; dessaturada porque tem 14% de erro médio contra a
+  // medição. A distinção que o olho pega primeiro é o traço tracejado, não a cor.
+  '#C79A4A': 'irradiância estimada (satélite)',
   '#F7D9A6': 'texto sobre fill âmbar', '#454A52': 'texto inativo (seletor idioma)',
 };
 const norm = h => String(h).toUpperCase().replace(/^#?/, '#');
