@@ -13,6 +13,14 @@ on:
         description: "Re-baixar dias já arquivados? '1' para sim."
         required: false
         default: 'false'
+      parar:
+        # O early-stop existe para não varrer o vazio além da retenção da Way2. Mas num BACKFILL longo
+        # ele TRUNCA em silêncio: há um vão real de 10 dias sem snapshot (27–31/05 e 01–05/06/2026),
+        # e com o default 7 o loop pararia ali, deixando tudo antes de 27/05/2026 sem reprocessar —
+        # com uma linha de log e exit 0. Descoberto em 27/07/2026 ao planejar o backfill.
+        description: 'Parar após N dias vazios seguidos (default 7; use 400 em backfill longo).'
+        required: false
+        default: '7'
 
 concurrency:
   group: way2-hist
@@ -28,10 +36,19 @@ jobs:
         with:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
+      # O rollup e reescrito INTEIRO pelo passo seguinte, e o container nao tem versionamento nem
+      # soft-delete confirmado. O backup roda na MESMA execucao, imediatamente antes — backup de
+      # ontem nao protege a reescrita de hoje. Se ele falhar, o job para e o rollup nao e tocado.
+      - name: Backup do rollup antes de reescrever
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          BLOBS: way2_daily.json
+        run: node scripts/backup-blob.js
       - name: Arquivar histórico Way2 + rollup diário
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           DIAS: ${{ github.event.inputs.dias || '1' }}
           FORCAR: ${{ github.event.inputs.forcar || 'false' }}
+          PARAR_APOS_VAZIOS: ${{ github.event.inputs.parar || '7' }}
         run: node scripts/gen-way2-hist.js
