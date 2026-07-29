@@ -997,6 +997,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         const pj2 = m2.proj_pct_n, erro = cf ? num(cf.erro_pp) : 0;
         if (m2.fechado || pj2 == null) {
           m2.proj_fundo = '#1F2228'; m2.proj_texto_cor = '#8B93A1'; m2.proj_rotulo = 'REALIZADO';
+        } else if (m2.atingido_n != null && num(m2.atingido_n) >= 100) {
+          // mes ABERTO com a meta ja entregue: nao e projecao, e fato. Mesma regra dos chips de
+          // grupo, para os tres nao usarem criterios diferentes. Chip PREENCHIDO.
+          m2.proj_fundo = '#43966B'; m2.proj_texto_cor = '#0F1113'; m2.proj_rotulo = 'META BATIDA';
         } else if (pj2 >= 100 + erro) {
           m2.proj_fundo = '#1D2D29'; m2.proj_texto_cor = '#7FC49C'; m2.proj_rotulo = 'ACIMA DA META';
         } else if (pj2 >= 100 - erro) {
@@ -1041,10 +1045,21 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           // escondendo que os grupos estao em situacoes OPOSTAS: o PPA bate com folga e o ML nao
           // bate de jeito nenhum. Tres chips resolvem — cada grupo com seu proprio veredito.
           const pv = num(m.proj_pct_n);
-          const faixa = pv >= 100 + erroBT ? 'bate' : (pv >= 100 - erroBT ? 'limite' : 'nao');
-          C['ctr_' + k + '_rot'] = { bate: 'BATE', limite: 'NO LIMITE', nao: 'NÃO BATE' }[faixa];
-          C['ctr_' + k + '_cor'] = { bate: '#7FC49C', limite: '#F7D9A6', nao: '#E8A0A2' }[faixa];
-          C['ctr_' + k + '_fundo'] = { bate: '#1D2D29', limite: '#3C301C', nao: '#342327' }[faixa];
+          // META BATIDA vem ANTES da regua de projecao, e nao e um quarto tom dela: quando o
+          // ENTREGUE ja passou a meta, nao ha o que projetar — o mes esta ganho, faltando dias ou
+          // nao. Dizer "BATE" nesse caso subnotifica o proprio resultado (o PPA em jul/26 estava em
+          // 109% da meta e a tarja falava no futuro do indicativo).
+          // O chip fica PREENCHIDO — contorno = projetado, preenchido = realizado.
+          const at = num(m.atingido_n);
+          const batida = m.atingido_n != null && at >= 100;
+          const faixa = batida ? 'batida'
+            : (pv >= 100 + erroBT ? 'bate' : (pv >= 100 - erroBT ? 'limite' : 'nao'));
+          C['ctr_' + k + '_rot'] = { batida: 'META BATIDA', bate: 'BATE', limite: 'NO LIMITE', nao: 'NÃO BATE' }[faixa];
+          C['ctr_' + k + '_cor'] = { batida: '#0F1113', bate: '#7FC49C', limite: '#F7D9A6', nao: '#E8A0A2' }[faixa];
+          C['ctr_' + k + '_fundo'] = { batida: '#43966B', bate: '#1D2D29', limite: '#3C301C', nao: '#342327' }[faixa];
+          C['ctr_' + k + '_batida'] = batida ? 1 : 0;
+          // sobra JA REALIZADA (entregue - meta). Nao confundir com `_gwh`, que e projecao - meta.
+          C['ctr_' + k + '_sobra'] = fmt(r2(num(m.liq_gwh) - num(m.meta_gwh)));
         });
         // o veredito em palavras: e o que a diretoria le primeiro
         C.ctr_texto = num(P.proj_pct_n) >= 100 ? 'contrato PPA seguro' : 'contrato PPA em risco';
