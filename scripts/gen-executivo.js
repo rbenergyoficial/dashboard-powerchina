@@ -866,6 +866,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
       out.manchete_ufv.push({ mes: mSel, fechado, ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
         dias_restantes: Math.max(0, dTot - dCorr),
+        // DIA DO CALENDARIO do dia em curso. `dias_decorridos` conta dias FECHADOS e por isso fica
+        // um atras da data — 28 fechados quando o calendario ja marca 29. O numero esta certo para
+        // o que mede (e o divisor da projecao), mas o card rotulava "DIA 28 DE 31", que se le como
+        // "hoje e dia 28" e parece defeito de dado. Com os dois campos o texto pode dizer a data E
+        // quantos dias entram na projecao, sem escolher entre estar correto e ser compreensivel.
+        // Nulo quando nao ha dia em curso (mes fechado) — o template testa com {{#if}}.
+        dia_hoje: parc.length ? parc[parc.length - 1].dia_num : null,
         ao_vivo: hojeAte ? 1 : 0, ao_vivo_ate: hojeAte, hoje_gwh: fmt(hojeGwh),
         liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
         atingido: fmt(at), proj_pct: fmt(pj),
