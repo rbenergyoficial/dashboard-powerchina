@@ -930,6 +930,27 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
           cortado_gwh: comCorte.length ? r2(comCorte.reduce((a, x) => a + x.cortado_gwh, 0)) : null,
           meses_com_corte: comCorte.length,
+          // ---- ATINGIMENTO SOBRE META INDEPENDENTE ----
+          // Em fev, mar e abr/2026 a meta gravada e EXATAMENTE a energia realizada (diferenca
+          // 0,000 GWh nos tres). Nesses meses bater a meta e aritmetico, nao desempenho, e o 100,00%
+          // que aparece nao mede nada. Num documento que vai a investidor isso e pior do que um
+          // numero ruim: tres 100,00% seguidos derrubam a credibilidade da peca inteira quando
+          // alguem repara.
+          // Entao publica-se TAMBEM o atingimento calculado so onde a meta e independente do
+          // realizado. No Complexo da 105,63% contra os 102,57% do total — o numero honesto e o
+          // MAIOR, o que torna a escolha facil. O total continua publicado ao lado, identificado.
+          ...(() => {
+            const F = temMeta.filter(x => x.liquida_gwh != null
+              && Math.abs(x.liquida_gwh - x.meta_gwh) > 0.005);
+            const mF = F.reduce((a, x) => a + x.meta_gwh, 0);
+            const lF = F.reduce((a, x) => a + x.liquida_gwh, 0);
+            return { meses_meta_firme: F.length,
+              meses_meta_igual: temMeta.length - F.length,
+              lbl_meta_firme: F.map(x => x.lbl).join(', ') || null,
+              liquida_firme_gwh: F.length ? r2(lF) : null,
+              meta_firme_gwh: F.length ? r2(mF) : null,
+              atingido_firme_pct: mF > 0 ? r2(100 * lF / mF) : null };
+          })(),
           nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }
 
       // ---- cascata ----
@@ -1150,6 +1171,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     });
 
     out.totais_vida = {
+      // outorga repetida aqui de proposito: o Sumario Executivo monta o cabecalho a partir DESTE
+      // bloco, e buscar `cap_mw` na raiz exigiria uma segunda query — que no dynamictext faz
+      // aparecer o seletor de frame no rodape do painel (§4 da nota do plugin). Um campo duplicado
+      // custa menos que um dropdown numa peca de apresentacao.
+      cap_mw: out.cap_mw,
       pre_cod_gwh: r2(tot.pre / 1000), pos_cod_gwh: r2(tot.pos / 1000),
       total_gwh: r2((tot.pre + tot.pos) / 1000),
       pre_pct: (tot.pre + tot.pos) > 0 ? r2(100 * tot.pre / (tot.pre + tot.pos)) : null,
