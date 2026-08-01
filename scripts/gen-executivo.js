@@ -317,6 +317,16 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       mes_ts: mes + '-01T00:00:00Z',
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
       frustrada_pct: (m.ger + m.fru) > 0 ? r2(100 * m.fru / (m.ger + m.fru)) : 0,
+      // BENCHMARK REGIONAL, mes a mes: o corte do subsistema Nordeste INTEIRO na mesma janela e pelo
+      // mesmo criterio (campo de limitacao preenchido, inclusive zero). Vem junto na linha do mes
+      // para o grafico sair de UMA query — duas series em frames separados exigiriam um join, e o
+      // painel de serie temporal do Grafana nao junta bem frames de origens diferentes.
+      // APURADO POR NOS em 28/07/2026 (scratchpad/regiao_ne.js) sobre o mesmo arquivo do ONS, os 54
+      // conjuntos fotovoltaicos do subsistema. E constante porque a janela e fechada: mar-jul/2026.
+      // Estender exigiria baixar ~9 MB por mes do S3 do ONS a cada rodada — caro para um cron de
+      // hora em hora, e o valor de meses passados nao muda.
+      ne_curtail_pct: ({ '2026-03': 22.07, '2026-04': 26.34, '2026-05': 31.71,
+        '2026-06': 24.39, '2026-07': 29.17 })[mes] ?? null,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.geP > 0 ? r2(100 * i.gvP / i.geP) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
