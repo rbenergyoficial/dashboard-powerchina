@@ -1002,12 +1002,21 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         // Fundos em HEX SÓLIDO, não rgba: rgba compõe com o fundo do card e o mesmo selo sai
         // diferente em painel de fundo diferente (§1 do design system).
         const pj2 = m2.proj_pct_n, erro = cf ? num(cf.erro_pp) : 0;
-        if (m2.fechado || pj2 == null) {
-          m2.proj_fundo = '#1F2228'; m2.proj_texto_cor = '#8B93A1'; m2.proj_rotulo = 'REALIZADO';
-        } else if (m2.atingido_n != null && num(m2.atingido_n) >= 100) {
-          // mes ABERTO com a meta ja entregue: nao e projecao, e fato. Mesma regra dos chips de
-          // grupo, para os tres nao usarem criterios diferentes. Chip PREENCHIDO.
+        const at2 = m2.atingido_n == null ? null : num(m2.atingido_n);
+        // A ORDEM IMPORTA, e estava errada: `fechado` vinha primeiro e engolia o veredito. Julho
+        // fechou com 107,21% da meta e o selo dizia só "REALIZADO" — a palavra some com a boa
+        // notícia justamente quando ela virou definitiva. Atingimento decide ANTES: bater a meta é
+        // fato, e num mês fechado é fato encerrado.
+        // PREENCHIDO = META ATINGIDA (não é "mês fechado"): é o único estado que merece destaque
+        // sólido. Todo o resto fica em contorno.
+        if (at2 != null && at2 >= 100) {
           m2.proj_fundo = '#43966B'; m2.proj_texto_cor = '#0F1113'; m2.proj_rotulo = 'META BATIDA';
+        } else if (m2.fechado) {
+          // fechado e não bateu: também é fato, não previsão. "NÃO BATE" falaria no futuro de um
+          // mês que já acabou.
+          m2.proj_fundo = '#342327'; m2.proj_texto_cor = '#E8A0A2'; m2.proj_rotulo = 'META NÃO BATIDA';
+        } else if (pj2 == null) {
+          m2.proj_fundo = '#1F2228'; m2.proj_texto_cor = '#8B93A1'; m2.proj_rotulo = 'REALIZADO';
         } else if (pj2 >= 100 + erro) {
           m2.proj_fundo = '#1D2D29'; m2.proj_texto_cor = '#7FC49C'; m2.proj_rotulo = 'ACIMA DA META';
         } else if (pj2 >= 100 - erro) {
@@ -1059,11 +1068,18 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           // O chip fica PREENCHIDO — contorno = projetado, preenchido = realizado.
           const at = num(m.atingido_n);
           const batida = m.atingido_n != null && at >= 100;
-          const faixa = batida ? 'batida'
-            : (pv >= 100 + erroBT ? 'bate' : (pv >= 100 - erroBT ? 'limite' : 'nao'));
-          C['ctr_' + k + '_rot'] = { batida: 'META BATIDA', bate: 'BATE', limite: 'NO LIMITE', nao: 'NÃO BATE' }[faixa];
-          C['ctr_' + k + '_cor'] = { batida: '#0F1113', bate: '#7FC49C', limite: '#F7D9A6', nao: '#E8A0A2' }[faixa];
-          C['ctr_' + k + '_fundo'] = { batida: '#43966B', bate: '#1D2D29', limite: '#3C301C', nao: '#342327' }[faixa];
+          // MES FECHADO nao admite linguagem de projecao: "NAO BATE" fala no futuro de um mes que
+          // ja acabou. Fechado sem bater vira META NAO BATIDA, que e o fato.
+          const faixa = batida ? 'batida' : (m.fechado ? 'nao_fech'
+            : (pv >= 100 + erroBT ? 'bate' : (pv >= 100 - erroBT ? 'limite' : 'nao')));
+          C['ctr_' + k + '_rot'] = { batida: 'META BATIDA', nao_fech: 'META NÃO BATIDA',
+            bate: 'BATE', limite: 'NO LIMITE', nao: 'NÃO BATE' }[faixa];
+          C['ctr_' + k + '_cor'] = { batida: '#0F1113', nao_fech: '#E8A0A2',
+            bate: '#7FC49C', limite: '#F7D9A6', nao: '#E8A0A2' }[faixa];
+          C['ctr_' + k + '_fundo'] = { batida: '#43966B', nao_fech: '#342327',
+            bate: '#1D2D29', limite: '#3C301C', nao: '#342327' }[faixa];
+          // sem `ctr_<g>_fechado`: os tres grupos sao do MESMO mes, entao o `fechado` da linha ja
+          // responde por todos. Campo duplicado e mais uma coisa para sair de sincronia.
           C['ctr_' + k + '_batida'] = batida ? 1 : 0;
           // sobra JA REALIZADA (entregue - meta). Nao confundir com `_gwh`, que e projecao - meta.
           C['ctr_' + k + '_sobra'] = fmt(r2(num(m.liq_gwh) - num(m.meta_gwh)));

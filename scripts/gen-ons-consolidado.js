@@ -165,9 +165,20 @@ async function gerarKpis(rows) {
     // ENE/CNF/REL são os códigos do ONS, e sozinhos não dizem nada a quem lê o painel — a
     // explicação estava só no tooltip, e executivo não passa o mouse. O rótulo passa a trazer o
     // significado; a sigla fica entre parênteses para quem cruza com o relatório do ONS.
-    { l: 'Energia (ENE)', v: fmtDot(rz('ENE').pct, 2), u: '%', g: 'r', sep: 1, t: fmtDot(rz('ENE').gwh, 2) + ' GWh — restrição por ENERGIA: sobra de geração no sistema, o ONS corta para equilibrar carga' },
-    { l: 'Confiabilidade (CNF)', v: fmtDot(rz('CNF').pct, 2), u: '%', g: 'r', t: fmtDot(rz('CNF').gwh, 2) + ' GWh — restrição por CONFIABILIDADE: limite de transmissão ou segurança da rede' },
-    { l: 'Religamento (REL)', v: fmtDot(rz('REL').pct, 2), u: '%', g: 'r', t: fmtDot(rz('REL').gwh, 2) + ' GWh — restrição por RELIGAMENTO e outras causas' },
+    // ROTULOS CONFERIDOS no campo `dsc_restricao` do proprio arquivo do ONS (28/07/2026). O arquivo
+    // NAO publica o que as siglas abreviam — so a descricao de cada evento. Entao o rotulo diz o que
+    // o ONS escreve, e nao o que a sigla parece abreviar. Os anteriores eram adivinhacao e dois
+    // estavam errados: REL nao e "religamento" e CNF nao e "confiabilidade".
+    //   ENE -> UM unico texto, sem variacao: "Controle de frequencia do SIN."
+    //   CNF -> carregamento de linha, carregamento de transformador, controle de fluxo entre
+    //          subsistemas (ex.: LT 230 kV Bom Nome/Milagres, FNS_FNESE)
+    //   REL -> os MESMOS tipos de texto (TR 345/138 kV SE Campos 2, FNESE, LT Itabaiana/Itabaianinha)
+    // Ou seja: CNF e REL NAO se distinguem pela descricao — as duas sao restricao de TRANSMISSAO e
+    // devem ser lidas somadas. O que separa sistemico de local e a coluna de ORIGEM (SIS x LOC), e
+    // nao o codigo de razao: os dois codigos aparecem nas duas origens.
+    { l: 'Frequência do SIN (ENE)', v: fmtDot(rz('ENE').pct, 2), u: '%', g: 'r', sep: 1, t: fmtDot(rz('ENE').gwh, 2) + ' GWh — o ONS registra invariavelmente "Controle de frequência do SIN": há geração demais no sistema e a frequência sobe, então o corte é para equilibrar carga' },
+    { l: 'Transmissão (CNF)', v: fmtDot(rz('CNF').pct, 2), u: '%', g: 'r', t: fmtDot(rz('CNF').gwh, 2) + ' GWh — restrição de TRANSMISSÃO: carregamento de linha ou transformador, ou limite de fluxo entre subsistemas. Mesma natureza do REL — leia os dois somados' },
+    { l: 'Transmissão (REL)', v: fmtDot(rz('REL').pct, 2), u: '%', g: 'r', t: fmtDot(rz('REL').gwh, 2) + ' GWh — restrição de TRANSMISSÃO, indistinguível do CNF pela descrição do ONS: os dois códigos trazem carregamento de elemento e controle de fluxo entre subsistemas' },
   ];
   const json = JSON.stringify(kpis, null, 1);
   await upload('ons_kpis.json', json);
