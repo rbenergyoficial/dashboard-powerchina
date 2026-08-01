@@ -913,9 +913,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // comissionamento e de dado quebrado, misturar os dois períodos num acumulado seria enganoso.
       // O mês corrente entra PARCIAL (o ano não acabou) — dito no rótulo.
       { const ano = mesAtual.slice(0, 4);
-        // SO MESES FECHADOS: incluir o mes corrente compara realizado parcial (dia 17) contra meta
-        // do mes inteiro e derruba o acumulado artificialmente (dava 97% quando o real e 111%).
-        const A = S.filter(x => x.mes.slice(0, 4) === ano && x.mes !== mesAtual);
+        // SO MESES FECHADOS: incluir um mes pela metade compara realizado parcial (dia 17) contra
+        // meta do mes inteiro e derruba o acumulado artificialmente (dava 97% quando o real e 111%).
+        //
+        // O TESTE E `fechado`, NAO "e o mes corrente". Usar o mes corrente como atalho funciona 30
+        // dias e quebra no 31o: em 01/08, `mesAtual` ainda era 2026-07 (nao havia dado de agosto) e
+        // julho — que ja tinha fechado com 31 de 31 dias — ficava de fora do acumulado. O ano
+        // "perdia" um mes inteiro justamente no dia em que ele deveria entrar.
+        const A = S.filter(x => x.mes.slice(0, 4) === ano && (x.mes !== mesAtual || fechado));
         const somaN = (k) => A.reduce((a, x) => a + (x[k] == null ? 0 : x[k]), 0);
         const temMeta = A.filter(x => x.meta_gwh != null);
         const metaAcum = temMeta.reduce((a, x) => a + x.meta_gwh, 0);
