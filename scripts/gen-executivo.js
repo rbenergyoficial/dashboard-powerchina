@@ -1025,6 +1025,34 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     }); });
 
     // lista de meses p/ o seletor do painel (mais novo primeiro)
+    // ---------- CAMPOS DE GRAFICO DO SUMARIO EXECUTIVO ----------
+    // Tres series que o gestor pediu e que so existiam espalhadas. Vao para dentro de `serie`, na
+    // linha do mes, e nao em arrays proprios: cada grafico sai de UMA query. Duas series em frames
+    // separados exigiriam join, e o painel de tempo do Grafana nao junta bem frames de origens
+    // diferentes — foi o que me custou uma rodada inteira no benchmark do Nordeste.
+    {
+      const porUfvMes = {};
+      (out.serie_ufv || []).forEach(x => { (porUfvMes[x.ufv] = porUfvMes[x.ufv] || {})[x.mes] = x; });
+      let accL = 0, accM = 0;
+      const anoAtual = mesAtual.slice(0, 4);
+      out.serie.forEach(s => {
+        const P = (porUfvMes.PPA || {})[s.mes], L = (porUfvMes.ML || {})[s.mes];
+        // 2) PPA x ML: a compensacao entre contratos e a leitura mais delicada do ano — o conjunto
+        //    so fecha acima da meta porque o excedente do PPA cobre o deficit do mercado livre.
+        s.ppa_ating_pct = P ? P.atingido_pct : null;
+        s.ml_ating_pct = L ? L.atingido_pct : null;
+        s.ppa_liq_gwh = P ? P.liquida_gwh : null;
+        s.ml_liq_gwh = L ? L.liquida_gwh : null;
+        // 3) ACUMULADO correndo contra a meta: percentual mensal nao mostra se o ANO esta ganho.
+        //    Reinicia a cada ano — somar 2025 com 2026 misturaria comissionamento com operacao.
+        if (s.mes.slice(0, 4) === anoAtual && s.meta_gwh != null && s.way2_liq_gwh != null) {
+          accL += s.way2_liq_gwh; accM += s.meta_gwh;
+          s.acum_liq_gwh = r2(accL); s.acum_meta_gwh = r2(accM);
+          s.acum_ating_pct = accM > 0 ? r2(100 * accL / accM) : null;
+        } else { s.acum_liq_gwh = null; s.acum_meta_gwh = null; s.acum_ating_pct = null; }
+      });
+    }
+
     out.meses_opcoes = meses.slice().reverse().map(m => ({ mes: m, lbl: lbl(m), atual: m === mesAtual ? 1 : 0 }));
 
     // ---------- CONFIANÇA DA PROJEÇÃO ----------
