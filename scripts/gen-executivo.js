@@ -785,6 +785,37 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         : '<div style="flex:1;background:' + cor + ';opacity:' + (i === ult ? 1 : 0.42) + ';height:'
           + (12 + (y - mn) / amp * 88).toFixed(0) + '%;border-radius:1px"></div>').join(''); };
 
+    // SPARKLINE EM LINHA, para o sumario executivo. Diferente do `barras()` acima, que e HTML e
+    // serve ao card operacional: aqui vai SVG com a REFERENCIA DE 100% desenhada, porque a pergunta
+    // do investidor nao e "quanto" e sim "esteve acima da meta o tempo todo?". A linha cruzando (ou
+    // nao) o tracejado responde isso antes de qualquer numero ser lido.
+    // O ultimo ponto ganha marcador cheio — e o periodo corrente, na cor de acento; o resto da
+    // linha fica na cor de apoio, conforme a especificacao de stat tile.
+    const sparkLinha = (vals, cor, corApoio) => {
+      const v = vals.map(x => (x == null ? null : Number(x)));
+      const ok = v.filter(x => x != null);
+      if (ok.length < 2) return '';
+      const W = 132, H = 34, P = 3;
+      // escala inclui SEMPRE o 100, senao a linha de meta sai do quadro quando todos os meses batem
+      const mn = Math.min(...ok, 100), mx = Math.max(...ok, 100);
+      const amp = (mx - mn) || 1;
+      const X = i => P + i * (W - 2 * P) / Math.max(1, v.length - 1);
+      const Y = y => P + (1 - (y - mn) / amp) * (H - 2 * P);
+      const pts = v.map((y, i) => (y == null ? null : X(i).toFixed(1) + ',' + Y(y).toFixed(1)))
+        .filter(Boolean).join(' ');
+      const y100 = Y(100).toFixed(1);
+      const ultI = v.length - 1, ultV = v[ultI];
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="34" preserveAspectRatio="none"'
+        + ' xmlns="http://www.w3.org/2000/svg">'
+        + '<line x1="0" y1="' + y100 + '" x2="' + W + '" y2="' + y100 + '" stroke="#3A4049"'
+        + ' stroke-width="1" stroke-dasharray="3 3"/>'
+        + '<polyline points="' + pts + '" fill="none" stroke="' + corApoio + '" stroke-width="1.6"'
+        + ' stroke-linejoin="round" stroke-linecap="round"/>'
+        + (ultV == null ? '' : '<circle cx="' + X(ultI).toFixed(1) + '" cy="' + Y(ultV).toFixed(1)
+          + '" r="2.6" fill="' + cor + '"/>')
+        + '</svg>';
+    };
+
     out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = []; out.ytd_ufv = [];
 
     // MÊS × USINA. Antes só o mês corrente era montado, então escolher "mês anterior" no painel
@@ -944,6 +975,21 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           // Entao publica-se TAMBEM o atingimento calculado so onde a meta e independente do
           // realizado. No Complexo da 105,63% contra os 102,57% do total — o numero honesto e o
           // MAIOR, o que torna a escolha facil. O total continua publicado ao lado, identificado.
+          // ---- TREND + DELTA: o contrato de stat tile pede label, valor, DELTA e TENDENCIA ----
+          // So valor e rotulo deixa o card parecendo um numero solto. A trajetoria contra a linha
+          // de 100% responde "esteve sempre acima?" antes de qualquer leitura, e o delta diz para
+          // onde vai. Ambos derivados do que ja existe — nenhuma fonte nova.
+          ...(() => {
+            const cor = { Complexo: '#E0B84A', PPA: '#7FA8E8', ML: '#5FBF8E' }[u] || '#98A2B3';
+            const serie = temMeta.map(x => x.atingido_pct);
+            const n = serie.length;
+            const d = (n >= 2 && serie[n - 1] != null && serie[n - 2] != null)
+              ? r2(serie[n - 1] - serie[n - 2]) : null;
+            return { spark_ating: sparkLinha(serie, cor, '#6B7482'),
+              delta_pp: d, delta_txt: d == null ? null : (d >= 0 ? '+' : '') + fmt(d) + ' pp',
+              ult_pct: n ? serie[n - 1] : null,
+              ult_lbl: temMeta.length ? temMeta[temMeta.length - 1].lbl : null };
+          })(),
           ...(() => {
             const F = temMeta.filter(x => x.liquida_gwh != null
               && Math.abs(x.liquida_gwh - x.meta_gwh) > 0.005);
