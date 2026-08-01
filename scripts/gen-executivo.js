@@ -801,29 +801,31 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // nao) o tracejado responde isso antes de qualquer numero ser lido.
     // O ultimo ponto ganha marcador cheio — e o periodo corrente, na cor de acento; o resto da
     // linha fica na cor de apoio, conforme a especificacao de stat tile.
+    // SPARKLINE do sumario executivo, em HTML — NAO em SVG.
+    // Aprendido na marra: o sanitizador do dynamictext REMOVE <svg>. O unico sparkline que funciona
+    // no projeto (painel [956]) sempre foi HTML de divs; eu escrevi SVG por parecer mais fino e o
+    // card saiu com um vao no lugar do grafico. Barra fina em div passa, e faz o mesmo trabalho.
+    // A LINHA DE 100% e um div posicionado: e ela que da sentido ao desenho, porque a pergunta nao
+    // e "quanto" e sim "esteve acima da meta o tempo todo?". A ultima barra vai na cor de acento.
     const sparkLinha = (vals, cor, corApoio) => {
       const v = vals.map(x => (x == null ? null : Number(x)));
       const ok = v.filter(x => x != null);
       if (ok.length < 2) return '';
-      const W = 132, H = 34, P = 3;
-      // escala inclui SEMPRE o 100, senao a linha de meta sai do quadro quando todos os meses batem
-      const mn = Math.min(...ok, 100), mx = Math.max(...ok, 100);
-      const amp = (mx - mn) || 1;
-      const X = i => P + i * (W - 2 * P) / Math.max(1, v.length - 1);
-      const Y = y => P + (1 - (y - mn) / amp) * (H - 2 * P);
-      const pts = v.map((y, i) => (y == null ? null : X(i).toFixed(1) + ',' + Y(y).toFixed(1)))
-        .filter(Boolean).join(' ');
-      const y100 = Y(100).toFixed(1);
-      const ultI = v.length - 1, ultV = v[ultI];
-      return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="34" preserveAspectRatio="none"'
-        + ' xmlns="http://www.w3.org/2000/svg">'
-        + '<line x1="0" y1="' + y100 + '" x2="' + W + '" y2="' + y100 + '" stroke="#3A4049"'
-        + ' stroke-width="1" stroke-dasharray="3 3"/>'
-        + '<polyline points="' + pts + '" fill="none" stroke="' + corApoio + '" stroke-width="1.6"'
-        + ' stroke-linejoin="round" stroke-linecap="round"/>'
-        + (ultV == null ? '' : '<circle cx="' + X(ultI).toFixed(1) + '" cy="' + Y(ultV).toFixed(1)
-          + '" r="2.6" fill="' + cor + '"/>')
-        + '</svg>';
+      // a escala inclui SEMPRE o 100, senao a referencia sai do quadro quando todos os meses batem
+      const mn = Math.min(...ok, 100), mx = Math.max(...ok, 100), amp = (mx - mn) || 1;
+      const alt = y => (8 + (y - mn) / amp * 84).toFixed(1);      // 8%..92% da caixa
+      const y100 = (100 - Number(alt(100))).toFixed(1);           // topo, em % (CSS cresce p/ baixo)
+      const ult = v.length - 1;
+      const barras = v.map((y, i) => y == null
+        ? '<div style="flex:1;min-width:2px"></div>'
+        : '<div style="flex:1;min-width:2px;display:flex;align-items:flex-end">'
+          + '<div style="width:100%;height:' + alt(y) + '%;border-radius:2px 2px 0 0;background:'
+          + (i === ult ? cor : corApoio) + '"></div></div>').join('');
+      return '<div style="position:relative;height:38px;display:flex;align-items:flex-end;gap:3px">'
+        + barras
+        + '<div style="position:absolute;left:0;right:0;top:' + y100 + '%;height:1px;'
+        + 'background:#4A5261"></div>'
+        + '</div>';
     };
 
     out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = []; out.ytd_ufv = [];
