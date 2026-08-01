@@ -327,6 +327,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // hora em hora, e o valor de meses passados nao muda.
       ne_curtail_pct: ({ '2026-03': 22.07, '2026-04': 26.34, '2026-05': 31.71,
         '2026-06': 24.39, '2026-07': 29.17 })[mes] ?? null,
+      // BENCHMARK DE PAR DIRETO: o Conj. Abaiara 230 kV (Milagres I a V) esta na MESMA malha, e por
+      // isso e a comparacao que o investidor pede depois da regional — "e o vizinho, sofreu igual?".
+      // Apurado do mesmo arquivo do ONS e pela MESMA formula usada aqui para o Mauriti,
+      // frustrada/(gerada+frustrada); com formulas diferentes a comparacao nao valeria nada.
+      // Fonte: relatorio comparativo de 28/07/2026, scratchpad/analise.js.
+      // ATENCAO jan e fev: a serie de REFERENCIA do ONS para o Mauriti so fica sadia a partir de
+      // marco (razao referencia/gerado abaixo de 1,00 antes disso), entao o corte do Mauriti nesses
+      // dois meses sai SUBESTIMADO — 5,01% e 5,36% contra 17,64% e 8,62% de Abaiara. Nao e vantagem
+      // nossa, e defeito de dado. O painel comeca a comparacao em marco.
+      abaiara_curtail_pct: ({ '2026-01': 17.64, '2026-02': 8.62, '2026-03': 24.25, '2026-04': 24.21,
+        '2026-05': 22.99, '2026-06': 17.89, '2026-07': 19.90 })[mes] ?? null,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.geP > 0 ? r2(100 * i.gvP / i.geP) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
