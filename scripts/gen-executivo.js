@@ -56,12 +56,30 @@ const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49
 // os cards POR USINA mudam.
 // O ramo de rateio fica para meses gravados antes da correção — sem ele, um mês sem `ml_por_ufv`
 // sairia com meta ZERO no ML e o painel mostraria atingimento infinito sem avisar.
+// M7 E M9 NA MESMA TAXA — decisão do usuário em 02/08/2026, depois de ver o efeito.
+// A planilha põe M1 na taxa do PPA e joga TODO o resto em M7 e M9. Como a meta global é menos
+// conservadora que a do PPA, isso dá aos dois menores parques 269,97 MWh/MW contra 137,72 de todos os
+// outros — quase o dobro. O atingimento deles caía para 40% e 44% não por desempenho, mas por régua.
+// Agora os três do ML usam a MESMA taxa por MW do PPA (garantido_ppa ÷ capacidade_ppa do mês, que já
+// varia com os dias). A diferença que sobra vira `nao_alocado`, EXPOSTA — é pergunta para quem emite
+// a meta, não número para enterrar nos dois parques menores.
+// `ml_por_ufv` continua no metas.json como REGISTRO DA FONTE (o que a planilha diz); a política de
+// alocação mora aqui, no gerador. Por isso M1 sai de lá e M7/M9 saem da taxa.
 function metasPorUfv(mtm) {
   if (!mtm) return null;
   const n = v => Number(v) || 0;
   const out = {};
   PPA.forEach(u => { out[u] = (mtm.ppa_por_ufv || {})[u] != null ? Number(mtm.ppa_por_ufv[u]) : 0; });
-  if (mtm.ml_por_ufv) { ML.forEach(u => { out[u] = n(mtm.ml_por_ufv[u]); }); return out; }
+  if (mtm.ml_por_ufv) {
+    const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);      // 270,105 MW
+    const taxa = n(mtm.garantido_ppa) / capPpa;                   // MWh/MW naquele mês
+    out.M1 = n(mtm.ml_por_ufv.M1);                                // da planilha
+    out.M7 = taxa * CAP_UFV.M7;
+    out.M9 = taxa * CAP_UFV.M9;
+    return out;
+  }
+  // fallback p/ meses gravados antes de a planilha emitir o ML: o resto rateado pelo equivalente.
+  // Sem ele um mês sem `ml_por_ufv` sairia com meta ZERO e o painel mostraria atingimento infinito.
   const eq = mtm.equivalente_por_ufv || {};
   const metaMl = n(mtm.garantido_total) - n(mtm.garantido_ppa);
   const eqMl = ML.reduce((a, u) => a + n(eq[u]), 0);
@@ -495,16 +513,19 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
       ml_gwh: r2(ML.reduce((a, u) => a + metaUfv[u], 0) / 1000),
       ml_fonte: mt.ml_por_ufv
-        ? 'LIDA da planilha: desde 02/08/2026 a linha "Valor Garantido" traz tambem as colunas '
-          + 'UFV Mauriti 7 / 10 / 9. Nao e derivada. A regra que a planilha aplica: M1 leva a taxa do '
-          + 'PPA (137,73 MWh/MW, igual ao M8 de mesma potencia) e M7+M9 dividem o resto proporcional a potencia.'
+        ? 'M1 vem da planilha (linha "Valor Garantido", coluna UFV Mauriti 10). M7 e M9 usam a MESMA '
+          + 'TAXA POR MW do PPA — ' + r2(mt.garantido_ppa / PPA.reduce((a, u) => a + CAP_UFV[u], 0))
+          + ' MWh/MW neste mes — por decisao do usuario em 02/08/2026. A planilha jogava todo o resto '
+          + 'nos dois, o que lhes dava quase o DOBRO da taxa das outras sete e derrubava o atingimento '
+          + 'deles por regua, nao por desempenho.'
         : 'DERIVADA (mes anterior a correcao da planilha): o resto entre a meta do complexo ('
           + r2(mt.garantido_total / 1000) + ' GWh) e a do PPA (' + r2(mt.garantido_ppa / 1000)
           + ' GWh), rateado entre M1/M7/M9 pela Energia Equivalente.',
       por_ufv: metaUfv,
       nao_alocado_gwh: r2(naoAlocado / 1000),
-      nao_alocado_nota: 'Zero por construcao: PPA + ML fecham a meta do complexo (sobra so o '
-        + 'arredondamento de 2 casas das nove parcelas).',
+      nao_alocado_nota: 'O que a meta do complexo tem a MAIS do que a soma das nove usinas na taxa do '
+        + 'PPA. Nao e erro nem sobra para enterrar em ninguem: e a diferenca de criterio entre a meta '
+        + 'global e a do PPA, e fica EXPOSTA porque e pergunta para quem emite a meta.',
       // dureza relativa: a diferenca de criterio entre a meta global e a do PPA recai TODA no ML
       ml_pct_p50: (() => { const eq = mt.equivalente_por_ufv || {};
         const e = ML.reduce((a, u) => a + num(eq[u]), 0);
