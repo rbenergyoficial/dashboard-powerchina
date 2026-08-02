@@ -1025,6 +1025,37 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
               meta_firme_gwh: F.length ? r2(mF) : null,
               atingido_firme_pct: mF > 0 ? r2(100 * lF / mF) : null };
           })(),
+          // ---- KPIs DE CONJUNTO PARA A ABERTURA DO SUMARIO ----
+          // Por que aqui e so no Complexo: disponibilidade e corte NAO existem por usina. O ONS
+          // publica os dois para o conjunto, e a serie por usina e sabidamente defeituosa em M3 e M7.
+          // Repetir o valor do conjunto em cada linha de usina convidaria a leitura errada.
+          //
+          // Por que existem: o painel de abertura desenhava esses numeros CHUMBADOS no HTML do card.
+          // Um numero escrito a mao dentro de um template nao tem fonte, nao tem janela e nao
+          // acompanha o dado — e o pior lugar possivel para um valor que vai a investidor. Sobem
+          // para ca, onde qualquer painel pode ler o MESMO valor.
+          //
+          // A JANELA DELES NAO E A DO ACUMULADO, e isso precisa ficar visivel no painel: o
+          // acumulado e jan-jul, mas o corte so vale de MARCO em diante — antes disso a serie de
+          // referencia do ONS para o Mauriti sai baixa e o corte apareceria subestimado (5,01% em
+          // janeiro), o que daria uma vantagem falsa contra o Nordeste. Mesma razao pela qual os
+          // graficos comparativos comecam em marco.
+          ...(u !== 'Complexo' ? {} : (() => {
+            const D = out.serie.filter(x => x.mes.slice(0, 4) === ano
+              && (x.mes !== mesAtual || fechado) && x.disp_pct != null);
+            // Constantes auditadas do comparativo de 28/07/2026 (scratchpad/analise.js e
+            // regiao_ne.js), apuradas no NIVEL CONJUNTO do arquivo do ONS — nao pela soma das
+            // usinas, que carrega o defeito de M3/M7. Mesma formula nos tres: frus/(ger+frus).
+            const MAURITI = 21.78, NORDESTE = 26.82, ABAIARA = 22.04;
+            return {
+              disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
+              disp_meses: D.length, disp_alvo_pct: 97,
+              corte_conj_pct: MAURITI, corte_ne_pct: NORDESTE, corte_abaiara_pct: ABAIARA,
+              corte_vantagem_pp: r2(NORDESTE - MAURITI),
+              corte_janela: 'mar/26 a jul/26',
+              corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE',
+            };
+          })()),
           nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }
 
       // ---- cascata ----
