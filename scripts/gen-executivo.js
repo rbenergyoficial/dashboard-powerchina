@@ -347,12 +347,22 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // mesmo criterio (campo de limitacao preenchido, inclusive zero). Vem junto na linha do mes
       // para o grafico sair de UMA query — duas series em frames separados exigiriam um join, e o
       // painel de serie temporal do Grafana nao junta bem frames de origens diferentes.
-      // APURADO POR NOS em 28/07/2026 (scratchpad/regiao_ne.js) sobre o mesmo arquivo do ONS, os 54
-      // conjuntos fotovoltaicos do subsistema. E constante porque a janela e fechada: mar-jul/2026.
-      // Estender exigiria baixar ~9 MB por mes do S3 do ONS a cada rodada — caro para um cron de
-      // hora em hora, e o valor de meses passados nao muda.
+      // APURADO POR NOS sobre o mesmo arquivo do ONS, os 54 conjuntos fotovoltaicos do subsistema
+      // (scratchpad/regiao_ne.js). E constante porque a janela e fechada: mar-jul/2026. Estender
+      // exigiria baixar ~9 MB por mes do S3 do ONS a cada rodada — caro para um cron de hora em hora,
+      // e o valor de meses passados nao muda.
+      // REAPURADO EM 02/08/2026 com JULHO COMPLETO. A apuracao anterior era de 28/07 e julho entrou
+      // com 26 dias de 31 — o painel anunciava "mar-jul" mostrando um julho pela metade.
       ne_curtail_pct: ({ '2026-03': 22.07, '2026-04': 26.34, '2026-05': 31.71,
-        '2026-06': 24.39, '2026-07': 29.17 })[mes] ?? null,
+        '2026-06': 24.39, '2026-07': 28.72 })[mes] ?? null,
+      // O NOSSO corte AUDITADO, do mesmo arquivo e da mesma apuracao dos outros dois. NAO e o
+      // `frustrada_pct` calculado acima: aquele inclui 03/03 e 11/03, dois dias em que o ONS publica
+      // 70% e 77% MAIS geracao do que o medidor Way2 registrou (fisicamente impossivel), o que infla
+      // o gerado e AFUNDA o percentual de corte — em marco a diferenca e 22,07% contra 23,57%.
+      // Comparar um numero nosso contaminado contra um benchmark limpo nao valeria nada, entao os
+      // graficos de comparacao usam ESTE campo nas tres series.
+      mauriti_curtail_pct: ({ '2026-03': 23.57, '2026-04': 23.53, '2026-05': 23.15,
+        '2026-06': 14.06, '2026-07': 21.32 })[mes] ?? null,
       // BENCHMARK DE PAR DIRETO: o Conj. Abaiara 230 kV (Milagres I a V) esta na MESMA malha, e por
       // isso e a comparacao que o investidor pede depois da regional — "e o vizinho, sofreu igual?".
       // Apurado do mesmo arquivo do ONS e pela MESMA formula usada aqui para o Mauriti,
@@ -362,8 +372,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // marco (razao referencia/gerado abaixo de 1,00 antes disso), entao o corte do Mauriti nesses
       // dois meses sai SUBESTIMADO — 5,01% e 5,36% contra 17,64% e 8,62% de Abaiara. Nao e vantagem
       // nossa, e defeito de dado. O painel comeca a comparacao em marco.
-      abaiara_curtail_pct: ({ '2026-01': 17.64, '2026-02': 8.62, '2026-03': 24.25, '2026-04': 24.21,
-        '2026-05': 22.99, '2026-06': 17.89, '2026-07': 19.90 })[mes] ?? null,
+      // REAPURADO em 02/08/2026 junto com os outros dois. Mudou em TODOS os meses, nao so em julho:
+      // o ONS revisa dados publicados, e a serie de Abaiara mexeu ate em marco (24,25 -> 24,20).
+      abaiara_curtail_pct: ({ '2026-01': 17.64, '2026-02': 8.62, '2026-03': 24.20, '2026-04': 24.15,
+        '2026-05': 23.05, '2026-06': 18.11, '2026-07': 17.20 })[mes] ?? null,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.geP > 0 ? r2(100 * i.gvP / i.geP) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
@@ -1066,17 +1078,25 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           ...(u !== 'Complexo' ? {} : (() => {
             const D = out.serie.filter(x => x.mes.slice(0, 4) === ano
               && (x.mes !== mesAtual || fechado) && x.disp_pct != null);
-            // Constantes auditadas do comparativo de 28/07/2026 (scratchpad/analise.js e
-            // regiao_ne.js), apuradas no NIVEL CONJUNTO do arquivo do ONS — nao pela soma das
-            // usinas, que carrega o defeito de M3/M7. Mesma formula nos tres: frus/(ger+frus).
-            const MAURITI = 21.78, NORDESTE = 26.82, ABAIARA = 22.04;
+            // Constantes auditadas (scratchpad/analise.js e regiao_ne.js), apuradas no NIVEL
+            // CONJUNTO do arquivo do ONS — nao pela soma das usinas, que carrega o defeito de M3/M7.
+            // Mesma formula nos tres: frus/(ger+frus), so onde val_geracaolimitada vem PREENCHIDO.
+            // REAPURADO EM 02/08/2026 COM JULHO COMPLETO. A apuracao de 28/07 tinha julho com 26 dias
+            // de 31, e o painel anunciava "mar-jul" mostrando um julho pela metade: Mauriti caiu de
+            // 21,78 para 21,20, Abaiara de 22,04 para 21,32 e o Nordeste de 26,82 para 26,80 — a
+            // vantagem contra a regiao SUBIU de 5,04 para 5,60 pp.
+            // 03/03 e 11/03 seguem FORA dos tres, pela mesma razao de sempre: o ONS publica neles
+            // mais geracao do que o medidor Way2 mediu, e uma usina nao entrega mais do que o proprio
+            // medidor de fronteira registrou. Excluir de um so e comparar janelas diferentes.
+            const MAURITI = 21.20, NORDESTE = 26.80, ABAIARA = 21.32;
             return {
               disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
               disp_meses: D.length, disp_alvo_pct: 97,
               corte_conj_pct: MAURITI, corte_ne_pct: NORDESTE, corte_abaiara_pct: ABAIARA,
               corte_vantagem_pp: r2(NORDESTE - MAURITI),
-              corte_janela: 'mar/26 a jul/26',
-              corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE',
+              corte_janela: 'mar a jul/26 · 151 dias',
+              corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE; '
+                + 'apurado em 02/08/2026, meses completos, menos 03/03 e 11/03 (dado do ONS impossível)',
             };
           })()),
           nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }
