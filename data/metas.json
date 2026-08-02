@@ -2,8 +2,9 @@
  "_fonte": "Planilha Base_Dados_MRD.xlsx, aba PPA (SharePoint). Linhas \"Valor Garantido de <mes>\" + \"Energia Equivalente\". ENERGIA LIQUIDA (coluna \"Energia Total de rede\").",
  "_unidade": "MWh",
  "_nota": "Guarda SO o que a planilha entrega: meta GLOBAL e meta do PPA (por usina). A meta das usinas FORA do PPA (M1/M7/M9) NAO existe na fonte — e DERIVADA pelo gen-executivo.js. COBERTURA: jan/26 a jul/26 (7 meses). O usuario nao tem PPA de 2025 — set/25 a dez/25 ficam SEM meta de proposito. Validacao da extracao: soma das 6 usinas do PPA bate com o total do PPA (+-0,02) e o PPA/dia e constante em 1199,98 MWh/dia nos 7 meses.",
+ "_reconstrucao_global": "fev, mar e abr/2026 NAO tinham meta global na fonte, e o usuario havia gravado ali a PROPRIA ENERGIA REALIZADA por falta de referencia. Meta igual ao realizado nao mede nada: produz 100,00% por aritmetica e derruba a credibilidade do painel inteiro quando alguem repara. Em 2026-08-02 os tres foram reconstruidos pela TAXA DIARIA de 1632,0 MWh/dia, que e o que mai, jun e jul entregam de forma exata (50592/31 = 48960/30 = 50592/31). A reconstrucao se autovalida: mar cai em 50592, identico a mai e jul (31 dias), e abr cai em 48960, identico a jun (30 dias). PENDENTE: jan/26 (53782,65) nao e o realizado (55,94 GWh) mas tambem nao segue a taxa — da 1734,9 MWh/dia, 6,3% acima. Fica como esta ate o usuario dizer se esse numero tem origem propria.",
  "_mapeamento": "M10 = M1 — MESMO PARQUE, CONFIRMADO PELO USUARIO em 2026-07-17. A planilha PPA nomeia as usinas 'Mauriti 2..10' e NAO EXISTE Mauriti 1; 'UFV Mauriti 10' e o parque de 49,11 MW que o ONS chama CEFMT1 e que o Way2/SCADA chamam M1. Este arquivo ja usa a chave M1. Alias em gen-executivo.js (ALIAS_PLANILHA) p/ quando o pipeline da planilha for ligado. A aritmetica ja apontava isso antes da confirmacao: a Energia Equivalente e exatamente proporcional a outorga (Mauriti7/ref=0,3000 = 14,733/49,11 · Mauriti9/ref=0,1999 = 9,822/49,11 · M2/ref=0,4998 = 24,555/49,11 · Mauriti10=9.091 -> 49,11 MW).",
- "_metodologia_ml": "Meta mensal so e emitida p/ o PPA. Para M1/M7/M9 aplica-se a TAXA DO PPA (garantido_ppa / capacidade_ppa) sobre a potencia de cada um — generalizacao da regra do usuario ('mesma potencia -> mesma meta', que ele usou p/ o M10). Isso poe as 9 usinas na mesma regua (mesmo % do proprio P50). A diferenca p/ (global - ppa) fica em 'nao_alocado', EXPOSTA: o global e ~7% menos conservador que o PPA e essa sobra e uma pergunta p/ quem emite a meta, nao um numero p/ enterrar no M7/M9 (o rateio do resto dava a eles meta 46% ACIMA do proprio P50 = inatingivel por construcao).",
+ "_metodologia_ml": "SUPERADA EM 25/07/2026 — descrevia a regra ANTERIOR (aplicar a taxa do PPA sobre a potencia de M1/M7/M9, deixando a diferenca em 'nao_alocado'). Hoje gen-executivo.js usa O RESTO: meta_ML = garantido_total - garantido_ppa, rateado entre M1/M7/M9 pela Energia Equivalente, e 'nao_alocado' e zero por construcao. Consequencia assumida e documentada no gerador: toda a diferenca de criterio entre a meta global e a do PPA recai sobre o ML, que fica com meta ~98% do proprio P50 contra ~74% do PPA. Texto mantido aqui so para nao se perder o registro de que a regra mudou.",
  "meses": {
   "2026-05": {
    "garantido_total": 50592,
@@ -78,7 +79,7 @@
    }
   },
   "2026-02": {
-   "garantido_total": 50646.38,
+   "garantido_total": 45696,
    "garantido_ppa": 33599.33,
    "ppa_por_ufv": {
     "M8": 6109.15,
@@ -102,7 +103,7 @@
    }
   },
   "2026-03": {
-   "garantido_total": 51286.96,
+   "garantido_total": 50592,
    "garantido_ppa": 37199.26,
    "ppa_por_ufv": {
     "M8": 6763.7,
@@ -126,7 +127,7 @@
    }
   },
   "2026-04": {
-   "garantido_total": 49399.12,
+   "garantido_total": 48960,
    "garantido_ppa": 35999.28,
    "ppa_por_ufv": {
     "M8": 6545.52,
