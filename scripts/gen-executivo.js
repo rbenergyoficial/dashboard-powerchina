@@ -43,18 +43,26 @@ const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49
 // correção de 25/07/2026 só pegou numa das cópias: o painel seguiu mostrando a meta antiga do ML.
 // É o mesmo tipo de erro do divisor da projeção. Agora existe um lugar só.
 //
-// A REGRA (informada pelo usuário): a planilha emite DUAS metas — a do complexo e a do PPA.
-//   PPA  -> vem pronta por usina em `ppa_por_ufv`
-//   ML   -> é O RESTO (garantido_total − garantido_ppa), rateado entre M1/M7/M9 pela ENERGIA
-//           EQUIVALENTE (o P50 de cada uma, que a planilha traz para as 9). O equivalente é régua
-//           melhor que a potência: já embute o fator de capacidade daquela usina naquele mês.
-// Consequência que vale saber: como a meta global é menos conservadora que a do PPA, a diferença
-// de critério recai TODA no ML — ele fica com meta ~98% do próprio P50 contra ~74% do PPA.
+// A REGRA, desde 2026-08-02: A FONTE EMITE AS NOVE. O usuário corrigiu a planilha e ela passou a
+// trazer também as colunas "UFV Mauriti 7 / 10 / 9" na linha Valor Garantido. Então aqui não se
+// deriva nada — LÊ-SE:
+//   PPA -> `ppa_por_ufv`      ML -> `ml_por_ufv`
+// Derivar um número que a fonte já entrega é inventar, e foi exatamente o erro corrigido em 25/07 na
+// outra ponta. A regra que a planilha aplica (decifrada e conferida nos 7 meses): M1 leva a taxa do
+// PPA — 137,73 MWh/MW, idêntico ao M8, que tem a mesma potência — e M7+M9 dividem o resto
+// proporcional à POTÊNCIA (3977,43 ÷ 2651,62 = 1,50 = 14,733 ÷ 9,822 MW).
+// Difere do rateio que se fazia aqui (pela Energia Equivalente): a SOMA é a mesma, mas o M1 ficava
+// com 8929,48 em vez de 6763,70 e M7/M9 com um terço a menos. Agregados (Complexo/PPA/ML) não mudam;
+// os cards POR USINA mudam.
+// O ramo de rateio fica para meses gravados antes da correção — sem ele, um mês sem `ml_por_ufv`
+// sairia com meta ZERO no ML e o painel mostraria atingimento infinito sem avisar.
 function metasPorUfv(mtm) {
   if (!mtm) return null;
-  const eq = mtm.equivalente_por_ufv || {}, n = v => Number(v) || 0;
+  const n = v => Number(v) || 0;
   const out = {};
   PPA.forEach(u => { out[u] = (mtm.ppa_por_ufv || {})[u] != null ? Number(mtm.ppa_por_ufv[u]) : 0; });
+  if (mtm.ml_por_ufv) { ML.forEach(u => { out[u] = n(mtm.ml_por_ufv[u]); }); return out; }
+  const eq = mtm.equivalente_por_ufv || {};
   const metaMl = n(mtm.garantido_total) - n(mtm.garantido_ppa);
   const eqMl = ML.reduce((a, u) => a + n(eq[u]), 0);
   ML.forEach(u => { out[u] = eqMl > 0 ? metaMl * n(eq[u]) / eqMl : 0; });
@@ -461,22 +469,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     mt = METAS.meses[mesAtual] || null;
     const pct = (r, m) => m > 0 ? r2(100 * r / m) : null;
 
-    // ---- meta das usinas FORA do PPA: DERIVADA, porque a fonte não emite ----
-    // A planilha só traz meta p/ o PPA e o total global. Regra (definida com o usuário 2026-07-17):
-    // aplicar a TAXA DO PPA (garantido_ppa ÷ capacidade_ppa = 137,73 MWh/MW) sobre a potência de M1/M7/M9.
-    // É a generalização da regra que o próprio usuário usou p/ o M10 ("mesma potência → mesma meta"):
-    // o que ela diz de fato é "mesma taxa por MW", e assim ela também alcança M7/M9, que não têm par de
-    // potência no PPA. Resultado: as 9 usinas na MESMA régua (74,4% do próprio P50).
-    // POR QUE NÃO ratear (global − PPA − M10) entre M7/M9, como estava: o global é ~7% menos conservador
-    // que o PPA (79,5% vs 74,4% do equivalente) e o rateio despejava essa diferença inteira nos dois
-    // menores parques → meta 145,9% do próprio P50, INATINGÍVEL por construção, com ou sem curtailment.
-    // A diferença vira `nao_alocado`, EXPOSTA: é pergunta p/ quem emite a meta, não número p/ enterrar.
+    // ---- meta por usina: LIDA da planilha, as nove ----
+    // Histórico das regras, porque os números mudaram duas vezes e alguém vai comparar com um print
+    // antigo: até 25/07/2026 a meta do ML era derivada da taxa do PPA sobre a potência (sobravam
+    // 3,25 GWh em `nao_alocado`); de 25/07 a 02/08 era o RESTO rateado pela Energia Equivalente; desde
+    // 02/08 a planilha emite as três e o gerador só lê. Detalhe da regra no topo do arquivo.
     if (mt) {
-      // CORRIGIDO em 25/07/2026, informado pelo usuário: a planilha emite DUAS metas — a do
-      // complexo e a do PPA. Logo a meta do ML não é derivada de taxa nenhuma, ela É O RESTO:
-      //     meta_ML = garantido_total − garantido_ppa
-      // O método anterior (taxa do PPA × potência de cada uma) deixava 3,25 GWh sem dono, e esse
-      // "não alocado" era só o sintoma de estar inventando uma meta que a fonte já determinava.
       const mpu = metasPorUfv(mt);                 // <- fonte unica (ver topo do arquivo)
       metaUfv = {}; Object.keys(mpu).forEach(u => { metaUfv[u] = r2(mpu[u]); });
       // agora fecha: sobra só arredondamento
@@ -496,13 +494,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
       garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
       ml_gwh: r2(ML.reduce((a, u) => a + metaUfv[u], 0) / 1000),
-      ml_fonte: 'O RESTO: meta do complexo (' + r2(mt.garantido_total / 1000) + ' GWh) menos a do PPA ('
-        + r2(mt.garantido_ppa / 1000) + ' GWh). A planilha emite so essas duas; a do ML e o que sobra, '
-        + 'rateado entre M1/M7/M9 pela Energia Equivalente (P50) de cada uma.',
+      ml_fonte: mt.ml_por_ufv
+        ? 'LIDA da planilha: desde 02/08/2026 a linha "Valor Garantido" traz tambem as colunas '
+          + 'UFV Mauriti 7 / 10 / 9. Nao e derivada. A regra que a planilha aplica: M1 leva a taxa do '
+          + 'PPA (137,73 MWh/MW, igual ao M8 de mesma potencia) e M7+M9 dividem o resto proporcional a potencia.'
+        : 'DERIVADA (mes anterior a correcao da planilha): o resto entre a meta do complexo ('
+          + r2(mt.garantido_total / 1000) + ' GWh) e a do PPA (' + r2(mt.garantido_ppa / 1000)
+          + ' GWh), rateado entre M1/M7/M9 pela Energia Equivalente.',
       por_ufv: metaUfv,
       nao_alocado_gwh: r2(naoAlocado / 1000),
-      nao_alocado_nota: 'Zero por construcao: PPA + ML fecham a meta do complexo. Ate 25/07/2026 aqui '
-        + 'sobravam 3,25 GWh, porque a meta do ML era inventada por uma taxa em vez de sair do resto.',
+      nao_alocado_nota: 'Zero por construcao: PPA + ML fecham a meta do complexo (sobra so o '
+        + 'arredondamento de 2 casas das nove parcelas).',
       // dureza relativa: a diferenca de criterio entre a meta global e a do PPA recai TODA no ML
       ml_pct_p50: (() => { const eq = mt.equivalente_por_ufv || {};
         const e = ML.reduce((a, u) => a + num(eq[u]), 0);
