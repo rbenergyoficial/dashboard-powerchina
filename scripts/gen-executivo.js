@@ -1159,8 +1159,24 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       if (!A.length) return [];
       const CAMPOS = ['way2_liq_gwh', 'meta_gwh', 'ppa_liq_gwh', 'meta_ppa_gwh'];
       const med = k => r2(A.reduce((a, x) => a + num(x[k]), 0) / A.length);
+      // ---- as tres parcelas do EMPILHADO ----
+      // Empilhar entregue COM meta seria falso: elas nao somam nada — sao a mesma energia contra
+      // duas reguas. O que soma de verdade e a meta MAIS o que passou dela. Entao a barra vira
+      //     base + acima      quando entregou mais que a meta   (total = entregue)
+      //     base + abaixo     quando entregou menos             (total = meta)
+      // com base = min(entregue, meta). Nos dois casos o topo colorido e a NOTICIA, e a altura da
+      // barra e sempre o maior dos dois — nunca uma soma inventada.
+      // O ramo `abaixo` nunca acendeu em 2026; existe para o primeiro mes ruim nao sair mudo.
+      const parcelas = (liq, meta) => ({
+        base_gwh: r2(Math.min(num(liq), num(meta))),
+        acima_gwh: r2(Math.max(0, num(liq) - num(meta))),
+        abaixo_gwh: r2(Math.max(0, num(meta) - num(liq))),
+      });
+      const pref = (o, p) => Object.fromEntries(Object.entries(o).map(([k, v]) => [p + k, v]));
       const linha = (rot, media, src) => Object.assign({ lbl: rot, media },
-        Object.fromEntries(CAMPOS.map(k => [k, src(k)])));
+        Object.fromEntries(CAMPOS.map(k => [k, src(k)])),
+        pref(parcelas(src('ppa_liq_gwh'), src('meta_ppa_gwh')), 'ppa_'),
+        pref(parcelas(src('way2_liq_gwh'), src('meta_gwh')), 'cx_'));
       return A.map(x => linha(x.lbl, 0, k => x[k])).concat([linha('MÉDIA', 1, med)]);
     })();
 
