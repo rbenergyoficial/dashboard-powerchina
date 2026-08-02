@@ -882,7 +882,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // painéis; enfiar uma linha "MÉDIA" nela contaminaria todos, e o acumulado do ano passaria a
     // somar a média junto com os meses. Duplicar 8 linhas custa nada perto desse risco.
     out.serie_e_media = (() => {
-      const A = out.serie.filter(x => x.mes.slice(0, 4) === ano && x.meta_gwh != null);
+      // `ano` só existe dentro do laço de ytd_ufv, mais abaixo — aqui o ano sai do mês corrente
+      const anoAtual = mesAtual.slice(0, 4);
+      const A = out.serie.filter(x => x.mes.slice(0, 4) === anoAtual && x.meta_gwh != null);
       if (!A.length) return [];
       const CAMPOS = ['way2_liq_gwh', 'meta_gwh', 'ppa_liq_gwh', 'meta_ppa_gwh'];
       const med = k => r2(A.reduce((a, x) => a + num(x[k]), 0) / A.length);
