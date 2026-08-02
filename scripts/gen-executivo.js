@@ -874,6 +874,24 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         + '</div>';
     };
 
+    // ---- SÉRIE + MÉDIA, só para os dois gráficos de entrega mês a mês ----
+    // Eles ganham uma 8ª barra à direita com a MÉDIA do período. Sem ela o leitor compara cada mês
+    // com o vizinho e não com o normal do ativo — e um mês fraco parece pior do que é (jun/26 é o
+    // exemplo: 48,96 GWh de meta parece baixo até se ver que a média entregue é 52,39).
+    // POR QUE UM ARRAY PRÓPRIO, e não uma linha extra em `serie`: `serie` é lida por mais de dez
+    // painéis; enfiar uma linha "MÉDIA" nela contaminaria todos, e o acumulado do ano passaria a
+    // somar a média junto com os meses. Duplicar 8 linhas custa nada perto desse risco.
+    out.serie_e_media = (() => {
+      const A = out.serie.filter(x => x.mes.slice(0, 4) === ano && x.meta_gwh != null);
+      if (!A.length) return [];
+      const CAMPOS = ['way2_liq_gwh', 'meta_gwh', 'ppa_liq_gwh', 'meta_ppa_gwh'];
+      const med = k => r2(A.reduce((a, x) => a + num(x[k]), 0) / A.length);
+      const linha = (lbl, media, src) => Object.assign({ lbl, media },
+        Object.fromEntries(CAMPOS.map(k => [k, src(k)])));
+      return A.map(x => linha(x.lbl, 0, k => x[k]))
+        .concat([linha('MÉDIA', 1, med)]);
+    })();
+
     out.cards_ufv = []; out.manchete_ufv = []; out.cascata_ufv = []; out.ytd_ufv = [];
 
     // MÊS × USINA. Antes só o mês corrente era montado, então escolher "mês anterior" no painel
