@@ -1173,10 +1173,17 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         abaixo_gwh: r2(Math.max(0, num(meta) - num(liq))),
       });
       const pref = (o, p) => Object.fromEntries(Object.entries(o).map(([k, v]) => [p + k, v]));
+      // ATINGIMENTO por mes. Entra no grafico como serie OCULTA na visualizacao e VISIVEL no
+      // tooltip: o barchart rotula cada barra com o proprio valor plotado, entao nao ha como
+      // estampar "%" numa barra que esta em GWh — mas o tooltip aceita a serie extra sem
+      // desequilibrar o empilhamento, que precisa continuar somando energia.
+      const pc = (l, m) => (num(m) > 0 ? r2(100 * num(l) / num(m)) : null);
       const linha = (rot, media, src) => Object.assign({ lbl: rot, media },
         Object.fromEntries(CAMPOS.map(k => [k, src(k)])),
         pref(parcelas(src('ppa_liq_gwh'), src('meta_ppa_gwh')), 'ppa_'),
-        pref(parcelas(src('way2_liq_gwh'), src('meta_gwh')), 'cx_'));
+        pref(parcelas(src('way2_liq_gwh'), src('meta_gwh')), 'cx_'),
+        { ppa_ating_pct: pc(src('ppa_liq_gwh'), src('meta_ppa_gwh')),
+          cx_ating_pct: pc(src('way2_liq_gwh'), src('meta_gwh')) });
       return A.map(x => linha(x.lbl, 0, k => x[k])).concat([linha('MÉDIA', 1, med)]);
     })();
 
