@@ -1089,10 +1089,16 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // mais geracao do que o medidor Way2 mediu, e uma usina nao entrega mais do que o proprio
             // medidor de fronteira registrou. Excluir de um so e comparar janelas diferentes.
             const MAURITI = 21.20, NORDESTE = 26.80, ABAIARA = 21.32;
+            // A ENERGIA, nao so o percentual. Para quem le, 21,20% e abstrato; 69,40 GWh que o ONS
+            // impediu de gerar e concreto, e e o numero que a pessoa leva da reuniao. O atingimento
+            // ja aparecia em GWh no card ao lado — o corte nao, e essa assimetria enfraquecia o lado
+            // que mais precisa de peso. Mesma apuracao dos percentuais acima.
+            const CORTADO_GWH = 69.40;
             return {
               disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
               disp_meses: D.length, disp_alvo_pct: 97,
               corte_conj_pct: MAURITI, corte_ne_pct: NORDESTE, corte_abaiara_pct: ABAIARA,
+              corte_gwh: CORTADO_GWH,
               corte_vantagem_pp: r2(NORDESTE - MAURITI),
               corte_janela: 'mar a jul/26 · 151 dias',
               corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE; '
