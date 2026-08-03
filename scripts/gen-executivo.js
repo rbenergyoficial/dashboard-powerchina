@@ -1078,6 +1078,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           ...(u !== 'Complexo' ? {} : (() => {
             const D = out.serie.filter(x => x.mes.slice(0, 4) === ano
               && (x.mes !== mesAtual || fechado) && x.disp_pct != null);
+            // MARCA as linhas que entraram na conta. O painel de Disponibilidade precisa filtrar
+            // pelo MESMO criterio, senao ele faz media de um conjunto e exibe um rotulo de outro —
+            // foi o que aconteceu em 03/08: agosto entrou na serie com DOIS dias, a media do card
+            // subiu para 99,50% e o texto ao lado continuou dizendo "7 meses fechados".
+            // Marcar aqui, e nao repetir a regra no painel, garante que os dois nunca divirjam.
+            out.serie.forEach(x => { if (x.fechado == null) x.fechado = 0; });
+            D.forEach(x => { x.fechado = 1; });
             // Constantes auditadas (scratchpad/analise.js e regiao_ne.js), apuradas no NIVEL
             // CONJUNTO do arquivo do ONS — nao pela soma das usinas, que carrega o defeito de M3/M7.
             // Mesma formula nos tres: frus/(ger+frus), so onde val_geracaolimitada vem PREENCHIDO.
