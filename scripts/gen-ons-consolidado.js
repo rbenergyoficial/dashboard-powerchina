@@ -198,6 +198,19 @@ async function gerarKpis(rows) {
 }
 
 (async () => {
+  // ANTES de consolidar, repara mês cujo blob ficou com dia faltando. O fluxo que grava os blobs
+  // mensais só toca no mês corrente e para às 23:00 UTC do último dia — antes de o ONS publicar
+  // esse dia. Sem isto, o último dia de CADA mês se perde para sempre (jun/26 e jul/26 perderam).
+  // Consolidar dados furados só espalharia o furo, então o reparo vem primeiro.
+  console.log('Reparo de meses incompletos:');
+  try {
+    const { repararMeses } = require('./repara-ons-mes.js');
+    await repararMeses(fetchJson, upload, BASE, months());
+  } catch (e) {
+    console.warn('  reparo falhou (' + e.message + ') — segue com os blobs como estão');
+  }
+  console.log('');
+
   // Restrição: 1 linha por ts (nível complexo)
   const restr = await consolidate({
     prefix: 'ons_restricao_',
