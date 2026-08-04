@@ -755,6 +755,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const out = [];
       const med = a => a && a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
       const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
+      // os dois grupos entram na serie diaria como se fossem usinas — ver o bloco que os soma abaixo
+      const GRUPOS = { PPA, ML };
+      const metaGrupo = (g, dias, MPU) => MPU ? r2(GRUPOS[g].reduce((a, u) => a + num(MPU[u]), 0) / dias) : null;
       meses.forEach(m => {
         // irradiância do mês, por dia e por usina
         const irrDiaU = {}, irrDiaC = {};
@@ -794,6 +797,27 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             liq_fechada_mwh: feC, liq_hoje_mwh: hoC,
             irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, encerrado: enc, ate });
+          // PPA e ML sao GRUPOS, e ate aqui so existiam no mensal (`serie_ufv`). Sem eles, escolher
+          // "PPA" com um mes no filtro do Sumario nao tinha serie diaria e o grafico caia de volta
+          // para o mensal. Somo os membros no proprio dia.
+          //   energia e meta SOMAM;
+          //   irradiancia e media PONDERADA POR POTENCIA — media simples daria a M7 (8,1 MW) o mesmo
+          //   peso da M4 (55 MW) e o numero nao representaria o grupo.
+          // Somo o valor CRU de cada membro e arredondo uma vez so: somar 6 valores ja arredondados
+          // acumula ate 0,03 MWh/dia, que em 151 dias vira ~4,5 MWh de divergencia contra o mensal.
+          Object.entries(GRUPOS).forEach(([g, membros]) => {
+            const vG = r2(membros.reduce((a, u) => a + num((x.ufv_liq_mwh || {})[u]), 0));
+            const [feG, hoG] = parte(vG);
+            let sIrr = 0, sCap = 0;
+            membros.forEach(u => {
+              const i = med((irrDiaU[d] || {})[u]);
+              if (i != null) { sIrr += i * CAP_UFV[u]; sCap += CAP_UFV[u]; }
+            });
+            out.push({ mes: m, dia: d, dia_num: dnum, ufv: g, liq_mwh: vG,
+              liq_fechada_mwh: feG, liq_hoje_mwh: hoG,
+              irr: sCap > 0 ? r2(sIrr / sCap) : null,
+              meta_dia_mwh: metaGrupo(g, dias, MPUd), parcial: pc, encerrado: enc, ate });
+          });
         });
         // COMPLETA O MÊS com os dias que ainda não têm dado (liq null). O eixo do gráfico passa a
         // sair do DADO: junho vai até 30, julho até 31, fevereiro até 28. Antes o eixo era fixo em
@@ -809,6 +833,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           out.push({ mes: m, dia: d, dia_num: dn, ufv: 'Complexo', liq_mwh: null,
             liq_fechada_mwh: null, liq_hoje_mwh: null, irr: null,
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: 0, ate: null });
+          // os grupos tambem reservam o lugar no eixo, senao o mes deles terminaria antes do das usinas
+          Object.keys(GRUPOS).forEach(g => out.push({ mes: m, dia: d, dia_num: dn, ufv: g,
+            liq_mwh: null, liq_fechada_mwh: null, liq_hoje_mwh: null, irr: null,
+            meta_dia_mwh: metaGrupo(g, dias, MPUd), parcial: 0, ate: null }));
         }
         // NAO inserir ponto fracionario aqui para "dar folga" no eixo: a largura da barra no
         // Grafana vem do MENOR intervalo entre pontos do eixo, entao um ponto em `dias + 0.5`
@@ -899,9 +927,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
       const fechado = dCorr >= dTot ? 1 : 0;
       // energia de hoje, ainda incompleta — some no "ja realizado", nao na base da projecao
-      // PPA e ML sao GRUPOS: nao existem como linha em serie_dia_ufv (que so tem as 9 usinas e o
-      // Complexo), entao filtrar por ufv=u daria 0 e a energia parcial vazaria para a base da
-      // projecao — foi o que aconteceu na primeira versao (PPA saltou 124,68 -> 126,21).
+      // PPA e ML sao GRUPOS. Desde 04/08/2026 eles TAMBEM tem linha propria em serie_dia_ufv (para o
+      // filtro do Sumario descer ao dia), mas aqui continuo somando os MEMBROS de proposito: e o
+      // mesmo numero, e nao passa a depender de uma linha derivada. Cuidado ao mexer — somar membros
+      // E a linha do grupo contaria a energia duas vezes (a primeira versao disso fez o PPA saltar
+      // de 124,68 para 126,21).
       const membros = u === 'PPA' ? PPA : u === 'ML' ? ML : [u];
       // duas versões de propósito: a CRUA entra na conta da projeção, a arredondada é a que se exibe.
       // Arredondar antes de projetar custava até 0,6 pp nas usinas pequenas (M7 tem 0,99 GWh no mês:
