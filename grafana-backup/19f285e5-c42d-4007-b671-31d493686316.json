@@ -1,0 +1,1630 @@
+{
+ "description": "Weather dashboard with units in °F",
+ "graphTooltip": 1,
+ "id": 4115055633641472,
+ "links": [
+  {
+   "tags": [
+    "weather",
+    "demo"
+   ],
+   "type": "dashboards"
+  }
+ ],
+ "panels": [
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "super-light-blue",
+        "value": null
+       },
+       {
+        "color": "blue",
+        "value": 40
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
+     },
+     "unit": "fahrenheit"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 0
+   },
+   "id": 1,
+   "options": {
+    "colorMode": "background"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_temp_c{job=\"weather-service\", location=~\"$location\"}) by (location) * 1.8 + 32",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Temperature",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "super-light-blue",
+        "value": null
+       },
+       {
+        "color": "blue",
+        "value": 40
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
+     },
+     "unit": "fahrenheit"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 4
+   },
+   "id": 2,
+   "options": {
+    "colorMode": "background"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_feelslike_temp_c{job=\"weather-service\", location=~\"$location\"}) by (location) * 1.8 + 32",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Feels Like Temperature",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "thresholds": {
+      "steps": [
+       {
+        "color": "super-light-blue",
+        "value": null
+       },
+       {
+        "color": "super-light-blue",
+        "value": 32
+       }
+      ]
+     },
+     "unit": "fahrenheit"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "prediction"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "dash": [
+          10,
+          10
+         ],
+         "fill": "dash"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 10,
+    "x": 4,
+    "y": 0
+   },
+   "id": 3,
+   "options": {
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_temp_c{job=\"weather-service\", location=~\"$location\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Actual Temperature - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_feelslike_temp_c{job=\"weather-service\",location=~\"$location\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Perceived Temperature - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_temp_c{job=\"weather-service\", location=~\"$location\", forecast_day=\"0\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Predicted Temperature - {{ location }}",
+     "refId": "prediction"
+    }
+   ],
+   "title": "Temperature",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 0
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "green",
+        "value": 30
+       },
+       {
+        "color": "orange",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
+     },
+     "unit": "humidity"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 8
+   },
+   "id": 4,
+   "options": {
+    "colorMode": "background"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_humidity{job=\"weather-service\", location=~\"$location\"}) by (location)",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Humidity",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "humidity"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "prediction"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "dash": [
+          10,
+          10
+         ],
+         "fill": "dash"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 10,
+    "x": 4,
+    "y": 8
+   },
+   "id": 5,
+   "options": {
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_humidity{job=\"weather-service\", location=~\"$location\"}) by (location)",
+     "legendFormat": "Actual Humidity - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_humidity{job=\"weather-service\", location=~\"$location\", forecast_day=\"0\"}) by (location)",
+     "legendFormat": "Predicted Humidity - {{ location }}",
+     "refId": "prediction"
+    }
+   ],
+   "title": "Humidity",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 6,
+    "x": 18,
+    "y": 0
+   },
+   "id": 6,
+   "options": {
+    "content": "<div>\n  <a href=\"/connections/add-new-connection/?src=click_top_cta_connect_data_weather\" target=\"_blank\"/>\n    <h1 style=\"\n        background: linear-gradient(120deg, rgb(30,144,255), rgb(30,144,255));\n        text-align: center;\n        font-size: 1.5em;\n        padding: 0.3em;\n        color: black;\n    \">\n      + Connect my data\n    </h1>\n  </a>\n</div>\n"
+   },
+   "pluginVersion": "v10.1.0",
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${DS_PROMETHEUS}"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic-by-name"
+     },
+     "custom": {
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      }
+     },
+     "mappings": [],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       }
+      ]
+     },
+     "unit": "string"
+    },
+    "overrides": []
+   },
+   "gridPos": {
+    "h": 15,
+    "w": 10,
+    "x": 14,
+    "y": 2
+   },
+   "id": 7,
+   "options": {
+    "basemap": {
+     "config": {},
+     "name": "Layer 0",
+     "type": "osm-standard"
+    },
+    "controls": {
+     "mouseWheelZoom": true,
+     "showAttribution": true,
+     "showDebug": false,
+     "showMeasure": false,
+     "showScale": false,
+     "showZoom": true
+    },
+    "layers": [
+     {
+      "config": {
+       "showLegend": false,
+       "style": {
+        "color": {
+         "fixed": "dark-green"
+        },
+        "opacity": 0.2,
+        "rotation": {
+         "fixed": 0,
+         "max": 360,
+         "min": -360,
+         "mode": "mod"
+        },
+        "size": {
+         "fixed": 10,
+         "max": 15,
+         "min": 2
+        },
+        "symbol": {
+         "fixed": "img/icons/marker/circle.svg",
+         "mode": "fixed"
+        },
+        "symbolAlign": {
+         "horizontal": "center",
+         "vertical": "center"
+        },
+        "text": {
+         "field": "location",
+         "fixed": "",
+         "mode": "fixed"
+        },
+        "textConfig": {
+         "fontSize": 12,
+         "offsetX": 0,
+         "offsetY": 0,
+         "textAlign": "center",
+         "textBaseline": "middle"
+        }
+       }
+      },
+      "filterData": {
+       "id": "byRefId",
+       "options": "A"
+      },
+      "location": {
+       "mode": "auto"
+      },
+      "name": "Layer 1",
+      "opacity": 1,
+      "tooltip": true,
+      "type": "markers"
+     },
+     {
+      "config": {
+       "nightColor": "#001e3c63",
+       "show": "to",
+       "sun": false
+      },
+      "name": "Layer 2",
+      "opacity": 1,
+      "tooltip": true,
+      "type": "dayNight"
+     }
+    ],
+    "tooltip": {
+     "mode": "none"
+    },
+    "view": {
+     "allLayers": true,
+     "id": "coords",
+     "lastOnly": false,
+     "lat": 27,
+     "layer": "Layer 1",
+     "lon": -12,
+     "shared": true,
+     "zoom": 1.5
+    }
+   },
+   "pluginVersion": "10.3.0-63516",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "disableTextWrap": false,
+     "editorMode": "code",
+     "exemplar": false,
+     "expr": "avg(weather_location_info{job=\"weather-service\", location=~\"$location\"}) by (location,lat,lon)",
+     "format": "table",
+     "fullMetaSearch": false,
+     "includeNullMetadata": true,
+     "instant": true,
+     "legendFormat": "__auto",
+     "range": false,
+     "refId": "A",
+     "useBackend": false
+    }
+   ],
+   "transformations": [
+    {
+     "id": "labelsToFields",
+     "options": {}
+    }
+   ],
+   "transparent": true,
+   "type": "geomap"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "thresholds": {
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 2
+       },
+       {
+        "color": "yellow",
+        "value": 7
+       },
+       {
+        "color": "red",
+        "value": 8
+       }
+      ]
+     }
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 12
+   },
+   "id": 8,
+   "options": {
+    "displayMode": "gradient"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_uv_index{job=\"weather-service\",location=~\"$location\"}) by (location)",
+     "legendFormat": "{{ location }}"
+    }
+   ],
+   "title": "UV Index",
+   "transparent": true,
+   "type": "bargauge"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "max": 10,
+     "min": 0,
+     "unit": "short"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "prediction"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "dash": [
+          10,
+          10
+         ],
+         "fill": "dash"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 10,
+    "x": 4,
+    "y": 12
+   },
+   "id": 9,
+   "options": {
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_uv_index{job=\"weather-service\",location=~\"$location\"}) by (location)",
+     "legendFormat": "Actual UV Index - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_uv_index{job=\"weather-service\", location=~\"$location\"}) by (location)",
+     "legendFormat": "Predicted UV Index - {{ location }}",
+     "refId": "prediction"
+    }
+   ],
+   "title": "UV Index",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "continuous-GrYlRd"
+     },
+     "max": 73,
+     "min": 0,
+     "unit": "velocitymph"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 20
+   },
+   "id": 10,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_wind_speed{job=\"weather-service\",location=~\"$location\"}) by (location) * 0.6213711922",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Wind Speed",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "lineWidth": 1
+     },
+     "mappings": [
+      {
+       "options": {
+        "pattern": "N.*",
+        "result": {
+         "color": "semi-dark-purple",
+         "index": 0
+        }
+       },
+       "type": "regex"
+      },
+      {
+       "options": {
+        "pattern": "E.*",
+        "result": {
+         "color": "dark-purple",
+         "index": 1
+        }
+       },
+       "type": "regex"
+      },
+      {
+       "options": {
+        "pattern": "S.*",
+        "result": {
+         "color": "dark-blue",
+         "index": 2
+        }
+       },
+       "type": "regex"
+      },
+      {
+       "options": {
+        "pattern": "W.*",
+        "result": {
+         "color": "semi-dark-blue",
+         "index": 3
+        }
+       },
+       "type": "regex"
+      }
+     ]
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 0,
+    "y": 24
+   },
+   "id": 11,
+   "options": {
+    "legend": {
+     "showLegend": false
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${DS_LOKI}"
+     },
+     "expr": "{namespace=\"weather-service\"} |= \"wind_dir\" |~ \"$location\" | logfmt"
+    }
+   ],
+   "timeFrom": "now-6h",
+   "title": "",
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "format": "kvp",
+      "keepTime": true,
+      "replace": true,
+      "source": "labels"
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "cluster": true,
+       "container": true,
+       "detected_level": true,
+       "filename": true,
+       "flags": true,
+       "job": true,
+       "level": true,
+       "location": false,
+       "msg": true,
+       "namespace": true,
+       "pod": true,
+       "service_name": true,
+       "stream": true,
+       "time": false
+      },
+      "includeByName": {},
+      "indexByName": {},
+      "renameByName": {
+       "wind_dir": ""
+      }
+     }
+    },
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "partitionByValues",
+     "options": {
+      "fields": [
+       "location"
+      ],
+      "naming": {
+       "asLabels": false
+      }
+     }
+    }
+   ],
+   "transparent": true,
+   "type": "state-timeline"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "velocitymph"
+    }
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 10,
+    "x": 4,
+    "y": 20
+   },
+   "id": 12,
+   "options": {
+    "legend": {
+     "calcs": [
+      "last",
+      "max",
+      "min"
+     ],
+     "displayMode": "table",
+     "placement": "right"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_wind_speed{job=\"weather-service\",location=~\"$location\"}) by (location) * 0.6213711922",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Wind Speed",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "continuous-BlPu"
+     },
+     "unit": "lengthin"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 0,
+    "y": 16
+   },
+   "id": 13,
+   "options": {
+    "colorMode": "background"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_precip_mm{job=\"weather-service\",location=~\"$location\"}) by (location)* 0.03937007874",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Precipitation",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "gridPos": {
+    "h": 6,
+    "w": 10,
+    "x": 14,
+    "y": 17
+   },
+   "id": 14,
+   "options": {
+    "content": "---\n### **Connect your own data**\n\nUsing the Grafana Cloud Infinity Plugin, you can import and visualize data from JSON, CSV, XML, GraphQL, and HTML endpoints. \n\nClick the **+ Connect my data** button below to get started!\n"
+   },
+   "pluginVersion": "v10.1.0",
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 6,
+    "x": 14,
+    "y": 23
+   },
+   "id": 15,
+   "options": {
+    "content": "<div>\n  <a href=\"/connections/datasources/yesoreyeram-infinity-datasource/?src=click_second_cta_connect_data_weather\" target=\"_blank\"/>\n    <h1 style=\"\n        background: linear-gradient(120deg, rgb(30,144,255), rgb(30,144,255));\n        text-align: center;\n        font-size: 1.5em;\n        padding: 0.3em;\n        color: black;\n    \">\n      + Connect my data\n    </h1>\n  </a>\n</div>\n"
+   },
+   "pluginVersion": "v10.1.0",
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 10,
+    "x": 14,
+    "y": 25
+   },
+   "id": 16,
+   "options": {
+    "content": "---"
+   },
+   "pluginVersion": "v10.1.0",
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "max": 10,
+     "min": 0,
+     "unit": "short"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "prediction"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "dash": [
+          10,
+          10
+         ],
+         "fill": "dash"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 10,
+    "x": 4,
+    "y": 16
+   },
+   "id": 17,
+   "options": {
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_precip_mm{job=\"weather-service\",location=~\"$location\"}) by (location)",
+     "legendFormat": "Actual Precipitation - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_precip_mm{job=\"weather-service\", location=~\"$location\", forecast_day=\"0\"}) by (location)",
+     "legendFormat": "Predicted Precipitation - {{ location }}",
+     "refId": "prediction"
+    }
+   ],
+   "title": "Precipitation",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "purple",
+      "mode": "fixed"
+     },
+     "custom": {
+      "lineWidth": 3
+     }
+    }
+   },
+   "gridPos": {
+    "h": 7,
+    "w": 24,
+    "x": 0,
+    "y": 27
+   },
+   "id": 18,
+   "options": {
+    "legend": {
+     "showLegend": false
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${DS_LOKI}"
+     },
+     "expr": "{namespace=\"weather-service\"} |= \"Current Condition\" | logfmt | location=~\"$location\""
+    }
+   ],
+   "timeFrom": "now-12h",
+   "title": "Condition",
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "format": "kvp",
+      "keepTime": true,
+      "replace": true,
+      "source": "labels"
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {},
+      "includeByName": {
+       "current_condition": true,
+       "location": true,
+       "time": true
+      },
+      "indexByName": {},
+      "renameByName": {}
+     }
+    },
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "partitionByValues",
+     "options": {
+      "fields": [
+       "location"
+      ]
+     }
+    }
+   ],
+   "transparent": true,
+   "type": "state-timeline"
+  },
+  {
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 35
+   },
+   "id": 19,
+   "repeat": "forecast_day",
+   "title": "Forecast for today + $forecast_day days",
+   "type": "row"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "super-light-blue",
+        "value": null
+       },
+       {
+        "color": "blue",
+        "value": 40
+       },
+       {
+        "color": "orange",
+        "value": 80
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
+     },
+     "unit": "fahrenheit"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 0,
+    "y": 36
+   },
+   "id": 20,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_temp_c{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location) * 1.8 + 32",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Forecast Temperature",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "thresholdsStyle": {
+       "mode": "dashed"
+      }
+     },
+     "unit": "fahrenheit"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "/.*(Min|Max).*/"
+      },
+      "properties": [
+       {
+        "id": "custom.lineStyle",
+        "value": {
+         "dash": [
+          10,
+          10
+         ],
+         "fill": "dash"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 12,
+    "x": 6,
+    "y": 36
+   },
+   "id": 21,
+   "options": {
+    "legend": {
+     "showLegend": false
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_temp_c{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Forecast Temperature - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_max_temp_c{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Forecast Max Temperature - {{ location }}"
+    },
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_min_temp_c{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location) * 1.8 + 32",
+     "legendFormat": "Forecast Min Temperature - {{ location }}"
+    }
+   ],
+   "title": "Forecast Temperature",
+   "transparent": true,
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 6,
+    "x": 18,
+    "y": 36
+   },
+   "id": 22,
+   "options": {
+    "content": "### **Create an Alert for Temperature**\n\nUsing the Grafana Cloud Alerting, you can set up alerts to monitor temperature and get notified when it crosses a certain threshold.\n\nOpen the context menu (`⋮`) on the panel to the left and select _More_ -> _New alert rule_ to get started\n"
+   },
+   "pluginVersion": "v10.1.0",
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 0
+       },
+       {
+        "color": "orange",
+        "value": 1
+       },
+       {
+        "color": "green",
+        "value": 30
+       },
+       {
+        "color": "orange",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 100
+       }
+      ]
+     },
+     "unit": "humidity"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 8,
+    "x": 0,
+    "y": 41
+   },
+   "id": 23,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_humidity{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location)",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Humidity",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "continuous-BlPu"
+     },
+     "unit": "lengthin"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 8,
+    "x": 8,
+    "y": 41
+   },
+   "id": 24,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_precip_mm{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location)* 0.03937007874",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "Precipitation",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "steps": [
+       {
+        "color": "blue",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 2
+       },
+       {
+        "color": "yellow",
+        "value": 7
+       },
+       {
+        "color": "red",
+        "value": 8
+       }
+      ]
+     }
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 8,
+    "x": 16,
+    "y": 41
+   },
+   "id": 25,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${DS_PROMETHEUS}"
+     },
+     "expr": "avg(weather_forecast_uv_index{job=\"weather-service\", location=~\"$location\", forecast_day=~\"$forecast_day\"}) by (location)",
+     "legendFormat": "__auto"
+    }
+   ],
+   "title": "UV Index",
+   "transparent": true,
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "datasource",
+    "uid": "-- Mixed --"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "center"
+     }
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 24,
+    "x": 0,
+    "y": 43
+   },
+   "id": 26,
+   "options": {
+    "cellHeight": "md"
+   },
+   "pluginVersion": "v10.1.0",
+   "targets": [
+    {
+     "datasource": {
+      "type": "loki",
+      "uid": "${DS_LOKI}"
+     },
+     "expr": "{namespace=\"weather-service\"} |= \"Forecast Condition\" | logfmt | location=~\"$location\" | forecast_day=\"$forecast_day\""
+    }
+   ],
+   "title": "Condition and Astro Timings",
+   "transformations": [
+    {
+     "id": "extractFields",
+     "options": {
+      "format": "kvp",
+      "keepTime": false,
+      "replace": true,
+      "source": "labels"
+     }
+    },
+    {
+     "id": "groupBy",
+     "options": {
+      "fields": {
+       "forecast_condition": {
+        "aggregations": [
+         "lastNotNull"
+        ],
+        "operation": "aggregate"
+       },
+       "location": {
+        "aggregations": [],
+        "operation": "groupby"
+       },
+       "moonrise_time": {
+        "aggregations": [
+         "lastNotNull"
+        ],
+        "operation": "aggregate"
+       },
+       "moonset_time": {
+        "aggregations": [
+         "lastNotNull"
+        ],
+        "operation": "aggregate"
+       },
+       "sunrise_time": {
+        "aggregations": [
+         "lastNotNull"
+        ],
+        "operation": "aggregate"
+       },
+       "sunset_time": {
+        "aggregations": [
+         "lastNotNull"
+        ],
+        "operation": "aggregate"
+       }
+      }
+     }
+    },
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {},
+      "includeByName": {},
+      "indexByName": {},
+      "renameByName": {
+       "forecast_condition (lastNotNull)": "Condition",
+       "location": "Location",
+       "moonrise_time (lastNotNull)": "Moonrise",
+       "moonset_time (lastNotNull)": "Moonset",
+       "sunrise_time (lastNotNull)": "Sunrise",
+       "sunset_time (lastNotNull)": "Sunset"
+      }
+     }
+    }
+   ],
+   "transparent": true,
+   "type": "table"
+  }
+ ],
+ "schemaVersion": 36,
+ "tags": [
+  "weather",
+  "demo"
+ ],
+ "templating": {
+  "list": [
+   {
+    "hide": 2,
+    "name": "DS_PROMETHEUS",
+    "query": "prometheus",
+    "regex": "/play/",
+    "type": "datasource"
+   },
+   {
+    "hide": 2,
+    "name": "DS_LOKI",
+    "query": "loki",
+    "regex": "/play-logs/",
+    "type": "datasource"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS_PROMETHEUS}"
+    },
+    "label": "Location",
+    "multi": true,
+    "name": "location",
+    "query": "label_values(weather_temp_c, location)",
+    "type": "query"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${DS_PROMETHEUS}"
+    },
+    "hide": 2,
+    "includeAll": true,
+    "label": "Forecast Days",
+    "multi": true,
+    "name": "forecast_day",
+    "query": "label_values(forecast_day)",
+    "regex": "[^0]",
+    "type": "query"
+   }
+  ]
+ },
+ "time": {
+  "from": "now-7d",
+  "to": "now"
+ },
+ "timezone": "utc",
+ "title": "Overview [Fahrenheit]",
+ "uid": "19f285e5-c42d-4007-b671-31d493686316",
+ "version": 1
+}

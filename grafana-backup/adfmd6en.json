@@ -1,0 +1,6920 @@
+{
+ "annotations": {
+  "list": [
+   {
+    "builtIn": 1,
+    "datasource": {
+     "type": "grafana",
+     "uid": "-- Grafana --"
+    },
+    "enable": true,
+    "hide": true,
+    "iconColor": "rgba(0, 211, 255, 1)",
+    "name": "Annotations & Alerts",
+    "type": "dashboard"
+   }
+  ]
+ },
+ "editable": true,
+ "fiscalYearStartMonth": 0,
+ "graphTooltip": 0,
+ "id": 302965152522240,
+ "liveNow": false,
+ "panels": [
+  {
+   "gridPos": {
+    "h": 3,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "id": 15,
+   "options": {
+    "code": {
+     "language": "html",
+     "showLineNumbers": false,
+     "showMiniMap": false
+    },
+    "content": "<div style=\"height:100%;display:flex;align-items:flex-start;padding-top:1px;overflow:visible\"><div style=\"display:flex;align-items:center;gap:26px;height:auto;padding:0 16px;font-family:Inter,system-ui,sans-serif;overflow:visible\"><div style=\"display:flex;align-items:center;gap:16px;flex-shrink:0\"><img src=\"data:image/png;base64,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\" style=\"height:34px;width:auto;flex-shrink:0;display:block\" alt=\"PowerChina\"><div style=\"display:flex;flex-direction:column;justify-content:center;line-height:1.15\"><span style=\"font-size:15px;font-weight:800;color:#e8eef7;white-space:nowrap\">Photovoltaic Complex <span style=\"background:linear-gradient(90deg,#a855f7,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent\">Mauriti</span></span><span style=\"font-size:9px;font-weight:600;letter-spacing:1px;color:#8aa0b8;text-transform:uppercase;margin-top:2px;white-space:nowrap\">PERFORMANCE INDICATOR &middot; POWERCHINA BRAZIL</span></div></div><div style=\"width:1px;height:30px;background:rgba(255,255,255,.14);flex-shrink:0\"></div><div style=\"display:flex;align-items:center;font-size:13.5px;font-weight:700;white-space:nowrap;letter-spacing:-.2px;flex-shrink:0\"><span style=\"color:#a855f7\">343,77 MW</span><span style=\"opacity:.22;margin:0 9px;color:#cbd5e1\">&middot;</span><span style=\"color:#34E0A1\">531,6 GWh</span><span style=\"color:#93a4bd;font-weight:600;margin-left:5px\">generated</span><span style=\"opacity:.22;margin:0 9px;color:#cbd5e1\">&middot;</span><span style=\"color:#f97316\">80,1 GWh</span><span style=\"color:#93a4bd;font-weight:600;margin-left:5px\">curtailed</span><span style=\"opacity:.22;margin:0 9px;color:#cbd5e1\">&middot;</span><span style=\"color:#fbbf24\">4.668</span><span style=\"color:#93a4bd;font-weight:600;margin-left:5px\">ONS restrictions</span><span style=\"opacity:.22;margin:0 9px;color:#cbd5e1\">&middot;</span><span style=\"color:#fbbf24\">2.334 h</span><span style=\"opacity:.22;margin:0 9px;color:#cbd5e1\">&middot;</span><span style=\"color:#fbbf24\">65%</span><span style=\"color:#93a4bd;font-weight:600;margin-left:5px\">ENE</span></div><div id=\"navmauriti\" style=\"margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;padding-right:4px\"><a href=\"/d/adfmd6\" style=\"font-size:13px;text-decoration:none;padding:2px 6px;border-radius:99px;border:1px solid rgba(255,255,255,.14);opacity:.55\">🇧🇷</a><a href=\"/d/adfmd6en\" style=\"font-size:13px;text-decoration:none;padding:2px 6px;border-radius:99px;border:1px solid #34E0A1\">🇬🇧</a><a href=\"/d/adfmd6zh\" style=\"font-size:13px;text-decoration:none;padding:2px 6px;border-radius:99px;border:1px solid rgba(255,255,255,.14);opacity:.55\">🇨🇳</a><span style=\"width:1px;height:16px;background:rgba(255,255,255,.18);margin:0 4px\"></span><a href=\"/d/adfmd6en\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#34E0A1;border:1px solid #34E0A1\">Monitor</a><a href=\"/d/perfmt1en\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">Performance</a><a href=\"/d/histmt1en\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">History</a><a href=\"/d/ppaml1en\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">PPA x ML</a><a href=\"/d/a75gd7en\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">SCADA</a><a href=\"/d/rbb7ggqen\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">ONS</a><a href=\"/d/a88bwpen\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">Irradiance</a><a href=\"/d/asldtren\" style=\"font-size:10.5px;font-weight:700;text-decoration:none;padding:3px 10px;border-radius:99px;white-space:nowrap;color:#8aa0b8;border:1px solid rgba(255,255,255,.14)\">MUST</a></div></div></div>",
+    "mode": "html"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [],
+   "title": "",
+   "transparent": true,
+   "type": "text"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "**Irradiância (radiação solar) AGORA** — fator #1 da geração. Fonte: Open-Meteo · Mauriti/CE.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3b82f6",
+        "value": 0
+       },
+       {
+        "color": "#22d3ee",
+        "value": 200
+       },
+       {
+        "color": "#fbbf24",
+        "value": 500
+       },
+       {
+        "color": "#f97316",
+        "value": 800
+       }
+      ]
+     },
+     "unit": "suffix: W/m²"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 0,
+    "y": 3
+   },
+   "id": 81,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 25
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "shortwave_radiation",
+       "text": "shortwave_radiation",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "current",
+     "source": "url",
+     "type": "json",
+     "url": "https://api.open-meteo.com/v1/forecast",
+     "url_options": {
+      "data": "",
+      "method": "GET",
+      "params": [
+       {
+        "key": "latitude",
+        "value": "-7.38"
+       },
+       {
+        "key": "longitude",
+        "value": "-38.77"
+       },
+       {
+        "key": "current",
+        "value": "temperature_2m,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code"
+       },
+       {
+        "key": "timezone",
+        "value": "America/Fortaleza"
+       }
+      ]
+     }
+    }
+   ],
+   "title": "☀️ Irradiance",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Fonte: Open-Meteo · Mauriti/CE (grátis, sem chave).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#f97316",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#f97316",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "celsius"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 4,
+    "y": 3
+   },
+   "id": 82,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 25
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "temperature_2m",
+       "text": "temperature_2m",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "current",
+     "source": "url",
+     "type": "json",
+     "url": "https://api.open-meteo.com/v1/forecast",
+     "url_options": {
+      "data": "",
+      "method": "GET",
+      "params": [
+       {
+        "key": "latitude",
+        "value": "-7.38"
+       },
+       {
+        "key": "longitude",
+        "value": "-38.77"
+       },
+       {
+        "key": "current",
+        "value": "temperature_2m,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code"
+       },
+       {
+        "key": "timezone",
+        "value": "America/Fortaleza"
+       }
+      ]
+     }
+    }
+   ],
+   "title": "🌡️ Temperature",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Fonte: Open-Meteo · Mauriti/CE (grátis, sem chave).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 0,
+     "max": 100,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 8,
+    "y": 3
+   },
+   "id": 83,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 25
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "cloud_cover",
+       "text": "cloud_cover",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "current",
+     "source": "url",
+     "type": "json",
+     "url": "https://api.open-meteo.com/v1/forecast",
+     "url_options": {
+      "data": "",
+      "method": "GET",
+      "params": [
+       {
+        "key": "latitude",
+        "value": "-7.38"
+       },
+       {
+        "key": "longitude",
+        "value": "-38.77"
+       },
+       {
+        "key": "current",
+        "value": "temperature_2m,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code"
+       },
+       {
+        "key": "timezone",
+        "value": "America/Fortaleza"
+       }
+      ]
+     }
+    }
+   ],
+   "title": "☁️ Clouds",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Fonte: Open-Meteo · Mauriti/CE (grátis, sem chave).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#22d3ee",
+      "mode": "fixed"
+     },
+     "decimals": 0,
+     "max": 100,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#22d3ee",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 12,
+    "y": 3
+   },
+   "id": 84,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 25
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "relative_humidity_2m",
+       "text": "relative_humidity_2m",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "current",
+     "source": "url",
+     "type": "json",
+     "url": "https://api.open-meteo.com/v1/forecast",
+     "url_options": {
+      "data": "",
+      "method": "GET",
+      "params": [
+       {
+        "key": "latitude",
+        "value": "-7.38"
+       },
+       {
+        "key": "longitude",
+        "value": "-38.77"
+       },
+       {
+        "key": "current",
+        "value": "temperature_2m,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code"
+       },
+       {
+        "key": "timezone",
+        "value": "America/Fortaleza"
+       }
+      ]
+     }
+    }
+   ],
+   "title": "💧 Humidity",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Condição do tempo agora (código WMO). Fonte: Open-Meteo · Mauriti/CE.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 0,
+     "mappings": [
+      {
+       "options": {
+        "0": {
+         "index": 0,
+         "text": "☀ Clear sky"
+        },
+        "1": {
+         "index": 1,
+         "text": "🌤 Mostly clear"
+        },
+        "2": {
+         "index": 2,
+         "text": "⛅ Partly cloudy"
+        },
+        "3": {
+         "index": 3,
+         "text": "☁ Cloudy"
+        },
+        "45": {
+         "index": 4,
+         "text": "🌫 Fog"
+        },
+        "48": {
+         "index": 5,
+         "text": "🌫 Fog"
+        },
+        "51": {
+         "index": 6,
+         "text": "🌦 Drizzle"
+        },
+        "53": {
+         "index": 7,
+         "text": "🌦 Drizzle"
+        },
+        "55": {
+         "index": 8,
+         "text": "🌦 Drizzle"
+        },
+        "61": {
+         "index": 9,
+         "text": "🌧 Light rain"
+        },
+        "63": {
+         "index": 10,
+         "text": "🌧 Rain"
+        },
+        "65": {
+         "index": 11,
+         "text": "🌧 Heavy rain"
+        },
+        "80": {
+         "index": 12,
+         "text": "🌧 Showers"
+        },
+        "81": {
+         "index": 13,
+         "text": "🌧 Showers"
+        },
+        "82": {
+         "index": 14,
+         "text": "⛈ Heavy showers"
+        },
+        "95": {
+         "index": 15,
+         "text": "⛈ Thunderstorm"
+        }
+       },
+       "type": "value"
+      }
+     ],
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#e8eef7",
+        "value": 0
+       }
+      ]
+     },
+     "unit": ""
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 16,
+    "y": 3
+   },
+   "id": 85,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 25
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "weather_code",
+       "text": "weather_code",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "current",
+     "source": "url",
+     "type": "json",
+     "url": "https://api.open-meteo.com/v1/forecast",
+     "url_options": {
+      "data": "",
+      "method": "GET",
+      "params": [
+       {
+        "key": "latitude",
+        "value": "-7.38"
+       },
+       {
+        "key": "longitude",
+        "value": "-38.77"
+       },
+       {
+        "key": "current",
+        "value": "temperature_2m,relative_humidity_2m,cloud_cover,shortwave_radiation,wind_speed_10m,weather_code"
+       },
+       {
+        "key": "timezone",
+        "value": "America/Fortaleza"
+       }
+      ]
+     }
+    }
+   ],
+   "title": "Weather",
+   "type": "stat"
+  },
+  {
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 20,
+    "y": 3
+   },
+   "id": 97,
+   "options": {
+    "bgColor": "",
+    "clockType": "24 hour",
+    "countdownSettings": {
+     "endCountdownTime": "2026-07-12T18:35:03-03:00",
+     "endText": "00:00:00",
+     "invalidValueText": "valor inválido",
+     "noValueText": "nenhum valor encontrado",
+     "queryCalculation": "last",
+     "source": "input"
+    },
+    "countupSettings": {
+     "beginCountupTime": "2026-07-12T18:35:03-03:00",
+     "beginText": "00:00:00",
+     "invalidValueText": "valor inválido",
+     "noValueText": "nenhum valor encontrado",
+     "queryCalculation": "last",
+     "source": "input"
+    },
+    "dateSettings": {
+     "dateFormat": "DD/MM/YYYY",
+     "fontSize": "13px",
+     "fontWeight": "normal",
+     "locale": "pt-br",
+     "showDate": true
+    },
+    "descriptionSettings": {
+     "descriptionText": "",
+     "fontSize": "12px",
+     "fontWeight": "normal",
+     "noValueText": "nenhuma descrição encontrada",
+     "source": "none"
+    },
+    "digitalSettings": {
+     "fillColor": "orange",
+     "glowSize": 0,
+     "strokeColor": "dark-orange",
+     "strokeWidth": 0
+    },
+    "fontMono": false,
+    "mode": "time",
+    "refresh": "sec",
+    "style": "text",
+    "timeSettings": {
+     "customFormat": "HH:mm:ss",
+     "fontSize": "26px",
+     "fontWeight": "bold"
+    },
+    "timezone": "America/Fortaleza",
+    "timezoneSettings": {
+     "fontSize": "10px",
+     "fontWeight": "normal",
+     "showTimezone": true,
+     "zoneFormat": "nameOffset"
+    }
+   },
+   "pluginVersion": "3.2.2",
+   "targets": [
+    {
+     "refId": "A"
+    }
+   ],
+   "title": "📍 Mauriti · CE",
+   "type": "grafana-clock-panel"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "**Geração BRUTA total** = totalizador 6233 (soma dos 22 circuitos 34,5 kV), atualiza a cada 5 min. Trocado da líquida (6196/6197) por atraso de telemetria nos medidores dos trafos. **% abaixo:** ÷ Outorga 343,77 MW. [Correção auditoria: ancora no último instante com os 22 circuitos completos; Total=soma dos circuitos → TR1+TR2=Total sempre.]",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "dark-blue",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 343.77,
+     "min": 0,
+     "thresholds": {
+      "mode": "percentage",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "#EAB839",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 5,
+    "x": 0,
+    "y": 6
+   },
+   "id": 42,
+   "options": {
+    "barShape": "rounded",
+    "barWidthFactor": 0.6,
+    "effects": {
+     "barGlow": true,
+     "centerGlow": true,
+     "gradient": true
+    },
+    "endpointMarker": "glow",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": true
+    },
+    "segmentCount": 10,
+    "segmentSpacing": 0.05,
+    "shape": "circle",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": false,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 30
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000))",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Generation · total (gross)",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "**Transformador 1 — geração BRUTA** (soma dos circuitos, 5 min). **Arco = Fator de Capacidade** = potência ÷ 171,885 MW (capacidade instalada dos parques do trafo). Enche conforme o sol; comparar TR1×TR2 revela parque subperformando. Legendas: FC (% instalada) e fatia da geração. [Correção auditoria: ancora no último instante com os 22 circuitos completos; Total=soma dos circuitos → TR1+TR2=Total sempre.]",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "blue",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 171.885,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3b82f6",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 4,
+    "x": 5,
+    "y": 6
+   },
+   "id": 43,
+   "options": {
+    "barShape": "rounded",
+    "barWidthFactor": 0.6,
+    "effects": {
+     "barGlow": true,
+     "centerGlow": true,
+     "gradient": true
+    },
+    "endpointMarker": "glow",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": true
+    },
+    "segmentCount": 10,
+    "segmentSpacing": 0.05,
+    "shape": "circle",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": false,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 30
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6198,6199,6200,6201,6202,6209,6210,6211,6212,6213,6214] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000))",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Transformer 1 · gross",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "**Transformador 2 — geração BRUTA** (soma dos circuitos, 5 min). **Arco = Fator de Capacidade** = potência ÷ 171,885 MW (capacidade instalada dos parques do trafo). Enche conforme o sol; comparar TR1×TR2 revela parque subperformando. Legendas: FC (% instalada) e fatia da geração. [Correção auditoria: ancora no último instante com os 22 circuitos completos; Total=soma dos circuitos → TR1+TR2=Total sempre.]",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "blue",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 171.885,
+     "min": 0,
+     "thresholds": {
+      "mode": "percentage",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "#EAB839",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 4,
+    "x": 9,
+    "y": 6
+   },
+   "id": 44,
+   "options": {
+    "barShape": "rounded",
+    "barWidthFactor": 0.6,
+    "effects": {
+     "barGlow": true,
+     "centerGlow": true,
+     "gradient": true
+    },
+    "endpointMarker": "glow",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": true
+    },
+    "segmentCount": 10,
+    "segmentSpacing": 0.05,
+    "shape": "circle",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": false,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 30
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6203,6204,6205,6206,6207,6208,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000))",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Transformer 2 · gross",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Carregamento = potência aparente √(P²+Q²) ÷ 230 MVA (capacidade do trafo). Verde <80% · amarelo <100% · vermelho sobrecarga.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "continuous-GrYlRd"
+     },
+     "decimals": 1,
+     "max": 120,
+     "min": 0,
+     "thresholds": {
+      "mode": "percentage",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "#EAB839",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 13,
+    "y": 6
+   },
+   "id": 101,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.6,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": true
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 25
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($p := ($v:=dados[pontoId=6196 and nomeGrandeza='Demat'].valores[valor!=null]; $count($v)>0?$v[-1].valor/1000:0); $q := ($w:=dados[pontoId=6196 and nomeGrandeza='Demre'].valores[valor!=null]; $count($w)>0?$w[-1].valor/1000:0); $sqrt($p*$p+$q*$q)/230*100)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "🌡️ Loading TR1 (230 MVA)",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Integral da potência (6233) hoje · Fonte Way2. Só valores positivos (geração).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#1ed760",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#1ed760",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MWh"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 4,
+    "x": 17,
+    "y": 6
+   },
+   "id": 90,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "$sum([dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor>0].valor, 0])*5/60/1000",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "⚡ Energy generated today",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Energia hoje ÷ (343,77 MW × horas decorridas). Referência: capacidade instalada do complexo.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#22d3ee",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "max": 100,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#22d3ee",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 21,
+    "y": 6
+   },
+   "id": 92,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($e := $sum([dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor>0].valor, 0])*5/60/1000; $n := $count(dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null].valor); $h := $n*5/60; $h>0 ? $e/(343.77*$h)*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "🎯 Capacity factor",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Maior potência instantânea (6233) hoje.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#f97316",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#f97316",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 4,
+    "x": 17,
+    "y": 9
+   },
+   "id": 91,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "$max([dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor>0].valor, 0])/1000",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "📈 Peak power today",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Média da potência ao longo do dia (energia ÷ horas).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#a855f7",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#a855f7",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 3,
+    "x": 21,
+    "y": 9
+   },
+   "id": 93,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 12,
+     "valueSize": 20
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($e := $sum([dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor>0].valor, 0])*5/60/1000; $n := $count(dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null].valor); $h := $n*5/60; $h>0 ? $e/$h : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "📊 Average power today",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Carregamento = potência aparente √(P²+Q²) ÷ 230 MVA (capacidade do trafo). Verde <80% · amarelo <100% · vermelho sobrecarga.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "continuous-GrYlRd"
+     },
+     "decimals": 1,
+     "max": 120,
+     "min": 0,
+     "thresholds": {
+      "mode": "percentage",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "#EAB839",
+        "value": 60
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 4,
+    "x": 13,
+    "y": 11
+   },
+   "id": 102,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.6,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": true
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 25
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($p := ($v:=dados[pontoId=6197 and nomeGrandeza='Demat'].valores[valor!=null]; $count($v)>0?$v[-1].valor/1000:0); $q := ($w:=dados[pontoId=6197 and nomeGrandeza='Demre'].valores[valor!=null]; $count($w)>0?$w[-1].valor/1000:0); $sqrt($p*$p+$q*$q)/230*100)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "🌡️ Loading TR2 (230 MVA)",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Curva da potência total (6233) ao longo de hoje. Fonte: Way2.",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#1ed760",
+      "mode": "fixed"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 28,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 2,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": true,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "megwatt"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 7,
+    "x": 17,
+    "y": 11
+   },
+   "id": 94,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "bottom",
+     "showLegend": false
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "single",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "time",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "MW",
+       "text": "Geração (MW)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor != null].{\"time\":data & \"-03:00\",\"MW\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "⚡ Generation profile today",
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: % of grant"
+    }
+   },
+   "gridPos": {
+    "h": 2,
+    "w": 5,
+    "x": 0,
+    "y": 14
+   },
+   "id": 45,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 11
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000)/343.77*100)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: % of cap."
+    }
+   },
+   "gridPos": {
+    "h": 1,
+    "w": 4,
+    "x": 5,
+    "y": 14
+   },
+   "id": 48,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 11
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6198,6199,6200,6201,6202,6209,6210,6211,6212,6213,6214] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000)/171.885*100)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: % of cap."
+    }
+   },
+   "gridPos": {
+    "h": 1,
+    "w": 4,
+    "x": 9,
+    "y": 14
+   },
+   "id": 49,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 11
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; ($sum([dados[pontoId in [6203,6204,6205,6206,6207,6208,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0])/1000)/171.885*100)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: % of gen."
+    }
+   },
+   "gridPos": {
+    "h": 1,
+    "w": 4,
+    "x": 5,
+    "y": 15
+   },
+   "id": 46,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 11
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; $all := $sum([dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0]); $c := $sum([dados[pontoId in [6198,6199,6200,6201,6202,6209,6210,6211,6212,6213,6214] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0]); $all!=0 ? $c/$all*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#8aa0b8",
+      "mode": "fixed"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: % of gen."
+    }
+   },
+   "gridPos": {
+    "h": 1,
+    "w": 4,
+    "x": 9,
+    "y": 15
+   },
+   "id": 47,
+   "options": {
+    "colorMode": "none",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 11
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($cd := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat']; $times := $distinct($cd.valores[valor!=null].data); $tc := $times[($tt := $; $count($cd.valores[data=$tt and valor!=null])=22)]; $t := $count($tc)>0 ? $tc[-1] : $times[-1]; $all := $sum([dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0]); $c := $sum([dados[pontoId in [6203,6204,6205,6206,6207,6208,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].valores[data=$t and valor!=null].valor, 0]); $all!=0 ? $c/$all*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "kvolt"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase A"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase B"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase C"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 12,
+    "x": 0,
+    "y": 16
+   },
+   "id": 11,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "lastNotNull",
+      "mean",
+      "max"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase A",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='TensaoA' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase B",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='TensaoB' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase C",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "C",
+     "root_selector": "dados[nomeGrandeza='TensaoC' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Line voltage (kV) · TR1",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "kvolt"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase A"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase B"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase C"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 12,
+    "x": 12,
+    "y": 16
+   },
+   "id": 103,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "lastNotNull",
+      "mean",
+      "max"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase A",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='TensaoA' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase B",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='TensaoB' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "v",
+       "text": "Phase C",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "C",
+     "root_selector": "dados[nomeGrandeza='TensaoC' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"v\":valor*1.7320508/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Line voltage (kV) · TR2",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "amp"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase A"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase B"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase C"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 12,
+    "x": 0,
+    "y": 25
+   },
+   "id": 12,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "lastNotNull",
+      "mean",
+      "max"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase A",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='CorrenteA' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase B",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='CorrenteB' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase C",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "C",
+     "root_selector": "dados[nomeGrandeza='CorrenteC' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Line current (A) · TR1",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "amp"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase A"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#F2495C",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase B"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#FADE2A",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Phase C"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#5794F2",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 9,
+    "w": 12,
+    "x": 12,
+    "y": 25
+   },
+   "id": 98,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "lastNotNull",
+      "mean",
+      "max"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase A",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='CorrenteA' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase B",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='CorrenteB' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "a",
+       "text": "Phase C",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "C",
+     "root_selector": "dados[nomeGrandeza='CorrenteC' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"a\":valor}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Line current (A) · TR2",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "none"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "P (MW)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#73BF69",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Q (MVAr)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#B877D9",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 34
+   },
+   "id": 14,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "max",
+      "mean"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "p",
+       "text": "P (MW)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='Demat' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"p\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "q",
+       "text": "Q (MVAr)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='Demre' and pontoId=6196].valores[valor != null].{\"time\":data & \"-03:00\",\"q\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Power P·Q · TR1",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineStyle": {
+       "fill": "solid"
+      },
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "none"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "P (MW)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#73BF69",
+         "mode": "fixed"
+        }
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Q (MVAr)"
+      },
+      "properties": [
+       {
+        "id": "color",
+        "value": {
+         "fixedColor": "#B877D9",
+         "mode": "fixed"
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 34
+   },
+   "id": 99,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "max",
+      "mean"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "p",
+       "text": "P (MW)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='Demat' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"p\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "q",
+       "text": "Q (MVAr)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "dados[nomeGrandeza='Demre' and pontoId=6197].valores[valor != null].{\"time\":data & \"-03:00\",\"q\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Power P·Q · TR2",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#2dd4bf",
+      "mode": "fixed"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "line"
+      }
+     },
+     "decimals": 2,
+     "max": 1.05,
+     "min": -1.05,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": 0
+       },
+       {
+        "color": "#F0598C",
+        "value": 0.92
+       }
+      ]
+     },
+     "unit": "none"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 42
+   },
+   "id": 13,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "mean",
+      "min"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "FP",
+       "text": "Fator de Potência",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "( $qmap := dados[nomeGrandeza='Demre' and pontoId=6196].valores[valor != null]{data: valor}; dados[nomeGrandeza='Demat' and pontoId=6196].valores[valor != null].{ \"time\": data & \"-03:00\", \"FP\": ( $qv := $lookup($qmap, data); ($qv != null ? ( $P := valor/1000; $Q := $qv/1000; $S := $sqrt($P*$P+$Q*$Q); ($S > 0.001 ? ($Q<0?-1:1)*($P<0?-$P:$P)/$S : null) ) : null) ) } )",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Power factor · TR1 (target ≥ 0.92)",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#2dd4bf",
+      "mode": "fixed"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 15,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": false,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "line"
+      }
+     },
+     "decimals": 2,
+     "max": 1.05,
+     "min": -1.05,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "transparent",
+        "value": 0
+       },
+       {
+        "color": "#F0598C",
+        "value": 0.92
+       }
+      ]
+     },
+     "unit": "none"
+    }
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 42
+   },
+   "id": 100,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [
+      "mean",
+      "min"
+     ],
+     "displayMode": "table",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "right",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "none"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "FP",
+       "text": "Fator de Potência",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "( $qmap := dados[nomeGrandeza='Demre' and pontoId=6197].valores[valor != null]{data: valor}; dados[nomeGrandeza='Demat' and pontoId=6197].valores[valor != null].{ \"time\": data & \"-03:00\", \"FP\": ( $qv := $lookup($qmap, data); ($qv != null ? ( $P := valor/1000; $Q := $qv/1000; $S := $sqrt($P*$P+$Q*$Q); ($S > 0.001 ? ($Q<0?-1:1)*($P<0?-$P:$P)/$S : null) ) : null) ) } )",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Power factor · TR2 (target ≥ 0.92)",
+   "transformations": [
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "(.+)",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 2,
+     "max": 100,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 2
+       }
+      ]
+     },
+     "unit": "percent"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 5,
+    "y": 50
+   },
+   "id": 4,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 34
+    },
+    "textMode": "auto",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "deseq",
+       "text": "Desequilíbrio V",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "( $b := dados[nomeGrandeza='TensaoB' and pontoId=6196].valores[valor != null]{data: valor}; $c := dados[nomeGrandeza='TensaoC' and pontoId=6196].valores[valor != null]{data: valor}; dados[nomeGrandeza='TensaoA' and pontoId=6196].valores[valor != null].{ \"time\": data & \"-03:00\", \"deseq\": ( $vb := $lookup($b,data); $vc := $lookup($c,data); (($vb != null and $vc != null) ? ( $va := valor; $mx := ($va>$vb?($va>$vc?$va:$vc):($vb>$vc?$vb:$vc)); $mn := ($va<$vb?($va<$vc?$va:$vc):($vb<$vc?$vb:$vc)); $av := ($va+$vb+$vc)/3; ($av>0 ? ($mx-$mn)/$av*100 : null) ) : null) ) } )",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#B877D9",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "MVAr"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 10,
+    "y": 50
+   },
+   "id": 10,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "last"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 34
+    },
+    "textMode": "auto",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "q",
+       "text": "Potência Reativa",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "dados[nomeGrandeza='Demre' and pontoId=6233].valores[valor != null].{\"time\":data & \"-03:00\",\"q\":valor/1000}",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#1ED760",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "none"
+    }
+   },
+   "gridPos": {
+    "h": 4,
+    "w": 5,
+    "x": 15,
+    "y": 50
+   },
+   "id": 8,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "area",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 34
+    },
+    "textMode": "auto",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "time",
+       "text": "Tempo",
+       "timestampFormat": "2006-01-02T15:04:05Z07:00",
+       "type": "timestamp"
+      },
+      {
+       "selector": "FP",
+       "text": "Fator de Potência",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "( $qmap := dados[nomeGrandeza='Demre' and pontoId=6233].valores[valor != null]{data: valor}; dados[nomeGrandeza='Demat' and pontoId=6233].valores[valor != null].{ \"time\": data & \"-03:00\", \"FP\": ( $qv := $lookup($qmap, data); ($qv != null ? ( $P := valor/1000; $Q := $qv/1000; $S := $sqrt($P*$P+$Q*$Q); ($S > 0.001 ? ($Q<0?-1:1)*($P<0?-$P:$P)/$S : null) ) : null) ) } )",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "**Geração BRUTA — soma instantânea dos 22 circuitos coletores (34,5 kV).** Fonte: medidores Way2 dos cubículos. Arco = capacidade nominal do complexo (343,77 MW).\n\nO equivalente LÍQUIDO (pós-transformadores, entregue à rede) está no setor 230 kV — é ~5–7% menor (perdas trafo + auxiliares).",
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#1ed760",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 343.77,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#1ed760",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 0,
+    "y": 54
+   },
+   "id": 30,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Complex power · Σ 34.5 kV collectors",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#34d399",
+      "mode": "fixed"
+     },
+     "decimals": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#34d399",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: / 22"
+    }
+   },
+   "gridPos": {
+    "h": 6,
+    "w": 12,
+    "x": 12,
+    "y": 54
+   },
+   "id": 31,
+   "options": {
+    "colorMode": "value",
+    "graphMode": "none",
+    "justifyMode": "auto",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "titleSize": 13,
+     "valueSize": 26
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "$count(dados[nomeGrandeza='Demat' and pontoId in [6198,6199,6200,6201,6202,6203,6204,6205,6206,6207,6208,6209,6210,6211,6212,6213,6214,6215,6216,6217,6218,6219]])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Circuits OK",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#a855f7",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#a855f7",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 0,
+    "y": 60
+   },
+   "id": 50,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6198,6199,6200] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M1",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#22d3ee",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 24.555,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#22d3ee",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 3,
+    "y": 60
+   },
+   "id": 51,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6201,6202] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M2",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#fbbf24",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#fbbf24",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 6,
+    "y": 60
+   },
+   "id": 52,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6203,6204,6205] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M3",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#3b82f6",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#3b82f6",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 9,
+    "y": 60
+   },
+   "id": 53,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6206,6207,6208] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M4",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#ef4444",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#ef4444",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 12,
+    "y": 60
+   },
+   "id": 54,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6209,6210,6211] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M5",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#34d399",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#34d399",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 3,
+    "x": 15,
+    "y": 60
+   },
+   "id": 55,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6212,6213,6214] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M6",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#f97316",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 14.733,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#f97316",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 2,
+    "x": 18,
+    "y": 60
+   },
+   "id": 56,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6215] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M7",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#ec4899",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 49.11,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#ec4899",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 2,
+    "x": 20,
+    "y": 60
+   },
+   "id": 57,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6216,6217,6218] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M8",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "fixedColor": "#a3e635",
+      "mode": "fixed"
+     },
+     "decimals": 2,
+     "max": 9.822,
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#a3e635",
+        "value": 0
+       }
+      ]
+     },
+     "unit": "suffix: MW"
+    }
+   },
+   "gridPos": {
+    "h": 5,
+    "w": 2,
+    "x": 22,
+    "y": 60
+   },
+   "id": 58,
+   "options": {
+    "barShape": "flat",
+    "barWidthFactor": 0.5,
+    "effects": {
+     "barGlow": false,
+     "centerGlow": false,
+     "gradient": true
+    },
+    "endpointMarker": "point",
+    "minVizHeight": 75,
+    "minVizWidth": 75,
+    "orientation": "auto",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "segmentCount": 1,
+    "segmentSpacing": 0.3,
+    "shape": "gauge",
+    "showThresholdLabels": false,
+    "showThresholdMarkers": true,
+    "sizing": "auto",
+    "sparkline": true,
+    "text": {
+     "titleSize": 14,
+     "valueSize": 20
+    },
+    "textMode": "auto"
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($v := dados[pontoId in [6219] and nomeGrandeza='Demat'].($vv := valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "M9",
+   "type": "gauge"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 0,
+    "y": 65
+   },
+   "id": 60,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6198,6199,6200] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 3.93
+       },
+       {
+        "color": "#2bb673",
+        "value": 5.71
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 3,
+    "y": 65
+   },
+   "id": 61,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6201,6202] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 6,
+    "y": 65
+   },
+   "id": 62,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6203,6204,6205] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 9,
+    "y": 65
+   },
+   "id": 63,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6206,6207,6208] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 12,
+    "y": 65
+   },
+   "id": 64,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6209,6210,6211] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 3,
+    "x": 15,
+    "y": 65
+   },
+   "id": 65,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6212,6213,6214] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 2.36
+       },
+       {
+        "color": "#2bb673",
+        "value": 3.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 2,
+    "x": 18,
+    "y": 65
+   },
+   "id": 66,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6215] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 7.86
+       },
+       {
+        "color": "#2bb673",
+        "value": 11.43
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 2,
+    "x": 20,
+    "y": 65
+   },
+   "id": 67,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6216,6217,6218] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "thresholds"
+     },
+     "decimals": 1,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "#8aa0b8",
+        "value": 0
+       },
+       {
+        "color": "#e02f44",
+        "value": 0.1
+       },
+       {
+        "color": "#f2b01e",
+        "value": 1.57
+       },
+       {
+        "color": "#2bb673",
+        "value": 2.29
+       }
+      ]
+     },
+     "unit": "suffix: % do total"
+    }
+   },
+   "gridPos": {
+    "h": 3,
+    "w": 2,
+    "x": 22,
+    "y": 65
+   },
+   "id": 68,
+   "options": {
+    "colorMode": "background",
+    "graphMode": "none",
+    "justifyMode": "center",
+    "orientation": "auto",
+    "percentChangeColorMode": "standard",
+    "reduceOptions": {
+     "calc": [
+      "lastNotNull"
+     ],
+     "calcs": [
+      "lastNotNull"
+     ],
+     "fields": "",
+     "values": false
+    },
+    "showPercentChange": false,
+    "text": {
+     "valueSize": 14
+    },
+    "textMode": "value",
+    "wideLayout": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($pp := ($v := dados[pontoId in [6219] and nomeGrandeza='Demat'].($vv:=valores[valor!=null]; $count($vv)>0?$vv[-1].valor:0); $sum($v)/1000); $tt := ($w := dados[pontoId=6233 and nomeGrandeza='Demat'].valores[valor!=null]; $count($w)>0 ? $w[-1].valor/1000 : 0); $tt > 0.5 ? $pp/$tt*100 : 0)",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "",
+   "type": "stat"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 6,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1.8,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": true,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "megwatt"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 55
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "0C0"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "legend": true,
+         "tooltip": true,
+         "viz": true
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 68
+   },
+   "id": 16,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and nomeGrandeza='Demat' and ${estilo} = true].(($c := $lookup($map,$string(pontoId)); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c, \"v\": valor/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and nomeGrandeza='Demat' and ${estilo} = false].(($c := $lookup($map,$string(pontoId)); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c, \"v\": valor/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Active power per circuit",
+   "transformations": [
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "^(?:[AB] )?(.+)$",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 6,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1.8,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": true,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "suffix: MVAr"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 55
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "0C0"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "legend": true,
+         "tooltip": true,
+         "viz": true
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 68
+   },
+   "id": 17,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and nomeGrandeza='Demre' and ${estilo} = true].(($c := $lookup($map,$string(pontoId)); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c, \"v\": valor/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and nomeGrandeza='Demre' and ${estilo} = false].(($c := $lookup($map,$string(pontoId)); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c, \"v\": valor/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Reactive power per circuit",
+   "transformations": [
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "^(?:[AB] )?(.+)$",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 6,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1.8,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": true,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "kvolt"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 55
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "0C0"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "legend": true,
+         "tooltip": true,
+         "viz": true
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 76
+   },
+   "id": 18,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and $substring(nomeGrandeza,0,6)='Tensao' and ($fs := [${fase:singlequote}]; $count($fs[$ != ''])=0 or $substring(nomeGrandeza,6) in $fs) and ${estilo} = true].(($c := $lookup($map,$string(pontoId)); $ph := $substring(nomeGrandeza,6); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c & \" \" & $ph, \"v\": valor*1.7320508/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and $substring(nomeGrandeza,0,6)='Tensao' and ($fs := [${fase:singlequote}]; $count($fs[$ != ''])=0 or $substring(nomeGrandeza,6) in $fs) and ${estilo} = false].(($c := $lookup($map,$string(pontoId)); $ph := $substring(nomeGrandeza,6); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c & \" \" & $ph, \"v\": valor*1.7320508/1000})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Line voltage · per circuit × phase",
+   "transformations": [
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "^(?:[AB] )?(.+)$",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "fieldConfig": {
+    "defaults": {
+     "color": {
+      "mode": "palette-classic"
+     },
+     "custom": {
+      "axisBorderShow": false,
+      "axisCenteredZero": false,
+      "axisColorMode": "text",
+      "axisGridShow": false,
+      "axisLabel": "",
+      "axisPlacement": "auto",
+      "barAlignment": 0,
+      "barWidthFactor": 0.6,
+      "drawStyle": "line",
+      "fillOpacity": 6,
+      "gradientMode": "opacity",
+      "hideFrom": {
+       "legend": false,
+       "tooltip": false,
+       "viz": false
+      },
+      "insertNulls": false,
+      "lineInterpolation": "smooth",
+      "lineWidth": 1.8,
+      "pointSize": 5,
+      "scaleDistribution": {
+       "type": "linear"
+      },
+      "showPoints": "never",
+      "showValues": false,
+      "spanNulls": true,
+      "stacking": {
+       "group": "A",
+       "mode": "none"
+      },
+      "thresholdsStyle": {
+       "mode": "off"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     },
+     "unit": "amp"
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byFrameRefID",
+       "options": "B"
+      },
+      "properties": [
+       {
+        "id": "custom.drawStyle",
+        "value": "bars"
+       },
+       {
+        "id": "custom.fillOpacity",
+        "value": 55
+       },
+       {
+        "id": "custom.lineWidth",
+        "value": 0
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "0C0"
+      },
+      "properties": [
+       {
+        "id": "custom.hideFrom",
+        "value": {
+         "legend": true,
+         "tooltip": true,
+         "viz": true
+        }
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 76
+   },
+   "id": 19,
+   "options": {
+    "annotations": {
+     "clustering": -1,
+     "multiLane": false
+    },
+    "legend": {
+     "calcs": [],
+     "displayMode": "list",
+     "enableFacetedFilter": false,
+     "overflow": "ellipsis",
+     "placement": "bottom",
+     "showLegend": true
+    },
+    "tooltip": {
+     "hideZeros": false,
+     "mode": "multi",
+     "sort": "desc"
+    }
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and $substring(nomeGrandeza,0,8)='Corrente' and ($fs := [${fase:singlequote}]; $count($fs[$ != ''])=0 or $substring(nomeGrandeza,8) in $fs) and ${estilo} = true].(($c := $lookup($map,$string(pontoId)); $ph := $substring(nomeGrandeza,8); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c & \" \" & $ph, \"v\": valor})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    },
+    {
+     "columns": [],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "timeseries",
+     "global_query_id": "",
+     "parser": "backend",
+     "refId": "B",
+     "root_selector": "($map := {\"6198\": \"1C1\", \"6199\": \"1C2\", \"6200\": \"1C3\", \"6201\": \"2C1\", \"6202\": \"2C2\", \"6203\": \"3C1\", \"6204\": \"3C2\", \"6205\": \"3C3\", \"6206\": \"4C1\", \"6207\": \"4C2\", \"6208\": \"4C3\", \"6209\": \"5C1\", \"6210\": \"5C2\", \"6211\": \"5C3\", \"6212\": \"6C1\", \"6213\": \"6C2\", \"6214\": \"6C3\", \"6215\": \"7C1\", \"6216\": \"8C1\", \"6217\": \"8C2\", \"6218\": \"8C3\", \"6219\": \"9C1\"}; $rows := dados[($cs := [${circuito:singlequote}]; $count($cs[$ != ''])=0 or $lookup($map,$string(pontoId)) in $cs) and ($us := [${ufv:singlequote}]; $count($us[$ != ''])=0 or ('M' & $substringBefore($lookup($map,$string(pontoId)) & '','C')) in $us) and $substring(nomeGrandeza,0,8)='Corrente' and ($fs := [${fase:singlequote}]; $count($fs[$ != ''])=0 or $substring(nomeGrandeza,8) in $fs) and ${estilo} = false].(($c := $lookup($map,$string(pontoId)); $ph := $substring(nomeGrandeza,8); valores[valor != null].{\"time\": data & \"-03:00\", \"circ\": $c & \" \" & $ph, \"v\": valor})); $count($rows) > 0 ? ($times := $sort($distinct($rows.time)); $times.($t := $; $merge([{\"time\": $t}, $rows[time=$t]{circ: v}]))) : [{\"time\": \"2000-01-01T00:00:00-03:00\", \"0C0\": 0}])",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_recent.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "Current · per circuit × phase",
+   "transformations": [
+    {
+     "id": "convertFieldType",
+     "options": {
+      "conversions": [
+       {
+        "destinationType": "time",
+        "targetField": "time"
+       }
+      ],
+      "fields": {}
+     }
+    },
+    {
+     "id": "renameByRegex",
+     "options": {
+      "regex": "^(?:[AB] )?(.+)$",
+      "renamePattern": "$1"
+     }
+    }
+   ],
+   "type": "timeseries"
+  },
+  {
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 84
+   },
+   "id": 111,
+   "title": "🩺 Meter health (Way2)",
+   "type": "row"
+  },
+  {
+   "datasource": {
+    "type": "yesoreyeram-infinity-datasource",
+    "uid": "bfrqxma0tx43kb"
+   },
+   "description": "Atraso de cada ponto = quantas leituras (×5 min) está atrás do ponto mais recente. Verde <10 · amarelo ≥10 · vermelho ≥30. Fonte: way2_eletrico.json.",
+   "fieldConfig": {
+    "defaults": {
+     "custom": {
+      "align": "auto",
+      "cellOptions": {
+       "type": "auto"
+      },
+      "filterable": false,
+      "footer": {
+       "reducers": []
+      },
+      "inspect": false
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": 0
+       },
+       {
+        "color": "red",
+        "value": 80
+       }
+      ]
+     }
+    },
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Atraso (min)"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "mode": "basic",
+         "type": "color-background"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "#2bb673",
+           "value": 0
+          },
+          {
+           "color": "#f2b01e",
+           "value": 10
+          },
+          {
+           "color": "#e02f44",
+           "value": 30
+          }
+         ]
+        }
+       },
+       {
+        "id": "custom.width",
+        "value": 120
+       },
+       {
+        "id": "unit",
+        "value": "short"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Última"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 90
+       },
+       {
+        "id": "custom.align",
+        "value": "center"
+       }
+      ]
+     },
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "Medidor"
+      },
+      "properties": [
+       {
+        "id": "custom.width",
+        "value": 150
+       }
+      ]
+     }
+    ]
+   },
+   "gridPos": {
+    "h": 16,
+    "w": 10,
+    "x": 0,
+    "y": 85
+   },
+   "id": 110,
+   "options": {
+    "cellHeight": "sm",
+    "showHeader": true
+   },
+   "pluginVersion": "13.2.0-28926505616",
+   "targets": [
+    {
+     "columns": [
+      {
+       "selector": "medidor",
+       "text": "Medidor",
+       "type": "string"
+      },
+      {
+       "selector": "ult",
+       "text": "Última",
+       "type": "string"
+      },
+      {
+       "selector": "atraso",
+       "text": "Atraso (min)",
+       "type": "number"
+      }
+     ],
+     "datasource": {
+      "type": "yesoreyeram-infinity-datasource",
+      "uid": "bfrqxma0tx43kb"
+     },
+     "filters": [],
+     "format": "table",
+     "parser": "backend",
+     "refId": "A",
+     "root_selector": "($maxn := $max(dados[nomeGrandeza='Demat'].$count(valores[valor!=null])); $map := {\"6196\": \"SE · TR1\", \"6197\": \"SE · TR2\", \"6233\": \"Totalizador\", \"6198\": \"M1 · C1\", \"6199\": \"M1 · C2\", \"6200\": \"M1 · C3\", \"6201\": \"M2 · C1\", \"6202\": \"M2 · C2\", \"6203\": \"M3 · C1\", \"6204\": \"M3 · C2\", \"6205\": \"M3 · C3\", \"6206\": \"M4 · C1\", \"6207\": \"M4 · C2\", \"6208\": \"M4 · C3\", \"6209\": \"M5 · C1\", \"6210\": \"M5 · C2\", \"6211\": \"M5 · C3\", \"6212\": \"M6 · C1\", \"6213\": \"M6 · C2\", \"6214\": \"M6 · C3\", \"6215\": \"M7 · C1\", \"6216\": \"M8 · C1\", \"6217\": \"M8 · C2\", \"6218\": \"M8 · C3\", \"6219\": \"M9 · C1\"}; dados[nomeGrandeza='Demat'].{\"medidor\": $lookup($map, $string(pontoId)),\"ult\": ($nn := valores[valor!=null]; $count($nn)>0 ? $substring($nn[-1].data,11,5) : '--:--'),\"atraso\": ($maxn - $count(valores[valor!=null])) * 5})",
+     "source": "url",
+     "type": "json",
+     "url": "https://rbenergydata.blob.core.windows.net/dados/way2_eletrico.json",
+     "url_options": {
+      "data": "",
+      "method": "GET"
+     }
+    }
+   ],
+   "title": "🩺 Meter health Way2 · telemetry lag (5 min)",
+   "transformations": [
+    {
+     "id": "sortBy",
+     "options": {
+      "fields": {},
+      "sort": [
+       {
+        "desc": true,
+        "field": "Atraso (min)"
+       }
+      ]
+     }
+    }
+   ],
+   "type": "table"
+  }
+ ],
+ "preload": false,
+ "refresh": "5m",
+ "schemaVersion": 42,
+ "tags": [
+  "mauriti",
+  "way2",
+  "eletrico"
+ ],
+ "templating": {
+  "list": [
+   {
+    "allowCustomValue": true,
+    "current": {
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "hide": 0,
+    "includeAll": true,
+    "label": "Plant",
+    "multi": true,
+    "name": "ufv",
+    "options": [],
+    "query": "M1, M2, M3, M4, M5, M6, M7, M8, M9",
+    "skipUrlSync": false,
+    "type": "custom",
+    "valuesFormat": "csv"
+   },
+   {
+    "allowCustomValue": true,
+    "current": {
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "hide": 0,
+    "includeAll": true,
+    "label": "Circuits",
+    "multi": true,
+    "name": "circuito",
+    "options": [],
+    "query": "1C1, 1C2, 1C3, 2C1, 2C2, 3C1, 3C2, 3C3, 4C1, 4C2, 4C3, 5C1, 5C2, 5C3, 6C1, 6C2, 6C3, 7C1, 8C1, 8C2, 8C3, 9C1",
+    "skipUrlSync": false,
+    "type": "custom",
+    "valuesFormat": "csv"
+   },
+   {
+    "allowCustomValue": true,
+    "current": {
+     "text": [
+      "All"
+     ],
+     "value": [
+      "$__all"
+     ]
+    },
+    "hide": 0,
+    "includeAll": true,
+    "label": "Phases",
+    "multi": true,
+    "name": "fase",
+    "options": [],
+    "query": "A, B, C",
+    "skipUrlSync": false,
+    "type": "custom",
+    "valuesFormat": "csv"
+   },
+   {
+    "allowCustomValue": true,
+    "current": {
+     "text": "Line",
+     "value": "true"
+    },
+    "hide": 0,
+    "includeAll": false,
+    "label": "Style",
+    "multi": false,
+    "name": "estilo",
+    "options": [],
+    "query": "Line : true, Bar : false",
+    "skipUrlSync": false,
+    "type": "custom",
+    "valuesFormat": "csv"
+   }
+  ]
+ },
+ "time": {
+  "from": "now/d",
+  "to": "now"
+ },
+ "timepicker": {
+  "refresh_intervals": [
+   "5s",
+   "10s",
+   "30s",
+   "1m",
+   "5m",
+   "15m",
+   "30m",
+   "1h",
+   "2h",
+   "1d"
+  ]
+ },
+ "timezone": "America/Fortaleza",
+ "title": "Monitor · Mauriti (EN)",
+ "uid": "adfmd6en",
+ "version": 6
+}

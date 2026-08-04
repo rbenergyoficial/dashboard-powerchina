@@ -1,0 +1,186 @@
+{
+ "gravado_em": "2026-08-04",
+ "nota": "Estado dos paineis Grafana no fim da sessao de 04/08/2026, antes de comecar os filtros de drill-down. Restaurar: POST /api/dashboards/db com {dashboard:<arquivo>, overwrite:true}.",
+ "dashboards": [
+  {
+   "uid": "19f285e5-c42d-4007-b671-31d493686316",
+   "titulo": "Overview [Fahrenheit]",
+   "versao": 1,
+   "paineis": 26
+  },
+  {
+   "uid": "4_D6mSh4z",
+   "titulo": "Cloud Logs Export Insights",
+   "versao": 1,
+   "paineis": 9
+  },
+  {
+   "uid": "71da1c56-ed65-4239-a3c2-80937d1e2a99",
+   "titulo": "Grafana Cloud Billing/Usage",
+   "versao": 3,
+   "paineis": 87
+  },
+  {
+   "uid": "9e5f7e59-1169-4296-a0a2-46f14bc7b012",
+   "titulo": "Incident Insights",
+   "versao": 1,
+   "paineis": 23
+  },
+  {
+   "uid": "a75gd7",
+   "titulo": "Mauriti · SCADA (energia diária)",
+   "versao": 56,
+   "paineis": 5
+  },
+  {
+   "uid": "a88bwp",
+   "titulo": "Mauriti · ONS Irradiância",
+   "versao": 27,
+   "paineis": 5
+  },
+  {
+   "uid": "adfmd6",
+   "titulo": "Mauriti · Monitor (visão geral · ao vivo)",
+   "versao": 335,
+   "paineis": 12
+  },
+  {
+   "uid": "adfmd6en",
+   "titulo": "Monitor · Mauriti (EN)",
+   "versao": 6,
+   "paineis": 59
+  },
+  {
+   "uid": "adfmd6zh",
+   "titulo": "监控 · Mauriti (中文)",
+   "versao": 6,
+   "paineis": 59
+  },
+  {
+   "uid": "AEbrOO2Mz",
+   "titulo": "Usage Insights - 2 - Data sources",
+   "versao": 1,
+   "paineis": 13
+  },
+  {
+   "uid": "asldtr",
+   "titulo": "Mauriti · MUST (demanda)",
+   "versao": 26,
+   "paineis": 4
+  },
+  {
+   "uid": "c1385932-e8b5-481e-a999-f716359f8cf2",
+   "titulo": "Overview [Celsius]",
+   "versao": 1,
+   "paineis": 26
+  },
+  {
+   "uid": "ca09c198-067e-4085-8cd6-569602c7b14f",
+   "titulo": "Alert Groups Insights",
+   "versao": 1,
+   "paineis": 22
+  },
+  {
+   "uid": "cardinality-management",
+   "titulo": "Cardinality management - 1 - overview",
+   "versao": 1,
+   "paineis": 8
+  },
+  {
+   "uid": "cardinality-management-label-detail",
+   "titulo": "Cardinality management - 3 - labels",
+   "versao": 1,
+   "paineis": 6
+  },
+  {
+   "uid": "cardinality-management-metrics-detail",
+   "titulo": "Cardinality management - 2 - metrics",
+   "versao": 1,
+   "paineis": 9
+  },
+  {
+   "uid": "cdn9jukg55bswb",
+   "titulo": "Usage Insights - 5 - Metrics Ingestion",
+   "versao": 1,
+   "paineis": 10
+  },
+  {
+   "uid": "cdybdibbio2dcd",
+   "titulo": "Usage Insights - 6 - Loki Query Fair Usage Drilldown",
+   "versao": 1,
+   "paineis": 13
+  },
+  {
+   "uid": "execmt1",
+   "titulo": "Visão Executiva · Complexo Mauriti",
+   "versao": 258,
+   "paineis": 26
+  },
+  {
+   "uid": "histmt1",
+   "titulo": "🕓 Historico Way2",
+   "versao": 20,
+   "paineis": 12
+  },
+  {
+   "uid": "invmt1",
+   "titulo": "Inversores · Confiabilidade",
+   "versao": 51,
+   "paineis": 31
+  },
+  {
+   "uid": "mon230kv",
+   "titulo": "Mauriti · Monitor · 230 kV (Subestação / Entrega)",
+   "versao": 40,
+   "paineis": 23
+  },
+  {
+   "uid": "mon345kv",
+   "titulo": "Mauriti · Monitor · 34,5 kV (Coletores / Geração)",
+   "versao": 21,
+   "paineis": 27
+  },
+  {
+   "uid": "MpmkYhRVz",
+   "titulo": "Usage Insights - 3 - Query Errors",
+   "versao": 1,
+   "paineis": 8
+  },
+  {
+   "uid": "ntS5Ujs7z",
+   "titulo": "Usage Insights - 4 - Alertmanager",
+   "versao": 1,
+   "paineis": 5
+  },
+  {
+   "uid": "perfmt1",
+   "titulo": "📈 Performance & Irradiância",
+   "versao": 25,
+   "paineis": 7
+  },
+  {
+   "uid": "ppaml1",
+   "titulo": "💰 PPA x ML",
+   "versao": 19,
+   "paineis": 11
+  },
+  {
+   "uid": "rbb7ggq",
+   "titulo": "Mauriti · ONS Portal Aberto",
+   "versao": 54,
+   "paineis": 4
+  },
+  {
+   "uid": "sumario1",
+   "titulo": "Sumário Executivo · Conjunto Fotovoltaico Mauriti",
+   "versao": 98,
+   "paineis": 25
+  },
+  {
+   "uid": "XU8HAD5Gk",
+   "titulo": "Usage Insights - 1 - Overview",
+   "versao": 1,
+   "paineis": 13
+  }
+ ]
+}
