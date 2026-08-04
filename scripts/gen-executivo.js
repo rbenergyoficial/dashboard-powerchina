@@ -1719,6 +1719,58 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       max_dia: new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate() + 0.5 }));
   }
 
+  // ---------- HORA A HORA POR USINA ----------
+  // O filtro do Sumario desce ano -> mes -> dia; faltava a ultima descida, dia -> 24 horas.
+  // O dado existe em way2_1h.json (potencia media horaria, ~90 dias), mas em 19,5 MB e organizado
+  // por MEDIDOR (25 pontos x 8 grandezas). Ler isso a cada carga de painel e inviavel, entao saio
+  // daqui com um blob compacto ja somado por usina.
+  //
+  // Energia da hora = potencia media da hora x 1 h. Demat vem em kW, entao /1000 da MW, que na
+  // janela de uma hora e o proprio MWh.
+  //
+  // Somo os CIRCUITOS de cada usina — a mesma tabela que o perfil de 30 min ja usa. O Complexo vem
+  // do medidor PROPRIO (6233), nao da soma dos 22 circuitos: uma medicao so nao acumula o erro de
+  // 22 medidores. PPA e ML somam os circuitos dos membros.
+  //
+  // ATENCAO: e energia BRUTA no circuito — nao desconta perda de transformacao. Em 15/07 o M3 da
+  // 181,0 MWh aqui contra 179,4 MWh da liquidada do Way2 (0,9%). Quem consumir tem de dizer isso.
+  try {
+    const H = await getJSON(BASE + 'way2_1h.json');
+    const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205],
+      M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214],
+      M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };
+    const dem = {};                                  // pontoId -> { 'AAAA-MM-DDTHH' -> kW }
+    (H.dados || []).forEach(s => {
+      if (s.nomeGrandeza !== 'Demat') return;
+      const m = dem[s.pontoId] = dem[s.pontoId] || {};
+      (s.valores || []).forEach(v => { if (v.valor != null) m[String(v.data).slice(0, 13)] = v.valor; });
+    });
+    const chaves = new Set();
+    Object.values(dem).forEach(m => Object.keys(m).forEach(k => chaves.add(k)));
+    // null se NENHUM circuito reportou: assim a hora sem dado nao vira zero (que o grafico
+    // desenharia como usina parada).
+    const soma = (pts, k) => { let t = null;
+      pts.forEach(p => { const v = (dem[p] || {})[k]; if (v != null) t = (t || 0) + v; });
+      return t; };
+    const horas = [];
+    [...chaves].sort().forEach(k => {
+      const dia = k.slice(0, 10), h = +k.slice(11, 13);
+      const poe = (u, kw) => { if (kw == null) return; horas.push({ dia, h, ufv: u, mwh: r2(kw / 1000) }); };
+      Object.entries(CIRC).forEach(([u, ps]) => poe(u, soma(ps, k)));
+      poe('PPA', soma(PPA.flatMap(u => CIRC[u]), k));
+      poe('ML', soma(ML.flatMap(u => CIRC[u]), k));
+      poe('Complexo', soma([6233], k));
+    });
+    const diasH = [...new Set(horas.map(x => x.dia))].sort();
+    const tamH = await writeOut({
+      gerado_em: new Date().toISOString(),
+      fonte: 'Way2 · Demat (potência ativa) média horária por circuito, integrada em 1 h. Energia BRUTA no circuito: não desconta perda de transformação — fica ~0,9% acima da líquida.',
+      inicio: diasH[0] || null, fim: diasH[diasH.length - 1] || null, dias: diasH, horas,
+    }, 'hora_ufv.json');
+    console.log('hora_ufv.json OK · ' + diasH.length + ' dias (' + diasH[0] + ' a ' + diasH[diasH.length - 1] + ') · '
+      + horas.length + ' linhas · ' + Math.round(tamH / 1024) + ' KB');
+  } catch (e) { console.warn('hora_ufv.json falhou (' + e.message + ') — segue sem a camada horária'); }
+
   const size = await writeOut(out);
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
   console.log('  entregue ' + entregue + ' GWh | potencial ' + potencial + ' | cortado ' + cortado + ' (' + cur.frustrada_pct + '%)');
