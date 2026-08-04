@@ -1101,11 +1101,25 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // ja aparecia em GWh no card ao lado — o corte nao, e essa assimetria enfraquecia o lado
             // que mais precisa de peso. Mesma apuracao dos percentuais acima.
             const CORTADO_GWH = 69.40;
+            // A MESMA apuracao, aberta: o que foi gerado, e por que o resto nao foi. Tudo da janela
+            // mar-jul, para os cards nao misturarem recorte — o erro que derrubava a versao anterior
+            // do painel era exatamente este: waterfall e causa vinham do acumulado pos-COD enquanto
+            // o card do corte dizia mar-jul, e ninguem avisava.
+            const GERADA_GWH = 258.87;              // Mauriti, conjunto, mar-jul
+            const RAZAO = { ene: 94.63, cnf: 3.99, rel: 1.37 };   // % da energia frustrada
+            const RAZAO_GWH = { ene: 65.67, cnf: 2.77, rel: 0.95 };
+            const ORIGEM = { sis: 96.41, loc: 3.59 };             // sistemico x local
+            const HORAS_RESTR = 1056;
             return {
               disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
               disp_meses: D.length, disp_alvo_pct: 97,
               corte_conj_pct: MAURITI, corte_ne_pct: NORDESTE, corte_abaiara_pct: ABAIARA,
-              corte_gwh: CORTADO_GWH,
+              corte_gwh: CORTADO_GWH, corte_gerada_gwh: GERADA_GWH,
+              corte_possivel_gwh: r2(GERADA_GWH + CORTADO_GWH),
+              corte_horas: HORAS_RESTR,
+              corte_ene_pct: RAZAO.ene, corte_cnf_pct: RAZAO.cnf, corte_rel_pct: RAZAO.rel,
+              corte_ene_gwh: RAZAO_GWH.ene, corte_cnf_gwh: RAZAO_GWH.cnf, corte_rel_gwh: RAZAO_GWH.rel,
+              corte_sis_pct: ORIGEM.sis, corte_loc_pct: ORIGEM.loc,
               corte_vantagem_pp: r2(NORDESTE - MAURITI),
               corte_janela: 'mar a jul/26 · 151 dias',
               corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE; '
