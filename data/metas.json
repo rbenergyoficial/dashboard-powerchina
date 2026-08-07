@@ -6,64 +6,6 @@
  "_mapeamento": "M10 = M1 — MESMO PARQUE, CONFIRMADO PELO USUARIO em 2026-07-17. A planilha PPA nomeia as usinas 'Mauriti 2..10' e NAO EXISTE Mauriti 1; 'UFV Mauriti 10' e o parque de 49,11 MW que o ONS chama CEFMT1 e que o Way2/SCADA chamam M1. Este arquivo ja usa a chave M1. Alias em gen-executivo.js (ALIAS_PLANILHA) p/ quando o pipeline da planilha for ligado. A aritmetica ja apontava isso antes da confirmacao: a Energia Equivalente e exatamente proporcional a outorga (Mauriti7/ref=0,3000 = 14,733/49,11 · Mauriti9/ref=0,1999 = 9,822/49,11 · M2/ref=0,4998 = 24,555/49,11 · Mauriti10=9.091 -> 49,11 MW).",
  "_metodologia_ml": "A planilha PASSOU A EMITIR a meta do ML por usina (colunas \"UFV Mauriti 7 / 10 / 9\" na linha Valor Garantido), corrigida pelo usuario em 02/08/2026 — antes ela so trazia o total do complexo e o do PPA, e o ML tinha de ser derivado. Agora vem em ml_por_ufv e o gerador LE, nao deriva. A regra que o usuario usou: M1 leva a taxa do PPA (137,73 MWh/MW — identico ao M8, mesma potencia) e M7+M9 dividem o resto proporcional a POTENCIA (3977,43/2651,62 = 1,50 = 14,733/9,822). Isso difere do que o gerador derivava (rateio pela Energia Equivalente): a soma e a mesma, mas o M1 ficava com 8929,48 em vez de 6763,70 e M7/M9 com um terco a menos. Historico das regras anteriores: ate 25/07/2026 aplicava-se a taxa do PPA sobre a potencia de cada uma e a diferenca ficava em nao_alocado; de 25/07 a 02/08 o ML era o RESTO rateado pelo equivalente.",
  "meses": {
-  "2026-05": {
-   "garantido_total": 50592,
-   "garantido_ppa": 37199.24,
-   "ppa_por_ufv": {
-    "M8": 6763.7,
-    "M2": 3380.74,
-    "M3": 6763.7,
-    "M4": 6763.7,
-    "M5": 6763.7,
-    "M6": 6763.7
-   },
-   "ml_por_ufv": {
-    "M1": 6763.7,
-    "M7": 3977.44,
-    "M9": 2651.62
-   },
-   "equivalente_total": 63634,
-   "equivalente_por_ufv": {
-    "M8": 9091,
-    "M2": 4544,
-    "M3": 9091,
-    "M4": 9091,
-    "M5": 9091,
-    "M6": 9091,
-    "M7": 2727,
-    "M1": 9091,
-    "M9": 1817
-   }
-  },
-  "2026-06": {
-   "garantido_total": 48960,
-   "garantido_ppa": 35999.28,
-   "ppa_por_ufv": {
-    "M8": 6545.52,
-    "M2": 3271.68,
-    "M3": 6545.52,
-    "M4": 6545.52,
-    "M5": 6545.52,
-    "M6": 6545.52
-   },
-   "ml_por_ufv": {
-    "M1": 6763.7,
-    "M7": 3718.21,
-    "M9": 2478.81
-   },
-   "equivalente_total": 63634,
-   "equivalente_por_ufv": {
-    "M8": 9091,
-    "M2": 4544,
-    "M3": 9091,
-    "M4": 9091,
-    "M5": 9091,
-    "M6": 9091,
-    "M7": 2727,
-    "M1": 9091,
-    "M9": 1817
-   }
-  },
   "2026-01": {
    "garantido_total": 50592,
    "garantido_ppa": 37199.26,
@@ -180,6 +122,64 @@
     "M9": 1817
    }
   },
+  "2026-05": {
+   "garantido_total": 50592,
+   "garantido_ppa": 37199.24,
+   "ppa_por_ufv": {
+    "M8": 6763.7,
+    "M2": 3380.74,
+    "M3": 6763.7,
+    "M4": 6763.7,
+    "M5": 6763.7,
+    "M6": 6763.7
+   },
+   "ml_por_ufv": {
+    "M1": 6763.7,
+    "M7": 3977.44,
+    "M9": 2651.62
+   },
+   "equivalente_total": 63634,
+   "equivalente_por_ufv": {
+    "M8": 9091,
+    "M2": 4544,
+    "M3": 9091,
+    "M4": 9091,
+    "M5": 9091,
+    "M6": 9091,
+    "M7": 2727,
+    "M1": 9091,
+    "M9": 1817
+   }
+  },
+  "2026-06": {
+   "garantido_total": 48960,
+   "garantido_ppa": 35999.28,
+   "ppa_por_ufv": {
+    "M8": 6545.52,
+    "M2": 3271.68,
+    "M3": 6545.52,
+    "M4": 6545.52,
+    "M5": 6545.52,
+    "M6": 6545.52
+   },
+   "ml_por_ufv": {
+    "M1": 6763.7,
+    "M7": 3718.21,
+    "M9": 2478.81
+   },
+   "equivalente_total": 63634,
+   "equivalente_por_ufv": {
+    "M8": 9091,
+    "M2": 4544,
+    "M3": 9091,
+    "M4": 9091,
+    "M5": 9091,
+    "M6": 9091,
+    "M7": 2727,
+    "M1": 9091,
+    "M9": 1817
+   }
+  },
   "2026-07": {
    "garantido_total": 50592,
    "garantido_ppa": 37199.26,
@@ -208,6 +208,36 @@
     "M1": 9091,
     "M9": 1817
    }
+  },
+  "2026-08": {
+   "garantido_total": 50592,
+   "garantido_ppa": 37199.26,
+   "ppa_por_ufv": {
+    "M8": 6763.7,
+    "M2": 3380.74,
+    "M3": 6763.7,
+    "M4": 6763.7,
+    "M5": 6763.7,
+    "M6": 6763.7
+   },
+   "ml_por_ufv": {
+    "M1": 6763.7,
+    "M7": 3977.43,
+    "M9": 2651.62
+   },
+   "equivalente_total": 63634,
+   "equivalente_por_ufv": {
+    "M8": 9091,
+    "M2": 4544,
+    "M3": 9091,
+    "M4": 9091,
+    "M5": 9091,
+    "M6": 9091,
+    "M7": 2727,
+    "M1": 9091,
+    "M9": 1817
+   },
+   "_origem": "Derivado da taxa diaria (_taxa_global), nao lido da planilha: agosto tem 31 dias como julho, entao 1632,0 x 31 = 50592 e 1199,98 x 31 = 37199,26 — os mesmos valores. Conferir contra a Base_Dados_MRD quando a aba de agosto for publicada."
   }
  }
 }
