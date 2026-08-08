@@ -20,8 +20,12 @@
  *   versoes — bruta (tudo) e limpa (so o que passa na faixa) — para a diferenca entre as duas ser
  *   ela mesma um indicador.
  *
- * Env: DADOS_STORAGE (RW no container dados). IIRR_URL (opcional) = CSV cru no blob;
- *   IIRR_LOCAL (opcional) = caminho local, para carga historica e testes.
+ * Env: DADOS_STORAGE (RW no container dados).
+ *   IIRR_LOCAL  = caminho de um CSV local (carga historica e testes)
+ *   IIRR_URL    = CSV cru no blob — e o modo definitivo, quando a ponte SharePoint->blob existir
+ *   nenhum dos dois = republica data/irr_seed.json, o historico ja processado que vive no repo.
+ *     O seed existe para o painel funcionar ANTES da automacao; assim que IIRR_URL for definida,
+ *     ele deixa de ser usado e o dado passa a vir do CSV.
  */
 const fs = require('fs'), https = require('https'), readline = require('readline');
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
@@ -90,6 +94,20 @@ async function writeOut(obj, nome) {
 }
 
 (async () => {
+  // modo seed: sem CSV nenhum, republica o historico do repo e sai
+  if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL) {
+    const seed = 'data/irr_seed.json';
+    if (!fs.existsSync(seed)) throw new Error('sem IIRR_URL/IIRR_LOCAL e sem ' + seed);
+    const j = JSON.parse(fs.readFileSync(seed, 'utf8'));
+    j.modo = 'seed';
+    j.nota_seed = 'Historico processado do export IIRR de 08/08/2026, versionado no repo. '
+      + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
+      + 'Definir IIRR_URL no workflow faz o gerador voltar a ler o CSV cru.';
+    const t = await writeOut(j);
+    console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
+      + (j.serie_dia || []).length + ' linhas diarias · janela ' + j.janela.ini + ' a ' + j.janela.fim);
+    return;
+  }
   const rl = fonteLinhas();
   let cab = null;
   const mapa = [];                 // { i, ufv, gr }
