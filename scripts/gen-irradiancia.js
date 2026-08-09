@@ -285,6 +285,47 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   const dias = Object.keys(acc).sort();
   const SLOTS = 48;
 
+  // ---------- a irradiancia VERIFICADA do ONS, para o comparativo ----------
+  // O join sai daqui, do Node, e nao do painel: cruzar dois blobs no JSONata exigiria uma segunda
+  // variavel de mes (o ONS usa 2026_08 e a pagina usa 2026-08) e uma segunda URL baixada em toda
+  // renderizacao. Com o ONS dentro dos MEUS arquivos, o comparativo fica simetrico com o resto da
+  // pagina: mesmo filtro, mesmo arquivo, mesmo nivel de zoom.
+  //
+  // MAPEAMENTO DAS TAGS — e aqui que mora o cuidado. CEFMTn = Mn, MENOS:
+  //   CEFMT7 nao e o M7: e o circuito 2 do M3 (defeito de tag conhecido do ONS, ja registrado no
+  //   projeto). Entao CEFMT7 fica FORA e o M7 simplesmente nao tem serie do ONS — melhor sem dado do
+  //   que com o dado do vizinho. O M3 usa so o CEFMT3.
+  // O ONS tambem nao tem agosto/2025 (o arquivo nao existe), o que deixa o primeiro mes da janela sem
+  // comparativo. Nao ha o que reconstruir ali, e forcar seria inventar.
+  const ONS_TAG = { CEFMT1: 'M1', CEFMT2: 'M2', CEFMT3: 'M3', CEFMT4: 'M4', CEFMT5: 'M5',
+    CEFMT6: 'M6', CEFMT8: 'M8', CEFMT9: 'M9' };
+  const ONS_BASE = 'https://rbenergydata.blob.core.windows.net/dados/ons_irradiancia_';
+  const getJSON = url => new Promise((res, rej) => {
+    https.get(url, r => {
+      if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode)); }
+      const c = []; r.on('data', b => c.push(b));
+      r.on('end', () => { try { res(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { rej(e); } });
+    }).on('error', rej);
+  });
+  const ons = {};                 // 'dia|ufv|slot' -> W/m2 verificado
+  const onsMes = [...new Set(dias.map(d => d.slice(0, 7)))].sort();
+  let onsOk = 0, onsFalta = [];
+  for (const m of onsMes) {
+    try {
+      const j = await getJSON(ONS_BASE + m.replace('-', '_') + '.json');
+      (j.consolidado || []).forEach(r => {
+        const u = ONS_TAG[r.u]; if (!u) return;
+        if (String(r.inv) === 'True') return;              // o proprio ONS marcou a medida invalida
+        const v = Number(r.irr); if (!isFinite(v)) return;
+        const slot = +r.ts.slice(11, 13) * 2 + (+r.ts.slice(14, 16) >= 30 ? 1 : 0);
+        ons[r.ts.slice(0, 10) + '|' + u + '|' + slot] = v;
+      });
+      onsOk++;
+    } catch (e) { onsFalta.push(m + ' (' + e.message + ')'); }
+  }
+  console.log('ONS: ' + onsOk + ' de ' + onsMes.length + ' meses lidos, ' + Object.keys(ons).length
+    + ' leituras' + (onsFalta.length ? ' · sem arquivo: ' + onsFalta.join(', ') : ''));
+
   // ---------- serie diaria ----------
   const valor = (o, gr, limpo) => {
     if (!o) return null;
@@ -334,6 +375,17 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     // com piso no denominador e faixa fisica: sem o piso, um dia em que a integral de cima ficou em
     // 0,001 kWh/m2 devolvia 27.000%; e albedo de solo/areia vive entre 15% e 30% (neve fresca chega a
     // 90%, e nao neva no Ceara), entao fora de 5% a 60% e defeito, nao terreno.
+    // ONS do dia, com as MESMAS definicoes que uso no nosso lado: integral (kWh/m2) e media das
+    // leituras com sol (W/m2, corte de 5). Sem isso o comparativo estaria comparando definicoes
+    // diferentes e a diferenca seria minha, nao do dado.
+    {
+      const v = [];
+      for (let k = 0; k < SLOTS; k++) { const x = ons[d + '|' + u + '|' + k]; if (x != null) v.push(x); }
+      l.ons_leituras = v.length;
+      l.ons_gti = v.length ? r3(v.reduce((a2, b2) => a2 + b2, 0) * H_SLOT / 1000) : null;
+      const sol = v.filter(x => x > SOL_MIN);
+      l.ons_sol_w = sol.length ? r2(sol.reduce((a2, b2) => a2 + b2, 0) / sol.length) : null;
+    }
     l.albedo_calc = (l.alb_cima > 0.5 && l.alb_baixo != null)
       ? (v => (v >= 5 && v <= 60 ? v : null))(r2(100 * l.alb_baixo / l.alb_cima)) : null;
     // a MESMA medida do dia em W/m2: media das leituras com sol, e a duracao do dia solar que faz a
@@ -380,6 +432,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       t_int: med('t_int'), t_orvalho: med('t_orvalho'), vento_dir: med('vento_dir'),
       suj1: med('suj1'), suj2: med('suj2'), bateria: med('bateria'),
       albedo_calc: med('albedo_calc'),
+      ons_gti_dia: med('ons_gti'), ons_sol_w: med('ons_sol_w'), ons_dias: L.filter(x => x.ons_gti != null).length,
       gti_pico_w: med('gti_pico_w'),
       dias_impossiveis: som('gti_impossivel'),
       perda_suj1: med('perda_suj1'), perda_suj2: med('perda_suj2'),
@@ -405,6 +458,10 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     const [d, u, slot] = k.split('|');
     const g = accH[k];
     const l = { dia: d, ufv: u, t: +slot / 2 };
+    // o ONS no MESMO slot, ao lado do nosso: e o que faz o comparativo ser um painel de duas linhas
+    // em vez de um cruzamento de dois blobs no navegador
+    const xo = ons[d + '|' + u + '|' + (+slot)];
+    if (xo != null) l.ons_w = r2(xo);
     let algum = false;
     Object.entries(CAMPO_H).forEach(([gr, campo]) => {
       const o = g[gr];
