@@ -331,7 +331,11 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     // trocada (eu havia suposto que fosse irradiancia refletida crua) — e ruido de divisao no
     // amanhecer, no crepusculo e na noite. A razao dos acumulados nao tem esse problema e da o numero
     // fisico esperado para solo e areia, algo entre 15% e 30%.
-    l.albedo_calc = (l.alb_cima && l.alb_baixo != null) ? r2(100 * l.alb_baixo / l.alb_cima) : null;
+    // com piso no denominador e faixa fisica: sem o piso, um dia em que a integral de cima ficou em
+    // 0,001 kWh/m2 devolvia 27.000%; e albedo de solo/areia vive entre 15% e 30% (neve fresca chega a
+    // 90%, e nao neva no Ceara), entao fora de 5% a 60% e defeito, nao terreno.
+    l.albedo_calc = (l.alb_cima > 0.5 && l.alb_baixo != null)
+      ? (v => (v >= 5 && v <= 60 ? v : null))(r2(100 * l.alb_baixo / l.alb_cima)) : null;
     // a MESMA medida do dia em W/m2: media das leituras com sol, e a duracao do dia solar que faz a
     // ponte com o kWh/m2. Media em 24 h daria metade disso — por isso a janela vai declarada.
     l.gti_sol_w = inc.nS ? r2(inc.sS / inc.nS) : null;
