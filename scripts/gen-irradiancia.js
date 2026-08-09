@@ -27,17 +27,16 @@
  *     O seed existe para o painel funcionar ANTES da automacao; assim que IIRR_URL for definida,
  *     ele deixa de ser usado e o dado passa a vir do CSV.
  */
-const fs = require('fs'), https = require('https'), readline = require('readline');
+const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
-// A serie HORARIA sai FORA do blob principal e QUEBRADA POR MES: irr_hora_<AAAA-MM>.json.
-//   Fora, porque junto o arquivo dava 12 MB e toda a pagina pagaria por isso para desenhar um card.
-//   Por mes, porque o Infinity BAIXA a URL e SO DEPOIS aplica o JSONata: um blob horario unico de
-//   3,4 MB seria puxado em toda renderizacao do painel, inclusive no modo mensal, em que ele nao usa
-//   nada dali. Com o mes na URL, o navegador puxa so o mes que esta na tela (~850 KB).
-// TODO mes conhecido ganha arquivo, mesmo os sem dado horario (esboco vazio), e existe tambem
-//   irr_hora_tudo.json: a URL do painel e montada por variavel, e URL que nao resolve deixa o painel
-//   em ERRO VERMELHO, nao vazio.
-// Janela de 120 dias, nao o ano: inspecao hora a hora se faz em dia recente.
+// SAIDA EM DOIS GRUPOS:
+//   irr_ufv.json          - o blob principal: serie diaria, mensal, qualidade e a lista dias_hora.
+//   irr_hora_<mes>-<dia>  - UM ARQUIVO POR NIVEL DE ZOOM do painel (ver emiteNiveis).
+// O Infinity BAIXA a URL e SO DEPOIS aplica o JSONata, entao filtrar no root_selector nao economiza
+// um byte de rede: quem decide o peso e o recorte do ARQUIVO. Um blob unico com todo o semi-horario
+// daria 8 MB, e um por mes daria 1,7 MB por mes cheio - em toda renderizacao, inclusive nos niveis
+// que nao leem semi-horario nenhum. Um arquivo por nivel deixa cada visao em 32 a 158 KB.
+// Janela de 120 dias para o semi-horario: inspecao ponto a ponto se faz em dia recente.
 const HORA_PRE = 'irr_hora_', HORA_DIAS = 120;
 
 // MRT0n = Mn, e MRT10 = M1 (ver o bloco de mapeamento acima)
@@ -121,57 +120,75 @@ async function writeOut(obj, nome) {
   return json.length;
 }
 
-// Um arquivo por mes, e cada um e o PACOTE COMPLETO do mes: a serie mensal inteira (para a visao
-// "All"), os dias daquele mes e as horas daquele mes. Assim o painel de serie resolve os TRES niveis
-// com UM alvo so.
-// Por que um alvo so: com dois alvos, o do nivel inativo devolve [] e o Infinity responde um frame
-// SEM CAMPO NENHUM — o painel trend nao acha o campo x e morre com "Unable to find field: x". E, quando
-// dois alvos trazem colunas de mesmo nome, o joinByField cola o refId no nome da serie e a legenda
-// vira "Módulo B". Um alvo nao tem nenhum dos dois problemas, e ainda baixa menos: o painel deixa de
-// puxar o blob principal de 1,7 MB.
-// Todo mes conhecido ganha arquivo, mesmo sem dado horario, e ha um "tudo" — a URL e montada por
-// variavel, e URL que nao resolve deixa o painel em erro vermelho, nao vazio.
-async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
-  const horaMes = {}, diaMes = {};
-  linhas.forEach(l => (horaMes[l.mes] = horaMes[l.mes] || []).push(l));
+// UM ARQUIVO POR NIVEL DE ZOOM, nomeado pelo par (mes, dia) que o painel monta na URL com as duas
+// variaveis do filtro:
+//    irr_hora_tudo-tudo.json      -> a serie mensal      (visao do ano)
+//    irr_hora_<mes>-tudo.json     -> os dias daquele mes (visao do mes)
+//    irr_hora_<mes>-<dd>.json     -> o semi-horario daquele dia, 48 pontos (visao do dia)
+// Cada arquivo carrega SO o nivel que o painel vai ler naquele estado, e nada mais. E o que mantem a
+// pagina leve: um mes cheio de semi-horario da 1,7 MB, e a visao por dia precisa de 40 KB desse total.
+//
+// Por que UM alvo por painel, e nao um alvo por nivel: com dois alvos, o do nivel inativo devolve [],
+// o Infinity responde um frame SEM CAMPO NENHUM e o trend morre em "Unable to find field: x"; e quando
+// os dois trazem coluna de mesmo nome, o joinByField cola o refId no nome da serie e a legenda vira
+// "Módulo B". Com um alvo, a URL escolhe o nivel e nenhum dos dois acontece.
+//
+// TODA combinacao que os filtros podem produzir precisa existir — URL que nao resolve deixa o painel
+// em ERRO VERMELHO, nao vazio. O filtro de dia se alimenta de `dias_hora`, entao as combinacoes
+// possiveis sao exatamente: (tudo,tudo), (cada mes,tudo) e (cada dia de dias_hora).
+// Os arquivos do formato anterior (irr_hora_<mes>.json, sem o dia) recebem LAPIDE: sem isso ficariam
+// no container com nome plausivel e dado congelado, esperando alguem apontar para eles.
+async function emiteNiveis(meta, semihora, serieDia, serieMes, mesesTodos, antigos) {
+  const shDia = {}, diaMes = {};
+  semihora.forEach(l => (shDia[l.dia] = shDia[l.dia] || []).push(l));
   (serieDia || []).forEach(l => (diaMes[l.mes] = diaMes[l.mes] || []).push(l));
-  const alvos = [...new Set([...(mesesTodos || []), ...Object.keys(horaMes), 'tudo'])].sort();
-  let bytes = 0;
-  for (const m of alvos) {
-    const rows = horaMes[m] || [];
-    bytes += await writeOut(Object.assign({}, meta, {
-      mes: m,
-      dias: [...new Set(rows.map(r => r.dia))].sort(),
-      serie_mes: serieMes || [],          // completa: e o nivel "All" do painel
-      serie_dia: diaMes[m] || [],         // so os dias deste mes
-      serie_hora: rows,                   // so as horas deste mes
-    }), HORA_PRE + m + '.json');
+  let n = 0, bytes = 0;
+  const grava = async (nome, obj) => { bytes += await writeOut(Object.assign({}, meta, obj), nome); n++; };
+
+  await grava(HORA_PRE + 'tudo-tudo.json', { nivel: 'mes', serie_mes: serieMes || [] });
+  for (const m of [...new Set(mesesTodos || [])].sort()) {
+    await grava(HORA_PRE + m + '-tudo.json', { nivel: 'dia', mes: m, serie_dia: diaMes[m] || [] });
   }
-  return { arquivos: alvos.length, bytes, comDado: Object.keys(horaMes).length, linhas: linhas.length };
+  for (const d of Object.keys(shDia).sort()) {
+    // o `dia` sai das linhas: o arquivo INTEIRO e daquele dia, repetir a data 432 vezes e desperdicio
+    const rows = shDia[d].map(({ dia, ...r }) => r);
+    await grava(HORA_PRE + d.slice(0, 7) + '-' + d.slice(8, 10) + '.json',
+      { nivel: 'semihora', dia: d, resolucao_min: 30, serie_semihora: rows });
+  }
+  for (const nome of antigos || []) {
+    await grava(nome, { obsoleto: 'Formato antigo (um pacote por mes). O painel agora le um arquivo '
+      + 'por nivel de zoom: irr_hora_<mes>-tudo.json para os dias do mes e irr_hora_<mes>-<dd>.json '
+      + 'para o semi-horario do dia. Este arquivo nao e mais atualizado.' });
+  }
+  return { arquivos: n, bytes, dias: Object.keys(shDia).length, linhas: semihora.length };
 }
+
+// os seeds vao GZIPADOS no repo: o semi-horario cru da 6 MB, e cada regeracao gravaria 6 MB novos no
+// historico do git (blob binario nao se delta-comprime). Gzipado da ~600 KB, e ler custa uma linha.
+const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString('utf8'));
 
 (async () => {
   // modo seed: sem CSV nenhum, republica o historico do repo e sai
   if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL) {
-    const seed = 'data/irr_seed.json';
+    const seed = 'data/irr_seed.json.gz';
     if (!fs.existsSync(seed)) throw new Error('sem IIRR_URL/IIRR_LOCAL e sem ' + seed);
-    const j = JSON.parse(fs.readFileSync(seed, 'utf8'));
+    const j = leSeed(seed);
     j.modo = 'seed';
     j.nota_seed = 'Historico processado do export IIRR de 08/08/2026, versionado no repo. '
       + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
       + 'Definir IIRR_URL no workflow faz o gerador voltar a ler o CSV cru.';
-    const seedH = 'data/irr_hora_seed.json';
+    const seedH = 'data/irr_hora_seed.json.gz';
     if (fs.existsSync(seedH)) {
-      const h = JSON.parse(fs.readFileSync(seedH, 'utf8'));
-      const linhas = h.serie_hora || [];
+      const h = leSeed(seedH);
+      const linhas = h.serie_semihora || [];
       // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode
       // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
       j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
-      const rh = await emiteHora({ gerado_em: h.gerado_em, fonte: h.fonte, resolucao_min: 60,
-        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.meses || [],
-      j.serie_mes || [], j.serie_dia || []);
-      console.log('irr_hora_<mes>.json republicado do seed · ' + rh.arquivos + ' arquivos ('
-        + rh.comDado + ' com dado) · ' + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas');
+      const rh = await emiteNiveis({ gerado_em: h.gerado_em, fonte: h.fonte,
+        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.serie_dia || [], j.serie_mes || [],
+      j.meses || [], (j.meses || []).concat('tudo').map(m => HORA_PRE + m + '.json'));
+      console.log('niveis republicados do seed · ' + rh.arquivos + ' arquivos · '
+        + Math.round(rh.bytes / 1024) + ' KB · ' + rh.dias + ' dias · ' + rh.linhas + ' linhas de 30 min');
     }
     const t = await writeOut(j);
     console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
@@ -245,10 +262,13 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
       o.sL += x; o.nL++;
       if (m.gr === 'IRRADIAÇÃO INCLINADA' && x > SOL_MIN) { o.sS = (o.sS || 0) + x; o.nS = (o.nS || 0) + 1; }
       if (HORA_GR.has(m.gr)) {
-        // hora com dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e
-        // ordenacao de TEXTO — com a hora crua, '10' vinha antes de '2' e o painel trend recusava a
-        // serie com "Values must be in ascending order".
-        const kh = d + '|' + m.ufv + '|' + String(hh).padStart(2, '0');
+        // SLOT de 30 min (0..47), nao a hora: e a resolucao nativa do export e a mesma que o ONS
+        // publica (semi-hora), entao a visao por dia nao agrega nada — mostra a leitura como ela veio.
+        // Dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e ordenacao de
+        // TEXTO — com o indice cru, '10' vinha antes de '2' e o trend recusava a serie inteira com
+        // "Values must be in ascending order".
+        const slot = hh * 2 + (+ts.slice(14, 16) >= 30 ? 1 : 0);
+        const kh = d + '|' + m.ufv + '|' + String(slot).padStart(2, '0');
         const oh = ((accH[kh] = accH[kh] || {})[m.gr] = accH[kh][m.gr] || { s: 0, n: 0 });
         oh.s += x; oh.n++;
       }
@@ -351,17 +371,20 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
   const CAMPO_H = { 'IRRADIAÇÃO INCLINADA': 'gti_w', 'IRRADIAÇÃO DIFUSA': 'dif_w',
     'IRRADIAÇÃO DIRETA': 'dni_w', 'TEMPERATURA MÓDULO 1': 't_mod', 'TEMPERATURA AMBIENTE': 't_amb',
     'UMIDADE RELATIVA DO AR': 'umid' };
-  const serie_hora = [];
+  // `t` = hora decimal (0, 0.5, 1 ... 23.5). E o x do painel: numero que sobe, sem depender de
+  // mapeamento, e que no eixo se le como hora. `mes` NAO vai na linha — o arquivo ja e de um mes so,
+  // e repeti-lo 12.960 vezes custava 230 KB por mes de nada.
+  const serie_semihora = [];
   Object.keys(accH).sort().forEach(k => {
-    const [d, u, hh] = k.split('|');
+    const [d, u, slot] = k.split('|');
     const g = accH[k];
-    const l = { dia: d, mes: d.slice(0, 7), ufv: u, h: +hh };
+    const l = { dia: d, ufv: u, t: +slot / 2 };
     let algum = false;
     Object.entries(CAMPO_H).forEach(([gr, campo]) => {
       const o = g[gr];
       if (o && o.n) { l[campo] = r2(o.s / o.n); algum = true; }
     });
-    if (algum) serie_hora.push(l);
+    if (algum) serie_semihora.push(l);
   });
 
   // ---------- tabela de QUALIDADE: e o entregavel principal ----------
@@ -397,26 +420,26 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
   };
   // a horaria sai antes, em um arquivo por mes, so os ultimos HORA_DIAS dias
   const corte = dias.slice(-HORA_DIAS)[0];
-  const hora = serie_hora.filter(x => x.dia >= corte);
+  const hora = serie_semihora.filter(x => x.dia >= corte);
   // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode oferecer
   // dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
   out.dias_hora = [...new Set(hora.map(x => x.dia))].sort();
-  const rh = await emiteHora({
-    gerado_em: out.gerado_em, fonte: out.fonte, resolucao_min: 60,
-    nota: 'PACOTE DO MES: serie mensal inteira (nivel "All"), os dias deste mes e as horas deste mes. '
-      + 'Existe para o painel resolver os tres niveis de zoom com UM alvo — com dois alvos, o do nivel '
-      + 'inativo devolve frame sem campo e o trend morre em "Unable to find field: x". '
-      + 'Horaria em W/m2 (media da hora, que na janela de 1 h e tambem Wh/m2).',
+  const rh = await emiteNiveis({
+    gerado_em: out.gerado_em, fonte: out.fonte,
+    nota: 'UM ARQUIVO POR NIVEL DE ZOOM do painel: tudo-tudo = serie mensal, <mes>-tudo = os dias do '
+      + 'mes, <mes>-<dd> = o semi-horario do dia (30 min, resolucao nativa do export e a mesma que o '
+      + 'ONS publica). Cada arquivo carrega so o nivel que o painel le naquele estado. '
+      + 'Irradiancia em W/m2 — potencia, como o sensor e o ONS reportam.',
     janela: { ini: corte, fim: dias[dias.length - 1] }, ufvs,
-  }, hora, meses, serie_mes, serie_dia);
-  console.log('irr_hora_<mes>.json OK · ' + rh.arquivos + ' arquivos (' + rh.comDado + ' com dado) · '
-    + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas · desde ' + corte);
+  }, hora, serie_dia, serie_mes, meses, meses.concat('tudo').map(m => HORA_PRE + m + '.json'));
+  console.log('niveis OK · ' + rh.arquivos + ' arquivos · ' + Math.round(rh.bytes / 1024) + ' KB · '
+    + rh.dias + ' dias de 30 min desde ' + corte);
 
   const tam = await writeOut(out);
   console.log('irr_ufv.json OK · ' + Math.round(tam / 1024) + ' KB');
   console.log('  janela ' + tsIni + ' a ' + tsFim + '  ·  ' + nLinhas + ' linhas  ·  ' + dias.length + ' dias');
   console.log('  ' + ufvs.length + ' UFVs · ' + grs.length + ' grandezas · ' + serie_dia.length
-    + ' linhas diarias · ' + serie_hora.length + ' linhas horarias');
+    + ' linhas diarias · ' + serie_semihora.length + ' linhas de 30 min');
   const ruins = qualidade.filter(q => q.veredito !== 'ok');
   console.log('  qualidade: ' + (qualidade.length - ruins.length) + ' de ' + qualidade.length + ' series ok');
   ruins.sort((a, b) => b.fora_pct - a.fora_pct).slice(0, 12).forEach(q =>
