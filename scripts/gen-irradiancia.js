@@ -29,12 +29,16 @@
  */
 const fs = require('fs'), https = require('https'), readline = require('readline');
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
-// A serie HORARIA vai em blob PROPRIO. Junto com o resto o arquivo dava 12 MB, e todo painel da
-// pagina baixaria os 12 MB para desenhar um card. Separada, o principal fica em ~1,7 MB e so o
-// painel de curva do dia paga o preco.
-// Janela de 120 dias, nao o ano: inspecao hora a hora se faz em dia recente, e 365 dias x 24 h x
-// 9 usinas x 6 grandezas passa de 10 MB — peso que nao se paga.
-const HORA_BLOB = 'irr_hora.json', HORA_DIAS = 120;
+// A serie HORARIA sai FORA do blob principal e QUEBRADA POR MES: irr_hora_<AAAA-MM>.json.
+//   Fora, porque junto o arquivo dava 12 MB e toda a pagina pagaria por isso para desenhar um card.
+//   Por mes, porque o Infinity BAIXA a URL e SO DEPOIS aplica o JSONata: um blob horario unico de
+//   3,4 MB seria puxado em toda renderizacao do painel, inclusive no modo mensal, em que ele nao usa
+//   nada dali. Com o mes na URL, o navegador puxa so o mes que esta na tela (~850 KB).
+// TODO mes conhecido ganha arquivo, mesmo os sem dado horario (esboco vazio), e existe tambem
+//   irr_hora_tudo.json: a URL do painel e montada por variavel, e URL que nao resolve deixa o painel
+//   em ERRO VERMELHO, nao vazio.
+// Janela de 120 dias, nao o ano: inspecao hora a hora se faz em dia recente.
+const HORA_PRE = 'irr_hora_', HORA_DIAS = 120;
 
 // MRT0n = Mn, e MRT10 = M1 (ver o bloco de mapeamento acima)
 const EST_UFV = { MRT02: 'M2', MRT03: 'M3', MRT04: 'M4', MRT05: 'M5', MRT06: 'M6',
@@ -107,6 +111,24 @@ async function writeOut(obj, nome) {
   return json.length;
 }
 
+// grava a serie horaria em um arquivo por mes. `mesesTodos` = todos os meses que o painel pode
+// pedir; os que nao tem dado horario saem como esboco vazio para a URL nunca faltar.
+async function emiteHora(meta, linhas, mesesTodos) {
+  const porMes = {};
+  linhas.forEach(l => (porMes[l.mes] = porMes[l.mes] || []).push(l));
+  const alvos = [...new Set([...(mesesTodos || []), ...Object.keys(porMes), 'tudo'])].sort();
+  let bytes = 0;
+  for (const m of alvos) {
+    const rows = porMes[m] || [];
+    bytes += await writeOut(Object.assign({}, meta, {
+      mes: m,
+      dias: [...new Set(rows.map(r => r.dia))].sort(),
+      serie_hora: rows,
+    }), HORA_PRE + m + '.json');
+  }
+  return { arquivos: alvos.length, bytes, comDado: Object.keys(porMes).length, linhas: linhas.length };
+}
+
 (async () => {
   // modo seed: sem CSV nenhum, republica o historico do repo e sai
   if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL) {
@@ -117,17 +139,22 @@ async function writeOut(obj, nome) {
     j.nota_seed = 'Historico processado do export IIRR de 08/08/2026, versionado no repo. '
       + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
       + 'Definir IIRR_URL no workflow faz o gerador voltar a ler o CSV cru.';
-    const t = await writeOut(j);
-    console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
-      + (j.serie_dia || []).length + ' linhas diarias · janela ' + j.janela.ini + ' a ' + j.janela.fim);
     const seedH = 'data/irr_hora_seed.json';
     if (fs.existsSync(seedH)) {
       const h = JSON.parse(fs.readFileSync(seedH, 'utf8'));
-      h.modo = 'seed';
-      const th = await writeOut(h, HORA_BLOB);
-      console.log('irr_hora.json republicado do seed · ' + Math.round(th / 1024) + ' KB · '
-        + (h.serie_hora || []).length + ' linhas horarias');
+      const linhas = h.serie_hora || [];
+      // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode
+      // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
+      j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
+      const rh = await emiteHora({ gerado_em: h.gerado_em, fonte: h.fonte, resolucao_min: 60,
+        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.meses || []);
+      console.log('irr_hora_<mes>.json republicado do seed · ' + rh.arquivos + ' arquivos ('
+        + rh.comDado + ' com dado) · ' + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas');
     }
+    const t = await writeOut(j);
+    console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
+      + (j.serie_dia || []).length + ' linhas diarias · ' + (j.dias_hora || []).length
+      + ' dias com hora · janela ' + j.janela.ini + ' a ' + j.janela.fim);
     return;
   }
   const rl = fonteLinhas();
@@ -313,18 +340,21 @@ async function writeOut(obj, nome) {
     ufvs, grandezas: grs, dias: dias.length, meses,
     serie_dia, serie_mes, qualidade,
   };
-  // a horaria sai antes, no seu proprio blob, so os ultimos HORA_DIAS dias
+  // a horaria sai antes, em um arquivo por mes, so os ultimos HORA_DIAS dias
   const corte = dias.slice(-HORA_DIAS)[0];
   const hora = serie_hora.filter(x => x.dia >= corte);
-  const tamH = await writeOut({
+  // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode oferecer
+  // dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
+  out.dias_hora = [...new Set(hora.map(x => x.dia))].sort();
+  const rh = await emiteHora({
     gerado_em: out.gerado_em, fonte: out.fonte, resolucao_min: 60,
-    nota: 'Media horaria por usina, ultimos ' + HORA_DIAS + ' dias. Irradiancia em W/m2 (media da hora, '
-      + 'que na janela de 1 h e tambem Wh/m2). Blob separado de proposito: junto com a serie diaria o '
-      + 'arquivo passava de 12 MB e toda a pagina pagaria por isso.',
+    nota: 'Media horaria por usina. Irradiancia em W/m2 (media da hora, que na janela de 1 h e tambem '
+      + 'Wh/m2). Um arquivo por mes: o Infinity baixa a URL antes de filtrar, e um blob unico seria '
+      + 'puxado inteiro em toda renderizacao do painel.',
     janela: { ini: corte, fim: dias[dias.length - 1] }, ufvs,
-    dias: dias.slice(-HORA_DIAS), serie_hora: hora,
-  }, HORA_BLOB);
-  console.log('irr_hora.json OK · ' + Math.round(tamH / 1024) + ' KB · ' + hora.length + ' linhas · desde ' + corte);
+  }, hora, meses);
+  console.log('irr_hora_<mes>.json OK · ' + rh.arquivos + ' arquivos (' + rh.comDado + ' com dado) · '
+    + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas · desde ' + corte);
 
   const tam = await writeOut(out);
   console.log('irr_ufv.json OK · ' + Math.round(tam / 1024) + ' KB');
