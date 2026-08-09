@@ -111,22 +111,33 @@ async function writeOut(obj, nome) {
   return json.length;
 }
 
-// grava a serie horaria em um arquivo por mes. `mesesTodos` = todos os meses que o painel pode
-// pedir; os que nao tem dado horario saem como esboco vazio para a URL nunca faltar.
-async function emiteHora(meta, linhas, mesesTodos) {
-  const porMes = {};
-  linhas.forEach(l => (porMes[l.mes] = porMes[l.mes] || []).push(l));
-  const alvos = [...new Set([...(mesesTodos || []), ...Object.keys(porMes), 'tudo'])].sort();
+// Um arquivo por mes, e cada um e o PACOTE COMPLETO do mes: a serie mensal inteira (para a visao
+// "All"), os dias daquele mes e as horas daquele mes. Assim o painel de serie resolve os TRES niveis
+// com UM alvo so.
+// Por que um alvo so: com dois alvos, o do nivel inativo devolve [] e o Infinity responde um frame
+// SEM CAMPO NENHUM — o painel trend nao acha o campo x e morre com "Unable to find field: x". E, quando
+// dois alvos trazem colunas de mesmo nome, o joinByField cola o refId no nome da serie e a legenda
+// vira "Módulo B". Um alvo nao tem nenhum dos dois problemas, e ainda baixa menos: o painel deixa de
+// puxar o blob principal de 1,7 MB.
+// Todo mes conhecido ganha arquivo, mesmo sem dado horario, e ha um "tudo" — a URL e montada por
+// variavel, e URL que nao resolve deixa o painel em erro vermelho, nao vazio.
+async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
+  const horaMes = {}, diaMes = {};
+  linhas.forEach(l => (horaMes[l.mes] = horaMes[l.mes] || []).push(l));
+  (serieDia || []).forEach(l => (diaMes[l.mes] = diaMes[l.mes] || []).push(l));
+  const alvos = [...new Set([...(mesesTodos || []), ...Object.keys(horaMes), 'tudo'])].sort();
   let bytes = 0;
   for (const m of alvos) {
-    const rows = porMes[m] || [];
+    const rows = horaMes[m] || [];
     bytes += await writeOut(Object.assign({}, meta, {
       mes: m,
       dias: [...new Set(rows.map(r => r.dia))].sort(),
-      serie_hora: rows,
+      serie_mes: serieMes || [],          // completa: e o nivel "All" do painel
+      serie_dia: diaMes[m] || [],         // so os dias deste mes
+      serie_hora: rows,                   // so as horas deste mes
     }), HORA_PRE + m + '.json');
   }
-  return { arquivos: alvos.length, bytes, comDado: Object.keys(porMes).length, linhas: linhas.length };
+  return { arquivos: alvos.length, bytes, comDado: Object.keys(horaMes).length, linhas: linhas.length };
 }
 
 (async () => {
@@ -147,7 +158,8 @@ async function emiteHora(meta, linhas, mesesTodos) {
       // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
       j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
       const rh = await emiteHora({ gerado_em: h.gerado_em, fonte: h.fonte, resolucao_min: 60,
-        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.meses || []);
+        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.meses || [],
+      j.serie_mes || [], j.serie_dia || []);
       console.log('irr_hora_<mes>.json republicado do seed · ' + rh.arquivos + ' arquivos ('
         + rh.comDado + ' com dado) · ' + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas');
     }
@@ -348,11 +360,12 @@ async function emiteHora(meta, linhas, mesesTodos) {
   out.dias_hora = [...new Set(hora.map(x => x.dia))].sort();
   const rh = await emiteHora({
     gerado_em: out.gerado_em, fonte: out.fonte, resolucao_min: 60,
-    nota: 'Media horaria por usina. Irradiancia em W/m2 (media da hora, que na janela de 1 h e tambem '
-      + 'Wh/m2). Um arquivo por mes: o Infinity baixa a URL antes de filtrar, e um blob unico seria '
-      + 'puxado inteiro em toda renderizacao do painel.',
+    nota: 'PACOTE DO MES: serie mensal inteira (nivel "All"), os dias deste mes e as horas deste mes. '
+      + 'Existe para o painel resolver os tres niveis de zoom com UM alvo — com dois alvos, o do nivel '
+      + 'inativo devolve frame sem campo e o trend morre em "Unable to find field: x". '
+      + 'Horaria em W/m2 (media da hora, que na janela de 1 h e tambem Wh/m2).',
     janela: { ini: corte, fim: dias[dias.length - 1] }, ufvs,
-  }, hora, meses);
+  }, hora, meses, serie_mes, serie_dia);
   console.log('irr_hora_<mes>.json OK · ' + rh.arquivos + ' arquivos (' + rh.comDado + ' com dado) · '
     + Math.round(rh.bytes / 1024) + ' KB · ' + rh.linhas + ' linhas · desde ' + corte);
 
