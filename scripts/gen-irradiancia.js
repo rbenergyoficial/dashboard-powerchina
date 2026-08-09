@@ -202,8 +202,10 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   const acc = {};                  // dia -> ufv -> gr -> {sB,nB,sL,nL,minL,maxL,fora,zd,nd}
   // acumulador HORARIO: o painel precisa descer ao dia e mostrar as 24 horas. Guardo so as
   // grandezas que se leem numa curva de dia — nao as 22, senao o blob passa de 20 MB.
-  const HORA_GR = new Set(['IRRADIAÇÃO INCLINADA', 'IRRADIAÇÃO DIFUSA', 'IRRADIAÇÃO DIRETA',
-    'TEMPERATURA MÓDULO 1', 'TEMPERATURA AMBIENTE', 'UMIDADE RELATIVA DO AR']);
+  // TODAS as grandezas vao para o semi-horario, nao so as seis do inicio: cada variavel da
+  // solarimetria tem painel proprio e precisa descer ao dia igual as outras. Como o arquivo e por DIA,
+  // o custo e pequeno — o arquivo do dia sai de 43 KB para ~130 KB, e so um dia e baixado por vez.
+  const HORA_GR = new Set(Object.keys(FAIXA));
   const accH = {};                 // dia|ufv|hora -> gr -> {s,n}
   const qual = {};                 // ufv -> gr -> {n,vazio,fora,zd,nd,min,max}
   let nLinhas = 0, tsIni = null, tsFim = null;
@@ -323,6 +325,13 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     l.fora_faixa = Object.values(g).reduce((a, o) => a + (o.fora || 0), 0);
     l.zeros_diurnos = inc.zd || 0;
     l.gti_noite_w = inc.nN ? r2(inc.sN / inc.nN) : null;
+    // ALBEDO pela razao das INTEGRAIS do dia, em %. A "TAXA DE ALBEDO" que o SCADA reporta e uma
+    // razao instantanea, e razao com denominador indo a zero explode: ao meio-dia ela vem 0,19 e a
+    // media do dia sai 3,97, com maximos de 1.625 a 1.843 no ano. Nao e sensor quebrado nem escala
+    // trocada (eu havia suposto que fosse irradiancia refletida crua) — e ruido de divisao no
+    // amanhecer, no crepusculo e na noite. A razao dos acumulados nao tem esse problema e da o numero
+    // fisico esperado para solo e areia, algo entre 15% e 30%.
+    l.albedo_calc = (l.alb_cima && l.alb_baixo != null) ? r2(100 * l.alb_baixo / l.alb_cima) : null;
     // a MESMA medida do dia em W/m2: media das leituras com sol, e a duracao do dia solar que faz a
     // ponte com o kWh/m2. Media em 24 h daria metade disso — por isso a janela vai declarada.
     l.gti_sol_w = inc.nS ? r2(inc.sS / inc.nS) : null;
@@ -359,6 +368,15 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       gti_sol_w: med('gti_sol_w'), horas_sol: med('gti_horas_sol'),
       t_mod: med('t_mod1'), t_amb: med('t_amb'), umid: med('umid'), vento: med('vento'),
       chuva_mm: som('chuva'), albedo: med('albedo'),
+      // media DIARIA das que se integram, para o nivel "All" de cada painel (o _kwh e soma do mes)
+      dif_dia: med('dif'), dni_dia: med('dni'),
+      alb_cima_dia: med('alb_cima'), alb_baixo_dia: med('alb_baixo'),
+      // e as que ainda nao tinham agregado mensal nenhum
+      t_mod2: med('t_mod2'), t_mod3: med('t_mod3'), t_mod4: med('t_mod4'),
+      t_int: med('t_int'), t_orvalho: med('t_orvalho'), vento_dir: med('vento_dir'),
+      suj1: med('suj1'), suj2: med('suj2'), bateria: med('bateria'),
+      albedo_calc: med('albedo_calc'),
+      gti_pico_w: med('gti_pico_w'),
       dias_impossiveis: som('gti_impossivel'),
       perda_suj1: med('perda_suj1'), perda_suj2: med('perda_suj2'),
       dias_suspeitos: L.filter(x => x.suspeito).length,
@@ -368,9 +386,13 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // ---------- serie HORARIA ----------
   // As leituras sao de 30 min; duas por hora. Irradiancia vira POTENCIA MEDIA da hora em W/m2 (media
   // das duas), que na janela de 1 h e tambem a energia em Wh/m2. As demais sao media simples.
-  const CAMPO_H = { 'IRRADIAÇÃO INCLINADA': 'gti_w', 'IRRADIAÇÃO DIFUSA': 'dif_w',
-    'IRRADIAÇÃO DIRETA': 'dni_w', 'TEMPERATURA MÓDULO 1': 't_mod', 'TEMPERATURA AMBIENTE': 't_amb',
-    'UMIDADE RELATIVA DO AR': 'umid' };
+  // Mesmos nomes da serie diaria, com UMA excecao deliberada: as grandezas que se integram no tempo
+  // mudam de GRANDEZA entre os niveis — no dia sao potencia (W/m2) e no acumulado sao energia
+  // (kWh/m2) — entao ganham sufixo _w para nao se passarem uma pela outra.
+  const CAMPO_H = {};
+  Object.entries(CAMPO).forEach(([gr, campo]) => {
+    CAMPO_H[gr] = INTEGRA.has(gr) ? campo + '_w' : campo;
+  });
   // `t` = hora decimal (0, 0.5, 1 ... 23.5). E o x do painel: numero que sobe, sem depender de
   // mapeamento, e que no eixo se le como hora. `mes` NAO vai na linha — o arquivo ja e de um mes so,
   // e repeti-lo 12.960 vezes custava 230 KB por mes de nada.
