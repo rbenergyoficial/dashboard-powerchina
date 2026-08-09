@@ -227,7 +227,10 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
       }
       o.sL += x; o.nL++;
       if (HORA_GR.has(m.gr)) {
-        const kh = d + '|' + m.ufv + '|' + hh;
+        // hora com dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e
+        // ordenacao de TEXTO — com a hora crua, '10' vinha antes de '2' e o painel trend recusava a
+        // serie com "Values must be in ascending order".
+        const kh = d + '|' + m.ufv + '|' + String(hh).padStart(2, '0');
         const oh = ((accH[kh] = accH[kh] || {})[m.gr] = accH[kh][m.gr] || { s: 0, n: 0 });
         oh.s += x; oh.n++;
       }
