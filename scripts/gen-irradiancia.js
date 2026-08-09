@@ -29,6 +29,12 @@
  */
 const fs = require('fs'), https = require('https'), readline = require('readline');
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
+// A serie HORARIA vai em blob PROPRIO. Junto com o resto o arquivo dava 12 MB, e todo painel da
+// pagina baixaria os 12 MB para desenhar um card. Separada, o principal fica em ~1,7 MB e so o
+// painel de curva do dia paga o preco.
+// Janela de 120 dias, nao o ano: inspecao hora a hora se faz em dia recente, e 365 dias x 24 h x
+// 9 usinas x 6 grandezas passa de 10 MB — peso que nao se paga.
+const HORA_BLOB = 'irr_hora.json', HORA_DIAS = 120;
 
 // MRT0n = Mn, e MRT10 = M1 (ver o bloco de mapeamento acima)
 const EST_UFV = { MRT02: 'M2', MRT03: 'M3', MRT04: 'M4', MRT05: 'M5', MRT06: 'M6',
@@ -82,7 +88,15 @@ function fonteLinhas() {
 
 async function writeOut(obj, nome) {
   const json = JSON.stringify(obj);
-  if (process.env.LOCAL_OUT) { fs.writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
+  if (process.env.LOCAL_OUT) {
+    // mesmo diretorio do LOCAL_OUT, mas com o nome do blob. Sem isso os dois writeOut escreviam no
+    // MESMO arquivo e a serie horaria era sobrescrita pela diaria — o seed horario simplesmente nao
+    // aparecia, sem erro nenhum.
+    const alvo = nome
+      ? process.env.LOCAL_OUT.split(/[\\/]/).slice(0, -1).concat(nome).join('/')
+      : process.env.LOCAL_OUT;
+    fs.writeFileSync(alvo, json); return json.length;
+  }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE;
   if (!conn) throw new Error('DADOS_STORAGE nao definido');
@@ -106,12 +120,25 @@ async function writeOut(obj, nome) {
     const t = await writeOut(j);
     console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
       + (j.serie_dia || []).length + ' linhas diarias · janela ' + j.janela.ini + ' a ' + j.janela.fim);
+    const seedH = 'data/irr_hora_seed.json';
+    if (fs.existsSync(seedH)) {
+      const h = JSON.parse(fs.readFileSync(seedH, 'utf8'));
+      h.modo = 'seed';
+      const th = await writeOut(h, HORA_BLOB);
+      console.log('irr_hora.json republicado do seed · ' + Math.round(th / 1024) + ' KB · '
+        + (h.serie_hora || []).length + ' linhas horarias');
+    }
     return;
   }
   const rl = fonteLinhas();
   let cab = null;
   const mapa = [];                 // { i, ufv, gr }
   const acc = {};                  // dia -> ufv -> gr -> {sB,nB,sL,nL,minL,maxL,fora,zd,nd}
+  // acumulador HORARIO: o painel precisa descer ao dia e mostrar as 24 horas. Guardo so as
+  // grandezas que se leem numa curva de dia — nao as 22, senao o blob passa de 20 MB.
+  const HORA_GR = new Set(['IRRADIAÇÃO INCLINADA', 'IRRADIAÇÃO DIFUSA', 'IRRADIAÇÃO DIRETA',
+    'TEMPERATURA MÓDULO 1', 'TEMPERATURA AMBIENTE', 'UMIDADE RELATIVA DO AR']);
+  const accH = {};                 // dia|ufv|hora -> gr -> {s,n}
   const qual = {};                 // ufv -> gr -> {n,vazio,fora,zd,nd,min,max}
   let nLinhas = 0, tsIni = null, tsFim = null;
 
@@ -160,6 +187,11 @@ async function writeOut(obj, nome) {
         continue;                                       // suspeita: fica fora do LIMPO
       }
       o.sL += x; o.nL++;
+      if (HORA_GR.has(m.gr)) {
+        const kh = d + '|' + m.ufv + '|' + hh;
+        const oh = ((accH[kh] = accH[kh] || {})[m.gr] = accH[kh][m.gr] || { s: 0, n: 0 });
+        oh.s += x; oh.n++;
+      }
       if (o.maxL == null || x > o.maxL) o.maxL = x;
       if (q.min == null || x < q.min) q.min = x;
       if (q.max == null || x > q.max) q.max = x;
@@ -231,6 +263,25 @@ async function writeOut(obj, nome) {
       fora_faixa: L.reduce((a, x) => a + (x.fora_faixa || 0), 0) });
   }));
 
+  // ---------- serie HORARIA ----------
+  // As leituras sao de 30 min; duas por hora. Irradiancia vira POTENCIA MEDIA da hora em W/m2 (media
+  // das duas), que na janela de 1 h e tambem a energia em Wh/m2. As demais sao media simples.
+  const CAMPO_H = { 'IRRADIAÇÃO INCLINADA': 'gti_w', 'IRRADIAÇÃO DIFUSA': 'dif_w',
+    'IRRADIAÇÃO DIRETA': 'dni_w', 'TEMPERATURA MÓDULO 1': 't_mod', 'TEMPERATURA AMBIENTE': 't_amb',
+    'UMIDADE RELATIVA DO AR': 'umid' };
+  const serie_hora = [];
+  Object.keys(accH).sort().forEach(k => {
+    const [d, u, hh] = k.split('|');
+    const g = accH[k];
+    const l = { dia: d, mes: d.slice(0, 7), ufv: u, h: +hh };
+    let algum = false;
+    Object.entries(CAMPO_H).forEach(([gr, campo]) => {
+      const o = g[gr];
+      if (o && o.n) { l[campo] = r2(o.s / o.n); algum = true; }
+    });
+    if (algum) serie_hora.push(l);
+  });
+
   // ---------- tabela de QUALIDADE: e o entregavel principal ----------
   const qualidade = [];
   ufvs.forEach(u => grs.forEach(gr => {
@@ -262,10 +313,24 @@ async function writeOut(obj, nome) {
     ufvs, grandezas: grs, dias: dias.length, meses,
     serie_dia, serie_mes, qualidade,
   };
+  // a horaria sai antes, no seu proprio blob, so os ultimos HORA_DIAS dias
+  const corte = dias.slice(-HORA_DIAS)[0];
+  const hora = serie_hora.filter(x => x.dia >= corte);
+  const tamH = await writeOut({
+    gerado_em: out.gerado_em, fonte: out.fonte, resolucao_min: 60,
+    nota: 'Media horaria por usina, ultimos ' + HORA_DIAS + ' dias. Irradiancia em W/m2 (media da hora, '
+      + 'que na janela de 1 h e tambem Wh/m2). Blob separado de proposito: junto com a serie diaria o '
+      + 'arquivo passava de 12 MB e toda a pagina pagaria por isso.',
+    janela: { ini: corte, fim: dias[dias.length - 1] }, ufvs,
+    dias: dias.slice(-HORA_DIAS), serie_hora: hora,
+  }, HORA_BLOB);
+  console.log('irr_hora.json OK · ' + Math.round(tamH / 1024) + ' KB · ' + hora.length + ' linhas · desde ' + corte);
+
   const tam = await writeOut(out);
   console.log('irr_ufv.json OK · ' + Math.round(tam / 1024) + ' KB');
   console.log('  janela ' + tsIni + ' a ' + tsFim + '  ·  ' + nLinhas + ' linhas  ·  ' + dias.length + ' dias');
-  console.log('  ' + ufvs.length + ' UFVs · ' + grs.length + ' grandezas · ' + serie_dia.length + ' linhas diarias');
+  console.log('  ' + ufvs.length + ' UFVs · ' + grs.length + ' grandezas · ' + serie_dia.length
+    + ' linhas diarias · ' + serie_hora.length + ' linhas horarias');
   const ruins = qualidade.filter(q => q.veredito !== 'ok');
   console.log('  qualidade: ' + (qualidade.length - ruins.length) + ' de ' + qualidade.length + ' series ok');
   ruins.sort((a, b) => b.fora_pct - a.fora_pct).slice(0, 12).forEach(q =>
