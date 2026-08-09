@@ -72,6 +72,11 @@ const FAIXA = {
 const INTEGRA = new Set(['IRRADIAÇÃO INCLINADA', 'IRRADIAÇÃO DIFUSA', 'IRRADIAÇÃO DIRETA',
   'IRRADIAÇÃO ALBEDO DE CIMA', 'IRRADIAÇÃO ALBEDO DE BAIXO']);
 const SOMA = new Set(['PRECIPITAÇÃO']);           // chuva acumula
+// Tetos do DIA, para pegar sensor travado — a faixa fisica por leitura nao pega (ver o bloco do
+// "dia impossivel"). 11 kWh/m2/dia fica acima do maior real medido no ano (10,72 no M2) e abaixo do
+// primeiro impossivel (12,30 no M9); 5 W/m2 de media entre 21h e 03h e generoso para ruido de
+// piranometro; 3 valores distintos em 48 leituras so acontece com registro repetido.
+const GTI_DIA_MAX = 11, GTI_NOITE_MAX = 5, GTI_VALORES_MIN = 3;
 const H_SLOT = 0.5;                               // horas por leitura (30 min)
 const DIURNO = [8, 15];                           // janela de sol alto p/ contar zero suspeito
 
@@ -218,6 +223,13 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
       if (q.minB == null || x < q.minB) q.minB = x;
       if (q.maxB == null || x > q.maxB) q.maxB = x;
       o.sB += x; o.nB++;
+      if (m.gr === 'IRRADIAÇÃO INCLINADA') {
+        // NOITE e VALORES DISTINTOS: os dois detectores de sensor travado. Ficam aqui, no BRUTO, antes
+        // do teste de faixa, porque sensor pinado passa na faixa fisica sem reclamar — 912,84 W/m2 e
+        // um valor perfeitamente possivel ao meio-dia.
+        if (hh >= 21 || hh <= 3) { o.sN = (o.sN || 0) + x; o.nN = (o.nN || 0) + 1; }
+        (o.vals = o.vals || new Set()).add(x);
+      }
       if (diurno) { o.nd++; q.nd++; if (x === 0) { o.zd++; q.zd++; } }
       const [lo, hi] = FAIXA[m.gr];
       if (x < lo || x > hi) {
@@ -284,7 +296,23 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
     l.cobertura_pct = r2(100 * (inc.nB || 0) / SLOTS);
     l.fora_faixa = Object.values(g).reduce((a, o) => a + (o.fora || 0), 0);
     l.zeros_diurnos = inc.zd || 0;
-    l.suspeito = (l.cobertura_pct < 95 || l.fora_faixa > 0 || (inc.zd || 0) > 2) ? 1 : 0;
+    l.gti_noite_w = inc.nN ? r2(inc.sN / inc.nN) : null;
+    l.gti_valores = inc.vals ? inc.vals.size : null;
+    // DIA IMPOSSIVEL — tres testes, cada um com um defeito diferente atras:
+    //   total do dia acima do teto fisico: nao existe em Mauriti (o maior real do ano foi 10,72);
+    //   irradiancia a NOITE: o sol nao esta la, entao e offset ou leitura congelada;
+    //   pouquissimos valores distintos no dia: o SCADA repetiu o ultimo registro.
+    // O caso que trouxe isso: M9, 10 a 18/08/2025 — NOVE dias com 21,91 kWh/m2 identicos e pico
+    // identico de 912,84 W/m2. E 912,84 x 24 h / 1000 = 21,91: o sensor ficou pinado num valor, dia e
+    // noite. A faixa fisica nao pega, e o dia impossivel dominava sozinho a escala do grafico do ano.
+    // O dia impossivel sai do LIMPO (gti = null) mas o bruto FICA, e a serie horaria fica intacta —
+    // e nela que se ve a linha reta que denuncia o sensor.
+    const impossivel = (l.gti_bruta != null && l.gti_bruta > GTI_DIA_MAX)
+      || (l.gti_noite_w != null && l.gti_noite_w > GTI_NOITE_MAX)
+      || (l.gti_valores != null && l.gti_valores <= GTI_VALORES_MIN && (inc.nB || 0) > 10);
+    l.gti_impossivel = impossivel ? 1 : 0;
+    if (impossivel) l.gti = null;
+    l.suspeito = (l.cobertura_pct < 95 || l.fora_faixa > 0 || (inc.zd || 0) > 2 || impossivel) ? 1 : 0;
     serie_dia.push(l);
   }));
 
@@ -300,6 +328,7 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
       gti_kwh: som('gti'), gti_dia: med('gti'), dif_kwh: som('dif'), dni_kwh: som('dni'),
       t_mod: med('t_mod1'), t_amb: med('t_amb'), umid: med('umid'), vento: med('vento'),
       chuva_mm: som('chuva'), albedo: med('albedo'),
+      dias_impossiveis: som('gti_impossivel'),
       perda_suj1: med('perda_suj1'), perda_suj2: med('perda_suj2'),
       dias_suspeitos: L.filter(x => x.suspeito).length,
       fora_faixa: L.reduce((a, x) => a + (x.fora_faixa || 0), 0) });
