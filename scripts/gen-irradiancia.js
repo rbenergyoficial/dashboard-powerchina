@@ -77,6 +77,11 @@ const SOMA = new Set(['PRECIPITAÇÃO']);           // chuva acumula
 // primeiro impossivel (12,30 no M9); 5 W/m2 de media entre 21h e 03h e generoso para ruido de
 // piranometro; 3 valores distintos em 48 leituras so acontece com registro repetido.
 const GTI_DIA_MAX = 11, GTI_NOITE_MAX = 5, GTI_VALORES_MIN = 3;
+// Corte de "esta com sol", para a media diaria em W/m2. 5 W/m2 nao e escolha minha: e o mesmo corte
+// que o gen-executivo.js usa no irr do ONS (`util = irr > 5`), e so com o MESMO corte as duas medias
+// sao comparaveis. Irradiancia e W/m2 (potencia) e irradiacao e kWh/m2 (energia): sao grandezas
+// diferentes, entao emito as DUAS, e a hora de sol e o que liga uma na outra de forma auditavel.
+const SOL_MIN = 5;
 const H_SLOT = 0.5;                               // horas por leitura (30 min)
 const DIURNO = [8, 15];                           // janela de sol alto p/ contar zero suspeito
 
@@ -238,6 +243,7 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
         continue;                                       // suspeita: fica fora do LIMPO
       }
       o.sL += x; o.nL++;
+      if (m.gr === 'IRRADIAÇÃO INCLINADA' && x > SOL_MIN) { o.sS = (o.sS || 0) + x; o.nS = (o.nS || 0) + 1; }
       if (HORA_GR.has(m.gr)) {
         // hora com dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e
         // ordenacao de TEXTO — com a hora crua, '10' vinha antes de '2' e o painel trend recusava a
@@ -297,6 +303,10 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
     l.fora_faixa = Object.values(g).reduce((a, o) => a + (o.fora || 0), 0);
     l.zeros_diurnos = inc.zd || 0;
     l.gti_noite_w = inc.nN ? r2(inc.sN / inc.nN) : null;
+    // a MESMA medida do dia em W/m2: media das leituras com sol, e a duracao do dia solar que faz a
+    // ponte com o kWh/m2. Media em 24 h daria metade disso — por isso a janela vai declarada.
+    l.gti_sol_w = inc.nS ? r2(inc.sS / inc.nS) : null;
+    l.gti_horas_sol = inc.nS ? r2(inc.nS * H_SLOT) : null;
     l.gti_valores = inc.vals ? inc.vals.size : null;
     // DIA IMPOSSIVEL — tres testes, cada um com um defeito diferente atras:
     //   total do dia acima do teto fisico: nao existe em Mauriti (o maior real do ano foi 10,72);
@@ -311,7 +321,7 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
       || (l.gti_noite_w != null && l.gti_noite_w > GTI_NOITE_MAX)
       || (l.gti_valores != null && l.gti_valores <= GTI_VALORES_MIN && (inc.nB || 0) > 10);
     l.gti_impossivel = impossivel ? 1 : 0;
-    if (impossivel) l.gti = null;
+    if (impossivel) { l.gti = null; l.gti_sol_w = null; }
     l.suspeito = (l.cobertura_pct < 95 || l.fora_faixa > 0 || (inc.zd || 0) > 2 || impossivel) ? 1 : 0;
     serie_dia.push(l);
   }));
@@ -326,6 +336,7 @@ async function emiteHora(meta, linhas, mesesTodos, serieMes, serieDia) {
     const med = k => { const v = L.map(x => x[k]).filter(x => x != null); return v.length ? r2(v.reduce((a, b) => a + b, 0) / v.length) : null; };
     serie_mes.push({ mes: m, ufv: u, dias: L.length,
       gti_kwh: som('gti'), gti_dia: med('gti'), dif_kwh: som('dif'), dni_kwh: som('dni'),
+      gti_sol_w: med('gti_sol_w'), horas_sol: med('gti_horas_sol'),
       t_mod: med('t_mod1'), t_amb: med('t_amb'), umid: med('umid'), vento: med('vento'),
       chuva_mm: som('chuva'), albedo: med('albedo'),
       dias_impossiveis: som('gti_impossivel'),
