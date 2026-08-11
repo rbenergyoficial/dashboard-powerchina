@@ -675,13 +675,19 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             nota: prOk ? null : S.nota };
         };
         // ---- as 9 usinas ----
+        const linhasUfv = [];
         Object.keys(CAP_UFV).sort().forEach(u => { const x = I.porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 };
           const liq = w2.reduce((a, d) => a + num((d.ufv_liq_mwh || {})[u]), 0);
           const meta = MPU ? MPU[u] : null;          // <- mesma fonte unica do bloco acima
           // M7: o "gv" do ONS é o circuito 2 do M3 (tag trocada), e nós o zeramos — usar ele daria
           // 100% de corte. O realizado do M7 vem do Way2. O PR fica NULL: comparar líquida do Way2
           // com potencial ESTIMADO não é Performance Ratio, é mistura de bases.
-          const viaW2 = VIA_WAY2.includes(u) && liq > 0;
+          // GATE DE DATA — a tag do M7 no ONS foi corrigida em TAG_M7_OK (17/07/2026). A partir do
+          // primeiro mes inteiramente posterior o dado cru vale, e manter a substituicao pelo Way2
+          // vira ruido: era ela que deixava um potencial "orfao" no grupo ML, presente no grupo e
+          // ausente das tres usinas. Em ago/26 valia 0,16 GWh.
+          const m7Cru = m > TAG_M7_OK.slice(0, 7);
+          const viaW2 = VIA_WAY2.includes(u) && liq > 0 && !m7Cru;
           // POTENCIAL DO M7 — não sai do ONS. Eu usava a mediana do `ge` dos parques de tag boa, mas o
           // `ge` do ONS é inconsistente antes de mar/26 (o mesmo motivo de o PR não existir lá). Isso
           // subestimava o potencial e ZERAVA o corte de set/25 a jan/26 — falso: o rendimento específico
@@ -714,7 +720,42 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             l.vies_pp = -10; l.vies_nota = 'piso: validado contra os meses de dado bom, este metodo subestima o corte em ~10 pontos percentuais'; }
           if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
             l.nota = 'O registro "M7" do ONS e o circuito 2 do M3 — o M7 nao tem geracao nem potencial proprios na fonte. Realizado vem do Way2; potencial e ESTIMADO pela mediana do ge/MW dos parques de tag boa. PR nao se aplica.'; }
-          out.push(l); });
+          linhasUfv.push(l); });
+
+        // ---- RECONCILIACAO: soma das usinas = corte do complexo -----------------------------
+        // REGRA DE NEGOCIO: PPA + ML tem de dar exatamente o corte do conjunto.
+        // Ate aqui nunca dava, porque sao duas contas diferentes sobre fontes diferentes:
+        //   complexo -> max(0, gref-ger) do ons_restricao_all, SO nos intervalos com lim>0
+        //   usina    -> max(0, ge-gv)    do ons_irradiancia,   em TODOS os intervalos
+        // O numero do complexo e o TOTAL DE CONTROLE: e o unico com contraparte externa no ONS,
+        // no nivel da subestacao. As usinas sao ajustadas na proporcao do proprio corte para
+        // somar esse total. O valor antes do ajuste fica em cortado_bruto_gwh, para auditoria.
+        //
+        // Se alguma usina esta sem corte publicado (PPA antes de mar/26, quando o ge do ONS nao
+        // presta), a soma seria incompleta e o ajuste NAO e aplicado: e melhor a linha nao fechar
+        // e dizer por que do que fechar distribuindo a diferenca sobre um subconjunto.
+        const comCorte = linhasUfv.filter(l => l.cortado_gwh != null);
+        const somaUfv = comCorte.reduce((a, l) => a + l.cortado_gwh, 0);
+        const alvoCorte = S.frustrada_gwh;
+        const recOk = comCorte.length === linhasUfv.length && somaUfv > 0 && alvoCorte > 0;
+        const fatorRec = recOk ? alvoCorte / somaUfv : 1;
+        if (recOk) {
+          comCorte.forEach(l => {
+            l.cortado_bruto_gwh = l.cortado_gwh;
+            l.cortado_gwh = r2(l.cortado_gwh * fatorRec);
+            l.corte_pct = l.potencial_gwh > 0 ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null;
+            l.outras_gwh = r2(Math.max(0, l.potencial_gwh - l.entregue_gwh - l.cortado_gwh)); });
+          // sobra de arredondamento vai para a usina de maior corte, p/ fechar ao centavo
+          const dif = r2(alvoCorte - comCorte.reduce((a, l) => a + l.cortado_gwh, 0));
+          if (dif !== 0) { const maior = comCorte.slice().sort((a, b) => b.cortado_gwh - a.cortado_gwh)[0];
+            maior.cortado_gwh = r2(maior.cortado_gwh + dif); }
+        }
+        linhasUfv.forEach(l => { l.corte_reconciliado = recOk ? 1 : 0;
+          l.corte_reconc_fator = recOk ? Math.round(fatorRec * 1e6) / 1e6 : null;
+          l.corte_reconc_nota = recOk
+            ? 'Corte ajustado na proporcao do proprio valor para somar o total do conjunto, que e o numero aferido do ONS no nivel da subestacao. Valor bruto em cortado_bruto_gwh.'
+            : 'Reconciliacao nao aplicada neste mes: ha usina sem corte publicado, a soma seria incompleta.'; });
+        linhasUfv.forEach(l => out.push(l));
         // ---- complexo ----
         { const ge = Object.values(I.porUfv).reduce((a, x) => a + x.ge, 0);
           const gv = Object.values(I.porUfv).reduce((a, x) => a + x.gv, 0);
@@ -743,6 +784,20 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             : ((I.porUfv[u] || {}).gv || 0)), 0);
           const lg = linha(g, som('ge'), gvG, som('geP'), som('gvP'), som('parN'), som('parOk'), liqG, metaG);
           lg.grupo = 1;
+          // O corte do grupo e a SOMA das suas usinas ja reconciliadas — nao um ge-gv recalculado
+          // sobre o agregado. Era o recalculo que fazia PPA + ML nao fechar com o Complexo, e que
+          // punha no grupo ML um potencial que nao existia em M1, M7 nem M9.
+          const membros = linhasUfv.filter(l => us.includes(l.ufv));
+          const semCorte = membros.some(l => l.cortado_gwh == null);
+          lg.cortado_gwh = semCorte ? null : r2(membros.reduce((a, l) => a + l.cortado_gwh, 0));
+          lg.corte_pct = (lg.cortado_gwh != null && lg.potencial_gwh > 0)
+            ? r2(100 * lg.cortado_gwh / lg.potencial_gwh) : null;
+          lg.outras_gwh = lg.cortado_gwh == null ? null
+            : r2(Math.max(0, lg.potencial_gwh - lg.entregue_gwh - lg.cortado_gwh));
+          lg.corte_reconciliado = recOk ? 1 : 0;
+          lg.corte_reconc_nota = semCorte
+            ? 'Corte do grupo indisponivel: alguma usina do grupo nao tem corte publicado neste mes.'
+            : 'Soma das usinas do grupo, reconciliada com o total do conjunto.';
           out.push(lg); });
       });
       return out; })(),
