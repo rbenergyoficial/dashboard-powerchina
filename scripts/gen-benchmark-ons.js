@@ -40,7 +40,10 @@ const FONTES = [
   { id: 'eolico', dir: 'restricao_coff_eolica_tm', arq: 'RESTRICAO_COFF_EOLICA' },
 ];
 const SUB = 'NE';                 // subsistema Nordeste
-const NOSSO = 'CJU_CEMTD';        // CONJ. MAURITI
+// Os conjuntos que saem NOMEADOS do mesmo arquivo da regiao. Tirar os dois daqui, e nao de fontes
+// diferentes, e o que torna a comparacao legitima. `abaiara` entra porque o painel compara com ele e o
+// valor dele tambem estava colado — os tres numeros tem de se destravar juntos ou a comparacao nao vale.
+const CONJ = { CJU_CEMTD: 'nosso', CJU_CEAB2: 'abaiara' };   // CONJ. MAURITI · CONJ. ABAIARA 230 KV
 const H = 0.5;                    // intervalo do ONS = 30 min
 const INI_Y = 2026, INI_M = 1;    // jan/26 = referencia do painel executivo
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -91,7 +94,7 @@ async function leMes(f, mo, acc) {
     const limNum = Number(limTxt.replace(',', '.')) || 0;
     const perda = Math.max(0, (gref - ger) * H);
     const alvos = [[f.id, mes, 'NE']];
-    if (c[iOns] === NOSSO) alvos.push([f.id, mes, 'MAURITI']);
+    if (CONJ[c[iOns]]) alvos.push([f.id, mes, CONJ[c[iOns]]]);
     for (const [fo, me, quem] of alvos) {
       const k = fo + '|' + me + '|' + quem;
       const a = acc[k] || (acc[k] = novo());
@@ -125,62 +128,101 @@ async function grava(obj) {
       catch (e) { faltou.push(f.id + ' ' + mo + ' (' + e.message.slice(0, 40) + ')'); }
     }
   }
-  // serie mensal: uma linha por (mes, fonte), com a regiao e o nosso lado a lado
+  // ---- serie mensal: uma linha por (mes, fonte), regiao e os conjuntos nomeados lado a lado ----
   const serie = [];
   const chaves = [...new Set(Object.keys(acc).map(k => k.split('|').slice(0, 2).join('|')))].sort();
+  const pct = a => (a && (a.ger + a.fru_p) > 0) ? r2(100 * a.fru_p / (a.ger + a.fru_p)) : null;
+  const pctZ = a => (a && (a.ger + a.fru_z) > 0) ? r2(100 * a.fru_z / (a.ger + a.fru_z)) : null;
   for (const ch of chaves) {
     const [fonte, mes] = ch.split('|');
-    const ne = acc[ch + '|NE'], nos = acc[ch + '|MAURITI'];
-    const pct = a => (a && (a.ger + a.fru_p) > 0) ? r2(100 * a.fru_p / (a.ger + a.fru_p)) : null;
-    const pctZ = a => (a && (a.ger + a.fru_z) > 0) ? r2(100 * a.fru_z / (a.ger + a.fru_z)) : null;
-    serie.push({
+    const ne = acc[ch + '|NE'];
+    const l = {
       mes: mes.replace('_', '-'), mes_ts: mes.replace('_', '-') + '-01T00:00:00Z', fonte,
       ne_gerado_gwh: r2(ne.ger / 1000), ne_cortado_gwh: r2(ne.fru_p / 1000),
-      ne_corte_pct: pct(ne), ne_corte_pct_maior_zero: pctZ(ne), ne_conjuntos: ne.conj.size,
-      nosso_gerado_gwh: nos ? r2(nos.ger / 1000) : null,
-      nosso_cortado_gwh: nos ? r2(nos.fru_p / 1000) : null,
-      nosso_corte_pct: pct(nos), nosso_corte_pct_maior_zero: pctZ(nos),
-      ne_ref_gwh: r2(ne.gref / 1000), nosso_ref_gwh: nos ? r2(nos.gref / 1000) : null,
+      ne_corte_pct: pct(ne), ne_corte_pct_maior_zero: pctZ(ne),
+      ne_ref_gwh: r2(ne.gref / 1000), ne_conjuntos: ne.conj.size, intervalos: ne.n,
+    };
+    // um bloco por conjunto nomeado (nosso, abaiara): mesmas colunas, mesmo criterio
+    for (const pref of Object.values(CONJ)) {
+      const a = acc[ch + '|' + pref];
+      l[pref + '_gerado_gwh'] = a ? r2(a.ger / 1000) : null;
+      l[pref + '_cortado_gwh'] = a ? r2(a.fru_p / 1000) : null;
+      l[pref + '_corte_pct'] = pct(a);
+      l[pref + '_corte_pct_maior_zero'] = pctZ(a);
+      l[pref + '_ref_gwh'] = a ? r2(a.gref / 1000) : null;
+      l[pref + '_intervalos_com_lim'] = a ? a.n_lim_p : null;
       // TESTE FISICO: a referencia do ONS nao pode ficar ABAIXO da geracao verificada — usina nao
-      // entrega mais do que a propria referencia. Quando isso acontece, `frustrada = max(0, gref-ger)`
-      // zera em quase todo intervalo e o corte sai artificialmente baixo. Em jan/26 o nosso conjunto
-      // tem referencia de 28.368 MWh contra 57.230 gerados: metade. E a mesma doenca do `ge` antes de
-      // mar/26, agora na coluna de referencia.
-      ref_suspeita: (nos && nos.gref < nos.ger) ? 1 : 0,
-      intervalos: ne.n, nosso_intervalos_com_lim: nos ? nos.n_lim_p : null,
-      // a vantagem em pontos percentuais: negativa = cortamos MENOS que a regiao
-      vantagem_pp: (pct(nos) != null && pct(ne) != null) ? r2(pct(nos) - pct(ne)) : null,
-    });
+      // entrega mais do que a propria referencia. Quando acontece, `max(0, gref-ger)` zera em quase
+      // todo intervalo e o corte sai artificialmente baixo. Em jan/26 o nosso conjunto publica 28.368
+      // MWh de referencia contra 57.230 gerados: metade. E a mesma doenca do `ge` antes de mar/26,
+      // agora na referencia. Nao e heuristica de valor, e impossibilidade fisica.
+      l[pref + '_ref_suspeita'] = (a && a.gref < a.ger) ? 1 : 0;
+    }
+    serie.push(l);
   }
-  // ---- ESTIMATIVA dos meses em que a referencia do ONS esta quebrada ----------------------
-  // Metodo: a razao entre o NOSSO corte e o do subsistema e estavel nos meses de dado bom (mediana
-  // 0,74 nos seis meses sadios de 2026). Aplico essa razao a taxa regional do mes quebrado. Escolhi
-  // isso em vez de aplicar a taxa regional cheia porque usa a NOSSA relacao medida com a regiao, em
-  // vez de assumir que nos comportamos como a media — e a pagina existe justamente para mostrar que
-  // nao nos comportamos. O valor bruto do ONS fica ao lado, e nada aqui se passa por medido.
-  ['solar', 'eolico'].forEach(fo => {
-    const A = serie.filter(x => x.fonte === fo && x.nosso_corte_pct != null);
-    const bons = A.filter(x => !x.ref_suspeita && x.ne_corte_pct > 0)
-      .map(x => x.nosso_corte_pct / x.ne_corte_pct).sort((a, b) => a - b);
-    if (!bons.length) return;
-    const razao = bons.length % 2 ? bons[(bons.length - 1) / 2]
-      : (bons[bons.length / 2 - 1] + bons[bons.length / 2]) / 2;
-    A.filter(x => x.ref_suspeita).forEach(x => {
-      const pctE = r2(x.ne_corte_pct * razao);
-      x.nosso_corte_pct_bruto = x.nosso_corte_pct;
-      x.nosso_cortado_gwh_bruto = x.nosso_cortado_gwh;
-      x.nosso_corte_pct = pctE;
-      // do percentual de volta para energia, com o gerado do mes: corte = ger * p/(100-p)
-      x.nosso_cortado_gwh = (pctE != null && pctE < 100 && x.nosso_gerado_gwh != null)
-        ? r2(x.nosso_gerado_gwh * pctE / (100 - pctE)) : null;
-      x.vantagem_pp = (pctE != null && x.ne_corte_pct != null) ? r2(pctE - x.ne_corte_pct) : null;
-      x.estimado = 1;
-      x.estimado_metodo = 'A referencia do ONS deste mes vem ABAIXO da geracao verificada, o que e '
-        + 'fisicamente impossivel e zera o calculo de corte. Valor estimado aplicando a razao mediana '
-        + 'entre o nosso corte e o do subsistema, medida em ' + bons.length + ' meses de dado '
-        + 'consistente (' + r2(razao) + '). Bruto do ONS em nosso_corte_pct_bruto.'; });
+
+  // ---- ESTIMATIVA dos meses com a referencia quebrada -------------------------------------
+  // Metodo: a razao entre o corte do conjunto e o do subsistema e estavel nos meses de dado bom.
+  // Aplico essa razao a taxa regional do mes quebrado. Escolhi isso em vez da taxa regional cheia
+  // porque usa a relacao MEDIDA daquele conjunto com a regiao, em vez de assumir que ele se comporta
+  // como a media — e a pagina existe justamente para mostrar que nao se comporta.
+  //
+  // MEDIDO E ESTIMADO VAO EM COLUNAS SEPARADAS, nao no mesmo campo: assim o grafico mostra a diferenca
+  // sozinho, com cor e legenda proprias, e nao depende de ninguem ler a descricao. Um numero estimado
+  // nunca ocupa a coluna do medido.
+  const estim = [];
+  for (const fo of [...new Set(serie.map(x => x.fonte))]) {
+    for (const pref of Object.values(CONJ)) {
+      const A = serie.filter(x => x.fonte === fo && x[pref + '_corte_pct'] != null);
+      // QUAL BASE? Escolhida por estabilidade MEDIDA, nao por intuicao. Nos seis meses de dado bom:
+      //   base ABAIARA   razao media 0,997  CV 14,6%  faixa 0,784-1,269
+      //   base NORDESTE  razao media 0,790  CV 18,4%  faixa 0,575-1,030
+      // O Abaiara ganha, e tem razao FISICA para ganhar: e o conjunto vizinho no MESMO no de 230 kV,
+      // entao sofre praticamente a mesma restricao — a razao dar ~1,0 nao e coincidencia. E ele tem
+      // referencia VALIDA em jan e fev, quando a nossa esta quebrada, o que tambem mostra que o defeito
+      // e da publicacao do NOSSO conjunto e nao do no.
+      // O Nordeste fica como reserva: se o par tambem estiver suspeito no mes, cai para a regiao.
+      const par = pref === 'nosso' ? 'abaiara' : null;
+      const usaPar = par && A.some(x => x[pref + '_ref_suspeita'] && x[par + '_corte_pct'] > 0);
+      const baseCol = usaPar ? par + '_corte_pct' : 'ne_corte_pct';
+      const baseNome = usaPar ? 'Conj. Abaiara 230 kV, o vizinho no mesmo no' : 'subsistema Nordeste';
+      const bons = A.filter(x => !x[pref + '_ref_suspeita'] && x[baseCol] > 0)
+        .map(x => x[pref + '_corte_pct'] / x[baseCol]).sort((a, b) => a - b);
+      // as colunas existem em TODA linha, mesmo vazias: coluna que aparece e desaparece faz o Grafana
+      // perder a serie entre um mes e outro
+      A.forEach(x => { x[pref + '_corte_pct_est'] = null; x[pref + '_cortado_gwh_est'] = null; });
+      if (!bons.length) continue;
+      const razao = bons.length % 2 ? bons[(bons.length - 1) / 2]
+        : (bons[bons.length / 2 - 1] + bons[bons.length / 2]) / 2;
+      A.filter(x => x[pref + '_ref_suspeita']).forEach(x => {
+        if (!(x[baseCol] > 0)) return;                    // sem base valida no mes, nao inventa
+        const pe = r2(x[baseCol] * razao);
+        // o BRUTO do ONS sai da coluna do medido: ele nao mede corte, mede um gref quebrado
+        x[pref + '_corte_pct_bruto'] = x[pref + '_corte_pct'];
+        x[pref + '_cortado_gwh_bruto'] = x[pref + '_cortado_gwh'];
+        x[pref + '_corte_pct'] = null;
+        x[pref + '_cortado_gwh'] = null;
+        x[pref + '_corte_pct_est'] = pe;
+        // do percentual de volta para energia com o gerado do mes: corte = ger * p/(100-p)
+        x[pref + '_cortado_gwh_est'] = (pe != null && pe < 100 && x[pref + '_gerado_gwh'] != null)
+          ? r2(x[pref + '_gerado_gwh'] * pe / (100 - pe)) : null;
+        x[pref + '_estimado'] = 1;
+        x[pref + '_estimado_base'] = baseNome;
+        x[pref + '_estimado_razao'] = r2(razao);
+        x[pref + '_estimado_metodo'] = 'A referencia do ONS neste mes vem ABAIXO da geracao verificada, '
+          + 'o que e fisicamente impossivel e zera o calculo de corte. Estimado pela razao mediana entre '
+          + 'o corte deste conjunto e o do ' + baseNome + ', medida em ' + bons.length + ' meses de dado '
+          + 'consistente (' + r2(razao) + '). Bruto do ONS em ' + pref + '_corte_pct_bruto.';
+        estim.push(fo + ' ' + x.mes + ' ' + pref); });
+    }
+  }
+  // a vantagem usa o valor VALIDO do mes, medido ou estimado, e diz qual dos dois foi
+  serie.forEach(x => {
+    const p = x.nosso_corte_pct != null ? x.nosso_corte_pct : x.nosso_corte_pct_est;
+    x.nosso_corte_pct_final = p;
+    x.vantagem_pp = (p != null && x.ne_corte_pct != null) ? r2(p - x.ne_corte_pct) : null;
+    x.base = x.nosso_corte_pct != null ? 'medido' : (p != null ? 'estimado' : 'sem dado');
   });
-  const estim = serie.filter(x => x.estimado).map(x => x.fonte + ' ' + x.mes);
 
   const out = {
     gerado_em: new Date().toISOString(),
@@ -195,15 +237,18 @@ async function grava(obj) {
       + 'razao mediana entre o nosso corte e o do subsistema nos meses sadios. Vem com estimado=1, '
       + 'estimado_metodo e o valor bruto ao lado. Nunca um estimado se passando por medido.',
     meses_estimados: estim,
-    nosso_conjunto: NOSSO, subsistema: SUB, serie,
+    conjuntos: CONJ, subsistema: SUB, serie,
   };
   if (faltou.length) out.meses_sem_arquivo = faltou;
   const t = await grava(out);
   console.log('\nbenchmark_ne.json OK · ' + Math.round(t / 1024) + ' KB · ' + serie.length + ' linhas'
     + (faltou.length ? ' · sem arquivo: ' + faltou.join(', ') : ''));
+  if (estim.length) console.log('  estimados: ' + estim.join(' · '));
   serie.filter(x => x.fonte === 'solar').forEach(x => console.log('  solar  ' + x.mes
-    + '  NE ' + String(x.ne_corte_pct).padStart(6) + '%  nosso ' + String(x.nosso_corte_pct).padStart(6)
-    + '%  vantagem ' + String(x.vantagem_pp).padStart(6) + ' pp'));
+    + '  NE ' + String(x.ne_corte_pct).padStart(6) + '%  nosso ' + String(x.nosso_corte_pct_final).padStart(6)
+    + '% (' + x.base + ')  abaiara ' + String(x.abaiara_corte_pct != null ? x.abaiara_corte_pct
+      : x.abaiara_corte_pct_est).padStart(6) + '%  vantagem ' + String(x.vantagem_pp).padStart(6) + ' pp'));
   serie.filter(x => x.fonte === 'eolico').forEach(x => console.log('  eolico ' + x.mes
-    + '  NE ' + String(x.ne_corte_pct).padStart(6) + '%  ' + x.ne_conjuntos + ' conjuntos'));
+    + '  NE ' + String(x.ne_corte_pct).padStart(6) + '%  ' + String(x.ne_cortado_gwh).padStart(8)
+    + ' GWh  ' + x.ne_conjuntos + ' conjuntos'));
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
