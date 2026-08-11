@@ -21,6 +21,14 @@ jobs:
           OUT_CONTAINER: dados
           OUT_BLOB: executivo.json
         run: node scripts/gen-executivo.js
+      - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+          # jan/26 em diante — referencia de todas as analises do painel executivo. Le ~390 MB dos
+          # dados abertos do ONS em streaming e grava so o resumo mensal (alguns KB).
+        run: node scripts/gen-benchmark-ons.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
