@@ -140,10 +140,48 @@ async function grava(obj) {
       nosso_gerado_gwh: nos ? r2(nos.ger / 1000) : null,
       nosso_cortado_gwh: nos ? r2(nos.fru_p / 1000) : null,
       nosso_corte_pct: pct(nos), nosso_corte_pct_maior_zero: pctZ(nos),
+      ne_ref_gwh: r2(ne.gref / 1000), nosso_ref_gwh: nos ? r2(nos.gref / 1000) : null,
+      // TESTE FISICO: a referencia do ONS nao pode ficar ABAIXO da geracao verificada — usina nao
+      // entrega mais do que a propria referencia. Quando isso acontece, `frustrada = max(0, gref-ger)`
+      // zera em quase todo intervalo e o corte sai artificialmente baixo. Em jan/26 o nosso conjunto
+      // tem referencia de 28.368 MWh contra 57.230 gerados: metade. E a mesma doenca do `ge` antes de
+      // mar/26, agora na coluna de referencia.
+      ref_suspeita: (nos && nos.gref < nos.ger) ? 1 : 0,
+      intervalos: ne.n, nosso_intervalos_com_lim: nos ? nos.n_lim_p : null,
       // a vantagem em pontos percentuais: negativa = cortamos MENOS que a regiao
       vantagem_pp: (pct(nos) != null && pct(ne) != null) ? r2(pct(nos) - pct(ne)) : null,
     });
   }
+  // ---- ESTIMATIVA dos meses em que a referencia do ONS esta quebrada ----------------------
+  // Metodo: a razao entre o NOSSO corte e o do subsistema e estavel nos meses de dado bom (mediana
+  // 0,74 nos seis meses sadios de 2026). Aplico essa razao a taxa regional do mes quebrado. Escolhi
+  // isso em vez de aplicar a taxa regional cheia porque usa a NOSSA relacao medida com a regiao, em
+  // vez de assumir que nos comportamos como a media — e a pagina existe justamente para mostrar que
+  // nao nos comportamos. O valor bruto do ONS fica ao lado, e nada aqui se passa por medido.
+  ['solar', 'eolico'].forEach(fo => {
+    const A = serie.filter(x => x.fonte === fo && x.nosso_corte_pct != null);
+    const bons = A.filter(x => !x.ref_suspeita && x.ne_corte_pct > 0)
+      .map(x => x.nosso_corte_pct / x.ne_corte_pct).sort((a, b) => a - b);
+    if (!bons.length) return;
+    const razao = bons.length % 2 ? bons[(bons.length - 1) / 2]
+      : (bons[bons.length / 2 - 1] + bons[bons.length / 2]) / 2;
+    A.filter(x => x.ref_suspeita).forEach(x => {
+      const pctE = r2(x.ne_corte_pct * razao);
+      x.nosso_corte_pct_bruto = x.nosso_corte_pct;
+      x.nosso_cortado_gwh_bruto = x.nosso_cortado_gwh;
+      x.nosso_corte_pct = pctE;
+      // do percentual de volta para energia, com o gerado do mes: corte = ger * p/(100-p)
+      x.nosso_cortado_gwh = (pctE != null && pctE < 100 && x.nosso_gerado_gwh != null)
+        ? r2(x.nosso_gerado_gwh * pctE / (100 - pctE)) : null;
+      x.vantagem_pp = (pctE != null && x.ne_corte_pct != null) ? r2(pctE - x.ne_corte_pct) : null;
+      x.estimado = 1;
+      x.estimado_metodo = 'A referencia do ONS deste mes vem ABAIXO da geracao verificada, o que e '
+        + 'fisicamente impossivel e zera o calculo de corte. Valor estimado aplicando a razao mediana '
+        + 'entre o nosso corte e o do subsistema, medida em ' + bons.length + ' meses de dado '
+        + 'consistente (' + r2(razao) + '). Bruto do ONS em nosso_corte_pct_bruto.'; });
+  });
+  const estim = serie.filter(x => x.estimado).map(x => x.fonte + ' ' + x.mes);
+
   const out = {
     gerado_em: new Date().toISOString(),
     fonte: 'ONS Dados Abertos — restricao_coff_fotovoltaica_tm e restricao_coff_eolica_tm, nivel CONJUNTO, '
@@ -153,6 +191,10 @@ async function grava(obj) {
       + 'A variante *_maior_zero usa val_geracaolimitada > 0, que e a convencao do gen-executivo.js — as '
       + 'duas divergem exatamente nos intervalos de limitacao a ZERO, e por isso vao as duas.',
     janela: 'jan/2026 em diante — referencia de todas as analises do painel executivo',
+    estimativa: 'Mes com referencia do ONS abaixo da geracao verificada tem o corte ESTIMADO pela '
+      + 'razao mediana entre o nosso corte e o do subsistema nos meses sadios. Vem com estimado=1, '
+      + 'estimado_metodo e o valor bruto ao lado. Nunca um estimado se passando por medido.',
+    meses_estimados: estim,
     nosso_conjunto: NOSSO, subsistema: SUB, serie,
   };
   if (faltou.length) out.meses_sem_arquivo = faltou;
