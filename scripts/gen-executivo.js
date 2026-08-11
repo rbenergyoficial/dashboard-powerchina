@@ -800,6 +800,64 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             : 'Soma das usinas do grupo, reconciliada com o total do conjunto.';
           out.push(lg); });
       });
+
+      // ---- REPARTICAO ESTIMADA PPA x ML ANTES DE MAR/26 --------------------------------
+      // O QUE E MEDIDO E O QUE E ESTIMADO, para nao restar duvida:
+      //   MEDIDO   · o corte do CONJUNTO, em todos os meses. Vem do registro do ONS na
+      //              subestacao (230 kV), que NAO passa pelo rele do CUB10_1 (34,5 kV) e por
+      //              isso nunca herdou o defeito de RTC. Conferido contra o Way2 de out/25 a
+      //              jul/26: razao entre 98,8% e 105,3%, sem nenhum deficit de ~20%.
+      //   ESTIMADO · a divisao desse total entre PPA e ML, nos meses em que o ONS nao publica
+      //              corte por usina utilizavel (o `ge` do ONS e inconsistente antes de mar/26).
+      //
+      // METODO. A razao e a media observada nos meses de dado bom, nao um palpite. O ML absorve
+      // de 33% a 38% do corte tendo 21,4% da capacidade — cerca de 1,7x o que lhe caberia por
+      // potencia. Isso e a politica de despacho aparecendo no numero: sob limitacao do ONS as
+      // tres usinas fora do PPA (M1, M7, M9) vao a ~1 MW para blindar a entrega contratada, e
+      // so sao liberadas depois que a meta do PPA do mes e atingida.
+      //
+      // Substitui tambem a estimativa "piso" que o ML carregava nesses meses, que vinha da
+      // comparacao de rendimento com as irmas do PPA e produzia parte maior que o todo
+      // (dez/25 dava ML 2,68 GWh contra 1,66 do conjunto — aritmeticamente impossivel).
+      //
+      // As usinas individuais seguem sem corte nesses meses, de proposito: repartir por usina
+      // exigiria uma camada a mais de suposicao sobre uma que ja e estimativa.
+      // Contexto completo em RT-MRD-2026-001 Rev.00 (Reginaldo Barros, 21/07/2026).
+      {
+        const par = m => [out.find(x => x.ufv === 'PPA' && x.mes === m), out.find(x => x.ufv === 'ML' && x.mes === m)];
+        const shares = [];
+        out.filter(l => l.ufv === 'PPA' && l.cortado_gwh != null).forEach(p => {
+          const [, m] = par(p.mes); if (!m || m.cortado_gwh == null) return;
+          const tot = p.cortado_gwh + m.cortado_gwh;
+          if (tot > 0) shares.push(m.cortado_gwh / tot); });
+        if (shares.length >= 3) {
+          const shML = shares.reduce((a, b) => a + b, 0) / shares.length;
+          const lo = Math.min(...shares), hi = Math.max(...shares);
+          const nota = 'REPARTICAO ESTIMADA. O total do conjunto neste mes e MEDIDO (registro do ONS na '
+            + 'subestacao, verificado contra o medidor de faturamento Way2). A divisao entre PPA e Mercado '
+            + 'Livre e ESTIMADA: ate fev/26 o ONS nao publica corte por usina utilizavel, porque as tags de '
+            + 'M3 e M7 estavam comprometidas — o rele do cubiculo CUB10_1 registrava metade da corrente do '
+            + 'circuito M3-C2 (RTC 300/1 contra TC fisico 600/1, reparado em 12/07/2026) e as tags da M7 '
+            + 'apontavam para esse mesmo cubiculo, de modo que a M7 nao tinha geracao propria telemetrada '
+            + '(corrigido em 17/07/2026). A divisao aplicada e a media observada nos meses de dado integro: '
+            + 'o Mercado Livre absorve ' + Math.round(shML * 1000) / 10 + '% do corte (faixa de '
+            + Math.round(lo * 1000) / 10 + '% a ' + Math.round(hi * 1000) / 10 + '% em ' + shares.length
+            + ' meses), contra 21,4% da capacidade instalada. Essa desproporcao e a politica de despacho: sob '
+            + 'limitacao do ONS, M1, M7 e M9 sao levadas a ~1 MW para blindar a entrega do PPA, e so sao '
+            + 'liberadas apos o atingimento da meta contratada. Contexto completo em RT-MRD-2026-001 Rev.00.';
+          out.filter(l => l.ufv === 'Complexo' && l.cortado_gwh != null).forEach(cx => {
+            const [P, M] = par(cx.mes);
+            if (!P || !M || P.cortado_gwh != null) return;          // so onde a repartição falta
+            M.cortado_gwh = r2(cx.cortado_gwh * shML);
+            P.cortado_gwh = r2(cx.cortado_gwh - M.cortado_gwh);
+            [P, M].forEach(l => { l.corte_estimado = 1; l.corte_reconciliado = 1;
+              l.corte_ml_share = Math.round(shML * 1e4) / 1e4;
+              l.corte_pct = l.potencial_gwh > 0 ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null;
+              l.outras_gwh = null;
+              l.corte_reconc_nota = nota; });
+            cx.corte_reparticao_estimada = 1; });
+        }
+      }
       return out; })(),
     // TODOS OS MESES, não só o corrente: o painel filtra por [ufv e mes], e o mês vem do seletor de
     // tempo do Grafana. Publicando só o mês atual, escolher "mês anterior" trocava o RÓTULO mas não os
