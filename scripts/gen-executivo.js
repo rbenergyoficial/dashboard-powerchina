@@ -107,7 +107,13 @@ const lbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
 const r2 = x => Math.round(x * 100) / 100;
 // padrao numerico da casa: ponto decimal, ponto de milhar, 2 casas nas medidas
 const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFixed(dec == null ? 2 : dec);
-  const [i, f2] = t.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (f2 ? '.' + f2 : ''); };
+  // SEPARADOR DE MILHAR: espaco estreito (U+202F), nao ponto. Com ponto nos dois papeis a mesma
+  // faixa do topo exibia "343.77 MW" (ponto decimal) ao lado de "5.063 eventos" (ponto de milhar).
+  // O leitor brasileiro aplica a convencao pt-BR ao segundo e le o primeiro como 343 mil. O espaco
+  // estreito nao quebra linha e devolve ao ponto um significado unico em toda a pagina — inclusive
+  // frente aos graficos nativos do Grafana, que usam ponto decimal e nao acompanham o Regional
+  // format (bug aberto grafana/grafana#116351).
+  const [i, f2] = t.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (f2 ? '.' + f2 : ''); };
 const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 
 function getJSON(url) { return new Promise((res, rej) => { https.get(url, x => { if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
@@ -242,6 +248,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // por UFV. Capta o derating térmico/clipping (ge/irr cai ~17% no sol forte) que uma reta ignora.
   // Validado escondendo JULHO/26 do ajuste e reconstruindo-o: MAE 1.45 MW · R² 98.34% · viés −0.43%.
   // (A reta pela origem dava R² 97.55% mas viés −5%, que num acumulado mensal EMPILHA em vez de cancelar.)
+  // BENCHMARK DO NORDESTE, calculado pelo gen-benchmark-ons.js (que roda ANTES deste no workflow —
+  // se rodasse depois, aqui se leria o blob da rodada anterior e o painel atrasaria um ciclo).
+  // E ele que mata os tres percentuais que viviam colados no codigo.
+  let BENCH = null;
+  try { BENCH = await getJSON(BASE + 'benchmark_ne.json'); }
+  catch (e) { console.log('benchmark_ne.json indisponivel (' + e.message + ') — os comparativos regionais saem nulos'); }
+
   const meses = Object.keys(M).sort();
   const BANDAS = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 3000];
   const banda = i => { for (let b = BANDAS.length - 2; b >= 0; b--) if (i >= BANDAS[b]) return b; return 0; };
@@ -1295,17 +1308,32 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // ainda nao entra no pipeline. Destravar so o nosso deixaria um numero vivo ao lado de dois
             // congelados — pior que os tres congelados juntos. Os tres se destravam de uma vez no
             // gen-benchmark-ons.js.
-            const MAURITI = 21.20, NORDESTE = 26.80, ABAIARA = 21.32;
+            // CALCULADOS, finalmente, do benchmark_ne.json — e os tres pelo MESMO criterio e na MESMA
+            // janela, que e o que torna a comparacao legitima. Janela: jan/26 em diante, referencia de
+            // todas as analises deste painel. Percentual agregado = Σcortado / (Σgerado + Σcortado),
+            // ponderado pela energia e nao media de percentuais, senao um mes pequeno pesaria igual a
+            // um mes grande.
+            // Mes com referencia do ONS quebrada entra pelo valor ESTIMADO (jan e fev/26; ver
+            // nosso_estimado_metodo no blob), porque o bruto ali nao mede corte, mede um gref invalido.
+            const BS = ((BENCH || {}).serie || []).filter(x => x.fonte === 'solar');
+            const agg = (pc, pg) => { let c = 0, g = 0;
+              BS.forEach(x => { const v = x[pc] != null ? x[pc] : x[pc + '_est'];
+                if (v != null && x[pg] != null) { c += v; g += x[pg]; } });
+              return (c + g) > 0 ? { pct: r2(100 * c / (c + g)), cortado: r2(c), gerado: r2(g) } : null; };
+            const aM = agg('nosso_cortado_gwh', 'nosso_gerado_gwh');
+            const aN = agg('ne_cortado_gwh', 'ne_gerado_gwh');
+            const aA = agg('abaiara_cortado_gwh', 'abaiara_gerado_gwh');
+            const MAURITI = aM ? aM.pct : null, NORDESTE = aN ? aN.pct : null, ABAIARA = aA ? aA.pct : null;
             // A ENERGIA, nao so o percentual. Para quem le, 21,20% e abstrato; 69,40 GWh que o ONS
             // impediu de gerar e concreto, e e o numero que a pessoa leva da reuniao. O atingimento
             // ja aparecia em GWh no card ao lado — o corte nao, e essa assimetria enfraquecia o lado
             // que mais precisa de peso. Mesma apuracao dos percentuais acima.
-            const CORTADO_GWH = 69.40;
+            const CORTADO_GWH = aM ? aM.cortado : null;
             // A MESMA apuracao, aberta: o que foi gerado, e por que o resto nao foi. Tudo da janela
             // mar-jul, para os cards nao misturarem recorte — o erro que derrubava a versao anterior
             // do painel era exatamente este: waterfall e causa vinham do acumulado pos-COD enquanto
             // o card do corte dizia mar-jul, e ninguem avisava.
-            const GERADA_GWH = 258.87;              // Mauriti, conjunto, mar-jul
+            const GERADA_GWH = aM ? aM.gerado : null;   // Mauriti, conjunto, jan/26 em diante
             const RAZAO = { ene: 94.63, cnf: 3.99, rel: 1.37 };   // % da energia frustrada
             const RAZAO_GWH = { ene: 65.67, cnf: 2.77, rel: 0.95 };
             const ORIGEM = { sis: 96.41, loc: 3.59 };             // sistemico x local
