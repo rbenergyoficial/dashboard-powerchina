@@ -35,6 +35,12 @@ const OUT_BLOB = process.env.OUT_BLOB || 'executivo.json';
 const CAP_MW = 343.77;      // outorga do complexo
 const H = 0.5;              // intervalo ONS = 30 min
 const RECONSTRUIR = process.env.RECONSTRUIR === '1';   // reconstrução do ge: DESLIGADA por padrão (ver bloco 2c)
+// DIAS EM QUE O ONS PUBLICOU IMPOSSIVEL: em 03/03 e 11/03 ele reporta 70% e 77% MAIS geracao do que o
+// medidor de faturamento Way2 registrou. Isso infla o gerado e AFUNDA o percentual de corte.
+// ESCOPO ESTREITO, de proposito: os dois dias saem do CORTE (nos dois niveis) e do denominador do
+// percentual de corte — e so. `realizado_gwh`, `referencia_gwh`, `disp_pct` e a contagem de dias
+// seguem cobrindo o mes inteiro, senao marco ficaria com 29 dias do lado ONS e 31 do lado Way2.
+const DIAS_EXCLUIDOS = new Set(['2026-03-03', '2026-03-11']);
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
 const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };  // outorga por UFV (MW) — soma 343,77
@@ -194,9 +200,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // ---------- 1) complexo por mês, a partir do ons_restricao_all ----------
   const M = {};   // mes -> acumuladores
   const DIA = {}; // dia -> { ger, fru, horas_restr }  (p/ a curva com o corte pintado)
+  // OS INSTANTES COM LIMITACAO REGISTRADA, compartilhados com o calculo por usina. A bandeira `lim`
+  // existe SO no arquivo do conjunto (o por-usina traz ts,u,irr,inv,ge,gv e nada de limitacao): era
+  // por isso que a usina somava os 1.488 intervalos do mes contra os 471 do conjunto, e dai vinha 34%
+  // do desvio auditado. Os dois arquivos tem os mesmos instantes, entao o cruzamento por ts fecha.
+  const LIM_TS = new Set();
   for (const r of restr.consolidado) {
     const mes = String(r.ts).slice(0, 7); if (!/^\d{4}-\d{2}$/.test(mes)) continue;
-    const m = M[mes] || (M[mes] = { ger: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
+    const m = M[mes] || (M[mes] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
     const ger = num(r.ger), gref = num(r.gref), lim = num(r.lim);
     // disp=0 é AUSÊNCIA DE PUBLICAÇÃO, não indisponibilidade. A partir de 2026-07-07 o ONS parou de
     // publicar disp na janela 20h–04h (16 dos 48 intervalos, todo dia). Em 10 meses antes disso houve
@@ -208,7 +219,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     const _d = String(r.ts).slice(0, 10);
     const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0 });
     dd.ger += ger * H;
-    if (lim > 0) { const perda = Math.max(0, (gref - ger) * H);   // <- definição da casa
+    // gerX = gerado no MESMO conjunto de dias em que o corte e apurado; e o denominador honesto do
+    // percentual de corte. Sem ele o percentual misturaria numerador filtrado com denominador cheio.
+    const excl = DIAS_EXCLUIDOS.has(_d);
+    if (!excl) m.gerX += ger * H;
+    if (lim > 0 && !excl) { const perda = Math.max(0, (gref - ger) * H);   // <- definição da casa
+      LIM_TS.add(String(r.ts));
       dd.fru += perda; dd.horas_restr += H;
       m.fru += perda; m.int_restr++;
       if (r.razao) m.raz[r.razao] = (m.raz[r.razao] || 0) + perda;
@@ -272,8 +288,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
       const dia_ = String(r.ts).slice(0, 10);
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 });
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0 });
       porUfv[u].ge += g * H; porUfv[u].gv += v * H;
+      // BALDE DO CORTE: so os intervalos com limitacao registrada (e ja sem os dias excluidos, que
+      // nao entraram no LIM_TS). O que cai FORA dele e deficit por outro motivo — sujeira,
+      // indisponibilidade, erro de modelo — e vai para `outras_gwh`, que ate aqui ficava sempre zero.
+      if (LIM_TS.has(String(r.ts))) { porUfv[u].geL += g * H; porUfv[u].gvL += v * H; }
       if (util(r)) { porUfv[u].parN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++; } }
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       // PR PAREADO: soma gv e ge SÓ nos intervalos em que o ONS publicou os dois. Somar o mês inteiro
@@ -306,12 +326,15 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // (não no Way2), então herda os dois defeitos. Prova: ge/MW do M3 em jul sai de 83,4 (sozinho)
     // p/ 104,9 (somado), dentro da faixa dos gêmeos de 49,11 MW (103,8–110,1).
     { const A = porUfv.M3, B = porUfv.M7;
-      if (A && B && mes < RTC_M3_REPARO.slice(0, 7)) { A.ge += B.ge; A.gv += B.gv; }
+      if (A && B && mes < RTC_M3_REPARO.slice(0, 7)) { A.ge += B.ge; A.gv += B.gv; A.geL += B.geL; A.gvL += B.gvL; }
       else if (A && B && mes === RTC_M3_REPARO.slice(0, 7)) {
         // mês da virada: só os dias ANTERIORES ao reparo somam
         const antes = C.filter(r => String(r.ts).slice(0, 10) < RTC_M3_REPARO && String(r.u) === 'CEFMT7');
         A.ge += antes.reduce((a, r) => a + num(r.ge) * H, 0);
         A.gv += antes.reduce((a, r) => a + num(r.gv) * H, 0);
+        const antesL = antes.filter(r => LIM_TS.has(String(r.ts)));
+        A.geL += antesL.reduce((a, r) => a + num(r.ge) * H, 0);
+        A.gvL += antesL.reduce((a, r) => a + num(r.gv) * H, 0);
       }
       // O registro M7 do ONS é o c2 em QUALQUER época — antes e depois do reparo. Logo o M7 não tem
       // NEM realizado NEM potencial no ONS. Realizado vem do Way2. Potencial é ESTIMADO: mediana do
@@ -323,6 +346,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           .filter(x => x != null).sort((a, b) => a - b);
         B.ge = bons.length ? bons[Math.floor(bons.length / 2)] * 14.733 : 0;
         B.ge_estimado = true; B.gv = 0;
+        // o M7 nao tem serie propria para medir a fracao limitada dele: herda a das usinas de tag boa,
+        // porque a limitacao e do conjunto e atinge todas ao mesmo tempo.
+        const frL = (porUfv.M1 && porUfv.M1.ge > 0) ? porUfv.M1.geL / porUfv.M1.ge : 0;
+        B.geL = B.ge * frL; B.gvL = 0;
       }
     }
     IRR[mes] = { porUfv, ge, gv, geP, gvP, pr_cob: parN ? r2(100 * parOk / parN) : 0,
@@ -342,7 +369,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // mes_ts: o Grafana só desenha eixo de tempo / sparkline sobre timestamp — "2026-07" sozinho ele lê como texto
       mes_ts: mes + '-01T00:00:00Z',
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
-      frustrada_pct: (m.ger + m.fru) > 0 ? r2(100 * m.fru / (m.ger + m.fru)) : 0,
+      // gerado na MESMA janela de dias em que o corte foi apurado (sem 03/03 e 11/03). E o denominador
+      // honesto do percentual: com o gerado cheio, numerador filtrado e denominador inteiro diriam
+      // coisas diferentes e o percentual sairia menor do que e.
+      gerado_janela_gwh: r2(m.gerX / 1000),
+      frustrada_pct: (m.gerX + m.fru) > 0 ? r2(100 * m.fru / (m.gerX + m.fru)) : 0,
       // BENCHMARK REGIONAL, mes a mes: o corte do subsistema Nordeste INTEIRO na mesma janela e pelo
       // mesmo criterio (campo de limitacao preenchido, inclusive zero). Vem junto na linha do mes
       // para o grafico sair de UMA query — duas series em frames separados exigiriam um join, e o
@@ -659,8 +690,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         const w2 = w2Mes(m);
         const mtm = METAS.meses[m] || null;
         const MPU = metasPorUfv(mtm);
-        const linha = (ufv, ge, gv, geP, gvP, parN, parOk, liq, meta) => {
-          const corte = Math.max(0, ge - gv);
+        // geL/gvL = a mesma dupla, restrita aos intervalos com limitacao. O corte sai DALI; o que
+        // sobra do deficit total vai para `outras_gwh`. Sem os dois baldes, `cortado` era o deficit
+        // inteiro contra o potencial e engolia sujeira, indisponibilidade e erro de modelo.
+        const linha = (ufv, ge, gv, geP, gvP, parN, parOk, liq, meta, geL, gvL) => {
+          const corte = Math.max(0, (geL == null ? ge : geL) - (gvL == null ? gv : gvL));
           const pr = geP > 0 ? r2(100 * gvP / geP) : null;
           const cob = parN ? r2(100 * parOk / parN) : 0;
           const prOk = !S.ramp_up && cob >= 70 && pr != null && pr >= 50 && pr <= 95;
@@ -669,7 +703,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             atingido_pct: meta > 0 ? r2(100 * liq / meta) : null,
             potencial_gwh: r2(ge / 1000), entregue_gwh: r2(gv / 1000), cortado_gwh: r2(corte / 1000),
             corte_pct: ge > 0 ? r2(100 * corte / ge) : null,
-            outras_gwh: r2(Math.max(0, ge - gv - corte) / 1000),
+            outras_gwh: r2(Math.max(0, (ge - gv) - corte) / 1000),
             pr_pct: prOk ? pr : null, pr_cobertura_pct: cob,
             disp_pct: S.disp_pct, horas_restricao: S.horas_restricao, escopo_complexo: 1,
             nota: prOk ? null : S.nota };
@@ -707,7 +741,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
               return w > 0 ? w / CAP_UFV[p] : null; }).filter(v => v != null).sort((a, b) => a - b);
             if (rend.length) { gePot = rend[Math.floor(rend.length / 2)] * CAP_UFV[u]; real = liq; }
           }
-          const l = linha(u, gePot, real, x.geP, x.gvP, x.parN, x.parOk, liq, meta);
+          // quando o potencial vem das irmas (usaIrma), o balde limitado tem de acompanhar a
+          // substituicao — senao o corte misturaria bases: potencial estimado contra janela medida.
+          const frL = x.ge > 0 ? x.geL / x.ge : 0;
+          const frLv = x.gv > 0 ? x.gvL / x.gv : frL;
+          const geLu = usaIrma ? gePot * frL : x.geL;
+          const gvLu = usaIrma ? real * frLv : x.gvL;
+          const l = linha(u, gePot, real, x.geP, x.gvP, x.parN, x.parOk, liq, meta, geLu, gvLu);
           // PPA nos meses de ge ruim: o cálculo dá 0,0% para as seis usinas — FALSO (o complexo cortou
           // 5,86% em out/25). E aqui não dá para estimar como no ML: as usinas do PPA SÃO a referência,
           // usá-las contra si mesmas seria circular. Fica VAZIO, com a nota dizendo por quê.
@@ -755,6 +795,15 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           l.corte_reconc_nota = recOk
             ? 'Corte ajustado na proporcao do proprio valor para somar o total do conjunto, que e o numero aferido do ONS no nivel da subestacao. Valor bruto em cortado_bruto_gwh.'
             : 'Reconciliacao nao aplicada neste mes: ha usina sem corte publicado, a soma seria incompleta.'; });
+        // GUARDA DE FECHAMENTO: e ela que impede a regressao. Sem isso estamos a um refactor de
+        // repetir o bug — duas contas paralelas que voltam a divergir sem ninguem perceber.
+        if (recOk) {
+          const conf = comCorte.reduce((a, l) => a + l.cortado_gwh, 0);
+          if (Math.abs(conf - alvoCorte) > 0.011) {
+            throw new Error('FECHAMENTO QUEBROU em ' + m + ': soma das usinas ' + r2(conf)
+              + ' GWh contra corte do conjunto ' + r2(alvoCorte) + ' GWh (tolerancia 0,01)');
+          }
+        }
         linhasUfv.forEach(l => out.push(l));
         // ---- complexo ----
         { const ge = Object.values(I.porUfv).reduce((a, x) => a + x.ge, 0);
@@ -764,7 +813,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           const pN = Object.values(I.porUfv).reduce((a, x) => a + (x.parN || 0), 0);
           const pK = Object.values(I.porUfv).reduce((a, x) => a + (x.parOk || 0), 0);
           const liq = w2.reduce((a, d) => a + num(d.ene_liq_mwh), 0);
-          const l = linha('Complexo', ge, gv, geP, gvP, pN, pK, liq, mtm ? mtm.garantido_total : null);
+          const geL = Object.values(I.porUfv).reduce((a, x) => a + (x.geL || 0), 0);
+          const gvL = Object.values(I.porUfv).reduce((a, x) => a + (x.gvL || 0), 0);
+          const l = linha('Complexo', ge, gv, geP, gvP, pN, pK, liq, mtm ? mtm.garantido_total : null, geL, gvL);
           // no complexo o corte vem da fórmula da casa (nível da subestação), não da soma dos ge−gv
           l.cortado_gwh = S.frustrada_gwh;
           l.corte_pct = (m < '2026-03') ? S.frustrada_pct : S.corte_pct_pot;
@@ -782,7 +833,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           const gvG = us.reduce((a, u) => a + (VIA_WAY2.includes(u)
             ? w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0)
             : ((I.porUfv[u] || {}).gv || 0)), 0);
-          const lg = linha(g, som('ge'), gvG, som('geP'), som('gvP'), som('parN'), som('parOk'), liqG, metaG);
+          const lg = linha(g, som('ge'), gvG, som('geP'), som('gvP'), som('parN'), som('parOk'), liqG, metaG, som('geL'), som('gvL'));
           lg.grupo = 1;
           // O corte do grupo e a SOMA das suas usinas ja reconciliadas — nao um ge-gv recalculado
           // sobre o agregado. Era o recalculo que fazia PPA + ML nao fechar com o Complexo, e que
@@ -1238,6 +1289,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // 03/03 e 11/03 seguem FORA dos tres, pela mesma razao de sempre: o ONS publica neles
             // mais geracao do que o medidor Way2 mediu, e uma usina nao entrega mais do que o proprio
             // medidor de fronteira registrou. Excluir de um so e comparar janelas diferentes.
+            // AINDA COLADOS, e de proposito: os tres tem de sair da MESMA apuracao ou a comparacao
+            // nao vale. O nosso ja da para calcular aqui (serie[].corte_janela_pct, publicado abaixo),
+            // mas Nordeste e Abaiara dependem do arquivo do ONS com os 54 conjuntos do subsistema, que
+            // ainda nao entra no pipeline. Destravar so o nosso deixaria um numero vivo ao lado de dois
+            // congelados — pior que os tres congelados juntos. Os tres se destravam de uma vez no
+            // gen-benchmark-ons.js.
             const MAURITI = 21.20, NORDESTE = 26.80, ABAIARA = 21.32;
             // A ENERGIA, nao so o percentual. Para quem le, 21,20% e abstrato; 69,40 GWh que o ONS
             // impediu de gerar e concreto, e e o numero que a pessoa leva da reuniao. O atingimento
