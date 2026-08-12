@@ -55,6 +55,47 @@ const H = 0.5;                    // intervalo do ONS = 30 min
 // (que e uma taxa) isso e de segunda ordem, e e a mesma escolha de denominador honesto que o
 // gen-executivo.js ja faz.
 const DIAS_EXCLUIDOS = new Set(['2026-03-03', '2026-03-11']);
+
+// ---------------------------------------------------------------------------------------------------
+// JAN e FEV/2026 — corte MODELADO com irradiancia, disponibilidade e geracao PROPRIAS.
+//
+// Nesses dois meses o `val_geracaoreferencia` do ONS e fisicamente impossivel, e da para provar sem
+// modelo nenhum: nos patamares SEM restricao a referencia tem de bater com a geracao (sem corte, a
+// referencia E o que a usina produziu). Medido contra o medidor de faturamento Way2:
+//     jan gref/ger = 0,790   fev 0,884   |   mar 0,998   abr 1,039   mai 1,031   jun 1,004
+// Janeiro publica 21% menos referencia do que gerou; fevereiro, 12% menos. Marco a junho fecham.
+//
+// COMO O NUMERO FOI OBTIDO (analise fora do pipeline, `scratchpad/modelo_v5.js`):
+//   irradiancia  GTI no plano dos modulos, 9 estacoes, media ponderada por capacidade  (pacote NT-ONS)
+//   disponibilidade  POT = inversores disponiveis x kW/UG, por patamar                 (pacote NT-ONS)
+//   geracao      medidor do COMPLEXO no Way2 (ponto 6233) — uma medicao so, imune a rateio de circuito
+//   quando       bandeira `val_geracaolimitada > 0` do ONS, que esta INTEGRA em jan e fev
+//   modelo       rendimento = ger / (GTI x fracao_disponivel), mediana por faixa de 100 W/m2,
+//                calibrado SO nos patamares sem restricao DO PROPRIO MES, com teto na potencia
+//                disponivel. corte = Σ max(0, previsto − real) x 0,5 h nos patamares com limitacao.
+//
+// EXATIDAO MEDIDA, e ela NAO e boa: validado contra os quatro meses em que o ONS mediu o corte deu
+//     mar +34,3%   abr −11,1%   mai −12,0%   jun −4,2%   (erro medio 15,4%)
+// Sem marco o erro cai para 9,1% e e sempre para MENOS — o modelo subestima. A causa da fragilidade e
+// estrutural e esta medida: o corte e a diferenca entre dois numeros grandes, e em marco o potencial
+// nos patamares restritos e ~63 GWh contra 14,6 de corte, entao o vies e amplificado 4,3x. Para o corte
+// sair a ±5% o potencial teria de acertar a ~1%.
+//
+// POR QUE MESMO ASSIM VAI PARA O PAINEL: quatro variantes independentes (geracao do SCADA, do Way2, com
+// e sem recalibracao) puseram janeiro entre 17,2 e 18,4 GWh — a ordem de grandeza resiste a troca de
+// fonte. E a alternativa em uso, a razao do vizinho Abaiara, poe janeiro em 10,81 GWh, que e ~60% menor
+// e nao tem nenhuma medicao propria por tras. Vai em SERIE e COR SEPARADAS, nunca na coluna do medido.
+const MODELADO = {
+  '2026-01': { gwh: 18.38, pct: 24.58, gerado: 56.37 },
+  '2026-02': { gwh: 7.89, pct: 13.39, gerado: 51.06 },
+};
+const MODELADO_METODO = 'Corte MODELADO com dados proprios: irradiancia no plano dos modulos das 9 '
+  + 'estacoes, disponibilidade por inversor e geracao do medidor de faturamento Way2 (ponto do '
+  + 'complexo), nos patamares que o ONS marcou com limitacao. O ONS publica para estes dois meses uma '
+  + 'referencia menor que a propria geracao verificada (jan 79%, fev 88% da gerada nos patamares SEM '
+  + 'restricao), o que e fisicamente impossivel e zera a apuracao normal. Validado nos quatro meses de '
+  + 'referencia valida: erro medio 15,4% (mar +34,3 · abr -11,1 · mai -12,0 · jun -4,2), tendencia a '
+  + 'SUBESTIMAR fora de marco. Numero de ordem de grandeza, nao de precisao contabil.';
 const INI_Y = 2026, INI_M = 1;    // jan/26 = referencia do painel executivo
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'benchmark_ne.json';
@@ -233,6 +274,16 @@ async function grava(obj) {
         estim.push(fo + ' ' + x.mes + ' ' + pref); });
     }
   }
+  // ---- corte MODELADO de jan e fev (ver o bloco MODELADO no topo) --------------------------------
+  // Colunas PROPRIAS, presentes em toda linha mesmo vazias: coluna que aparece e some faz o Grafana
+  // perder a serie entre um mes e outro. Um modelado NUNCA ocupa a coluna do medido.
+  serie.forEach(x => {
+    const M = x.fonte === 'solar' ? MODELADO[x.mes] : null;
+    x.nosso_cortado_gwh_modelo = M ? M.gwh : null;
+    x.nosso_corte_pct_modelo = M ? M.pct : null;
+    if (M) { x.nosso_modelo_metodo = MODELADO_METODO; x.nosso_modelo_gerado_gwh = M.gerado; }
+  });
+
   // a vantagem usa o valor VALIDO do mes, medido ou estimado, e diz qual dos dois foi
   serie.forEach(x => {
     const p = x.nosso_corte_pct != null ? x.nosso_corte_pct : x.nosso_corte_pct_est;
