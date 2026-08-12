@@ -1445,7 +1445,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const A = out.serie.filter(x => x.mes.slice(0, 4) === anoAtual && x.meta_gwh != null);
       if (!A.length) return [];
       const CAMPOS = ['way2_liq_gwh', 'meta_gwh', 'ppa_liq_gwh', 'meta_ppa_gwh'];
-      const med = k => r2(A.reduce((a, x) => a + num(x[k]), 0) / A.length);
+      // A MEDIA SO OLHA MESES FECHADOS. As barras dos meses continuam todas — inclusive a do mes
+      // corrente, marcada com asterisco — mas a media nao pode dividir por ele: em 12/08 o mes tinha
+      // 18,41 GWh entregues contra meta de mes inteiro, e entrar nessa conta derrubava a media do PPA
+      // de 36,34 para 36,45 na meta e de 7,27 para 4,01 no superavit. Media contaminada por mes pela
+      // metade e pior que media nenhuma: ela vira a REGUA com que o leitor julga cada mes.
+      const F = A.filter(x => x.mes < mesAtual);
+      const BASE = F.length ? F : A;                 // em janeiro do ano F fica vazio; nao divide por 0
+      const med = k => r2(BASE.reduce((a, x) => a + num(x[k]), 0) / BASE.length);
       // ---- as tres parcelas do EMPILHADO ----
       // Empilhar entregue COM meta seria falso: elas nao somam nada — sao a mesma energia contra
       // duas reguas. O que soma de verdade e a meta MAIS o que passou dela. Entao a barra vira
