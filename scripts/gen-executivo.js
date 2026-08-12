@@ -1322,8 +1322,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // quatro graficos da secao 2, e nenhum estimado entra no card.
             // CONVENCAO `maior_zero` (val_geracaolimitada > 0), tambem igual a dos graficos.
             const CORTE_INI = '2026-03';
+            // SOMENTE MESES FECHADOS, igual aos cards de meta e disponibilidade ao lado. O mes corrente
+            // entra pela metade: somar agosto com 18 GWh gerados no mesmo total que julho com 55 punha
+            // 74,98 GWh de energia impedida ao lado de 305,27 GWh entregues que NAO contavam agosto —
+            // dois recortes diferentes na mesma linha de cards. O mes parcial continua visivel no
+            // grafico mes a mes, onde barra curta se le como mes incompleto; no ACUMULADO ele nao entra.
             const BS = ((BENCH || {}).serie || [])
-              .filter(x => x.fonte === 'solar' && String(x.mes) >= CORTE_INI);
+              .filter(x => x.fonte === 'solar' && String(x.mes) >= CORTE_INI && String(x.mes) < mesAtual);
             const agg = (pc, pg) => { let c = 0, g = 0;
               BS.forEach(x => { const v = x[pc];
                 if (v != null && x[pg] != null) { c += v; g += x[pg]; } });
