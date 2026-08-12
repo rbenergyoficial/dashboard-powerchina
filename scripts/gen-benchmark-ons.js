@@ -45,6 +45,16 @@ const SUB = 'NE';                 // subsistema Nordeste
 // valor dele tambem estava colado — os tres numeros tem de se destravar juntos ou a comparacao nao vale.
 const CONJ = { CJU_CEMTD: 'nosso', CJU_CEAB2: 'abaiara' };   // CONJ. MAURITI · CONJ. ABAIARA 230 KV
 const H = 0.5;                    // intervalo do ONS = 30 min
+// DIAS EM QUE O ONS PUBLICOU IMPOSSIVEL PARA O NOSSO CONJUNTO: em 03/03 e 11/03 ele reporta 70% e 77%
+// MAIS geracao do que o medidor de faturamento Way2 registrou. Isso infla o gerado, afunda o percentual
+// de corte e faz o mes de marco sair 0,90 GWh acima da apuracao auditada do gen-executivo.js — dois
+// numeros para a mesma coisa na mesma pagina.
+// SO PARA `nosso`, de proposito: o defeito e na publicacao do CJU_CEMTD, nao no no nem na regiao. Tirar
+// dois dias BONS do Nordeste e do Abaiara para casar com um defeito do nosso arquivo seria introduzir
+// erro, nao remover. O custo e marco apurado em 29 dias do nosso lado e 31 dos outros; num PERCENTUAL
+// (que e uma taxa) isso e de segunda ordem, e e a mesma escolha de denominador honesto que o
+// gen-executivo.js ja faz.
+const DIAS_EXCLUIDOS = new Set(['2026-03-03', '2026-03-11']);
 const INI_Y = 2026, INI_M = 1;    // jan/26 = referencia do painel executivo
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'benchmark_ne.json';
@@ -58,7 +68,8 @@ function meses() {
 }
 
 // acumulador: um por (fonte, mes, quem). `quem` = 'NE' (a regiao) ou 'MAURITI'.
-const novo = () => ({ ger: 0, gref: 0, fru_p: 0, fru_z: 0, n: 0, n_lim_p: 0, n_lim_z: 0, conj: new Set() });
+const novo = () => ({ ger: 0, gref: 0, fru_p: 0, fru_z: 0, n: 0, n_lim_p: 0, n_lim_z: 0, conj: new Set(),
+  dias: new Set(), n_excl: 0 });
 
 function linhas(url) {
   return new Promise((res, rej) => {
@@ -95,10 +106,12 @@ async function leMes(f, mo, acc) {
     const perda = Math.max(0, (gref - ger) * H);
     const alvos = [[f.id, mes, 'NE']];
     if (CONJ[c[iOns]]) alvos.push([f.id, mes, CONJ[c[iOns]]]);
+    const dia = String(c[iTs]).slice(0, 10);
     for (const [fo, me, quem] of alvos) {
       const k = fo + '|' + me + '|' + quem;
       const a = acc[k] || (acc[k] = novo());
-      a.ger += ger * H; a.gref += gref * H; a.n++; a.conj.add(c[iOns]);
+      if (quem === 'nosso' && DIAS_EXCLUIDOS.has(dia)) { a.n_excl++; continue; }   // ver DIAS_EXCLUIDOS
+      a.ger += ger * H; a.gref += gref * H; a.n++; a.conj.add(c[iOns]); a.dias.add(dia);
       if (temLim) { a.fru_p += perda; a.n_lim_p++; }
       if (limNum > 0) { a.fru_z += perda; a.n_lim_z++; }
     }
@@ -139,6 +152,7 @@ async function grava(obj) {
     const l = {
       mes: mes.replace('_', '-'), mes_ts: mes.replace('_', '-') + '-01T00:00:00Z', fonte,
       ne_gerado_gwh: r2(ne.ger / 1000), ne_cortado_gwh: r2(ne.fru_p / 1000),
+      ne_cortado_gwh_maior_zero: r2(ne.fru_z / 1000),
       ne_corte_pct: pct(ne), ne_corte_pct_maior_zero: pctZ(ne),
       ne_ref_gwh: r2(ne.gref / 1000), ne_conjuntos: ne.conj.size, intervalos: ne.n,
     };
@@ -147,10 +161,13 @@ async function grava(obj) {
       const a = acc[ch + '|' + pref];
       l[pref + '_gerado_gwh'] = a ? r2(a.ger / 1000) : null;
       l[pref + '_cortado_gwh'] = a ? r2(a.fru_p / 1000) : null;
+      l[pref + '_cortado_gwh_maior_zero'] = a ? r2(a.fru_z / 1000) : null;
       l[pref + '_corte_pct'] = pct(a);
       l[pref + '_corte_pct_maior_zero'] = pctZ(a);
       l[pref + '_ref_gwh'] = a ? r2(a.gref / 1000) : null;
       l[pref + '_intervalos_com_lim'] = a ? a.n_lim_p : null;
+      l[pref + '_dias'] = a ? a.dias.size : null;
+      l[pref + '_intervalos_excluidos'] = a ? a.n_excl : null;
       // TESTE FISICO: a referencia do ONS nao pode ficar ABAIXO da geracao verificada — usina nao
       // entrega mais do que a propria referencia. Quando acontece, `max(0, gref-ger)` zera em quase
       // todo intervalo e o corte sai artificialmente baixo. Em jan/26 o nosso conjunto publica 28.368
