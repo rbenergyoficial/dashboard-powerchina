@@ -1315,14 +1315,42 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // um mes grande.
             // Mes com referencia do ONS quebrada entra pelo valor ESTIMADO (jan e fev/26; ver
             // nosso_estimado_metodo no blob), porque o bruto ali nao mede corte, mede um gref invalido.
-            const BS = ((BENCH || {}).serie || []).filter(x => x.fonte === 'solar');
+            // JANELA mar/26 EM DIANTE, e nao jan/26: em jan e fev o `gref` do ONS vem subdeclarado e os
+            // dois meses so existiam por ESTIMATIVA. Entrar com estimativa aqui puxava o agregado para
+            // baixo e punha o card em 19,33% enquanto o grafico logo abaixo, do MESMO blob, mostrava 23
+            // a 24% — dois numeros para a mesma coisa na mesma secao. A janela agora e a mesma dos
+            // quatro graficos da secao 2, e nenhum estimado entra no card.
+            // CONVENCAO `maior_zero` (val_geracaolimitada > 0), tambem igual a dos graficos.
+            const CORTE_INI = '2026-03';
+            const BS = ((BENCH || {}).serie || [])
+              .filter(x => x.fonte === 'solar' && String(x.mes) >= CORTE_INI);
             const agg = (pc, pg) => { let c = 0, g = 0;
-              BS.forEach(x => { const v = x[pc] != null ? x[pc] : x[pc + '_est'];
+              BS.forEach(x => { const v = x[pc];
                 if (v != null && x[pg] != null) { c += v; g += x[pg]; } });
               return (c + g) > 0 ? { pct: r2(100 * c / (c + g)), cortado: r2(c), gerado: r2(g) } : null; };
-            const aM = agg('nosso_cortado_gwh', 'nosso_gerado_gwh');
-            const aN = agg('ne_cortado_gwh', 'ne_gerado_gwh');
-            const aA = agg('abaiara_cortado_gwh', 'abaiara_gerado_gwh');
+            const aM = agg('nosso_cortado_gwh_maior_zero', 'nosso_gerado_gwh');
+            const aN = agg('ne_cortado_gwh_maior_zero', 'ne_gerado_gwh');
+            const aA = agg('abaiara_cortado_gwh_maior_zero', 'abaiara_gerado_gwh');
+            // rotulo da janela DERIVADO dos meses que entraram, e a contagem de dias vem do proprio
+            // blob (`nosso_dias`, que ja desconta 03/03 e 11/03). O texto fixo "mar a jul/26 · 151 dias"
+            // ficou parado em julho enquanto agosto ja entrava nos graficos.
+            const MES_LBL = m => ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out',
+              'nov', 'dez'][Number(String(m).slice(5, 7)) - 1] + '/' + String(m).slice(2, 4);
+            const DIAS_JAN = BS.reduce((a2, x) => a2 + (x.nosso_dias || 0), 0);
+            const JANELA = BS.length
+              ? (BS.length === 1 ? MES_LBL(BS[0].mes)
+                : MES_LBL(BS[0].mes) + ' a ' + MES_LBL(BS[BS.length - 1].mes))
+                + ' · ' + DIAS_JAN + ' dias'
+              : 'sem dado';
+            // razao e origem, agora CALCULADAS do benchmark (energia por codigo, nao contagem)
+            const somaB = k => BS.reduce((a2, x) => a2 + (x[k] || 0), 0);
+            const RZ_GWH = { ene: somaB('nosso_razao_ene_gwh'), cnf: somaB('nosso_razao_cnf_gwh'),
+              rel: somaB('nosso_razao_rel_gwh'), outras: somaB('nosso_razao_outras_gwh') };
+            const RZ_TOT = RZ_GWH.ene + RZ_GWH.cnf + RZ_GWH.rel + RZ_GWH.outras;
+            const OR_GWH = { sis: somaB('nosso_origem_sis_gwh'), loc: somaB('nosso_origem_loc_gwh'),
+              outras: somaB('nosso_origem_outras_gwh') };
+            const OR_TOT = OR_GWH.sis + OR_GWH.loc + OR_GWH.outras;
+            const pc = (v, t) => t > 0 ? r2(100 * v / t) : null;
             const MAURITI = aM ? aM.pct : null, NORDESTE = aN ? aN.pct : null, ABAIARA = aA ? aA.pct : null;
             // A ENERGIA, nao so o percentual. Para quem le, 21,20% e abstrato; 69,40 GWh que o ONS
             // impediu de gerar e concreto, e e o numero que a pessoa leva da reuniao. O atingimento
@@ -1334,10 +1362,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             // do painel era exatamente este: waterfall e causa vinham do acumulado pos-COD enquanto
             // o card do corte dizia mar-jul, e ninguem avisava.
             const GERADA_GWH = aM ? aM.gerado : null;   // Mauriti, conjunto, jan/26 em diante
-            const RAZAO = { ene: 94.63, cnf: 3.99, rel: 1.37 };   // % da energia frustrada
-            const RAZAO_GWH = { ene: 65.67, cnf: 2.77, rel: 0.95 };
-            const ORIGEM = { sis: 96.41, loc: 3.59 };             // sistemico x local
-            const HORAS_RESTR = 1056;
+            const RAZAO = { ene: pc(RZ_GWH.ene, RZ_TOT), cnf: pc(RZ_GWH.cnf, RZ_TOT),
+              rel: pc(RZ_GWH.rel, RZ_TOT), outras: pc(RZ_GWH.outras, RZ_TOT) };
+            const RAZAO_GWH = { ene: r2(RZ_GWH.ene), cnf: r2(RZ_GWH.cnf), rel: r2(RZ_GWH.rel),
+              outras: r2(RZ_GWH.outras) };
+            const ORIGEM = { sis: pc(OR_GWH.sis, OR_TOT), loc: pc(OR_GWH.loc, OR_TOT),
+              outras: pc(OR_GWH.outras, OR_TOT) };
+            const HORAS_RESTR = r2(somaB('nosso_horas_restricao'));
             return {
               disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
               disp_meses: D.length, disp_alvo_pct: 97,
@@ -1348,10 +1379,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
               corte_ene_pct: RAZAO.ene, corte_cnf_pct: RAZAO.cnf, corte_rel_pct: RAZAO.rel,
               corte_ene_gwh: RAZAO_GWH.ene, corte_cnf_gwh: RAZAO_GWH.cnf, corte_rel_gwh: RAZAO_GWH.rel,
               corte_sis_pct: ORIGEM.sis, corte_loc_pct: ORIGEM.loc,
+              corte_outras_razao_pct: RAZAO.outras, corte_outras_origem_pct: ORIGEM.outras,
               corte_vantagem_pp: r2(NORDESTE - MAURITI),
-              corte_janela: 'mar a jul/26 · 151 dias',
-              corte_fonte: 'ONS · Restrição de Geração — conjunto, 54 conjuntos FV do subsistema NE; '
-                + 'apurado em 02/08/2026, meses completos, menos 03/03 e 11/03 (dado do ONS impossível)',
+              corte_janela: JANELA,
+              corte_fonte: 'ONS · Restrição de Geração — nível conjunto, subsistema NE; calculado a cada '
+                + 'rodada pelo gen-benchmark-ons.js, convenção val_geracaolimitada > 0, meses completos, '
+                + 'menos 03/03 e 11/03 (nesses dois o ONS publica mais geração do que o medidor Way2)',
             };
           })()),
           nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }

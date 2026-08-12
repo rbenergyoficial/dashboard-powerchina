@@ -110,7 +110,7 @@ function meses() {
 
 // acumulador: um por (fonte, mes, quem). `quem` = 'NE' (a regiao) ou 'MAURITI'.
 const novo = () => ({ ger: 0, gref: 0, fru_p: 0, fru_z: 0, n: 0, n_lim_p: 0, n_lim_z: 0, conj: new Set(),
-  dias: new Set(), n_excl: 0 });
+  dias: new Set(), n_excl: 0, razao: {}, origem: {} });
 
 function linhas(url) {
   return new Promise((res, rej) => {
@@ -124,7 +124,7 @@ function linhas(url) {
 
 async function leMes(f, mo, acc) {
   const rl = await linhas(ONS + f.dir + '/' + f.arq + '_' + mo + '.csv');
-  let cab = null, iSub, iUsi, iOns, iTs, iGer, iLim, iGref, n = 0;
+  let cab = null, iSub, iUsi, iOns, iTs, iGer, iLim, iGref, iRaz, iOri, n = 0;
   for await (const l of rl) {
     if (!l) continue;
     const c = l.replace(/^﻿/, '').split(';');
@@ -133,6 +133,7 @@ async function leMes(f, mo, acc) {
       iSub = cab.indexOf('id_subsistema'); iUsi = cab.indexOf('nom_usina'); iOns = cab.indexOf('id_ons');
       iTs = cab.indexOf('din_instante'); iGer = cab.indexOf('val_geracao');
       iLim = cab.indexOf('val_geracaolimitada'); iGref = cab.indexOf('val_geracaoreferencia');
+      iRaz = cab.indexOf('cod_razaorestricao'); iOri = cab.indexOf('cod_origemrestricao');
       if ([iSub, iOns, iTs, iGer, iLim, iGref].some(i => i < 0)) throw new Error('layout mudou em ' + f.id + ' ' + mo);
       continue;
     }
@@ -154,7 +155,14 @@ async function leMes(f, mo, acc) {
       if (quem === 'nosso' && DIAS_EXCLUIDOS.has(dia)) { a.n_excl++; continue; }   // ver DIAS_EXCLUIDOS
       a.ger += ger * H; a.gref += gref * H; a.n++; a.conj.add(c[iOns]); a.dias.add(dia);
       if (temLim) { a.fru_p += perda; a.n_lim_p++; }
-      if (limNum > 0) { a.fru_z += perda; a.n_lim_z++; }
+      if (limNum > 0) { a.fru_z += perda; a.n_lim_z++;
+        // razao e origem da restricao, na MESMA convencao maior_zero dos cards do painel. O codigo vem
+        // como texto curto (ENE/CNF/REL e SIS/LOC); guarda-se a ENERGIA por codigo, nao a contagem de
+        // patamares — um patamar de 200 MW cortados nao pesa igual a um de 2 MW.
+        const rz = String(iRaz >= 0 ? (c[iRaz] || '') : '').trim().toUpperCase() || 'SEM_CODIGO';
+        const or = String(iOri >= 0 ? (c[iOri] || '') : '').trim().toUpperCase() || 'SEM_CODIGO';
+        a.razao[rz] = (a.razao[rz] || 0) + perda;
+        a.origem[or] = (a.origem[or] || 0) + perda; }
     }
     n++;
   }
@@ -209,6 +217,21 @@ async function grava(obj) {
       l[pref + '_intervalos_com_lim'] = a ? a.n_lim_p : null;
       l[pref + '_dias'] = a ? a.dias.size : null;
       l[pref + '_intervalos_excluidos'] = a ? a.n_excl : null;
+      // horas em restricao = patamares com limitacao x 0,5 h (convencao maior_zero)
+      l[pref + '_horas_restricao'] = a ? r2(a.n_lim_z * H) : null;
+      // energia frustrada por RAZAO e por ORIGEM, em GWh. Colunas fixas para o Grafana nao perder a
+      // serie entre meses; codigo que aparecer fora dessas listas cai em `_outras`.
+      const soma = (o, ks) => ks.reduce((t, k) => t + ((o || {})[k] || 0), 0);
+      const RZ = ['ENE', 'CNF', 'REL'], OR = ['SIS', 'LOC'];
+      RZ.forEach(k => { l[pref + '_razao_' + k.toLowerCase() + '_gwh'] = a ? r2((a.razao[k] || 0) / 1000) : null; });
+      OR.forEach(k => { l[pref + '_origem_' + k.toLowerCase() + '_gwh'] = a ? r2((a.origem[k] || 0) / 1000) : null; });
+      l[pref + '_razao_outras_gwh'] = a
+        ? r2((Object.keys(a.razao).reduce((t, k) => t + (RZ.includes(k) ? 0 : a.razao[k]), 0)) / 1000) : null;
+      l[pref + '_origem_outras_gwh'] = a
+        ? r2((Object.keys(a.origem).reduce((t, k) => t + (OR.includes(k) ? 0 : a.origem[k]), 0)) / 1000) : null;
+      l[pref + '_razao_codigos'] = a ? Object.keys(a.razao).sort().join(',') : null;
+      l[pref + '_origem_codigos'] = a ? Object.keys(a.origem).sort().join(',') : null;
+      void soma;
       // TESTE FISICO: a referencia do ONS nao pode ficar ABAIXO da geracao verificada — usina nao
       // entrega mais do que a propria referencia. Quando acontece, `max(0, gref-ger)` zera em quase
       // todo intervalo e o corte sai artificialmente baixo. Em jan/26 o nosso conjunto publica 28.368
