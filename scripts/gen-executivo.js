@@ -379,6 +379,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const serie = meses.map(mes => { const m = M[mes]; const i = IRR[mes] || { ge: 0, gv: 0, irr_media: 0 };
     const w2 = daily.dias.filter(x => String(x.dia).slice(0, 7) === mes);
     return { mes, lbl: lbl(mes), dias: m.dias.size,
+      // dias do WAY2 no mes — e o divisor honesto para ratear a meta do mes corrente, porque e
+      // exatamente o conjunto de dias que alimenta `way2_liq_gwh` e `ppa_liq_gwh`. Usar outra
+      // contagem (a serie diaria, por exemplo, que ia so ate o dia 10 enquanto o Way2 tinha 11)
+      // defasa numerador e denominador e infla o superavit do mes em curso.
+      w2_dias: w2.length,
+      w2_dias_completos: w2.filter(x => !x.parcial && x.completo !== false).length,
       // mes_ts: o Grafana só desenha eixo de tempo / sparkline sobre timestamp — "2026-07" sozinho ele lê como texto
       mes_ts: mes + '-01T00:00:00Z',
       realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
@@ -1460,8 +1466,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // Os dias vem do DADO (a serie diaria do proprio mes), nao do relogio: assim o rateio acompanha
       // ate onde a medicao chegou, que e o que a barra representa.
       const diasDoMes = new Date(Date.UTC(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0)).getUTCDate();
-      const diasCorridos = new Set((out.serie_diaria || [])
-        .filter(x => String(x.dia || '').slice(0, 7) === mesAtual).map(x => x.dia)).size;
+      // O divisor sai do MESMO conjunto de dias do numerador: `w2_dias` e a contagem de dias do Way2
+      // que formam `ppa_liq_gwh` e `way2_liq_gwh`. Antes eu usava a serie diaria, que ia ate o dia 10
+      // enquanto o Way2 ja tinha 11 — um dia de defasagem que inflava o superavit de agosto em ~1,2 GWh.
+      const CUR = (out.serie || []).find(x => x.mes === mesAtual) || {};
+      const diasCorridos = num(CUR.w2_dias) || 0;
       const fatorMes = (diasCorridos > 0 && diasCorridos < diasDoMes) ? diasCorridos / diasDoMes : 1;
       const rateia = (x, k) => (x.mes === mesAtual && /^meta/.test(k))
         ? r2(num(x[k]) * fatorMes) : x[k];
