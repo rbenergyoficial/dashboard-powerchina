@@ -1452,6 +1452,19 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // metade e pior que media nenhuma: ela vira a REGUA com que o leitor julga cada mes.
       const F = A.filter(x => x.mes < mesAtual);
       const BASE = F.length ? F : A;                 // em janeiro do ano F fica vazio; nao divide por 0
+      // META DO MES CORRENTE RATEADA pelos dias transcorridos. A meta do PPA e uma TAXA POR DIA (ver
+      // METAS): 37,20 GWh em agosto sao 1,20 GWh/dia. Cobrar o mes inteiro de um mes que tem 12 dias
+      // corridos faz a barra parecer fracasso quando a operacao esta adiante do contrato — em 12/08 o
+      // PPA tinha entregue 18,41 GWh contra 14,40 rateados, ou seja 4,01 ACIMA, e o grafico mostrava o
+      // oposto. Vale so para o mes corrente; mes fechado nunca e rateado.
+      // Os dias vem do DADO (a serie diaria do proprio mes), nao do relogio: assim o rateio acompanha
+      // ate onde a medicao chegou, que e o que a barra representa.
+      const diasDoMes = new Date(Date.UTC(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0)).getUTCDate();
+      const diasCorridos = new Set((out.serie_diaria || [])
+        .filter(x => String(x.dia || '').slice(0, 7) === mesAtual).map(x => x.dia)).size;
+      const fatorMes = (diasCorridos > 0 && diasCorridos < diasDoMes) ? diasCorridos / diasDoMes : 1;
+      const rateia = (x, k) => (x.mes === mesAtual && /^meta/.test(k))
+        ? r2(num(x[k]) * fatorMes) : x[k];
       const med = k => r2(BASE.reduce((a, x) => a + num(x[k]), 0) / BASE.length);
       // ---- as tres parcelas do EMPILHADO ----
       // Empilhar entregue COM meta seria falso: elas nao somam nada — sao a mesma energia contra
@@ -1478,7 +1491,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         pref(parcelas(src('way2_liq_gwh'), src('meta_gwh')), 'cx_'),
         { ppa_ating_pct: pc(src('ppa_liq_gwh'), src('meta_ppa_gwh')),
           cx_ating_pct: pc(src('way2_liq_gwh'), src('meta_gwh')) });
-      return A.map(x => linha(x.lbl, 0, k => x[k])).concat([linha('MÉDIA', 1, med)]);
+      return A.map(x => Object.assign(linha(x.lbl, 0, k => rateia(x, k)), {
+        mes: x.mes,
+        parcial: x.mes === mesAtual && fatorMes < 1 ? 1 : 0,
+        dias_corridos: x.mes === mesAtual ? diasCorridos : null,
+        dias_do_mes: x.mes === mesAtual ? diasDoMes : null,
+        meta_cheia_gwh: x.mes === mesAtual ? x.meta_gwh : null,
+        meta_ppa_cheia_gwh: x.mes === mesAtual ? x.meta_ppa_gwh : null,
+      })).concat([linha('MÉDIA', 1, med)]);
     })();
 
     out.meses_opcoes = meses.slice().reverse().map(m => ({ mes: m, lbl: lbl(m), atual: m === mesAtual ? 1 : 0 }));
