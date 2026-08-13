@@ -1068,9 +1068,19 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const v = vals.map(x => (x == null ? null : Number(x)));
       const ok = v.filter(x => x != null);
       if (ok.length < 2) return '';
-      // a escala inclui SEMPRE o 100, senao a referencia sai do quadro quando todos os meses batem
-      const mn = Math.min(...ok, 100), mx = Math.max(...ok, 100), amp = (mx - mn) || 1;
-      const alt = y => (8 + (y - mn) / amp * 84).toFixed(1);      // 8%..92% da caixa
+      // ESCALA FIXA E SIMETRICA EM TORNO DE 100, com amplitude minima de +-30 pp.
+      // Antes era normalizada do MENOR ao MAIOR de cada linha: o pior mes desenhava sempre em 8% da
+      // altura e o melhor sempre em 92%, INDEPENDENTE da distancia real entre eles. No Conjunto, meses
+      // entre 100% e 125% viravam barras com 12x de diferenca — um mes perfeitamente bom parecia
+      // desastre. Pior: cada linha tinha a propria escala, entao Conjunto e Mercado Livre nao eram
+      // comparaveis apesar de estarem na mesma coluna.
+      // Agora a banda e 100 +- S, com S = 30 ou o maior desvio, o que for maior (arredondado a 5). Com
+      // os dados de hoje as tres linhas caem na mesma banda 70-130, entao ficam comparaveis entre si, e
+      // a linha de 100 fica exatamente no MEIO da caixa — a leitura "esteve acima?" vira imediata.
+      const desvio = Math.max(...ok.map(y => Math.abs(y - 100)));
+      const S = Math.max(30, Math.ceil(desvio / 5) * 5);
+      const mn = 100 - S, amp = 2 * S;
+      const alt = y => Math.min(92, Math.max(8, 8 + (y - mn) / amp * 84)).toFixed(1);   // 8%..92%
       const y100 = (100 - Number(alt(100))).toFixed(1);           // topo, em % (CSS cresce p/ baixo)
       const ult = v.length - 1;
       const barras = v.map((y, i) => y == null
