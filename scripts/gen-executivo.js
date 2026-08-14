@@ -1039,6 +1039,28 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // lugar e a ordem de avaliação do literal não importa.
   // Cada estrutura ganha uma linha por usina + 'Complexo'; o painel filtra com [ufv='$ufv'].
   {
+    // META RATEADA no mes corrente, para TODAS as entidades (Complexo, PPA, ML e as nove usinas).
+    // O `meta_gwh` do serie_ufv e sempre do mes INTEIRO. O rateio existia so no `serie_e_media`, que
+    // alimentava os dois paineis de entrega — ao unificar num painel unico com filtro por entidade a
+    // fonte passa a ser esta, e sem o rateio agosto voltaria a parecer fracasso em todas as linhas.
+    // CAMPO NOVO, nao substituicao: `meta_gwh` continua sendo o mes inteiro (varios paineis e o
+    // acumulado dependem dele). Quem quer comparar contra o parcial usa `meta_rateada_gwh`.
+    // O divisor sai de `w2_dias` — o mesmo conjunto de dias que forma a geracao, senao numerador e
+    // denominador cobrem periodos diferentes.
+    (() => {
+      const diasDoMes = new Date(Date.UTC(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0)).getUTCDate();
+      const CUR = out.serie.find(x => x.mes === mesAtual) || {};
+      const dias = num(CUR.w2_dias) || 0;
+      const fator = (dias > 0 && dias < diasDoMes) ? dias / diasDoMes : 1;
+      out.serie_ufv.forEach(x => {
+        const parcial = x.mes === mesAtual && fator < 1;
+        x.parcial = parcial ? 1 : 0;
+        x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
+        x.dias_corridos = parcial ? dias : null;
+        x.dias_do_mes = parcial ? diasDoMes : null;
+      });
+    })();
+
     const SU = out.serie_ufv;
     const UFVS = ['Complexo', 'PPA', 'ML'].concat(Object.keys(CAP_UFV).sort());
     const LIMIAR = 0.5;
