@@ -1787,7 +1787,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     const T = PRECOD.janela.total_mwh;
     out.pre_cod_razoes = {
       revisao: PRECOD._revisao, emissao: PRECOD._emissao, congelado_em: PRECOD._congelado_em,
-      janela: PRECOD.janela, compensavel: PRECOD.compensavel,
+      // total_gwh existe para o painel não precisar dividir por 1000 nem somar tiles no template —
+      // Handlebars não faz conta, e somar à mão é o número colado que apodrece.
+      janela: { ...PRECOD.janela, total_gwh: r2(PRECOD.janela.total_mwh / 1000) },
+      compensavel: PRECOD.compensavel,
       razoes: PRECOD.razoes, mensal: PRECOD.pre_cod.mensal,
       horas: { calendario: PRECOD.pre_cod.horas_calendario, sinapse: PRECOD.pre_cod.horas_sinapse,
                sobreposicao: PRECOD.pre_cod.sobreposicao_h },
