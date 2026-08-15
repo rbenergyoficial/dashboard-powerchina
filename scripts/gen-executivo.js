@@ -1784,41 +1784,39 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // Aqui só se repassa o que está no arquivo, com um campo derivado: `tiles`, já formatado, para o
   // card do topo não precisar de matemática no template.
   if (PRECOD) {
-    const T = PRECOD.janela.total_mwh;
+    const P = PRECOD.pre_cod;
     out.pre_cod_razoes = {
       revisao: PRECOD._revisao, emissao: PRECOD._emissao, congelado_em: PRECOD._congelado_em,
-      // total_gwh existe para o painel não precisar dividir por 1000 nem somar tiles no template —
-      // Handlebars não faz conta, e somar à mão é o número colado que apodrece.
-      janela: { ...PRECOD.janela, total_gwh: r2(PRECOD.janela.total_mwh / 1000) },
-      compensavel: PRECOD.compensavel,
-      razoes: PRECOD.razoes, mensal: PRECOD.pre_cod.mensal,
-      horas: { calendario: PRECOD.pre_cod.horas_calendario, sinapse: PRECOD.pre_cod.horas_sinapse,
-               sobreposicao: PRECOD.pre_cod.sobreposicao_h },
-      banda_pct: PRECOD.pre_cod.banda_pct,
+      // ⚠️ O NÚMERO DE TELA É A FASE PRÉ-COD, não a janela do art. 3º. A janela é recorte de norma
+      // (01/01 a 25/11/2025) e carrega 69,14 GWh de energia PÓS-COD — rotular aquilo de "pré-COD"
+      // sobra 53% no número. A janela fica em `janela_art3`, para auditoria, fora da tela.
+      total: { gwh: P.total_gwh, mwh: P.total_mwh,
+        estimado_mwh: P.estimado_mwh, sager_pre_cod_mwh: P.sager_pre_cod_mwh },
+      janela_art3: PRECOD.janela_art3,
+      mensal: P.mensal,
+      horas: { calendario: P.horas_calendario, sinapse: P.horas_sinapse,
+               sobreposicao: P.sobreposicao_h },
       // O painel tem de poder dizer a incerteza sem que ninguém a escreva à mão no HTML.
-      incerteza: { banda_pct: PRECOD.pre_cod.banda_pct,
+      incerteza: { banda_pct: P.banda_pct,
         desvio_mensal_pct: PRECOD.validacao.desvio_padrao_mensal_pct,
         aviso: PRECOD._aviso_validacao },
-      // Resumo pronto para o card de destaque — é o número que a Portaria pede, não o total.
-      resumo: { l: 'COMPENSÁVEL', nome: 'CNF + REL', v: r2(PRECOD.compensavel.mwh / 1000), u: 'GWh',
-        pct: PRECOD.compensavel.pct, cor: '#43966B',
-        sub: PRECOD.compensavel.pct + '% da janela do art. 3º', t: PRECOD.compensavel._regra },
-      // tiles prontos: rótulo, valor em GWh, % e a classificação da Portaria por razão.
-      // `classe` é o enum (para lógica); `classe_lbl` é o que se LÊ na tela. Sem ele o painel
-      // mostrava "NAO_COMPENSAVEL" cru, e traduzir no template seria rótulo escrito à mão.
-      tiles: PRECOD.razoes.map(z => ({
-        l: z.codigo, nome: z.nome, v: r2(z.total_mwh / 1000), u: 'GWh',
-        pct: z.pct, classe: z.portaria,
+      // tiles prontos, já ordenados do maior para o menor pelo arquivo congelado.
+      // `classe`/`classe_lbl` seguem no dado (auditoria e enquadramento futuro), mas o painel do
+      // cabeçalho não os exibe: ali o pedido é mostrar o número, não enquadrar na Portaria.
+      tiles: P.por_razao.map(z => ({
+        l: z.codigo, nome: z.nome, v: z.gwh, u: 'GWh', pct: z.pct,
+        classe: z.portaria,
         classe_lbl: { compensavel: 'Compensável', nao_compensavel: 'Não compensável',
                       a_classificar: 'A classificar' }[z.portaria] || z.portaria,
-        cor: z.portaria === 'compensavel' ? '#43966B' : (z.portaria === 'nao_compensavel' ? '#C85C60' : '#8B93A1'),
-        t: z.nome + ' — ' + r2(z.total_mwh / 1000) + ' GWh (' + z.pct + '% da janela do art. 3º); '
-           + 'pré-COD ' + r2(z.pre_cod_mwh / 1000) + ' GWh estimado + SAGER ' + r2(z.sager_mwh / 1000) + ' GWh medido',
+        t: z.nome + ' — ' + z.gwh + ' GWh (' + z.pct + '% do curtailment pré-COD); '
+           + r2(z.estimado_mwh / 1000) + ' GWh estimado (04/01 a 31/08) + '
+           + r2(z.sager_pre_cod_mwh / 1000) + ' GWh medido pelo SAGER nas usinas ainda em teste',
       })),
       fonte: PRECOD._fonte,
     };
-    console.log('pré-COD por razão (' + PRECOD._revisao + '): janela ' + r2(T / 1000) + ' GWh · compensável '
-      + r2(PRECOD.compensavel.mwh / 1000) + ' GWh (' + PRECOD.compensavel.pct + '%)');
+    console.log('pré-COD por razão (' + PRECOD._revisao + '): ' + P.total_gwh + ' GWh · '
+      + P.por_razao.map(z => z.codigo + ' ' + z.gwh).join(' · ')
+      + '  [janela art.3º = ' + PRECOD.janela_art3.total_gwh + ' GWh, fora da tela]');
   }
 
   // CAPACIDADE INSTALADA em cada ponto do perfil. Parece desperdício gravar uma constante 14 mil

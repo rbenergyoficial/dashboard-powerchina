@@ -1,75 +1,62 @@
 {
- "_fonte": "Planilha Apuracao_Pre_Pos_COD_MRD_PT-EN_Rev06.xlsx (PWC_Docs/DOU_DIARIO_OFICIAL_UNIAO/Curtailment), abas 14 a 20. Emissao 11/08/2026. Portaria MME 140/2026, art. 3o.",
- "_unidade": "MWh",
- "_nota": "CONGELADO da Rev06 em 15/08/2026. A planilha NAO guarda valor calculado — toda celula derivada e formula sem cache, so o Excel produz o numero ao abrir. Por isso a cadeia foi reimplementada e conferida contra as ancoras da propria planilha: as 1191,17 h de calendario da aba 17 e a validacao mes a mes da aba 15 batem exatamente. Ao chegar a Rev07, refazer com scratchpad/precod/*.js e trocar _revisao.",
+ "_fonte": "Planilha Apuracao_Pre_Pos_COD_MRD_PT-EN_Rev06.xlsx (PWC_Docs/DOU_DIARIO_OFICIAL_UNIAO/Curtailment), abas 14 a 20. Emissao 11/08/2026.",
+ "_unidade": "MWh (campos *_mwh) e GWh (campos *_gwh)",
+ "_nota": "CONGELADO da Rev06 em 15/08/2026. A planilha NAO guarda valor calculado — toda celula derivada e formula sem cache, so o Excel produz o numero ao abrir. Por isso a cadeia foi reimplementada e conferida contra as ancoras da propria planilha: as 1191,17 h de calendario da aba 17 e a validacao mes a mes da aba 15 batem exatamente. Ao chegar a Rev07, rodar scripts/precod/ e trocar _revisao.",
  "_revisao": "Rev06",
  "_emissao": "2026-08-11",
  "_congelado_em": "2026-08-15",
- "_aviso_validacao": "O erro TOTAL de 0% da validacao e POR CONSTRUCAO: as ancoras de vies sao definidas como a razao que faz o total fechar contra a aba 18. Nao e validacao, e identidade. O numero honesto e o desvio-padrao MENSAL de 4,00%, e ainda assim medido em tres meses so, todos de estacao seca. A faixa adotada e +-15%, quase 4x a dispersao medida — e julgamento conservador, nao a dispersao observada. NUNCA publicar o 0%.",
- "janela": {
-  "inicio": "2025-01-01",
-  "fim": "2025-11-25",
-  "total_mwh": 200354.4,
-  "pre_cod_estimado_mwh": 127367.12,
-  "sager_medido_mwh": 72987.28,
-  "compensavel_mwh": 60633.95,
-  "compensavel_pct": 30.26,
-  "_nota": "Janela do art. 3o. O pre-COD e ESTIMATIVA (+-15%); o trecho SAGER e calculado sobre dado medido."
- },
- "razoes": [
-  {
-   "codigo": "CNF",
-   "nome": "Confiabilidade elétrica",
-   "portaria": "compensavel",
-   "pre_cod_mwh": 29652.34,
-   "pre_cod_horas": 315.71,
-   "sager_mwh": 26190.16,
-   "total_mwh": 55842.49,
-   "pct": 27.87
-  },
-  {
-   "codigo": "REL",
-   "nome": "Indisponibilidade externa",
-   "portaria": "compensavel",
-   "pre_cod_mwh": 4791.46,
-   "pre_cod_horas": 82.73,
-   "sager_mwh": 0,
-   "total_mwh": 4791.46,
-   "pct": 2.39
-  },
-  {
-   "codigo": "ENE",
-   "nome": "Razão energética",
-   "portaria": "nao_compensavel",
-   "pre_cod_mwh": 91257.83,
-   "pre_cod_horas": 781.23,
-   "sager_mwh": 46797.12,
-   "total_mwh": 138054.95,
-   "pct": 68.91
-  },
-  {
-   "codigo": "ND",
-   "nome": "Sem motivo registrado",
-   "portaria": "a_classificar",
-   "pre_cod_mwh": 1665.5,
-   "pre_cod_horas": 11.5,
-   "sager_mwh": 0,
-   "total_mwh": 1665.5,
-   "pct": 0.83
-  }
- ],
- "compensavel": {
-  "_regra": "Portaria 140/2026: CNF e REL sao compensaveis; ENE nao e; ND fica a classificar.",
-  "mwh": 60633.95,
-  "pct": 30.26
- },
  "pre_cod": {
-  "periodo": "2025-01-04 a 2025-08-31",
-  "natureza": "estimativa",
+  "_nota": "Todo o montante de curtailment da fase PRE-COD: a estimativa de 04/01 a 31/08/2025 MAIS a parcela pre-COD do trecho medido pelo SAGER (usinas que seguiram em teste depois de 04/09). NAO confundir com a janela do art. 3o, que soma tambem energia POS-COD.",
+  "total_mwh": 131216.8,
+  "total_gwh": 131.22,
+  "estimado_mwh": 127367.12,
+  "sager_pre_cod_mwh": 3849.68,
   "banda_pct": 15,
   "horas_calendario": 1191.17,
   "horas_sinapse": 1201.58,
   "sobreposicao_h": 10.41,
+  "por_razao": [
+   {
+    "codigo": "ENE",
+    "nome": "Razão energética",
+    "mwh": 93074.32,
+    "gwh": 93.07,
+    "pct": 70.93,
+    "estimado_mwh": 91257.83,
+    "sager_pre_cod_mwh": 1816.49,
+    "portaria": "nao_compensavel"
+   },
+   {
+    "codigo": "CNF",
+    "nome": "Confiabilidade elétrica",
+    "mwh": 31685.52,
+    "gwh": 31.69,
+    "pct": 24.15,
+    "estimado_mwh": 29652.34,
+    "sager_pre_cod_mwh": 2033.18,
+    "portaria": "compensavel"
+   },
+   {
+    "codigo": "REL",
+    "nome": "Indisponibilidade externa",
+    "mwh": 4791.46,
+    "gwh": 4.79,
+    "pct": 3.65,
+    "estimado_mwh": 4791.46,
+    "sager_pre_cod_mwh": 0,
+    "portaria": "compensavel"
+   },
+   {
+    "codigo": "ND",
+    "nome": "Sem motivo registrado",
+    "mwh": 1665.5,
+    "gwh": 1.67,
+    "pct": 1.27,
+    "estimado_mwh": 1665.5,
+    "sager_pre_cod_mwh": 0,
+    "portaria": "a_classificar"
+   }
+  ],
   "mensal": [
    {
     "mes": "2025-01",
@@ -161,6 +148,60 @@
    }
   ]
  },
+ "janela_art3": {
+  "_nota": "Recorte da Portaria MME 140/2026, art. 3o (01/01 a 25/11/2025). Mistura pre e pos-COD de proposito: e a janela da norma, nao uma fase da usina. Fica aqui para auditoria; o painel usa pre_cod.",
+  "inicio": "2025-01-01",
+  "fim": "2025-11-25",
+  "total_mwh": 200354.4,
+  "pre_cod_estimado_mwh": 127367.12,
+  "sager_medido_mwh": 72987.28,
+  "compensavel_mwh": 60633.95,
+  "compensavel_pct": 30.26,
+  "total_gwh": 200.35,
+  "pos_cod_mwh": 69137.6,
+  "razoes": [
+   {
+    "codigo": "CNF",
+    "nome": "Confiabilidade elétrica",
+    "portaria": "compensavel",
+    "pre_cod_mwh": 29652.34,
+    "pre_cod_horas": 315.71,
+    "sager_mwh": 26190.16,
+    "total_mwh": 55842.49,
+    "pct": 27.87
+   },
+   {
+    "codigo": "REL",
+    "nome": "Indisponibilidade externa",
+    "portaria": "compensavel",
+    "pre_cod_mwh": 4791.46,
+    "pre_cod_horas": 82.73,
+    "sager_mwh": 0,
+    "total_mwh": 4791.46,
+    "pct": 2.39
+   },
+   {
+    "codigo": "ENE",
+    "nome": "Razão energética",
+    "portaria": "nao_compensavel",
+    "pre_cod_mwh": 91257.83,
+    "pre_cod_horas": 781.23,
+    "sager_mwh": 46797.12,
+    "total_mwh": 138054.95,
+    "pct": 68.91
+   },
+   {
+    "codigo": "ND",
+    "nome": "Sem motivo registrado",
+    "portaria": "a_classificar",
+    "pre_cod_mwh": 1665.5,
+    "pre_cod_horas": 11.5,
+    "sager_mwh": 0,
+    "total_mwh": 1665.5,
+    "pct": 0.83
+   }
+  ]
+ },
  "validacao": {
   "periodo": "2025-09 a 2025-11",
   "metodo": "âncora calibrada no total; erro mensal é a medida honesta",
@@ -171,7 +212,7 @@
   "aviso": "O erro total de 0% é POR CONSTRUÇÃO: as âncoras são definidas como a razão que faz o total fechar. Citar o desvio mensal de 4%, nunca o zero."
  },
  "serie_continua": {
-  "_nota": "Aba 20, set/25 a jul/26. FORA da janela do art. 3o — serve de acompanhamento e de validacao independente. ATENCAO: 'perda_nos_intervalos_pct' tem como denominador SO os intervalos com restricao, nao o mes inteiro; nao confundir com a taxa mensal de corte do executivo.json (mar/26 sai 28,3% aqui contra 22,87% la). O campo ref_ons_valida marca de mar/26 em diante: antes disso o ONS publica referencia ABAIXO da geracao verificada e a comparacao nao vale.",
+  "_nota": "Aba 20, set/25 a jul/26. FORA da fase pre-COD — serve de acompanhamento e de validacao independente. ATENCAO: 'perda_nos_intervalos_pct' tem como denominador SO os intervalos com restricao, nao o mes inteiro. O campo ref_ons_valida marca de mar/26 em diante: antes disso o ONS publica referencia ABAIXO da geracao verificada.",
   "meses": [
    {
     "mes": "2025-09",
