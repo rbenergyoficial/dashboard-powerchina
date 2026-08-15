@@ -1,3 +1,6 @@
 node_modules/
 data/irr_seed.json
 data/irr_hora_seed.json
+
+# documentacao de trabalho do Claude — fica local, o repo e PUBLICO
+CLAUDE.md
