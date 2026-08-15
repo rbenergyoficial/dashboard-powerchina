@@ -179,6 +179,46 @@ async function gerarKpis(rows) {
     { l: 'Confiabilidade Elétrica (CNF)', v: fmtDot(rz('CNF').pct, 2), u: '%', g: 'r', t: fmtDot(rz('CNF').gwh, 2) + ' GWh — corte motivado por limitações operativas da rede: carregamento de linha ou transformador, limite de fluxo entre subsistemas' },
     { l: 'Restrição Elétrica (REL)', v: fmtDot(rz('REL').pct, 2), u: '%', g: 'r', t: fmtDot(rz('REL').gwh, 2) + ' GWh — indisponibilidade externa: um equipamento de terceiro fora de operação limita o escoamento' },
   ];
+
+  // ---- PRÉ-COD: entra como TILE, não como HTML colado no cabeçalho ----
+  // Os KPIs acima vêm do ONS, que só publica a partir do COD — a fase de comissionamento fica de
+  // fora deles. O item do pré-COD existia no cabeçalho com os números ESCRITOS À MÃO no HTML, e já
+  // apodreceu uma vez: dizia 304,22 GWh, virou 301,32 quando o backfill do somaPos corrigiu a
+  // líquida, e o cabeçalho seguiu mostrando o valor velho. Agora é dado — gerado vem do
+  // executivo.json, cortado e horas vêm do arquivo congelado da apuração.
+  // `pc:1` marca o tile para o template desenhá-lo diferente; flag como 1/'' porque no Handlebars
+  // a string "false" é TRUTHY.
+  try {
+    const PC = require('../data/pre_cod_razoes.json');
+    const exec = await fetchJson(BASE + 'executivo.json');
+    const ger = exec && exec.totais_vida && exec.totais_vida.pre_cod_gwh;
+    if (ger && PC && PC.pre_cod) {
+      const cor = PC.pre_cod.total_gwh, hs = PC.pre_cod.horas_sinapse;
+      // Horas levam 1 casa e passam de mil: com ponto de milhar sairia "1.201.6", ilegível — os dois
+      // pontos significam coisas diferentes no mesmo número. Medida com decimal acima de mil vai SEM
+      // separador de milhar. (O `fmtDot` segue certo onde é contagem inteira: "5.102 eventos".)
+      const fmtH = (n) => Number(n || 0).toFixed(1);
+      kpis.pre_cod = { gerado_gwh: ger, cortado_gwh: cor, horas: hs, revisao: PC._revisao };
+      kpis.tiles.push({ l: 'Pré-COD · comissionamento', v: fmtDot(ger, 2), u: 'GWh', g: 'p', pc: 1,
+        v2: fmtDot(cor, 2), u2: 'GWh', h: fmtH(hs),
+        t: 'COMISSIONAMENTO (pré-COD), 21/jan a 21/nov/2025 — antes da operação comercial. '
+         + 'GERADO ' + fmtDot(ger, 2) + ' GWh: energia líquida medida pelo Way2 (medidor de faturamento). '
+         + 'CORTADO ' + fmtDot(cor, 2) + ' GWh: é ESTIMATIVA, faixa de ±15% — a Sinapse registra a ocorrência '
+         + 'mas não traz geração de referência, então a energia frustrada é reconstruída pela irradiância medida '
+         + 'e pela capacidade em teste (apuração ' + PC._revisao + ', ' + PC._emissao + '). '
+         + 'As ' + fmtH(hs) + ' h de restrição vêm da Sinapse (Iqony). '
+         + 'Os KPIs à esquerda são do ONS, que só publica a partir do COD, e por isso NÃO incluem nada disto. '
+         + 'O detalhe mês a mês está na seção DESDE O INÍCIO.' });
+      console.log('  PRÉ-COD .......... ' + fmtDot(ger, 2) + ' GWh gerado · ' + fmtDot(cor, 2)
+        + ' GWh cortado (est. ±15%) · ' + fmtH(hs) + ' h');
+    } else {
+      console.log('  pré-COD: tile OMITIDO (executivo.json sem totais_vida, ou data/pre_cod_razoes.json ausente)');
+    }
+  } catch (e) {
+    // Um cabeçalho sem o item do pré-COD é melhor que um cabeçalho quebrado.
+    console.log('  pré-COD: tile OMITIDO — ' + e.message);
+  }
+
   const json = JSON.stringify(kpis, null, 1);
   await upload('ons_kpis.json', json);
   console.log('\nons_kpis.json (' + Buffer.byteLength(json) + ' B) — dado até ' + ultimo);
