@@ -1796,10 +1796,18 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       incerteza: { banda_pct: PRECOD.pre_cod.banda_pct,
         desvio_mensal_pct: PRECOD.validacao.desvio_padrao_mensal_pct,
         aviso: PRECOD._aviso_validacao },
+      // Resumo pronto para o card de destaque — é o número que a Portaria pede, não o total.
+      resumo: { l: 'COMPENSÁVEL', nome: 'CNF + REL', v: r2(PRECOD.compensavel.mwh / 1000), u: 'GWh',
+        pct: PRECOD.compensavel.pct, cor: '#43966B',
+        sub: PRECOD.compensavel.pct + '% da janela do art. 3º', t: PRECOD.compensavel._regra },
       // tiles prontos: rótulo, valor em GWh, % e a classificação da Portaria por razão.
+      // `classe` é o enum (para lógica); `classe_lbl` é o que se LÊ na tela. Sem ele o painel
+      // mostrava "NAO_COMPENSAVEL" cru, e traduzir no template seria rótulo escrito à mão.
       tiles: PRECOD.razoes.map(z => ({
         l: z.codigo, nome: z.nome, v: r2(z.total_mwh / 1000), u: 'GWh',
         pct: z.pct, classe: z.portaria,
+        classe_lbl: { compensavel: 'Compensável', nao_compensavel: 'Não compensável',
+                      a_classificar: 'A classificar' }[z.portaria] || z.portaria,
         cor: z.portaria === 'compensavel' ? '#43966B' : (z.portaria === 'nao_compensavel' ? '#C85C60' : '#8B93A1'),
         t: z.nome + ' — ' + r2(z.total_mwh / 1000) + ' GWh (' + z.pct + '% da janela do art. 3º); '
            + 'pré-COD ' + r2(z.pre_cod_mwh / 1000) + ' GWh estimado + SAGER ' + r2(z.sager_mwh / 1000) + ' GWh medido',
