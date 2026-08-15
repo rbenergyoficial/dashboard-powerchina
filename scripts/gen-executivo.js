@@ -29,6 +29,13 @@ const METAS = (() => { try { return require('../data/metas.json'); } catch (e) {
 // fases operacionais oficiais (teste/performance/COD por UFV) — extraídas dos despachos ANEEL e
 // dos SGIs. Usadas para separar pré-COD de pós-COD sem heurística.
 const FASES = (() => { try { return require('../data/fases_operacao.json').ufvs; } catch (e) { return {}; } })();
+// Curtailment do PRÉ-COD por razão (ENE/CNF/REL/ND) na janela do art. 3º da Portaria MME 140/2026.
+// CONGELADO da Rev06 da planilha de apuração, não recalculado a cada run: a planilha NÃO guarda
+// nenhum valor calculado (toda célula derivada é fórmula sem cache — só o Excel produz o número ao
+// abrir), então ler a fonte exigiria carregar aqui a reimplementação inteira de um método que é do
+// usuário, não nosso. Congelado é rastreável e estável; ao sair a Rev07, refazer com os scripts de
+// scratchpad/precod/ e trocar `_revisao`.
+const PRECOD = (() => { try { return require('../data/pre_cod_razoes.json'); } catch (e) { return null; } })();
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -1769,6 +1776,38 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     };
     console.log('vida da usina: ' + out.serie_vida.length + ' meses · pré-COD ' + out.totais_vida.pre_cod_gwh
       + ' GWh (' + out.totais_vida.pre_pct + '%) · pós-COD ' + out.totais_vida.pos_cod_gwh + ' GWh');
+  }
+
+  // ---------- PRÉ-COD POR RAZÃO (Portaria MME 140/2026, art. 3º) ----------
+  // A energia frustrada do pré-COD não é apurável pelo ONS — a Sinapse registra a ocorrência mas não
+  // tem geração de referência. Estes números vêm da apuração do usuário (ver PRECOD, congelado).
+  // Aqui só se repassa o que está no arquivo, com um campo derivado: `tiles`, já formatado, para o
+  // card do topo não precisar de matemática no template.
+  if (PRECOD) {
+    const T = PRECOD.janela.total_mwh;
+    out.pre_cod_razoes = {
+      revisao: PRECOD._revisao, emissao: PRECOD._emissao, congelado_em: PRECOD._congelado_em,
+      janela: PRECOD.janela, compensavel: PRECOD.compensavel,
+      razoes: PRECOD.razoes, mensal: PRECOD.pre_cod.mensal,
+      horas: { calendario: PRECOD.pre_cod.horas_calendario, sinapse: PRECOD.pre_cod.horas_sinapse,
+               sobreposicao: PRECOD.pre_cod.sobreposicao_h },
+      banda_pct: PRECOD.pre_cod.banda_pct,
+      // O painel tem de poder dizer a incerteza sem que ninguém a escreva à mão no HTML.
+      incerteza: { banda_pct: PRECOD.pre_cod.banda_pct,
+        desvio_mensal_pct: PRECOD.validacao.desvio_padrao_mensal_pct,
+        aviso: PRECOD._aviso_validacao },
+      // tiles prontos: rótulo, valor em GWh, % e a classificação da Portaria por razão.
+      tiles: PRECOD.razoes.map(z => ({
+        l: z.codigo, nome: z.nome, v: r2(z.total_mwh / 1000), u: 'GWh',
+        pct: z.pct, classe: z.portaria,
+        cor: z.portaria === 'compensavel' ? '#43966B' : (z.portaria === 'nao_compensavel' ? '#C85C60' : '#8B93A1'),
+        t: z.nome + ' — ' + r2(z.total_mwh / 1000) + ' GWh (' + z.pct + '% da janela do art. 3º); '
+           + 'pré-COD ' + r2(z.pre_cod_mwh / 1000) + ' GWh estimado + SAGER ' + r2(z.sager_mwh / 1000) + ' GWh medido',
+      })),
+      fonte: PRECOD._fonte,
+    };
+    console.log('pré-COD por razão (' + PRECOD._revisao + '): janela ' + r2(T / 1000) + ' GWh · compensável '
+      + r2(PRECOD.compensavel.mwh / 1000) + ' GWh (' + PRECOD.compensavel.pct + '%)');
   }
 
   // CAPACIDADE INSTALADA em cada ponto do perfil. Parece desperdício gravar uma constante 14 mil
