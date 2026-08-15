@@ -1808,6 +1808,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         classe: z.portaria,
         classe_lbl: { compensavel: 'Compensável', nao_compensavel: 'Não compensável',
                       a_classificar: 'A classificar' }[z.portaria] || z.portaria,
+        // A cor vem do DADO, não do template: se o painel decidisse a cor por conta, seria valor
+        // escrito à mão e sairia de sincronia na primeira mudança de classificação. E `cor` vazio
+        // não falha visivelmente — o CSS fica inválido e o navegador pinta a borda com a cor
+        // herdada, o que PARECE certo e não é. Foi o que aconteceu quando eu a removi sem notar.
+        cor: z.portaria === 'compensavel' ? '#43966B'
+           : (z.portaria === 'nao_compensavel' ? '#C85C60' : '#8B93A1'),
         t: z.nome + ' — ' + z.gwh + ' GWh (' + z.pct + '% do curtailment pré-COD); '
            + r2(z.estimado_mwh / 1000) + ' GWh estimado (04/01 a 31/08) + '
            + r2(z.sager_pre_cod_mwh / 1000) + ' GWh medido pelo SAGER nas usinas ainda em teste',
