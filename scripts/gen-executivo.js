@@ -83,12 +83,24 @@ function metasPorUfv(mtm) {
   const n = v => Number(v) || 0;
   const out = {};
   PPA.forEach(u => { out[u] = (mtm.ppa_por_ufv || {})[u] != null ? Number(mtm.ppa_por_ufv[u]) : 0; });
-  if (mtm.ml_por_ufv) {
-    const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);      // 270,105 MW
-    const taxa = n(mtm.garantido_ppa) / capPpa;                   // MWh/MW naquele mês
-    out.M1 = n(mtm.ml_por_ufv.M1);                                // da planilha
-    out.M7 = taxa * CAP_UFV.M7;
-    out.M9 = taxa * CAP_UFV.M9;
+  // TAXA ÚNICA DENTRO DO ML — decisão do usuário em 16/08/2026, substitui a de 02/08.
+  // O contrato fixa duas metas: a do complexo e a do PPA. A do ML é o RESTO, por aritmética
+  // (`garantido_total − garantido_ppa`), e é repartida entre M1/M7/M9 proporcional à POTÊNCIA — o que
+  // dá a mesma taxa por MW aos três.
+  // O que isso corrige: a política anterior punha os três na taxa do PPA (137,7 MWh/MW), o que só
+  // absorvia 10,15 dos 13,39 GWh. Os 3,24 restantes viravam `nao_alocado`, e o efeito colateral era o
+  // ML aparecer com 90,3% de atingimento quando o contrato implica 68,5% — a sobra saía do
+  // DENOMINADOR e fazia o grupo parecer melhor do que é.
+  // O que NÃO se volta a fazer: a repartição da planilha (M1 na taxa do PPA e todo o resto em M7+M9)
+  // punha os dois menores parques em 270,0 MWh/MW contra 137,7 dos outros — quase o dobro, e o
+  // atingimento deles caía para 40% e 44% por RÉGUA, não por desempenho. Rejeitada em 02/08.
+  // A régua do ML ser ~32% mais dura que a do PPA é fato estrutural do contrato; agora ele aparece
+  // no GRUPO, dividido por igual, em vez de concentrado em dois parques ou escondido numa sobra.
+  // `ml_por_ufv` continua no metas.json como REGISTRO DA FONTE (o que a planilha diz).
+  if (mtm.ml_por_ufv || (n(mtm.garantido_total) > 0 && n(mtm.garantido_ppa) > 0)) {
+    const metaMl = n(mtm.garantido_total) - n(mtm.garantido_ppa);   // o resto contratual
+    const capMl = ML.reduce((a, u) => a + CAP_UFV[u], 0);           // 73,665 MW
+    ML.forEach(u => { out[u] = capMl > 0 ? metaMl * CAP_UFV[u] / capMl : 0; });
     return out;
   }
   // fallback p/ meses gravados antes de a planilha emitir o ML: o resto rateado pelo equivalente.
