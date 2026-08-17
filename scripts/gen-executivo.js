@@ -29,6 +29,61 @@ const METAS = (() => { try { return require('../data/metas.json'); } catch (e) {
 // fases operacionais oficiais (teste/performance/COD por UFV) — extraídas dos despachos ANEEL e
 // dos SGIs. Usadas para separar pré-COD de pós-COD sem heurística.
 const FASES = (() => { try { return require('../data/fases_operacao.json').ufvs; } catch (e) { return {}; } })();
+
+// ---- META RECONSTRUÍDA para os meses ANTERIORES à cobertura da planilha (set–dez/2025) ----
+// A planilha entrega jan/26 em diante, e só. Não é lacuna de pipeline: o COD é POR USINA (04/09 a
+// 22/11/2025), e durante a entrada em operação não havia garantia contratual consolidada.
+// Mas a meta é uma TAXA DIÁRIA EXATA — garantido_total/dias dá 1632,000 MWh/dia nos oito meses
+// publicados, sem variação na terceira casa; por usina as taxas somam exatamente esse 1632,000.
+// Então 2025 é reconstruível sem arbítrio: taxa da usina × dias em que ELA já tinha COD.
+// ⚠️ Aplicar a taxa cheia ao mês inteiro criaria déficit falso: em set/25 nenhuma usina tinha COD
+// antes do dia 4, e o M9 só entrou em 22/11. O rateio por COD é o que torna o número comparável.
+// Marcado com `_reconstruida:1` — quem consome sabe que não veio da planilha.
+(() => {
+  const ks = Object.keys(METAS.meses).sort();
+  if (!ks.length || !Object.keys(FASES).length) return;
+  const r3 = (x) => Math.round(x * 1000) / 1000;
+  const base = METAS.meses[ks[0]];
+  const [y0, m0] = ks[0].split('-').map(Number);
+  const dias0 = new Date(Date.UTC(y0, m0, 0)).getUTCDate();
+  const TX = {}, ppaU = Object.keys(base.ppa_por_ufv || {});
+  for (const [u, v] of Object.entries({ ...(base.ppa_por_ufv || {}), ...(base.ml_por_ufv || {}) })) TX[u] = v / dias0;
+  const cod = {};
+  for (const u of Object.keys(TX)) {
+    const c = FASES[u] && FASES[u].operacao_comercial && FASES[u].operacao_comercial.cod;
+    if (c) cod[u] = c;
+  }
+  // sem COD de TODAS as usinas o rateio seria chute — não reconstrói nada.
+  if (Object.keys(cod).length !== Object.keys(TX).length) {
+    console.log('  meta 2025: NÃO reconstruída (falta COD de alguma usina)');
+    return;
+  }
+  let m = Object.values(cod).sort()[0].slice(0, 7), n = 0;
+  while (m < ks[0]) {
+    if (!METAS.meses[m]) {
+      const [yy, mm] = m.split('-').map(Number);
+      const dias = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+      const ini = m + '-01', fim = m + '-' + String(dias).padStart(2, '0');
+      let tot = 0, ppa = 0; const pU = {}, mU = {};
+      for (const [u, tx] of Object.entries(TX)) {
+        if (cod[u] > fim) continue;
+        const d0 = cod[u] > ini ? cod[u] : ini;
+        const nd = Math.round((Date.parse(fim) - Date.parse(d0)) / 864e5) + 1;
+        const v = tx * nd; tot += v;
+        if (ppaU.includes(u)) { ppa += v; pU[u] = r3(v); } else mU[u] = r3(v);
+      }
+      if (tot > 0) {
+        METAS.meses[m] = { garantido_total: r3(tot), garantido_ppa: r3(ppa),
+          ppa_por_ufv: pU, ml_por_ufv: mU, _reconstruida: 1,
+          _nota: 'taxa diária por usina × dias com COD — a planilha não cobre este mês' };
+        n++;
+      }
+    }
+    let [yy, mm] = m.split('-').map(Number); mm++; if (mm > 12) { mm = 1; yy++; }
+    m = yy + '-' + String(mm).padStart(2, '0');
+  }
+  if (n) console.log('  meta reconstruída .. ' + n + ' meses de 2025 (taxa × dias com COD)');
+})();
 // Curtailment do PRÉ-COD por razão (ENE/CNF/REL/ND) na janela do art. 3º da Portaria MME 140/2026.
 // CONGELADO da Rev06 da planilha de apuração, não recalculado a cada run: a planilha NÃO guarda
 // nenhum valor calculado (toda célula derivada é fórmula sem cache — só o Excel produz o número ao
