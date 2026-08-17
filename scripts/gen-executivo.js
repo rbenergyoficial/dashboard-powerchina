@@ -1307,7 +1307,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             const n = serie.length;
             const d = (n >= 2 && serie[n - 1] != null && serie[n - 2] != null)
               ? r2(serie[n - 1] - serie[n - 2]) : null;
-            return { spark_ating: sparkLinha(serie, cor, '#6B7482'),
+            // `cor` sai no dado, nao no template: os cards do cabecalho pintavam PPA e Complexo
+            // com o verde da casa, que e a cor do ML — a mesma entidade trocava de cor entre a
+            // parte de cima e os graficos de baixo da pagina. Quem decide a cor e o mapa, e o mapa
+            // mora aqui. (usuario, 16/08/2026)
+            return { cor, spark_ating: sparkLinha(serie, cor, '#6B7482'),
               delta_pp: d, delta_txt: d == null ? null : (d >= 0 ? '+' : '') + fmt(d) + ' pp',
               ult_pct: n ? serie[n - 1] : null,
               ult_lbl: temMeta.length ? temMeta[temMeta.length - 1].lbl : null };

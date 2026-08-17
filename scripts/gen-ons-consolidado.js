@@ -160,7 +160,12 @@ async function gerarKpis(rows) {
     { l: 'Frustrado', v: fmtDot(kpis.frustrados_gwh, 2), u: 'GWh', g: 'e', t: 'Energia perdida por restrição ONS' },
     // "4.808" sozinho era ambíguo: em pt-BR o ponto lê-se como decimal, e o número aparecia sem
     // unidade ao lado de outros com MW/GWh/h. Agora diz o que conta.
-    { l: 'Restrições', v: fmtDot(kpis.restricoes, 0), u: 'eventos', g: 'e', t: 'Intervalos de 30 min com limite ativo' },
+    // `sep` marca INICIO DE FAMILIA no cabecalho. Os 9 blocos vinham com separador identico entre
+    // todos, entao nada agrupava: Outorga, ENE e Pre-COD pesavam igual sendo coisas de naturezas
+    // diferentes, e o usuario relatou dificuldade de leitura (16/08/2026). Sao quatro familias:
+    // energia (Outorga/Gerado/Frustrado) · restricao (Restricoes/Duracao) · razoes (ENE/CNF/REL) ·
+    // pre-COD. O `sep` ja existia no ENE; faltava aqui.
+    { l: 'Restrições', v: fmtDot(kpis.restricoes, 0), u: 'eventos', g: 'e', sep: 1, t: 'Intervalos de 30 min com limite ativo' },
     { l: 'Duração', v: fmtDot(kpis.duracao_h, 0), u: 'h', g: 'e', t: 'Horas totais sob restrição' },
     // ENE/CNF/REL são os códigos do ONS, e sozinhos não dizem nada a quem lê o painel — a
     // explicação estava só no tooltip, e executivo não passa o mouse. O rótulo passa a trazer o
