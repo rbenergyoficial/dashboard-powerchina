@@ -208,7 +208,11 @@ async function gerarKpis(rows) {
       // separador de milhar. (O `fmtDot` segue certo onde é contagem inteira: "5.102 eventos".)
       const fmtH = (n) => Number(n || 0).toFixed(1);
       kpis.pre_cod = { gerado_gwh: ger, cortado_gwh: cor, horas: hs, revisao: PC._revisao };
+      // `cor` TEM de sair aqui: o template usa {{cor}} na divisoria e no rotulo, e campo vazio no
+      // Handlebars nao deixa buraco visivel — deixa CSS invalido, que o navegador conserta com uma
+      // cor herdada. Parece certo no render e so a consulta denuncia. (ja aconteceu em 15/08/2026)
       kpis.tiles.push({ l: 'Pré-COD · comissionamento', v: fmtDot(ger, 2), u: 'GWh', g: 'p', pc: 1,
+        cor: '#F5A623',
         v2: fmtDot(cor, 2), u2: 'GWh', h: fmtH(hs),
         t: 'COMISSIONAMENTO (pré-COD), 21/jan a 21/nov/2025 — antes da operação comercial. '
          + 'GERADO ' + fmtDot(ger, 2) + ' GWh: energia líquida medida pelo Way2 (medidor de faturamento). '
