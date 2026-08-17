@@ -150,6 +150,11 @@ async function gerarKpis(rows) {
   };
 
   // tiles[] pré-formatados (PT-BR) p/ a faixa de KPIs do cabeçalho (card Business Text).
+  // ⚠️ CAMPOS CONSUMIDOS PELO TEMPLATE LEVAM PREFIXO `k`. No Handlebars o HELPER ganha do campo,
+  // e os helpers de um Business Text vazam para os outros painéis da MESMA página. `h` colidia com
+  // o helper h(v,max) do card de corte (saía "NaN h"), `cor` com o cor(u) do painel de contratos
+  // (barras TEAL) e `pc` com o pc(a,b) do rodapé. Nada disso aparece no render d-solo — lá o painel
+  // vizinho não existe e o campo vence. Medido em 16/08/2026 nas 13 páginas.
   // g='e' KPIs de energia · g='r' restrição POR TIPO (ENE/CNF/REL, % da energia frustrada).
   // ponto decimal + ponto de milhar; 2 casas nas MEDIDAS (MW/GWh/%), inteiro nas CONTAGENS (padrão do usuário 2026-07-16)
   const fmtDot = (n, dec) => { const s = Number(n || 0).toFixed(dec); const [i, f] = s.split('.'); const im = i.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return f ? im + '.' + f : im; };
@@ -169,7 +174,7 @@ async function gerarKpis(rows) {
     // de causa (ENE #A79BE8 / CNF #7A6FB5 / REL #544B85), entao o cabecalho aponta para onde o
     // detalhe esta. Nao vai como cor de ROTULO: #544B85 em texto de 9px no escuro tem contraste
     // ruim, e o pedido era justamente legibilidade.
-    { l: 'Restrições', v: fmtDot(kpis.restricoes, 0), u: 'eventos', g: 'e', sep: 1, cor: '#8E9AAD', t: 'Intervalos de 30 min com limite ativo' },
+    { l: 'Restrições', v: fmtDot(kpis.restricoes, 0), u: 'eventos', g: 'e', sep: 1, kcor: '#8E9AAD', t: 'Intervalos de 30 min com limite ativo' },
     { l: 'Duração', v: fmtDot(kpis.duracao_h, 0), u: 'h', g: 'e', t: 'Horas totais sob restrição' },
     // ENE/CNF/REL são os códigos do ONS, e sozinhos não dizem nada a quem lê o painel — a
     // explicação estava só no tooltip, e executivo não passa o mouse. O rótulo passa a trazer o
@@ -184,7 +189,7 @@ async function gerarKpis(rows) {
     //   REL -> Restricao Eletrica: INDISPONIBILIDADE EXTERNA (equipamento de terceiro fora)
     // O que continua valendo: nenhuma das tres aponta para a operacao do ativo, e o que separa
     // sistemico de local e a coluna de ORIGEM (SIS x LOC), nao o codigo de razao.
-    { l: 'Razão Energética (ENE)', v: fmtDot(rz('ENE').pct, 2), u: '%', g: 'r', sep: 1, cor: '#A79BE8', t: fmtDot(rz('ENE').gwh, 2) + ' GWh — controle de frequência no SIN: há geração demais no sistema e a frequência sobe, então o corte é para equilibrar carga. O ONS registra invariavelmente "Controle de frequência do SIN"' },
+    { l: 'Razão Energética (ENE)', v: fmtDot(rz('ENE').pct, 2), u: '%', g: 'r', sep: 1, kcor: '#A79BE8', t: fmtDot(rz('ENE').gwh, 2) + ' GWh — controle de frequência no SIN: há geração demais no sistema e a frequência sobe, então o corte é para equilibrar carga. O ONS registra invariavelmente "Controle de frequência do SIN"' },
     { l: 'Confiabilidade Elétrica (CNF)', v: fmtDot(rz('CNF').pct, 2), u: '%', g: 'r', t: fmtDot(rz('CNF').gwh, 2) + ' GWh — corte motivado por limitações operativas da rede: carregamento de linha ou transformador, limite de fluxo entre subsistemas' },
     { l: 'Restrição Elétrica (REL)', v: fmtDot(rz('REL').pct, 2), u: '%', g: 'r', t: fmtDot(rz('REL').gwh, 2) + ' GWh — indisponibilidade externa: um equipamento de terceiro fora de operação limita o escoamento' },
   ];
@@ -211,9 +216,9 @@ async function gerarKpis(rows) {
       // `cor` TEM de sair aqui: o template usa {{cor}} na divisoria e no rotulo, e campo vazio no
       // Handlebars nao deixa buraco visivel — deixa CSS invalido, que o navegador conserta com uma
       // cor herdada. Parece certo no render e so a consulta denuncia. (ja aconteceu em 15/08/2026)
-      kpis.tiles.push({ l: 'Pré-COD · comissionamento', v: fmtDot(ger, 2), u: 'GWh', g: 'p', pc: 1,
-        cor: '#F5A623',
-        v2: fmtDot(cor, 2), u2: 'GWh', h: fmtH(hs),
+      kpis.tiles.push({ l: 'Pré-COD · comissionamento', v: fmtDot(ger, 2), u: 'GWh', g: 'p', kpc: 1,
+        kcor: '#F5A623',
+        v2: fmtDot(cor, 2), u2: 'GWh', kh: fmtH(hs),
         t: 'COMISSIONAMENTO (pré-COD), 21/jan a 21/nov/2025 — antes da operação comercial. '
          + 'GERADO ' + fmtDot(ger, 2) + ' GWh: energia líquida medida pelo Way2 (medidor de faturamento). '
          + 'CORTADO ' + fmtDot(cor, 2) + ' GWh: é ESTIMATIVA, faixa de ±15% — a Sinapse registra a ocorrência '
