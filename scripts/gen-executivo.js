@@ -1570,6 +1570,27 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       });
     }
 
+    // ---------- ACUMULADO POR ENTIDADE ----------
+    // O mesmo acumulado de vida que vai em `serie`, mas por linha de `serie_ufv` — sem isso o painel
+    // do acumulado nao tem como obedecer ao filtro de usina/contrato: `serie` so existe no nivel
+    // conjunto. Mesma regra de x: eixo_x continuo, senao o trend recusa a serie que atravessa o ano.
+    {
+      const acc = {};
+      (out.serie_ufv || []).slice()
+        .sort((a, b) => a.mes < b.mes ? -1 : a.mes > b.mes ? 1 : 0)
+        .forEach(x => {
+          x.eixo_x = (Number(x.mes.slice(0, 4)) - 2025) * 12 + Number(x.mes.slice(5, 7));
+          if (x.liquida_gwh != null && x.meta_gwh != null) {
+            const k = acc[x.ufv] = acc[x.ufv] || { L: 0, M: 0 };
+            k.L += x.liquida_gwh; k.M += x.meta_gwh;
+            x.vida_acum_liq_gwh = r2(k.L); x.vida_acum_meta_gwh = r2(k.M);
+            x.vida_acum_ating_pct = k.M > 0 ? r2(100 * k.L / k.M) : null;
+          } else {
+            x.vida_acum_liq_gwh = null; x.vida_acum_meta_gwh = null; x.vida_acum_ating_pct = null;
+          }
+        });
+    }
+
     // ---- SÉRIE + MÉDIA, só para os dois gráficos de entrega mês a mês ----
     // Eles ganham uma 8ª barra à direita com a MÉDIA do período. Sem ela o leitor compara cada mês
     // com o vizinho e não com o normal do ativo — e um mês fraco parece pior do que é (jun/26 é o
