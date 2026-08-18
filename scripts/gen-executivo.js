@@ -1532,8 +1532,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     {
       const porUfvMes = {};
       (out.serie_ufv || []).forEach(x => { (porUfvMes[x.ufv] = porUfvMes[x.ufv] || {})[x.mes] = x; });
-      let accL = 0, accM = 0;
-      const anoAtual = mesAtual.slice(0, 4);
+      let accL = 0, accM = 0;          // acumulado do ANO CIVIL, reinicia em janeiro
+      let vidaL = 0, vidaM = 0;        // acumulado da VIDA do ativo, corre desde set/25 sem reiniciar
+      let anoCorr = null;
       out.serie.forEach(s => {
         const P = (porUfvMes.PPA || {})[s.mes], L = (porUfvMes.ML || {})[s.mes];
         // 2) PPA x ML: a compensacao entre contratos e a leitura mais delicada do ano — o conjunto
@@ -1543,12 +1544,29 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         s.ppa_liq_gwh = P ? P.liquida_gwh : null;
         s.ml_liq_gwh = L ? L.liquida_gwh : null;
         // 3) ACUMULADO correndo contra a meta: percentual mensal nao mostra se o ANO esta ganho.
-        //    Reinicia a cada ano — somar 2025 com 2026 misturaria comissionamento com operacao.
-        if (s.mes.slice(0, 4) === anoAtual && s.meta_gwh != null && s.way2_liq_gwh != null) {
+        //    Sao DUAS contagens, e elas respondem perguntas diferentes:
+        //    · acum_*      — do ANO CIVIL, reinicia em janeiro. Antes so era calculado para o ano
+        //                    corrente, entao set-dez/25 saia null e o painel do acumulado abria
+        //                    VAZIO com o filtro em 2025. Agora vale para todo ano da serie.
+        //    · vida_acum_* — da VIDA do ativo, corre desde o primeiro mes sem reiniciar. E o que o
+        //                    painel [14] do sumario usa: uma linha so, de set/25 ate hoje.
+        //    O x do painel NAO pode ser o numero do mes: numa serie que atravessa o ano ele desce
+        //    de 12 para 1 e o trend recusa a serie inteira. Por isso vai tambem `eixo_x`, contador
+        //    continuo (ano - 2025) * 12 + mes, que sobe sempre e da a cada mes um rotulo estavel.
+        const anoS = s.mes.slice(0, 4);
+        s.eixo_x = (Number(anoS) - 2025) * 12 + Number(s.mes.slice(5, 7));
+        if (s.meta_gwh != null && s.way2_liq_gwh != null) {
+          if (anoS !== anoCorr) { accL = 0; accM = 0; anoCorr = anoS; }
           accL += s.way2_liq_gwh; accM += s.meta_gwh;
+          vidaL += s.way2_liq_gwh; vidaM += s.meta_gwh;
           s.acum_liq_gwh = r2(accL); s.acum_meta_gwh = r2(accM);
           s.acum_ating_pct = accM > 0 ? r2(100 * accL / accM) : null;
-        } else { s.acum_liq_gwh = null; s.acum_meta_gwh = null; s.acum_ating_pct = null; }
+          s.vida_acum_liq_gwh = r2(vidaL); s.vida_acum_meta_gwh = r2(vidaM);
+          s.vida_acum_ating_pct = vidaM > 0 ? r2(100 * vidaL / vidaM) : null;
+        } else {
+          s.acum_liq_gwh = null; s.acum_meta_gwh = null; s.acum_ating_pct = null;
+          s.vida_acum_liq_gwh = null; s.vida_acum_meta_gwh = null; s.vida_acum_ating_pct = null;
+        }
       });
     }
 
