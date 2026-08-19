@@ -1,0 +1,54 @@
+name: Apagar blob (uso pontual, com confirmacao)
+
+# Roda SO por dispatch manual e SO se a palavra de confirmacao vier certa.
+# Existe porque a connection string do storage e secret do Actions: apagar um blob de
+# fora do CI exigiria a credencial em maquina, e credencial nao sai daqui.
+#
+# Uso: Actions -> este workflow -> Run workflow -> blob=way2_monitor.json, confirmar=APAGAR
+
+on:
+  workflow_dispatch:
+    inputs:
+      blob:
+        description: 'Nome do blob no container dados (ex.: way2_monitor.json)'
+        required: true
+      confirmar:
+        description: 'Escreva APAGAR para confirmar. Qualquer outra coisa aborta.'
+        required: true
+        default: 'nao'
+
+jobs:
+  apagar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Conferir a palavra de confirmacao
+        if: ${{ inputs.confirmar != 'APAGAR' }}
+        run: |
+          echo "Confirmacao ausente ou errada. Nada foi apagado."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i @azure/storage-blob@12
+      - name: Apagar o blob (com snapshot antes)
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          BLOB: ${{ inputs.blob }}
+        run: |
+          node -e '
+          const { BlobServiceClient } = require("@azure/storage-blob");
+          (async () => {
+            const svc = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE);
+            const cont = svc.getContainerClient("dados");
+            const bc = cont.getBlockBlobClient(process.env.BLOB);
+            if (!(await bc.exists())) { console.log("blob nao existe:", process.env.BLOB); return; }
+            const p = await bc.getProperties();
+            console.log("apagando", process.env.BLOB, p.contentLength, "bytes, modificado em", p.lastModified);
+            const snap = await bc.createSnapshot();          // rede de seguranca antes de apagar
+            console.log("snapshot criado:", snap.snapshot);
+            await bc.delete();
+            console.log("apagado. o snapshot preserva o conteudo se precisar voltar.");
+          })().catch(e => { console.error(e.message); process.exit(1); });
+          '
