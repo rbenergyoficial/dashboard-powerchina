@@ -1,3 +1,7 @@
+// APOSENTADO em 13/07/2026 (commit 8f64fc9): o snapshot passou para gen-way2-recent.js,
+// que grava way2_recent.json e hist/way2_<dia>.json. O workflow monitor-way2.yml foi
+// desligado e removido em 19/08/2026; o blob way2_monitor.json ficou congelado em 13/07 e
+// nao e lido por nenhum painel do stack. Mantido aqui so como referencia de historico.
 // Monitor ao vivo — potência ativa (Demat, 5 min) dos pontos de GERAÇÃO Way2 do Complexo Mauriti.
 // Grava a resposta crua da API Way2 no blob dados/way2_monitor.json (formato {dados:[{pontoId,valores:[{data,valor}]}]}).
 // Pontos: 6196/6197 (SE TR1/TR2), 6198–6219 (22 circuitos C1/C2/C3), 6233 (Somatório Geração).
