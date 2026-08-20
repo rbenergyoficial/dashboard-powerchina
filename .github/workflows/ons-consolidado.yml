@@ -20,3 +20,16 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
         run: node scripts/gen-ons-consolidado.js
+
+      # DEPOIS do consolidado, e nao antes: le ons_restricao_all.json e ons_irradiancia_all.json,
+      # que o passo acima acabou de gravar. Na ordem invertida ele calcularia sobre a rodada
+      # anterior — a mesma armadilha do benchmark antes do executivo.
+      # O proprio gerador tem portao: revalida contra os meses de referencia valida do ONS e
+      # ABORTA sem gravar se o erro passar do limite. Job vermelho aqui significa modelo fora de
+      # calibracao, e o blob antigo continua no ar — que e o comportamento certo.
+      - name: Corte por gemeo de irradiancia (set/25 em diante)
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+          OUT_BLOB: corte_gemeo.json
+        run: node scripts/gen-corte-gemeo.js
