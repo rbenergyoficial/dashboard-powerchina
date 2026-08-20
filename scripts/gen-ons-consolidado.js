@@ -157,7 +157,13 @@ async function gerarKpis(rows) {
   // vizinho não existe e o campo vence. Medido em 16/08/2026 nas 13 páginas.
   // g='e' KPIs de energia · g='r' restrição POR TIPO (ENE/CNF/REL, % da energia frustrada).
   // ponto decimal + ponto de milhar; 2 casas nas MEDIDAS (MW/GWh/%), inteiro nas CONTAGENS (padrão do usuário 2026-07-16)
-  const fmtDot = (n, dec) => { const s = Number(n || 0).toFixed(dec); const [i, f] = s.split('.'); const im = i.replace(/\B(?=(\d{3})+(?!\d))/g, '.'); return f ? im + '.' + f : im; };
+  // SEM separador de milhar: nesta suite o PONTO e o separador DECIMAL (regra da casa), entao
+  // usa-lo tambem para milhar colide. Medido em 20/08/2026: o card do topo mostrava
+  // "Duracao 2.596 h" para 2596 h - lido pela convencao da propria pagina da 2,6 horas, tres
+  // ordens de grandeza abaixo do real, ao lado de "1201.6 h" do pre-COD no mesmo card.
+  // A tentativa de 16/08 foi desambiguar dizendo a unidade: resolve "5.192 eventos", porque
+  // ninguem tem 5,192 eventos, e NAO resolve hora, onde 2,596 e um numero plausivel.
+  const fmtDot = (n, dec) => Number(n || 0).toFixed(dec);
   const rz = (k) => kpis.razoes[k] || { pct: 0, gwh: 0 };
   kpis.tiles = [
     { l: 'Outorga', v: fmtDot(kpis.outorga_mw, 2), u: 'MW', g: 'e', t: 'Capacidade outorgada do complexo' },
