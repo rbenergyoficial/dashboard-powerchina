@@ -106,6 +106,19 @@ const num = s => (s === '' || s == null) ? null : Number(s);
     getJSON(BASE + 'ons_irradiancia_all.json'),
     getJSON(BASE + 'ons_restricao_all.json'),
   ]);
+  // A APURACAO DO ONS entra aqui, e nao so no portao: o painel precisa das duas colunas no MESMO
+  // arquivo. Infinity devolve um frame por target, e barchart aceita um frame so — juntar no
+  // JSONata do painel exigiria ler dois blobs, que e onde nasce serie sumindo entre um mes e outro.
+  // Verdade = `nosso_cortado_gwh_maior_zero` com `nosso_ref_suspeita = 0`, os meses em que a
+  // referencia do ONS nao esta quebrada.
+  let bench = null;
+  try { bench = await getJSON(BASE + 'benchmark_ne.json'); }
+  catch (e) { console.log('benchmark_ne.json indisponivel (' + e.message + ')'); }
+  const verdade = {};
+  for (const x of ((bench || {}).serie || [])) {
+    if (x.fonte === 'solar' && !x.nosso_ref_suspeita && x.nosso_cortado_gwh_maior_zero != null)
+      verdade[x.mes] = x.nosso_cortado_gwh_maior_zero;
+  }
 
   // irradiancia do conjunto, ponderada pela capacidade
   const IRR = {};
@@ -164,23 +177,22 @@ const num = s => (s === '' || s == null) ? null : Number(s);
     // escondido atras de um numero de duas casas.
     const conf = mes < POOL_INI.slice(0, 7) ? 'baixa'
       : (jm <= 14 && am >= 10) ? 'alta' : (jm <= 35) ? 'media' : 'baixa';
+    // COLUNAS PROPRIAS, presentes em toda linha mesmo vazias: coluna que aparece e some faz o
+    // Grafana perder a serie entre um mes e outro. Um calculado NUNCA ocupa a coluna do apurado.
+    const ons = verdade[mes] != null ? verdade[mes] : null;
     return { mes, lbl: MES_LBL(mes), eixo_x: EIXO_X(mes),
       corte_gwh: r2(o.gwh), gerado_gwh: r2(GER[mes]),
       corte_pct: r2(100 * o.gwh / (o.gwh + GER[mes])),
+      corte_ons_gwh: ons,
+      corte_calculado_gwh: (ons == null && conf !== 'baixa') ? r2(o.gwh) : null,
+      corte_calculado_fraco_gwh: (ons == null && conf === 'baixa') ? r2(o.gwh) : null,
+      corte_final_gwh: ons != null ? ons : r2(o.gwh),
+      base: ons != null ? 'apurado' : 'calculado',
       horas_restricao: r2(o.n * 0.5), intervalos: o.n,
       janela_mediana_dias: jm, amostra_mediana: Math.round(am), confianca: conf };
   });
 
   // ---- PORTAO: revalida contra os meses em que a apuracao do ONS presta -------------------------
-  // A verdade de comparacao vem do proprio benchmark, campo `nosso_cortado_gwh_maior_zero` com
-  // `nosso_ref_suspeita = 0` — os meses em que a referencia do ONS nao esta quebrada.
-  let bench = null;
-  try { bench = await getJSON(BASE + 'benchmark_ne.json'); } catch (e) { /* sem benchmark: sem portao */ }
-  const verdade = {};
-  for (const x of ((bench || {}).serie || [])) {
-    if (x.fonte === 'solar' && !x.nosso_ref_suspeita && x.nosso_cortado_gwh_maior_zero != null)
-      verdade[x.mes] = x.nosso_cortado_gwh_maior_zero;
-  }
   const pares = serie.filter(s => verdade[s.mes] != null)
     .map(s => ({ mes: s.mes, ons: verdade[s.mes], modelo: s.corte_gwh,
                  erro_pct: r2(100 * (s.corte_gwh - verdade[s.mes]) / verdade[s.mes]) }));
