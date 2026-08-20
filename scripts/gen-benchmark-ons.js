@@ -97,6 +97,7 @@ const MODELADO_METODO = 'Corte MODELADO com dados proprios: irradiancia no plano
   + 'referencia valida: erro medio 15,4% (mar +34,3 · abr -11,1 · mai -12,0 · jun -4,2), tendencia a '
   + 'SUBESTIMAR fora de marco. Numero de ordem de grandeza, nao de precisao contabil.';
 const INI_Y = 2026, INI_M = 1;    // jan/26 = referencia do painel executivo
+const BASE_LEITURA = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'benchmark_ne.json';
 const r2 = v => (v == null || !isFinite(v) ? null : Math.round(v * 100) / 100);
@@ -111,6 +112,19 @@ function meses() {
 // acumulador: um por (fonte, mes, quem). `quem` = 'NE' (a regiao) ou 'MAURITI'.
 const novo = () => ({ ger: 0, gref: 0, fru_p: 0, fru_z: 0, n: 0, n_lim_p: 0, n_lim_z: 0, conj: new Set(),
   dias: new Set(), n_excl: 0, razao: {}, origem: {} });
+
+// Le um blob JSON ja publicado (historico e corte calculado). Os CSV do ONS vem por `linhas()`,
+// em streaming, porque tem dezenas de MB; estes tem dezenas de KB e cabem na memoria.
+function getJSON(url) {
+  return new Promise((ok, ko) => {
+    https.get(url, { headers: { 'accept-encoding': 'gzip' }, timeout: 60000 }, r => {
+      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode)); }
+      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
+      const c = []; cru.on('data', d => c.push(d));
+      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
+    }).on('error', ko);
+  });
+}
 
 function linhas(url) {
   return new Promise((res, rej) => {
@@ -307,12 +321,62 @@ async function grava(obj) {
     if (M) { x.nosso_modelo_metodo = MODELADO_METODO; x.nosso_modelo_gerado_gwh = M.gerado; }
   });
 
-  // a vantagem usa o valor VALIDO do mes, medido ou estimado, e diz qual dos dois foi
+  // ---- HISTORICO de set a dez/25, de um blob proprio ---------------------------------------------
+  // A janela viva comeca em jan/26 e nao se estica: este job roda 15x/dia e ja le ~390 MB dos dados
+  // abertos: cobrir 2025 poria cada rodada em ~950 MB para reler meses FECHADOS, que nunca mudam.
+  // O `benchmark-2025.yml` calcula esses meses sob demanda e grava em benchmark_ne_2025.json (~20 KB);
+  // aqui so lemos. Nao e numero colado: e dado gerado pelo MESMO script, com procedencia no blob.
+  // So entram meses ANTERIORES a janela viva — historico nunca sobrescreve o que foi calculado agora.
+  let hist = null;
+  try { hist = await getJSON(BASE_LEITURA + 'benchmark_ne_2025.json'); }
+  catch (e) { console.log('benchmark_ne_2025.json indisponivel (' + e.message + ') — sem historico'); }
+  const INI_MES = INI_Y + '-' + String(INI_M).padStart(2, '0');
+  const vivos = new Set(serie.map(x => x.fonte + ' ' + x.mes));
+  let nHist = 0;
+  for (const h of ((hist || {}).serie || [])) {
+    if (h.mes >= INI_MES || vivos.has(h.fonte + ' ' + h.mes)) continue;
+    h.origem = 'historico';
+    serie.push(h); nHist++;
+  }
+  serie.sort((a, b) => a.fonte === b.fonte ? (a.mes < b.mes ? -1 : 1) : (a.fonte < b.fonte ? -1 : 1));
+
+  // ---- corte CALCULADO pelo gemeo de irradiancia -------------------------------------------------
+  // Nos meses em que a referencia do ONS esta quebrada, o numero da casa passa a ser o do
+  // gen-corte-gemeo.js, que e VALIDADO (MAE 5,9% nos seis meses de referencia boa) contra a razao do
+  // vizinho, que erra ~37% e tem ruido de ±30%. Nao ha ciclo entre os dois geradores: o gemeo le
+  // deste blob apenas os meses de referencia VALIDA, para se validar, e escreve apenas nos meses de
+  // referencia quebrada, que sao disjuntos.
+  let gemeo = null;
+  try { gemeo = await getJSON(BASE_LEITURA + 'corte_gemeo.json'); }
+  catch (e) { console.log('corte_gemeo.json indisponivel (' + e.message + ') — sem calculado'); }
+  // O criterio e `base === 'calculado'`, e NAO a coluna corte_calculado_gwh: aquela coluna fica vazia
+  // nos meses de confianca baixa, que sao publicados numa serie propria para o painel poder marca-los.
+  // Filtrando por ela, set/25 caia de volta na razao do vizinho e a serie misturava dois metodos —
+  // 26,37% pelo vizinho ao lado de 9% e 11,88% pelo gemeo, no mesmo grafico. A confianca vai em
+  // coluna separada (`nosso_calc_confianca`), que e onde ela pertence.
+  const GEM = {};
+  for (const g of ((gemeo || {}).serie || [])) if (g.base === 'calculado') GEM[g.mes] = g;
   serie.forEach(x => {
-    const p = x.nosso_corte_pct != null ? x.nosso_corte_pct : x.nosso_corte_pct_est;
+    const g = x.fonte === 'solar' ? GEM[x.mes] : null;
+    x.nosso_cortado_gwh_calc = g ? g.corte_gwh : null;
+    x.nosso_corte_pct_calc = g ? g.corte_pct : null;
+    x.nosso_calc_confianca = g ? g.confianca : null;
+    if (g) x.nosso_calc_metodo = (gemeo.metodo || '') + ' VALIDACAO: MAE '
+      + ((gemeo.validacao || {}).mae_pct) + '%, vies ' + ((gemeo.validacao || {}).vies_pct) + '%.';
+  });
+
+  // a vantagem usa o valor VALIDO do mes, e diz qual dos tres foi. Ordem de preferencia: MEDIDO pelo
+  // ONS > CALCULADO pelo gemeo (validado) > ESTIMADO pela razao do vizinho (piso, ±30%).
+  serie.forEach(x => {
+    const p = x.nosso_corte_pct != null ? x.nosso_corte_pct
+      : (x.nosso_corte_pct_calc != null ? x.nosso_corte_pct_calc : x.nosso_corte_pct_est);
     x.nosso_corte_pct_final = p;
+    x.nosso_cortado_gwh_final = x.nosso_cortado_gwh_maior_zero != null && x.nosso_corte_pct != null
+      ? x.nosso_cortado_gwh_maior_zero
+      : (x.nosso_cortado_gwh_calc != null ? x.nosso_cortado_gwh_calc : x.nosso_cortado_gwh_est);
     x.vantagem_pp = (p != null && x.ne_corte_pct != null) ? r2(p - x.ne_corte_pct) : null;
-    x.base = x.nosso_corte_pct != null ? 'medido' : (p != null ? 'estimado' : 'sem dado');
+    x.base = x.nosso_corte_pct != null ? 'medido'
+      : (x.nosso_corte_pct_calc != null ? 'calculado' : (p != null ? 'estimado' : 'sem dado'));
   });
 
   const out = {
