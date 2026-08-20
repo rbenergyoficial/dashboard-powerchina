@@ -1,0 +1,50 @@
+name: Benchmark NE 2025 (uso pontual, blob separado)
+
+# Roda SO por dispatch manual e grava num blob PROPRIO (benchmark_ne_2025.json).
+# NAO toca o benchmark_ne.json de producao.
+#
+# POR QUE UM WORKFLOW A PARTE, e nao esticar a janela do executivo.yml: aquele job
+# roda 15x por dia e ja le ~390 MB dos dados abertos do ONS. Estender a janela para
+# set/25 poe cada uma das 15 rodadas em ~950 MB para reler meses FECHADOS, que nunca
+# mudam. A pergunta que este workflow responde e pontual — "o vizinho Abaiara resgata
+# o corte de set-nov/25, que a nossa referencia do ONS nao mede?" — e a resposta cabe
+# num blob separado, lido a mao.
+#
+# A janela padrao vai de set/25 a ago/26 DE PROPOSITO: a estimativa pela razao do
+# vizinho so existe se houver meses de referencia sadia na mesma rodada para calibrar
+# a mediana (gen-benchmark-ons.js, filtro `bons`). Pedir so os quatro meses de 2025
+# devolveria estimativa nula.
+
+on:
+  workflow_dispatch:
+    inputs:
+      meses:
+        description: 'Lista AAAA_MM separada por virgula'
+        required: true
+        default: '2025_09,2025_10,2025_11,2025_12,2026_01,2026_02,2026_03,2026_04,2026_05,2026_06,2026_07,2026_08'
+      blob:
+        description: 'Blob de saida (nunca benchmark_ne.json)'
+        required: true
+        default: 'benchmark_ne_2025.json'
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Recusar escrita no blob de producao
+        if: ${{ inputs.blob == 'benchmark_ne.json' }}
+        run: |
+          echo "Este workflow nao grava em benchmark_ne.json. Use o executivo.yml."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar benchmark com a janela pedida
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+          OUT_BLOB: ${{ inputs.blob }}
+          MESES: ${{ inputs.meses }}
+        run: node scripts/gen-benchmark-ons.js
