@@ -32,6 +32,52 @@ const OBRIGATORIOS = ['camp', 'site', 'eq', 'classe', 'estado', 'st', 'dcol',
   'o2', 'n2', 'tot', 'comb', 'r1'];
 const MIN_REGISTROS = 100;   // a base ja tem 176; queda abaixo disto e arquivo truncado
 
+// ---- LIMITES DA NORMA, e o uso de cada um ----------------------------------------------------
+// A regra normativa mora AQUI, no gerador, e nao no JSONata dos paineis: sao 24 paineis lendo o
+// mesmo dado, e duplicar a interpretacao da norma em cada um e garantir que uma copia envelheca
+// diferente das outras. O painel so desenha.
+//
+// ABNT NBR 10576:2017, quarta edicao. Transformador em servico: Tabela 7, por classe de tensao.
+// Comutador em servico: Tabela 10, por POSICAO — o 04T1 e o 04T2 sao de neutro.
+//
+// 🔴 OLEO NOVO NAO TEM PERCENTUAL. A nota (a) da Tabela 2 restringe aqueles valores a amostras de
+// 24 h a 30 dias apos o ENCHIMENTO, antes da energizacao. A 1a coleta e de jan-fev/2025 em
+// equipamento fabricado em 2023 e energizado a partir de set/2025 — muito fora da janela, e fora
+// dela a norma manda acordar os valores entre comprador e fabricante. Aplicar a Tabela 2 assim
+// mesmo produziria uma nao conformidade que a propria norma nao sustenta.
+const ALTA = '> 145 kV', SERV = 'Em serviço (NBR 10576)';
+const ehComut = l => /COMUT/i.test(l.eq || '');
+function limitesDe(l) {
+  if (l.estado !== SERV) return {};
+  if (ehComut(l)) return { rig: { min: 30 }, agua: { max: 40 } };
+  const a = l.classe === ALTA;
+  return { rig: { min: a ? 60 : 40 }, fp: { max: 0.5 }, ti: { min: a ? 25 : 20 },
+           iN: { max: a ? 0.15 : 0.20 }, agua: { max: a ? 20 : 40 } };
+}
+// uso = quanto do limite esta consumido. Para limite de MAXIMO e valor/limite; para o de MINIMO e
+// limite/valor — assim os dois lem na MESMA direcao: 0 e folga total, 100 e estar no limite.
+// Sem isso o leitor teria de inverter a leitura mentalmente em dois dos cinco ensaios.
+const ENSAIOS = ['rig', 'fp', 'ti', 'iN', 'agua'];
+const r1 = v => (v == null || !isFinite(v)) ? null : Math.round(v * 10) / 10;
+function enriquece(l) {
+  const L = limitesDe(l);
+  let pior = null;
+  for (const k of ENSAIOS) {
+    const lim = L[k];
+    const u = (!lim || l[k] == null) ? null
+      : (lim.max != null ? l[k] / lim.max * 100 : (l[k] > 0 ? lim.min / l[k] * 100 : null));
+    l['uso_' + k] = r1(u);
+    l['lim_' + k] = lim ? (lim.max != null ? lim.max : lim.min) : null;
+    if (u != null && (pior == null || u > pior)) pior = u;
+  }
+  l.uso_pior = r1(pior);
+  l.unidade = (l.site || '') + ' · ' + (l.ts || l.eq || '');
+  l.comutador = ehComut(l) ? 1 : 0;
+  // rotulo curto da campanha, para caber em eixo e legenda
+  l.camp_rot = String(l.camp || '').replace(/^(\d)ª Coleta – (\d{4}).*/, '$1ª/$2');
+  return l;
+}
+
 async function grava(obj) {
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { fs.writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
@@ -59,6 +105,7 @@ async function grava(obj) {
   if (Object.keys(faltando).length)
     throw new Error('campos ausentes: ' + Object.entries(faltando).map(([k, n]) => k + ' em ' + n).join(', '));
 
+  laudos.forEach(enriquece);
   const camps = [...new Set(laudos.map(l => l.camp))].sort();
   const sites = [...new Set(laudos.map(l => l.site))].sort();
   const naoConforme = laudos.filter(l => l.st && l.st !== 'CONFORME').length;
@@ -81,5 +128,9 @@ async function grava(obj) {
   const t = await grava(out);
   console.log(OUT_BLOB + ' OK · ' + Math.round(t / 1024) + ' KB · ' + laudos.length + ' laudos · '
     + camps.length + ' campanhas · ' + sites.length + ' locais · ' + naoConforme + ' nao conformes');
+  const comUso = laudos.filter(l => l.uso_pior != null);
+  const pior = comUso.slice().sort((a, b) => b.uso_pior - a.uso_pior)[0];
+  console.log('   uso do limite calculado em ' + comUso.length + ' laudos em servico · pior caso: '
+    + (pior ? pior.unidade + ' ' + pior.uso_pior + '%' : '—'));
   camps.forEach(c => console.log('   ' + c + ': ' + laudos.filter(l => l.camp === c).length + ' laudos'));
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
