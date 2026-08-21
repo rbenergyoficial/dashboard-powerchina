@@ -78,6 +78,155 @@ function enriquece(l) {
   return l;
 }
 
+// ---- AGREGACOES ------------------------------------------------------------------------------
+// Os 24 paineis nao recalculam media, ranking nem pivo em JSONata: recebem prontos. E o mesmo
+// padrao do executivo.json (serie, serie_ufv, serie_e_media) e existe pela mesma razao — a regra
+// de negocio num lugar so, e o painel reduzido a projecao.
+//
+// NENHUM ROTULO DE CAMPANHA VIRA NOME DE COLUNA nas tabelas. Coluna chamada "CO₂ 3ª/2026"
+// apodrece na 4a coleta: o painel declara o seletor, o dado passa a trazer outro nome, e o
+// Infinity devolve null SEM ERRO. As colunas tem nome estavel (co2_atu, co2_ant) e quem diz de
+// que campanha se trata e o TITULO do painel, por variavel de dashboard — que o Grafana
+// reinterpola a cada carga. A excecao e o barchart [541], que usa a tecnica de colunas dinamicas
+// (columns: [] + $merge): ali o nome da coluna E a serie, e a ordem alfabetica das campanhas
+// coincide com a cronologica.
+const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+const media = (lista, k, casas = 1) => {
+  const v = lista.map(x => num(x[k])).filter(x => x != null);
+  if (!v.length) return null;
+  const m = v.reduce((a, b) => a + b, 0) / v.length;
+  return Math.round(m * 10 ** casas) / 10 ** casas;
+};
+// data da campanha = MEDIANA das coletas dela. A campanha se estende por semanas ("jan-fev/25"),
+// entao qualquer extremo desloca o ponto no eixo; a mediana fica no centro de massa da coleta.
+function tsDe(lista) {
+  const ds = lista.map(x => x.dcol).filter(Boolean).sort();
+  if (!ds.length) return null;
+  return ds[Math.floor(ds.length / 2)] + 'T12:00:00-03:00';
+}
+// os 11 parametros que o painel HTML acompanha campanha a campanha. Limite so onde a norma fixa
+// valor de manutencao — gas dissolvido nao tem teto na NBR 10576, e linha inventada seria pior
+// que linha nenhuma.
+const PARAMS = [
+  { k: 'rig', nome: 'Rigidez dielétrica', un: 'kV', lim: 40, sentido: 'min' },
+  { k: 'fp', nome: 'Fator de potência', un: '%', lim: 0.5, sentido: 'max' },
+  { k: 'ti', nome: 'Tensão interfacial', un: 'dina/cm', lim: 20, sentido: 'min' },
+  { k: 'iN', nome: 'Índice de neutralização', un: 'mg KOH/g', lim: 0.2, sentido: 'max' },
+  { k: 'agua', nome: 'Teor de água', un: 'ppm', lim: 40, sentido: 'max' },
+  { k: 'dens', nome: 'Densidade', un: 'g/cm³', lim: null },
+  { k: 'co', nome: 'CO', un: 'ppm', lim: null },
+  { k: 'co2', nome: 'CO₂', un: 'ppm', lim: null },
+  { k: 'tot', nome: 'Gases totais dissolvidos', un: 'ppm', lim: null },
+  { k: 'o2', nome: 'O₂', un: 'ppm', lim: null },
+  { k: 'r1', nome: 'Relação CO₂/CO', un: '', lim: null },
+];
+const ENSAIO_NOME = { rig: 'Rigidez', fp: 'Fator de potência', ti: 'Tensão interfacial',
+  iN: 'Índ. neutralização', agua: 'Teor de água' };
+// Os cinco gases combustiveis que denunciam falha, e o que a presenca de cada um aponta.
+// ABNT NBR 7274:2026 para a interpretacao, IEC 60599 para os metodos de razao entre gases.
+const GK = [['h2', 'H₂'], ['ch4', 'CH₄'], ['c2h6', 'C₂H₆'], ['c2h4', 'C₂H₄'], ['c2h2', 'C₂H₂']];
+const NOTA_GAS = {
+  'H₂': 'descargas parciais, arco ou eletrólise — acompanhar na próxima coleta',
+  'CH₄': 'falha térmica de baixa temperatura, abaixo de 300 °C',
+  'C₂H₆': 'sobreaquecimento moderado, de 150 a 300 °C',
+  'C₂H₄': 'falha térmica severa, acima de 300 °C — em comutador é esperado com a comutação; avaliar contra o contador de operações',
+  'C₂H₂': 'arco ou descarga de alta energia, acima de 700 °C — qualquer valor exige investigação',
+};
+
+function agrega(laudos, camps) {
+  const rot = c => (laudos.find(l => l.camp === c) || {}).camp_rot || c;
+  const ULT = camps[camps.length - 1], PEN = camps[camps.length - 2];
+  const servico = laudos.filter(l => l.estado === SERV);
+  const ultServ = servico.filter(l => l.camp === ULT);
+
+  // [500] pior caso da frota por ensaio — o que decide se a frota esta confortavel nao e a media
+  const resumo_ensaio = Object.entries(ENSAIO_NOME).map(([k, nome]) => {
+    const cand = servico.filter(l => l['uso_' + k] != null)
+      .sort((a, b) => b['uso_' + k] - a['uso_' + k])[0];
+    return cand ? { ensaio: nome, uso: cand['uso_' + k], unidade: cand.unidade } : null;
+  }).filter(Boolean).sort((a, b) => b.uso - a.uso);
+
+  // [501] cobertura de cada coleta
+  const campanhas_meta = camps.map(c => {
+    const g = laudos.filter(l => l.camp === c);
+    const ds = g.map(l => l.dcol).filter(Boolean).sort();
+    return { camp: c, camp_rot: rot(c), analises: g.length,
+      equipamentos: new Set(g.map(l => l.unidade)).size,
+      em_servico: g.filter(l => l.estado === SERV).length,
+      conformes: g.filter(l => l.st === 'CONFORME').length,
+      primeira: ds[0] || null, ultima: ds[ds.length - 1] || null };
+  });
+
+  // [502] CO2 e CO medios por local — os dois gases que a frota realmente apresenta
+  const locaisServ = [...new Set(servico.map(l => l.site))].sort();
+  const gases_local = locaisServ.map(site => {
+    const g = ultServ.filter(l => l.site === site);
+    return g.length ? { site, co2: media(g, 'co2', 0), co: media(g, 'co', 0) } : null;
+  }).filter(Boolean).sort((a, b) => (b.co2 || 0) - (a.co2 || 0));
+
+  // [520]-[530] tendencia da frota, um ponto por campanha
+  const tendencia = [];
+  for (const p of PARAMS) for (const c of camps) {
+    const g = laudos.filter(l => l.camp === c);
+    tendencia.push({ param: p.nome, camp: c, camp_rot: rot(c), ts: tsDe(g), media: media(g, p.k, 3) });
+  }
+
+  // [540] mapa de calor · uma linha por unidade em servico na coleta mais recente
+  const mapa = ultServ.map(l => ({ unidade: l.unidade,
+    rig: l.uso_rig, fp: l.uso_fp, ti: l.uso_ti, iN: l.uso_iN, agua: l.uso_agua,
+    co: num(l.co), co2: num(l.co2) }))
+    .sort((a, b) => (b.rig || 0) - (a.rig || 0));
+
+  // [541] CO2 por local em formato LONGO — o painel pivota com $merge e ganha a campanha nova
+  // sozinho, sem que ninguem edite o painel
+  const co2_local = [];
+  for (const site of locaisServ) for (const c of camps) {
+    const g = laudos.filter(l => l.site === site && l.camp === c);
+    if (g.length) co2_local.push({ site, camp_rot: rot(c), co2: media(g, 'co2', 0) });
+  }
+
+  // [560]-[563] quatro rankings de oito. NAO sao alarmes: com a frota inteira conforme, o que
+  // eles respondem e "por onde comecar a olhar na proxima coleta", que e outra pergunta.
+  const co2U = {}, co2P = {};
+  for (const l of laudos) { if (l.camp === ULT) co2U[l.unidade] = num(l.co2);
+    if (l.camp === PEN) co2P[l.unidade] = num(l.co2); }
+  const rank_co2 = Object.keys(co2U).filter(u => co2P[u] != null && co2U[u] != null)
+    .map(u => ({ unidade: u, delta: Math.round(co2U[u] - co2P[u]), de_para: co2P[u] + ' -> ' + co2U[u] }))
+    .sort((a, b) => b.delta - a.delta).slice(0, 8).map((x, i) => Object.assign({ pos: i + 1 }, x));
+
+  const rank_co = ultServ.filter(l => num(l.co) != null).sort((a, b) => b.co - a.co).slice(0, 8)
+    .map((l, i) => ({ pos: i + 1, unidade: l.unidade, co: l.co,
+      razao: l.co > 0 ? Math.round(l.co2 / l.co * 10) / 10 : null }));
+
+  const rank_agua = ultServ.filter(l => num(l.agua) != null).sort((a, b) => b.agua - a.agua).slice(0, 8)
+    .map((l, i) => ({ pos: i + 1, unidade: l.unidade, agua: l.agua, uso: l.uso_agua }));
+
+  const rank_rig = ultServ.filter(l => l.uso_rig != null).sort((a, b) => b.uso_rig - a.uso_rig).slice(0, 8)
+    .map((l, i) => ({ pos: i + 1, unidade: l.unidade, rig: l.rig, uso: l.uso_rig }));
+
+  // [564] gases-chave acima de zero: a lista mais curta do painel, e a mais importante. Sem corte
+  // de proposito — em frota saudavel ela deve ser curta, e conferir isso E o resultado.
+  const gases_chave = [];
+  for (const l of laudos.filter(x => x.camp === ULT)) for (const [k, nome] of GK)
+    if (num(l[k]) != null && l[k] > 0)
+      gases_chave.push({ unidade: l.unidade + (l.comutador ? ' (comutador)' : ''), gas: nome,
+        ppm: l[k], indica: NOTA_GAS[nome] });
+
+  // [565] comparativo por local, colunas de nome ESTAVEL
+  const comparativo_local = locaisServ.map(site => {
+    const a = laudos.filter(l => l.site === site && l.camp === PEN);
+    const b = laudos.filter(l => l.site === site && l.camp === ULT);
+    const ca = media(a, 'co2'), cb = media(b, 'co2');
+    return { local: site, co2_ant: ca, co2_atu: cb,
+      delta: (ca != null && cb != null) ? Math.round(cb - ca) : null,
+      co_atu: media(b, 'co'), agua_atu: media(b, 'agua'), rig_atu: media(b, 'rig') };
+  }).filter(x => x.co2_atu != null).sort((a, b) => (b.delta || 0) - (a.delta || 0));
+
+  return { camp_atual: ULT, camp_atual_rot: rot(ULT), camp_anterior: PEN, camp_anterior_rot: rot(PEN),
+    resumo_ensaio, campanhas_meta, gases_local, tendencia, mapa, co2_local,
+    rank_co2, rank_co, rank_agua, rank_rig, gases_chave, comparativo_local };
+}
+
 async function grava(obj) {
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { fs.writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
@@ -106,7 +255,10 @@ async function grava(obj) {
     throw new Error('campos ausentes: ' + Object.entries(faltando).map(([k, n]) => k + ' em ' + n).join(', '));
 
   laudos.forEach(enriquece);
-  const camps = [...new Set(laudos.map(l => l.camp))].sort();
+  // ordem CRONOLOGICA pelo numero da coleta. O sort alfabetico funciona por acidente ate a
+  // 9a campanha e quebra na 10a — e quebraria calado, trocando qual e a "mais recente".
+  const ordC = c => Number((/^(\d+)/.exec(String(c)) || [0, 0])[1]);
+  const camps = [...new Set(laudos.map(l => l.camp))].sort((a, b) => ordC(a) - ordC(b));
   const sites = [...new Set(laudos.map(l => l.site))].sort();
   const naoConforme = laudos.filter(l => l.st && l.st !== 'CONFORME').length;
 
@@ -125,6 +277,7 @@ async function grava(obj) {
     laudos_total: laudos.length, nao_conformes: naoConforme,
     laudos,
   };
+  Object.assign(out, agrega(laudos, camps));
   const t = await grava(out);
   console.log(OUT_BLOB + ' OK · ' + Math.round(t / 1024) + ' KB · ' + laudos.length + ' laudos · '
     + camps.length + ' campanhas · ' + sites.length + ' locais · ' + naoConforme + ' nao conformes');
@@ -133,4 +286,8 @@ async function grava(obj) {
   console.log('   uso do limite calculado em ' + comUso.length + ' laudos em servico · pior caso: '
     + (pior ? pior.unidade + ' ' + pior.uso_pior + '%' : '—'));
   camps.forEach(c => console.log('   ' + c + ': ' + laudos.filter(l => l.camp === c).length + ' laudos'));
+  console.log('   agregados: tendencia ' + out.tendencia.length + ' pontos · mapa ' + out.mapa.length
+    + ' unidades · co2_local ' + out.co2_local.length + ' · gases-chave ' + out.gases_chave.length
+    + ' ocorrencias · comparativo ' + out.comparativo_local.length + ' locais');
+  console.log('   campanha atual ' + out.camp_atual_rot + ' · anterior ' + out.camp_anterior_rot);
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
