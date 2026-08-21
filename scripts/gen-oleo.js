@@ -157,12 +157,11 @@ function agrega(laudos, camps) {
       primeira: ds[0] || null, ultima: ds[ds.length - 1] || null };
   });
 
-  // [502] CO2 e CO medios por local — os dois gases que a frota realmente apresenta
+  // locais que tem equipamento em servico — usado pelo comparativo e pelo CO2 por local.
+  // O [502] NAO le daqui: ele faz a media sobre TODAS as campanhas em servico direto de
+  // laudos, que e o numero que o humano revisou. Campo agregado que nenhum painel consome
+  // e o que fez alguem procurar defeito no way2_monitor por um mes — nao entra.
   const locaisServ = [...new Set(servico.map(l => l.site))].sort();
-  const gases_local = locaisServ.map(site => {
-    const g = ultServ.filter(l => l.site === site);
-    return g.length ? { site, co2: media(g, 'co2', 0), co: media(g, 'co', 0) } : null;
-  }).filter(Boolean).sort((a, b) => (b.co2 || 0) - (a.co2 || 0));
 
   // [520]-[530] tendencia da frota, um ponto por campanha
   const tendencia = [];
@@ -191,7 +190,7 @@ function agrega(laudos, camps) {
   for (const l of laudos) { if (l.camp === ULT) co2U[l.unidade] = num(l.co2);
     if (l.camp === PEN) co2P[l.unidade] = num(l.co2); }
   const rank_co2 = Object.keys(co2U).filter(u => co2P[u] != null && co2U[u] != null)
-    .map(u => ({ unidade: u, delta: Math.round(co2U[u] - co2P[u]), de_para: co2P[u] + ' -> ' + co2U[u] }))
+    .map(u => ({ unidade: u, delta: Math.round(co2U[u] - co2P[u]), de_para: co2P[u] + ' → ' + co2U[u] }))
     .sort((a, b) => b.delta - a.delta).slice(0, 8).map((x, i) => Object.assign({ pos: i + 1 }, x));
 
   const rank_co = ultServ.filter(l => num(l.co) != null).sort((a, b) => b.co - a.co).slice(0, 8)
@@ -223,7 +222,7 @@ function agrega(laudos, camps) {
   }).filter(x => x.co2_atu != null).sort((a, b) => (b.delta || 0) - (a.delta || 0));
 
   return { camp_atual: ULT, camp_atual_rot: rot(ULT), camp_anterior: PEN, camp_anterior_rot: rot(PEN),
-    resumo_ensaio, campanhas_meta, gases_local, tendencia, mapa, co2_local,
+    resumo_ensaio, campanhas_meta, tendencia, mapa, co2_local,
     rank_co2, rank_co, rank_agua, rank_rig, gases_chave, comparativo_local };
 }
 
