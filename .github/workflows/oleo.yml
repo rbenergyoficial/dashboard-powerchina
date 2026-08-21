@@ -1,0 +1,34 @@
+name: Óleo isolante -> oleo.json
+
+# Dispara quando o dado dos laudos muda no repositorio, e por dispatch manual.
+#
+# Nao ha cron: a coleta de oleo e TRIMESTRAL. Um job diario reescreveria o mesmo blob 90 vezes
+# entre uma campanha e outra, e versao a toa e ruido — a mesma razao pela qual o publicador de
+# dashboard recusa publicacao sem mudanca.
+#
+# O ciclo e assumidamente manual: quem roda o pipeline dos laudos copia o dados_html.json para
+# data/oleo_laudos.json e da push. Quatro vezes ao ano nao justifica automatizar a copia.
+on:
+  push:
+    paths:
+      - 'data/oleo_laudos.json'
+      - 'scripts/gen-oleo.js'
+  workflow_dispatch: {}
+concurrency:
+  group: gen-oleo
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Publicar oleo.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+          OUT_BLOB: oleo.json
+        run: node scripts/gen-oleo.js
