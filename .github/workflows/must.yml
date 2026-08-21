@@ -1,0 +1,47 @@
+name: MUST -> must_diario.json (demanda contra o contratado)
+
+# Roda depois do way2-hist, que ja acordou a API da Way2 no mesmo horario.
+#
+# A SONDA existe porque a profundidade do historico da API e desconhecida: o fluxo do Power
+# Automate so pede o mes corrente, o que nao prova que a API guarde apenas isso. Rodar com
+# sonda=sim NAO grava blob nenhum — so imprime, por janela mensal e por ponto, quantos dias
+# voltaram com valor. A resposta decide se o painel nasce com a serie inteira ou raso.
+on:
+  schedule:
+    - cron: '45 3 * * *'   # 00:45 BRT, depois do way2-hist das 03:30 UTC
+  workflow_dispatch:
+    inputs:
+      sonda:
+        description: 'sim = so sondar a profundidade do historico, sem gravar nada'
+        required: false
+        default: 'nao'
+      dias:
+        description: 'quantos dias para tras processar'
+        required: false
+        default: '3'
+      forcar:
+        description: 'sim = reprocessa dia ja presente no blob'
+        required: false
+        default: 'nao'
+concurrency:
+  group: gen-must
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar must_diario.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          OUT_CONTAINER: dados
+          OUT_BLOB: must_diario.json
+          SONDA: ${{ inputs.sonda == 'sim' && '1' || '' }}
+          DIAS: ${{ inputs.dias || '3' }}
+          FORCAR: ${{ inputs.forcar == 'sim' && '1' || '' }}
+        run: node scripts/gen-must.js

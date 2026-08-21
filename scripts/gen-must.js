@@ -1,0 +1,244 @@
+/*
+ * gen-must.js — demanda contra o MUST contratado, por parque.
+ *
+ * POR QUE EXISTE. Os cards de MUST do dashboard HTML (ranking de pico, situacao por parque, picos
+ * monitorados) dependem do PICO por parque, e esse numero nao existe em blob nenhum: o
+ * way2_daily.json tem o pico do complexo e dos dois trafos, nao das nove usinas, e o way2_must.json
+ * traz so a media DIARIA do mes corrente. O HTML nao sofre com isso porque calcula o pico ao vivo,
+ * chamando a API da Way2 no navegador a cada carregamento — um painel Grafana lendo blob nao pode.
+ *
+ * O QUE PUBLICA (must_diario.json), por dia e por parque:
+ *   pico_mw · hora do pico · media_mw · contratado_mw · pct_must · margem_mw · status
+ * Semana, mes e ano saem DAI no JSONata do painel: 365 dias x 9 parques e um frame trivial.
+ *
+ * ACUMULATIVO POR CONSTRUCAO. O blob nunca e reescrito do zero: le o que existe, mistura os dias
+ * novos e regrava. Se a API da Way2 so guardar 30 dias — e o way2_must.json sugere que o fluxo do
+ * Power Automate so pede o mes corrente — o historico se constroi rodada a rodada, e uma rodada que
+ * volte vazia NAO pode apagar o passado.
+ *
+ * MODO SONDA (SONDA=1): nao grava nada. Pergunta a API quantos dias ela devolve por ponto em
+ * janelas cada vez mais antigas e imprime o resultado. Existe porque a profundidade do historico e
+ * desconhecida e a resposta muda o desenho: com 12 meses o painel nasce completo, com 30 dias ele
+ * nasce raso e enche com o tempo. Serve depois como diagnostico, quando a API mudar de
+ * comportamento sem avisar.
+ *
+ * Env: WAY2_TOKEN [obrigatorio] · DADOS_STORAGE [obrigatorio fora da sonda] · SONDA=1 ·
+ *      DIAS (quantos dias para tras processar, default 3) · FORCAR=1 (reprocessa dia ja presente) ·
+ *      LOCAL_OUT (grava em arquivo em vez do blob).
+ */
+const https = require('https');
+
+const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medicao/pontos' };
+const CONTAINER = process.env.OUT_CONTAINER || 'dados';
+const OUT_BLOB = process.env.OUT_BLOB || 'must_diario.json';
+const BASE_LEITURA = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
+
+// pontoId -> parque, e o limite CONTRATADO em MW. Os pontos 6380-6388 sao os medidores dedicados
+// do MUST, distintos dos 6196-6233 que o gen-way2-hist.js le para geracao. Os limites conferem com
+// a outorga de cada usina e sao os mesmos configurados no "Compor Limites" do fluxo de alerta.
+const PONTOS = {
+  6380: { parque: 'M1', contrato: 49.11 },
+  6381: { parque: 'M2', contrato: 24.55 },
+  6382: { parque: 'M3', contrato: 49.11 },
+  6383: { parque: 'M4', contrato: 49.11 },
+  6384: { parque: 'M5', contrato: 49.11 },
+  6385: { parque: 'M6', contrato: 49.11 },
+  6386: { parque: 'M7', contrato: 14.73 },
+  6387: { parque: 'M8', contrato: 49.11 },
+  6388: { parque: 'M9', contrato: 9.82 },
+};
+const IDS = Object.keys(PONTOS);
+const GRANDEZA = 'Demat';          // demanda ativa: e ela que o contrato de MUST limita
+
+// FAIXAS DE STATUS, copiadas do dashboard HTML v7 (renderMustPeakRanking). O limiar de 100% tem
+// fonte CONTRATUAL — e o MUST do contrato de uso do sistema de transmissao, e ultrapassa-lo e o
+// que gera penalidade. Os de 95% e 98% sao faixas de AVISO da casa, sem norma por tras: existem
+// para dar tempo de reagir antes da ultrapassagem, e estao aqui com esse nome para ninguem os
+// confundir com limite regulatorio.
+const FAIXAS = [
+  { ate: 95, status: 'Normal' },
+  { ate: 98, status: 'Atencao' },
+  { ate: 100, status: 'Alerta' },
+  { ate: Infinity, status: 'Critico' },
+];
+const statusDe = pct => (FAIXAS.find(f => pct <= f.ate) || FAIXAS[FAIXAS.length - 1]).status;
+
+const r = (v, d = 2) => (v == null || !isFinite(v) ? null : Math.round(v * 10 ** d) / 10 ** d);
+const sleep = ms => new Promise(x => setTimeout(x, ms));
+
+// dia-calendario em BRT (UTC-3), independente do fuso do runner (que roda em UTC)
+function diaBRT(offset = 0) {
+  const d = new Date(Date.now() - 3 * 3600 * 1000 - offset * 86400 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+function apiGet(query, token, timeout = 90000) {
+  return new Promise((ok, ko) => {
+    const req = https.get({ ...API, path: API.path + '?' + query, headers: { 'Pim-Auth': token }, timeout }, res => {
+      if (res.statusCode !== 200) { res.resume(); return ko(new Error('Way2 HTTP ' + res.statusCode)); }
+      let buf = ''; res.on('data', c => buf += c);
+      res.on('end', () => { try { ok(JSON.parse(buf.replace(/^﻿/, ''))); } catch (e) { ko(e); } });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', ko);
+  });
+}
+
+function query(ini, fim, intervalo) {
+  return 'ids=' + IDS.join(',') + '&grandezas=' + GRANDEZA + '&contextodasdatas=ConsiderarDiaCheio'
+    + '&intervalo=' + intervalo + '&medicao-datainicio=' + ini + '&medicao-datafim=' + fim
+    + '&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false';
+}
+
+async function comRetry(q, token, tentativas = 3) {
+  let ultimo;
+  for (let i = 0; i < tentativas; i++) {
+    try { return await apiGet(q, token); }
+    catch (e) { ultimo = e; await sleep(2000 * (i + 1)); }
+  }
+  throw ultimo;
+}
+
+// ---------------- SONDA ----------------
+// Pergunta janelas cada vez mais antigas e conta quantos dias voltaram COM valor. Usa intervalo
+// UmDia de proposito: e a consulta mais barata que ainda responde "existe dado aqui?".
+async function sonda(token) {
+  const hoje = diaBRT(0);
+  const janelas = [0, 1, 2, 3, 6, 11, 17, 23].map(m => {
+    const d = new Date(hoje + 'T12:00:00Z'); d.setUTCMonth(d.getUTCMonth() - m);
+    const ini = d.toISOString().slice(0, 8) + '01';
+    const f = new Date(ini + 'T12:00:00Z'); f.setUTCMonth(f.getUTCMonth() + 1); f.setUTCDate(0);
+    return { rotulo: ini.slice(0, 7), ini, fim: f.toISOString().slice(0, 10) };
+  });
+  console.log('SONDA · quantos dias COM VALOR a API devolve, por janela e por ponto');
+  console.log('janela  | ' + Object.values(PONTOS).map(p => p.parque.padStart(5)).join(' ') + '  | total');
+  for (const j of janelas) {
+    let linha = [], tot = 0;
+    try {
+      const resp = await comRetry(query(j.ini + 'T00:00:00', j.fim + 'T23:59:59', 'UmDia'), token);
+      for (const id of IDS) {
+        const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === GRANDEZA);
+        const n = s ? (s.valores || []).filter(v => v.valor != null).length : 0;
+        linha.push(String(n).padStart(5)); tot += n;
+      }
+      console.log(j.rotulo + ' | ' + linha.join(' ') + '  | ' + tot);
+    } catch (e) {
+      console.log(j.rotulo + ' | ERRO: ' + e.message.slice(0, 60));
+    }
+    await sleep(800);
+  }
+  console.log('\nLeitura: coluna zerada = a API nao guarda aquele mes para aquele ponto.');
+  console.log('Se so o mes corrente voltar cheio, o must_diario.json tem de ser ACUMULATIVO — e ele e.');
+}
+
+// ---------------- dia a dia ----------------
+// Pico e media do dia por parque, a partir do 5 min. O horario do pico vai junto: sem ele o card de
+// "picos monitorados" nao tem o que mostrar, e e a informacao que a operacao usa para achar a causa.
+function doDia(resp, dia) {
+  const out = [];
+  for (const id of IDS) {
+    const p = PONTOS[id];
+    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === GRANDEZA);
+    const vs = (s ? s.valores || [] : []).filter(v => v.valor != null);
+    if (!vs.length) continue;
+    // a API devolve kW; o contrato e em MW
+    let pico = -Infinity, hora = null, soma = 0;
+    for (const v of vs) {
+      const mw = v.valor / 1000;
+      soma += mw;
+      if (mw > pico) { pico = mw; hora = String(v.data).slice(11, 16); }
+    }
+    const pct = p.contrato > 0 ? 100 * pico / p.contrato : null;
+    out.push({
+      dia, parque: p.parque,
+      pico_mw: r(pico, 3), pico_hora: hora, media_mw: r(soma / vs.length, 3),
+      contratado_mw: p.contrato, pct_must: r(pct, 2),
+      margem_mw: r(p.contrato - pico, 3),
+      status: pct == null ? null : statusDe(pct),
+      slots: vs.length,
+    });
+  }
+  return out;
+}
+
+async function leBlob(url) {
+  return new Promise(ok => {
+    https.get(url, { headers: { 'accept-encoding': 'gzip' } }, res => {
+      if (res.statusCode !== 200) { res.resume(); return ok(null); }
+      const cru = /gzip/i.test(res.headers['content-encoding'] || '')
+        ? res.pipe(require('zlib').createGunzip()) : res;
+      const c = []; cru.on('data', d => c.push(d));
+      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ok(null); } });
+    }).on('error', () => ok(null));
+  });
+}
+
+async function grava(obj) {
+  const json = JSON.stringify(obj);
+  if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
+  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  await cont.createIfNotExists();
+  await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json),
+    { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=900' } });
+  return json.length;
+}
+
+(async () => {
+  const token = process.env.WAY2_TOKEN;
+  if (!token) { console.error('ERRO: WAY2_TOKEN ausente.'); process.exit(1); }
+
+  if (/^(1|true|sim)$/i.test(process.env.SONDA || '')) { await sonda(token); return; }
+
+  const DIAS = Math.max(1, parseInt(process.env.DIAS || '3', 10) || 3);
+  const FORCAR = /^(1|true|sim)$/i.test(process.env.FORCAR || '');
+
+  const antigo = (await leBlob(BASE_LEITURA + OUT_BLOB)) || {};
+  const mapa = new Map();
+  for (const l of (antigo.serie || [])) mapa.set(l.dia + '|' + l.parque, l);
+  const antes = mapa.size;
+
+  let dias = 0, novos = 0, vazios = 0;
+  for (let off = 1; off <= DIAS; off++) {
+    const dia = diaBRT(off);
+    if (!FORCAR && [...mapa.keys()].some(k => k.startsWith(dia + '|'))) continue;
+    let resp;
+    try { resp = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59', 'CincoMinutos'), token); }
+    catch (e) { console.log('  ' + dia + '  ERRO ' + e.message.slice(0, 50)); continue; }
+    const linhas = doDia(resp, dia);
+    dias++;
+    if (!linhas.length) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
+    for (const l of linhas) { mapa.set(l.dia + '|' + l.parque, l); novos++; }
+    const pior = linhas.slice().sort((a, b) => b.pct_must - a.pct_must)[0];
+    console.log('  ' + dia + '  ' + linhas.length + ' parques  ·  pior: ' + pior.parque + ' '
+      + pior.pico_mw + ' MW (' + pior.pct_must + '% do MUST, ' + pior.status + ') as ' + pior.pico_hora);
+    await sleep(600);
+  }
+
+  const serie = [...mapa.values()].sort((a, b) => a.dia === b.dia ? a.parque.localeCompare(b.parque) : (a.dia < b.dia ? -1 : 1));
+  // GUARDA ANTI-REGRESSAO: rodada que nao acrescentou nada NAO regrava. Sem isto, uma janela em que
+  // a API responde vazia produziria um blob identico com data nova — ruido que esconde o momento em
+  // que a coleta parou de funcionar.
+  if (serie.length === antes && !FORCAR) {
+    console.log('\nnada novo (' + antes + ' linhas ja presentes) — blob NAO regravado');
+    return;
+  }
+  const dias_distintos = new Set(serie.map(x => x.dia)).size;
+  const out = {
+    gerado_em: new Date().toISOString(),
+    fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, 5 min. '
+      + 'A API devolve kW; aqui vai em MW.',
+    metodo: 'Pico e media do dia por parque a partir do 5 min, com o horario do pico. '
+      + 'pct_must = pico / contratado x 100 · margem = contratado - pico.',
+    faixas: 'Status pelas faixas do dashboard HTML v7: ate 95% Normal, ate 98% Atencao, ate 100% '
+      + 'Alerta, acima de 100% Critico. O 100% e CONTRATUAL (MUST do contrato de uso do sistema de '
+      + 'transmissao); 95% e 98% sao faixas de aviso da casa, sem norma por tras.',
+    contratos: Object.fromEntries(Object.values(PONTOS).map(p => [p.parque, p.contrato])),
+    dias: dias_distintos, linhas: serie.length, serie,
+  };
+  const t = await grava(out);
+  console.log('\n' + OUT_BLOB + ' OK · ' + Math.round(t / 1024) + ' KB · ' + dias_distintos
+    + ' dias · ' + serie.length + ' linhas (+' + novos + ' nesta rodada, ' + dias + ' dias lidos, '
+    + vazios + ' vazios)');
+})().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
