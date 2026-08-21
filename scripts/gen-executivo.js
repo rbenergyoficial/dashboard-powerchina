@@ -178,6 +178,27 @@ const daPlanilha = nome => ALIAS_PLANILHA[String(nome).trim()] || String(nome).t
 const INV_POR_PARQUE = { M1: 165, M2: 88, M3: 165, M4: 165, M5: 165, M6: 165, M7: 44, M8: 165, M9: 33 };
 const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const lbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
+// PR LIVRE: gv/ge contando SO as meias horas sem limitacao registrada. Responde "quanto a usina
+// entrega da referencia QUANDO A DEIXAM ENTREGAR", que e o que o PR publicado nao responde — ele
+// divide por um potencial que inclui o que o ONS mandou nao gerar.
+//
+// ⚠️ O QUE ELE NAO E: nao e o Performance Ratio da IEC (energia / (irradiancia x capacidade CC)).
+// E ADERENCIA A REFERENCIA DO ONS — a mesma razao que o `pr_pct` da casa e o `calcPR` do dashboard
+// HTML sempre usaram (gv/gref). Por isso ele passeia perto de 100%: o `ge` do ONS nao e o potencial
+// de projeto, e um modelo que corre proximo do que a usina entrega. O PR de engenharia existe e e
+// outro numero — a planilha da usina publica `实际PR` em 64% a 74%, contra alvo proprio de 82,8%.
+// Confundir os dois faz um parque normal parecer excelente.
+//
+// GUARDA, e ela e necessaria: a serie POR USINA do ONS nao e integra (o conjunto e). Acima de 110%
+// significa gv > ge, ou seja, a geracao ESTIMADA saiu abaixo da verificada — medido em ago/26 no M3
+// (124%) e em jul/26 no M7 (127%). Isso e defeito do denominador, nao recorde da usina, e sai NULO.
+// Amostra minima de 20 pares livres: mes muito restrito nao tem intervalo livre bastante para medir.
+const PR_LIVRE_MIN = 50, PR_LIVRE_MAX = 110, PR_LIVRE_PARES = 20;
+const prLivre = (gv, ge, pares) => {
+  if (!(ge > 0) || !(pares >= PR_LIVRE_PARES)) return null;
+  const v = Math.round(100 * gv / ge * 100) / 100;
+  return (v >= PR_LIVRE_MIN && v <= PR_LIVRE_MAX) ? v : null;
+};
 const r2 = x => Math.round(x * 100) / 100;
 // padrao numerico da casa: ponto decimal, ponto de milhar, 2 casas nas medidas
 const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFixed(dec == null ? 2 : dec);
@@ -364,6 +385,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     const C = CRU[mes]; if (!C) continue;
     const porUfv = {}; let ge = 0, gv = 0, irrSoma = 0, irrN = 0, geRec = 0, geTot = 0;
     let geP = 0, gvP = 0, parN = 0, parOk = 0;   // PR pareado + cobertura
+    let gePL = 0, gvPL = 0, parLivre = 0;        // o mesmo par, so nos intervalos SEM limitacao
     const porDia = {};
     for (const r of C) {
       const u = String(r.u).replace('CEFMT', 'M');          // CEFMT1..9 == M1..M9 (confirmado pela assinatura de capacidade)
@@ -375,19 +397,26 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
       const dia_ = String(r.ts).slice(0, 10);
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0 });
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0, gePL: 0, gvPL: 0, parLivre: 0 });
       porUfv[u].ge += g * H; porUfv[u].gv += v * H;
       // BALDE DO CORTE: so os intervalos com limitacao registrada (e ja sem os dias excluidos, que
       // nao entraram no LIM_TS). O que cai FORA dele e deficit por outro motivo — sujeira,
       // indisponibilidade, erro de modelo — e vai para `outras_gwh`, que ate aqui ficava sempre zero.
       if (LIM_TS.has(String(r.ts))) { porUfv[u].geL += g * H; porUfv[u].gvL += v * H; }
-      if (util(r)) { porUfv[u].parN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++; } }
+      // PAR LIVRE: o MESMO filtro do PR publicado, menos os intervalos com limitacao registrada.
+      // O PR publicado divide por um potencial que inclui o que o ONS mandou nao gerar, entao
+      // usina cortada aparece como usina ruim — e a casa sacrifica o Mercado Livre no corte de
+      // proposito. Medido em 20/08/2026: M1 sai de 59,5% para 92,0% e M9 de 58,1% para 86,8%,
+      // com o M1 passando de PIOR do parque a terceiro melhor.
+      if (util(r)) { porUfv[u].parN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++;
+        if (!LIM_TS.has(String(r.ts))) { porUfv[u].gePL += g * H; porUfv[u].gvPL += v * H; porUfv[u].parLivre++; } } }
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       // PR PAREADO: soma gv e ge SÓ nos intervalos em que o ONS publicou os dois. Somar o mês inteiro
       // infla o PR quando falta ge (divide por um denominador incompleto) — foi isso que deixou out/25
       // a fev/26 sem PR. Restringindo aos pares válidos, o número volta a ser comparável, e a COBERTURA
       // (quantos intervalos entraram) vai junto p/ o leitor saber sobre quanto do mês ele está olhando.
-      if (util(r)) { irrSoma += irr; irrN++; parN++; if (g > 0) { geP += g * H; gvP += v * H; parOk++; } }
+      if (util(r)) { irrSoma += irr; irrN++; parN++; if (g > 0) { geP += g * H; gvP += v * H; parOk++;
+        if (!LIM_TS.has(String(r.ts))) { gePL += g * H; gvPL += v * H; parLivre++; } } }
       // O registro "M7" do ONS é o circuito 2 do M3 — logo pertence ao PPA, não ao ML. Antes do reparo
       // do RTC ele carrega metade do c2 e completa o M3; a partir do reparo o ONS_M3 já vem inteiro e
       // esse registro vira duplicata, então sai da conta. Sem isso o gráfico diário rouba do PPA e
@@ -439,7 +468,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         B.geL = B.ge * frL; B.gvL = 0;
       }
     }
-    IRR[mes] = { porUfv, ge, gv, geP, gvP, pr_cob: parN ? r2(100 * parOk / parN) : 0,
+    IRR[mes] = { porUfv, ge, gv, geP, gvP, gePL, gvPL, parLivre, parN,
+      pr_cob: parN ? r2(100 * parOk / parN) : 0,
       irr_media: irrN ? irrSoma / irrN : 0, rec_pct: geTot > 0 ? r2(100 * geRec / geTot) : 0 };
     Object.entries(porDia).sort().forEach(([dia, x]) => corteDiario.push({ dia, mes,
       ppa_corte_pct: x.ppa_ge > 0 ? r2(100 * Math.max(0, x.ppa_ge - x.ppa_gv) / x.ppa_ge) : 0,
@@ -501,6 +531,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       abaiara_curtail_pct: ({ '2026-01': 17.64, '2026-02': 8.62, '2026-03': 24.20, '2026-04': 24.15,
         '2026-05': 23.05, '2026-06': 18.11, '2026-07': 17.20 })[mes] ?? null,
       potencial_irr_gwh: r2(i.ge / 1000), pr_pct: i.geP > 0 ? r2(100 * i.gvP / i.geP) : null,
+      pr_livre_pct: prLivre(i.gvPL, i.gePL, i.parLivre),
+      pr_livre_cobertura_pct: i.parN > 0 ? r2(100 * (i.parLivre || 0) / i.parN) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
       disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
@@ -1107,6 +1139,43 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
       corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0 })) };
+
+  // ---------- 6b) PR LIVRE por entidade, sobre o serie_ufv ja pronto ----------
+  // Feito aqui, e nao dentro de `linha()`, porque `linha()` e chamada com argumentos posicionais em
+  // quatro lugares de formatos diferentes — esticar a assinatura para carregar mais dois baldes seria
+  // trocar clareza por economia de linhas. Aqui basta reler os acumuladores do mes.
+  //
+  // POR QUE ESTE CAMPO EXISTE: o `pr_pct` divide por um potencial que inclui o que o ONS mandou nao
+  // gerar, entao usina cortada le como usina ruim — e a casa sacrifica o Mercado Livre no corte de
+  // proposito. Medido em 20/08/2026 na janela mar-ago/26: o M1 sai de 59,5% para 92,0% e passa de
+  // PIOR do parque a TERCEIRO MELHOR; o M9 sai de 58,1% para 86,8%. As do PPA sobem ~15 pp, nao 33.
+  {
+    const somaLivre = (I, us) => us.reduce((a, u) => {
+      const x = (I.porUfv || {})[u]; if (!x) return a;
+      a.gv += x.gvPL || 0; a.ge += x.gePL || 0; a.pares += x.parLivre || 0; a.par += x.parN || 0; return a;
+    }, { gv: 0, ge: 0, pares: 0, par: 0 });
+    // grupos montados aqui a partir das constantes do topo: o `GRUPOS` do bloco 7 e local dele.
+    const MEMBROS = { Complexo: Object.keys(CAP_UFV), PPA, ML };
+    (out.serie_ufv || []).forEach(l => {
+      const I = IRR[l.mes]; if (!I) { l.pr_livre_pct = null; l.pr_livre_cobertura_pct = null; return; }
+      const us = MEMBROS[l.ufv] || [l.ufv];
+      const t = somaLivre(I, us);
+      l.pr_livre_pct = prLivre(t.gv, t.ge, t.pares);
+      l.pr_livre_cobertura_pct = t.par > 0 ? r2(100 * t.pares / t.par) : null;
+      // M7 nao tem serie propria no ONS (o registro dele e o circuito 2 do M3) — la o PR nao se
+      // aplica, nem o publicado nem o livre. Mesma regra do `pr_pct`.
+      if (l.pr_pct == null && l.fonte_realizado) l.pr_livre_pct = null;
+      if (l.pr_livre_pct == null && t.ge > 0 && t.pares >= 20)
+        l.pr_livre_nota = 'PR livre fora da faixa defensavel (50% a 110%): a geracao ESTIMADA do ONS '
+          + 'para esta usina neste mes saiu incoerente com a verificada. O conjunto e integro; a '
+          + 'abertura por usina nao. Sai vazio em vez de virar recorde.';
+      if (l.pr_livre_pct != null) l.pr_livre_metodo = 'Realizado dividido pela referencia do ONS, '
+        + 'contando SO as meias horas SEM limitacao registrada. Mede quanto a usina entrega quando a '
+        + 'deixam entregar, e por isso NAO penaliza as usinas do Mercado Livre, que a casa sacrifica '
+        + 'no corte de proposito. NAO e o Performance Ratio da IEC: e aderencia a referencia do ONS, '
+        + 'a mesma razao do pr_pct. Cobertura em pr_livre_cobertura_pct.';
+    });
+  }
 
   // ---------- 7) CARDS, MANCHETE e CASCATA por UFV (o filtro do painel) ----------
   // Derivados DEPOIS do objeto pronto, a partir de out.serie_ufv — assim nada precisa ser movido de
