@@ -132,8 +132,31 @@ async function sonda(token) {
 }
 
 // ---------------- dia a dia ----------------
-// Pico e media do dia por parque, a partir do 5 min. O horario do pico vai junto: sem ele o card de
-// "picos monitorados" nao tem o que mostrar, e e a informacao que a operacao usa para achar a causa.
+// Pico e media do dia por parque. O horario do pico vai junto: sem ele o card de "picos
+// monitorados" nao tem o que mostrar, e e a informacao que a operacao usa para achar a causa.
+//
+// 🔴 A BASE E 15 MINUTOS, NAO 5. Demanda no setor eletrico se apura por INTEGRALIZACAO de 15
+// minutos, e o proprio dashboard v7 abre com "15 min" no seletor. Medido em 21/08/2026 com a base
+// de 5 min: o pico instantaneo passava da OUTORGA do parque em 12% a 22%, em 94 a 143 dias de 360
+// — um parque de 49,11 MW marcando 55,7 MW. Nao e ultrapassagem de MUST, e transitorio de medicao
+// que a integralizacao de 15 min dissolve. Publicar aquilo pintaria 29% dos dias de "Critico".
+//
+// O de 5 min fica publicado ao lado (`pico5_mw`), como diagnostico: se um dia os dois divergirem
+// muito, e sinal de transitorio, nao de carga.
+const BUCKET_MIN = 15;
+function baldes(vs) {
+  // bucket = borda ESQUERDA, mesma convencao do gen-way2-agg.js. A string de tempo e manipulada
+  // direto (naive-local BRT) — passar por Date arriscaria deslocar 3 h.
+  const b = new Map();
+  for (const v of vs) {
+    const hh = String(v.data).slice(11, 13), mm = +String(v.data).slice(14, 16);
+    const chave = hh + ':' + String(Math.floor(mm / BUCKET_MIN) * BUCKET_MIN).padStart(2, '0');
+    const o = b.get(chave) || { soma: 0, n: 0 };
+    o.soma += v.valor / 1000; o.n++; b.set(chave, o);
+  }
+  return b;
+}
+
 function doDia(resp, dia) {
   const out = [];
   for (const id of IDS) {
@@ -142,16 +165,22 @@ function doDia(resp, dia) {
     const vs = (s ? s.valores || [] : []).filter(v => v.valor != null);
     if (!vs.length) continue;
     // a API devolve kW; o contrato e em MW
-    let pico = -Infinity, hora = null, soma = 0;
+    let pico5 = -Infinity, hora5 = null, soma = 0;
     for (const v of vs) {
-      const mw = v.valor / 1000;
-      soma += mw;
-      if (mw > pico) { pico = mw; hora = String(v.data).slice(11, 16); }
+      const mw = v.valor / 1000; soma += mw;
+      if (mw > pico5) { pico5 = mw; hora5 = String(v.data).slice(11, 16); }
+    }
+    let pico = -Infinity, hora = null;
+    for (const [chave, o] of baldes(vs)) {
+      const md = o.soma / o.n;
+      if (md > pico) { pico = md; hora = chave; }
     }
     const pct = p.contrato > 0 ? 100 * pico / p.contrato : null;
     out.push({
       dia, parque: p.parque,
-      pico_mw: r(pico, 3), pico_hora: hora, media_mw: r(soma / vs.length, 3),
+      pico_mw: r(pico, 3), pico_hora: hora,              // 15 min — a base contratual
+      pico5_mw: r(pico5, 3), pico5_hora: hora5,          // 5 min — diagnostico de transitorio
+      media_mw: r(soma / vs.length, 3),
       contratado_mw: p.contrato, pct_must: r(pct, 2),
       margem_mw: r(p.contrato - pico, 3),
       status: pct == null ? null : statusDe(pct),
@@ -229,8 +258,12 @@ async function grava(obj) {
     gerado_em: new Date().toISOString(),
     fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, 5 min. '
       + 'A API devolve kW; aqui vai em MW.',
-    metodo: 'Pico e media do dia por parque a partir do 5 min, com o horario do pico. '
-      + 'pct_must = pico / contratado x 100 · margem = contratado - pico.',
+    metodo: 'Pico do dia por parque em INTEGRALIZACAO DE 15 MINUTOS (media dos slots de 5 min no '
+      + 'quarto de hora), com o horario do balde. pct_must = pico / contratado x 100 · '
+      + 'margem = contratado - pico. O pico instantaneo de 5 min vai ao lado em pico5_mw, so como '
+      + 'diagnostico: medido em 21/08/2026, ele passa da OUTORGA do parque em 12% a 22% num terco '
+      + 'dos dias, o que e transitorio de medicao e nao carga — usa-lo como base pintaria 29% dos '
+      + 'dias de Critico.',
     faixas: 'Status pelas faixas do dashboard HTML v7: ate 95% Normal, ate 98% Atencao, ate 100% '
       + 'Alerta, acima de 100% Critico. O 100% e CONTRATUAL (MUST do contrato de uso do sistema de '
       + 'transmissao); 95% e 98% sao faixas de aviso da casa, sem norma por tras.',
