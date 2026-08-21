@@ -397,7 +397,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
       const dia_ = String(r.ts).slice(0, 10);
-      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0, gePL: 0, gvPL: 0, parLivre: 0 });
+      (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0, gePL: 0, gvPL: 0, parLivre: 0, irrSoma: 0, irrN: 0 });
       porUfv[u].ge += g * H; porUfv[u].gv += v * H;
       // BALDE DO CORTE: so os intervalos com limitacao registrada (e ja sem os dias excluidos, que
       // nao entraram no LIM_TS). O que cai FORA dele e deficit por outro motivo — sujeira,
@@ -408,7 +408,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // usina cortada aparece como usina ruim — e a casa sacrifica o Mercado Livre no corte de
       // proposito. Medido em 20/08/2026: M1 sai de 59,5% para 92,0% e M9 de 58,1% para 86,8%,
       // com o M1 passando de PIOR do parque a terceiro melhor.
-      if (util(r)) { porUfv[u].parN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++;
+      if (util(r)) { porUfv[u].parN++; porUfv[u].irrSoma += irr; porUfv[u].irrN++; if (g > 0) { porUfv[u].geP += g * H; porUfv[u].gvP += v * H; porUfv[u].parOk++;
         if (!LIM_TS.has(String(r.ts))) { porUfv[u].gePL += g * H; porUfv[u].gvPL += v * H; porUfv[u].parLivre++; } } }
       ge += g * H; gv += v * H; geTot += g * H; if (rec) geRec += g * H;
       // PR PAREADO: soma gv e ge SÓ nos intervalos em que o ONS publicou os dois. Somar o mês inteiro
@@ -1162,6 +1162,13 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const t = somaLivre(I, us);
       l.pr_livre_pct = prLivre(t.gv, t.ge, t.pares);
       l.pr_livre_cobertura_pct = t.par > 0 ? r2(100 * t.pares / t.par) : null;
+      // IRRADIANCIA MEDIA da entidade no mes, no mesmo recorte `util` do PR — e o eixo x do
+      // grafico de PR x irradiancia. Para grupo e a media PONDERADA pela capacidade das usinas:
+      // media simples deixaria o M9, de 9,8 MW, pesar igual ao M1, de 49,1 MW.
+      { let is = 0, ip = 0;
+        us.forEach(u => { const x = (I.porUfv || {})[u]; const c = CAP_UFV[u] || 0;
+          if (x && x.irrN > 0 && c > 0) { is += (x.irrSoma / x.irrN) * c; ip += c; } });
+        l.irr_media = ip > 0 ? r2(is / ip) : null; }
       // M7 nao tem serie propria no ONS (o registro dele e o circuito 2 do M3) — la o PR nao se
       // aplica, nem o publicado nem o livre. Mesma regra do `pr_pct`.
       if (l.pr_pct == null && l.fonte_realizado) l.pr_livre_pct = null;
