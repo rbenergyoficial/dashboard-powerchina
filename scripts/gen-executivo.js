@@ -944,6 +944,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           // no complexo o corte vem da fórmula da casa (nível da subestação), não da soma dos ge−gv
           l.cortado_gwh = S.frustrada_gwh;
           l.corte_pct = (m < '2026-03') ? S.frustrada_pct : S.corte_pct_pot;
+          // 🔴 E POR ISSO `outras_gwh` TEM DE SER REFEITO. A `linha()` calculou o resto com o corte
+          // CRU (geL−gvL); trocando o corte pela formula da casa sem refazer o resto, os tres termos
+          // param de fechar com o potencial. Medido em 21/08/2026: sobrava 3,4% do potencial no
+          // Complexo (2,2 GWh/mes) enquanto nas nove usinas e nos grupos fechava em zero — e a
+          // `outras_gwh` publicada saia pela METADE do que realmente sobra (1,73 contra 5,12 GWh em
+          // mar/26). O grupo ja fazia esta conta; a linha do Complexo tinha ficado para tras.
+          l.outras_gwh = l.cortado_gwh == null ? null
+            : r2(Math.max(0, l.potencial_gwh - l.entregue_gwh - l.cortado_gwh));
           if (m < '2026-03') l.corte_base = 'cortado / (gerado + cortado) — nao usa a geracao estimada do ONS, que e inconsistente antes de mar/26';
           out.push(l); }
         // ---- grupos PPA e ML como se fossem "usinas" ----
