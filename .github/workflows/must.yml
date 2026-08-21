@@ -29,7 +29,9 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 45 min por causa da CARGA HISTORICA: sao ~360 chamadas de 5 min com pausa de 0,6 s entre
+    # elas. A rodada diaria gasta segundos; o teto existe para a primeira, que reconstroi a serie.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
