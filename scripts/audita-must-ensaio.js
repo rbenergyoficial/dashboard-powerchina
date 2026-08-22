@@ -19,6 +19,8 @@ const ARQS = [['must_5min.json', 5], ['must_15min.json', 15],
   ['must_30min.json', 30], ['must_60min.json', 60]];
 
 const le = n => { try { return JSON.parse(fs.readFileSync(DIR + n, 'utf8')); } catch (e) { return null; } };
+const alvoDias = (process.env.DIAS_ALVO
+  || '2026-06-13,2026-06-16,2026-08-03,2026-08-07,2026-08-11').split(',');
 const hm = ms => new Date(ms + 3 * 3600000).toISOString().slice(11, 16);
 
 let falhou = false;
@@ -75,9 +77,26 @@ if (!d) console.log('\n  must_diario.json ausente');
 else {
   const s = d.serie || [];
   console.log('\n  must_diario.json  ' + s.length + ' linhas');
-  const semSlots = s.filter(l => l.slots != null && l.slots > 96 && !l.parcial);
-  if (semSlots.length) erro('ha ' + semSlots.length + ' linhas com mais de 96 intervalos num dia '
-    + 'fechado — o pico ainda esta sendo apurado na granularidade de 5 min');
+  // 🔴 So as linhas REPROCESSADAS nesta rodada podem ser julgadas. O gerador e acumulativo: as
+  // linhas antigas trazem o `slots` da versao anterior (288, da base de 5 min) porque nao foram
+  // tocadas. Julgar o blob inteiro acusaria o historico de um defeito que a rodada nao tinha como
+  // corrigir — e foi exatamente o falso positivo que esta guarda deu na primeira execucao.
+  //
+  // O que o historico antigo REVELA, e que importa: enquanto nao for reprocessado com FORCAR, ele
+  // segue com o pico apurado no alinhamento errado. A publicacao tem de rodar DIAS=366 FORCAR=1.
+  const antigas = s.filter(l => l.slots != null && l.slots > 96);
+  if (antigas.length) console.log('      ' + antigas.length + ' linhas ainda com o `slots` da versao '
+    + 'anterior — o historico so se corrige com FORCAR=1 e a janela inteira');
+  const recentes = s.filter(l => !l.parcial && alvoDias.includes(l.dia));
+  const ruins = recentes.filter(l => l.slots != null && l.slots > 96);
+  if (ruins.length) erro('ha ' + ruins.length + ' linhas de dia AUDITADO com mais de 96 intervalos '
+    + '— o pico ainda esta sendo apurado na granularidade de 5 min');
+  else if (recentes.length) console.log('      ' + recentes.length + ' linhas dos dias auditados, '
+    + 'todas com 96 intervalos ou menos');
+  const acima = recentes.filter(l => l.pct_must != null && l.pct_must > 100);
+  console.log('      dias auditados com pct_must > 100: ' + acima.length
+    + (acima.length ? '  ' + acima.map(l => l.dia + ' ' + l.parque + ' ' + l.pct_must + '%').join(' · ') : ''));
+  if (acima.length) erro('o diario ainda acusa ultrapassagem nos dias auditados — na fonte sao ZERO');
   const ex = s.filter(l => !l.parcial).slice(-3);
   ex.forEach(l => console.log('      ' + l.dia + ' ' + String(l.parque).padEnd(9)
     + 'pico ' + String(l.pico_mw).padStart(8) + ' as ' + l.pico_hora
@@ -86,7 +105,6 @@ else {
 
 // ---- a pergunta que originou tudo ---------------------------------------------------------------
 console.log('\n=== ultrapassagens que sobraram ===');
-const alvo = (process.env.DIAS_ALVO || '2026-06-13,2026-06-16,2026-08-03,2026-08-07,2026-08-11').split(',');
 for (const [nome, passo] of ARQS) {
   const b = le(nome);
   if (!b) continue;
@@ -94,7 +112,7 @@ for (const [nome, passo] of ARQS) {
   const casos = [];
   for (const l of (b.serie || [])) {
     const dia = new Date(l.ms - passo * 60000 + 3 * 3600000).toISOString().slice(0, 10);
-    if (!alvo.includes(dia)) continue;
+    if (!alvoDias.includes(dia)) continue;
     for (const p of PARQUES) {
       if (l[p] == null || !c[p]) continue;
       const pct = l[p] / c[p] * 100;
