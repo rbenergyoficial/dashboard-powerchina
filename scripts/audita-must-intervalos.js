@@ -47,7 +47,7 @@ const query = intervalo => 'ids=' + ID + '&grandezas=' + GRANDEZA
 (async () => {
   if (!TOKEN) throw new Error('WAY2_TOKEN ausente');
   console.log('Vocabulario de intervalo da API Way2 — ponto ' + ID + ', ' + GRANDEZA + ', ' + DIA + '\n');
-  console.log('  nome                esperado  recebido  1o rotulo  ultimo rotulo   veredito');
+  console.log('  nome                esperado  recebido  primeiro           ultimo             veredito');
   const bons = {};
   for (const [nome, esperado] of CANDIDATOS) {
     let j;
@@ -56,12 +56,15 @@ const query = intervalo => 'ids=' + ID + '&grandezas=' + GRANDEZA
     const s = (j.dados || []).find(x => String(x.pontoId) === String(ID) && x.nomeGrandeza === GRANDEZA);
     const vs = (s ? s.valores || [] : []);
     const n = vs.length;
-    const t0 = n ? String(vs[0].data).slice(11, 16) : '--:--';
-    const tn = n ? String(vs[n - 1].data).slice(11, 16) : '--:--';
+    // 🔴 a DATA COMPLETA importa: o ultimo balde do dia e rotulado 00:00, e e preciso saber se a
+    // API o devolve com a data do dia consultado ou a do dia seguinte. Processando dia a dia, a
+    // resposta errada duplicaria ou perderia o ultimo quarto de hora de cada dia.
+    const t0 = n ? String(vs[0].data).slice(0, 16).replace('T', ' ') : '--';
+    const tn = n ? String(vs[n - 1].data).slice(0, 16).replace('T', ' ') : '--';
     const ok = n === esperado;
     if (ok) bons[esperado] = nome;
     console.log('  ' + nome.padEnd(20) + String(esperado).padStart(8) + String(n).padStart(10)
-      + '     ' + t0 + '      ' + tn + '        ' + (ok ? 'SERVE' : 'nao serve'));
+      + '  ' + t0.padEnd(19) + tn.padEnd(19) + (ok ? 'SERVE' : 'nao serve'));
     await sleep(900);
   }
   console.log('\n=== nomes a usar ===');
