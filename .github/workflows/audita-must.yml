@@ -1,0 +1,28 @@
+name: Auditoria MUST · integralizacao de 15 min
+
+# SOMENTE LEITURA. Nao grava blob, nao toca em producao. Pergunta a Way2 a mesma grandeza nos
+# dois intervalos (5 min e 15 min) e diz se a agregacao por media que o gen-must-intra.js faz
+# reproduz a integralizacao da propria fonte.
+#
+# Existe porque a diferenca decide a leitura: as ultrapassagens medidas sao MARGINAIS (100,02% a
+# 101,42%), e nessa faixa amostrar e integralizar dao respostas diferentes.
+on:
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'dias a auditar, separados por virgula (AAAA-MM-DD)'
+        required: false
+        default: '2026-08-03,2026-08-07,2026-08-11'
+jobs:
+  audita:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Comparar 5 min agregado contra 15 min da fonte
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS_ALVO: ${{ inputs.dias }}
+        run: node scripts/audita-must-integralizacao.js
