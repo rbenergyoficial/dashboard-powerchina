@@ -8,7 +8,8 @@
  * chamando a API da Way2 no navegador a cada carregamento — um painel Grafana lendo blob nao pode.
  *
  * O QUE PUBLICA (must_diario.json), por dia e por parque:
- *   pico_mw · hora do pico · media_mw · contratado_mw · pct_must · margem_mw · status
+ *   ms (epoch de 00:00 BRT) · pico_mw · hora do pico · media_mw · contratado_mw · pct_must
+ *   · margem_mw · status
  * Semana, mes e ano saem DAI no JSONata do painel: 365 dias x 9 parques e um frame trivial.
  *
  * ACUMULATIVO POR CONSTRUCAO. O blob nunca e reescrito do zero: le o que existe, mistura os dias
@@ -213,6 +214,15 @@ function doDia(resp, dia) {
   }
   // o conjunto entra como uma "usina" a mais, com o mesmo formato das nove — assim todo painel
   // que ja filtra por parque ganha o Complexo de graca
+  // 🔴 O EPOCH DO DIA VAI JUNTO, para o painel poder recortar pelo seletor de tempo do dashboard.
+  // Sem ele o ranking e as tabelas ficavam presos a uma janela propria, derivada do seletor de
+  // Periodo, enquanto a curva obedecia ao seletor de tempo — e os dois mostravam numeros diferentes
+  // para o mesmo parque sem nada na tela explicando por que (medido em 22/08/2026: M2 a 101,4% no
+  // ranking de 90 dias contra 90,5% na curva de 24 h).
+  //
+  // Nao da para derivar isso no painel: o JSONata Go parseia `$toMillis('2026-08-22')` como 00:00
+  // UTC — correto, mas UTC — e IGNORA o offset em '2026-08-22T00:00:00-03:00', devolvendo tambem
+  // 00:00 UTC. Corrigir no painel exigiria somar 3 h a mao, que e numero de fuso escrito no painel.
   const cx = serieComplexo(resp);
   if (cx.length) {
     let pico5 = -Infinity, hora5 = null, soma = 0;
@@ -287,7 +297,11 @@ async function grava(obj) {
     const linhas = doDia(resp, dia);
     dias++;
     if (!linhas.length) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
-    for (const l of linhas) { if (hoje) l.parcial = true; mapa.set(l.dia + '|' + l.parque, l); novos++; }
+    // 00:00 no horario de Brasilia. O dia INTEIRO vai de `ms` a `ms + 86.400.000`, e e assim que
+    // o painel decide se ele toca a janela selecionada.
+    const ms = Date.parse(dia + 'T03:00:00Z');
+    for (const l of linhas) { l.ms = ms; if (hoje) l.parcial = true;
+      mapa.set(l.dia + '|' + l.parque, l); novos++; }
     const pior = linhas.slice().sort((a, b) => b.pct_must - a.pct_must)[0];
     console.log('  ' + dia + '  ' + linhas.length + ' parques  ·  pior: ' + pior.parque + ' '
       + pior.pico_mw + ' MW (' + pior.pct_must + '% do MUST, ' + pior.status + ') as ' + pior.pico_hora);
@@ -298,8 +312,13 @@ async function grava(obj) {
   // GUARDA ANTI-REGRESSAO: rodada que nao acrescentou nada NAO regrava. Sem isto, uma janela em que
   // a API responde vazia produziria um blob identico com data nova — ruido que esconde o momento em
   // que a coleta parou de funcionar.
+  // linha antiga sem `ms` recebe o dela agora: o campo nasceu depois de 366 dias ja gravados, e o
+  // recorte por janela trataria como ausente tudo o que veio antes
+  let remendo = 0;
+  for (const l of serie) if (l.ms == null) { l.ms = Date.parse(l.dia + 'T03:00:00Z'); remendo++; }
+  if (remendo) console.log('  ms retroativo em ' + remendo + ' linhas antigas');
   const temHoje = serie.some(l => l.dia === diaBRT(0));
-  if (serie.length === antes && !temHoje && !FORCAR) {
+  if (serie.length === antes && !temHoje && !remendo && !FORCAR) {
     console.log('\nnada novo (' + antes + ' linhas ja presentes) — blob NAO regravado');
     return;
   }
