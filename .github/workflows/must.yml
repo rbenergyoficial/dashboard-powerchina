@@ -33,7 +33,11 @@ on:
 # concorrentes no mesmo blob.
 concurrency:
   group: gen-must
-  cancel-in-progress: ${{ github.event_name == 'schedule' }}
+  # ⚠️ A expressao e avaliada pelo run que CHEGA, e decide se ELE cancela os anteriores.
+  # Com `== 'schedule'` o cron chegava com true e continuava matando o dispatch — que foi
+  # exatamente o erro cometido na primeira tentativa de consertar isto. O correto e o
+  # inverso: o cron chega com false e ESPERA; o dispatch chega com true e limpa a fila.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 jobs:
   gen:
     runs-on: ubuntu-latest

@@ -92,11 +92,23 @@ function query(ini, fim, intervalo) {
     + '&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false';
 }
 
-async function comRetry(q, token, tentativas = 3) {
+// 🔴 O 429 PRECISA DE ESPERA LONGA, nao de mais uma tentativa rapida. Medido em 22/08/2026 na
+// recarga de 366 dias: com duas chamadas por dia o volume dobrou e a Way2 passou a devolver
+// HTTP 429 em seis dias espalhados. O backoff de 2/4/6 s nao alcanca uma janela de limite —
+// aqueles dias falharam e ficaram com o dado ANTIGO, sem erro visivel no fim do job, que
+// terminou 'success'.
+//
+// Agora o 429 dorme progressivamente mais (15/30/60/120 s) e ganha tentativas extras. Um dia
+// perdido numa recarga de alinhamento e um dia que continua publicando o numero errado.
+async function comRetry(q, token, tentativas = 5) {
   let ultimo;
   for (let i = 0; i < tentativas; i++) {
     try { return await apiGet(q, token); }
-    catch (e) { ultimo = e; await sleep(2000 * (i + 1)); }
+    catch (e) {
+      ultimo = e;
+      const limite = /429/.test(e.message || '');
+      await sleep(limite ? Math.min(120000, 15000 * 2 ** i) : 2000 * (i + 1));
+    }
   }
   throw ultimo;
 }
