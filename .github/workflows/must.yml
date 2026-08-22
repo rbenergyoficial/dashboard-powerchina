@@ -23,9 +23,17 @@ on:
         description: 'sim = reprocessa dia ja presente no blob'
         required: false
         default: 'nao'
+# 🔴 O CRON NAO PODE CANCELAR UMA CARGA HISTORICA. Com `cancel-in-progress: true` puro, o job
+# agendado que chega no meio de um dispatch longo MATA o dispatch — foi o que aconteceu em
+# 22/08/2026: a recarga dos 366 dias, necessaria para corrigir o alinhamento do quarto de hora,
+# foi cancelada aos 12 minutos pelo agendamento seguinte, e o historico ficou com o dado velho.
+#
+# Agora so o proprio agendamento e cancelavel: um dispatch em andamento faz o cron seguinte
+# ESPERAR em vez de derrubar. Dois runs nao correm juntos, entao nao ha risco de duas gravacoes
+# concorrentes no mesmo blob.
 concurrency:
   group: gen-must
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'schedule' }}
 jobs:
   gen:
     runs-on: ubuntu-latest
