@@ -1,0 +1,49 @@
+name: MUST intradiário -> must_5min / 15min / 30min / 60min
+
+# Roda 10 min depois do must.yml, que ja acordou a API da Way2 no mesmo horario.
+#
+# JOB SEPARADO do must.yml de proposito: sao dois produtos com falhas independentes. O diario
+# alimenta o ranking e a situacao por parque; o intradiario alimenta a forma da curva. Juntos, uma
+# falha na carga longa derrubaria tambem o blob que ja funciona ha meses — e o vermelho no job
+# deixaria de dizer qual dos dois quebrou.
+on:
+  schedule:
+    - cron: '55 3 * * *'   # 00:55 BRT, logo depois do must.yml das 03:45 UTC
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'quantos dias para tras processar (365 = carga historica completa)'
+        required: false
+        default: '2'
+      forcar:
+        description: 'sim = reprocessa dia ja presente no blob'
+        required: false
+        default: 'nao'
+      so:
+        description: 'processar so uma resolucao: 5, 15, 30 ou 60 (vazio = as quatro)'
+        required: false
+        default: ''
+concurrency:
+  group: gen-must-intra
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    # 60 min por causa da CARGA HISTORICA: 365 chamadas de dia inteiro em 5 min, com pausa de 0,6 s
+    # entre elas mais a latencia da API. A rodada diaria gasta segundos — o teto existe para a
+    # primeira, que reconstroi as quatro series.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar as quatro resolucoes
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          OUT_CONTAINER: dados
+          DIAS: ${{ inputs.dias || '2' }}
+          FORCAR: ${{ inputs.forcar == 'sim' && '1' || '' }}
+          SO: ${{ inputs.so }}
+        run: node scripts/gen-must-intra.js
