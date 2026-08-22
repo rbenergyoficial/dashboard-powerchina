@@ -13,6 +13,10 @@ on:
         description: 'dias a auditar, separados por virgula (AAAA-MM-DD)'
         required: false
         default: '2026-08-03,2026-08-07,2026-08-11'
+      dia_alinhamento:
+        description: 'dia para o diagnostico detalhado de alinhamento'
+        required: false
+        default: '2026-08-07'
 jobs:
   audita:
     runs-on: ubuntu-latest
@@ -26,3 +30,8 @@ jobs:
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           DIAS_ALVO: ${{ inputs.dias }}
         run: node scripts/audita-must-integralizacao.js
+      - name: Diagnostico de alinhamento (um dia, series lado a lado)
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIA_ALVO: ${{ inputs.dia_alinhamento || '2026-08-07' }}
+        run: node scripts/audita-must-alinhamento.js
