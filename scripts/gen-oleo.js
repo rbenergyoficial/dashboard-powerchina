@@ -221,8 +221,50 @@ function agrega(laudos, camps) {
       co_atu: media(b, 'co'), agua_atu: media(b, 'agua'), rig_atu: media(b, 'rig') };
   }).filter(x => x.co2_atu != null).sort((a, b) => (b.delta || 0) - (a.delta || 0));
 
+  // ---- A MANCHETE E A SAUDE POR LOCAL --------------------------------------------------------
+  // A pagina abria com uma tabela. Quem le primeiro — gerente, diretor — quer a CONCLUSAO, e so
+  // depois a evidencia. A frase e montada AQUI, do proprio dado: nenhum numero dela e escrito a
+  // mao, entao ela nao pode divergir do que os paineis mostram.
+  const pior = resumo_ensaio[0] || null;
+  // a contagem vive fora desta funcao; recalcular aqui mantem agrega() fechada sobre os proprios
+  // argumentos, que e o que permite testa-la isolada
+  const naoConf = laudos.filter(l => l.st && l.st !== 'CONFORME').length;
+
+  // Pior uso do limite POR LOCAL, na campanha mais recente. E a leitura executiva que faltava:
+  // "quem esta mais perto do limite da norma", em vez de "qual ensaio".
+  const saude_local = locaisServ.map(site => {
+    const g = ultServ.filter(l => l.site === site && l.uso_pior != null);
+    if (!g.length) return null;
+    const p2 = g.slice().sort((a, b) => b.uso_pior - a.uso_pior)[0];
+    return { site, uso: p2.uso_pior, unidade: p2.unidade, margem: r1(100 - p2.uso_pior) };
+  }).filter(Boolean).sort((a, b) => b.uso - a.uso);
+
+  // variacao media de CO2 entre as duas campanhas mais recentes — e o unico parametro com
+  // movimento real na frota, e por isso e o que a manchete cita depois da conformidade
+  const co2Ant = media(laudos.filter(l => l.camp === PEN), 'co2', 1);
+  const co2Atu = media(laudos.filter(l => l.camp === ULT), 'co2', 1);
+  const co2_var_pct = (co2Ant && co2Atu) ? r1((co2Atu / co2Ant - 1) * 100) : null;
+
+  const manchete = {
+    conforme: naoConf === 0,
+    laudos: laudos.length,
+    campanhas: camps.length,
+    unidades: new Set(ultServ.map(l => l.unidade)).size,
+    locais: locaisServ.length,
+    pior_ensaio: pior ? pior.ensaio : null,
+    pior_uso: pior ? pior.uso : null,
+    pior_margem: pior ? r1(100 - pior.uso) : null,
+    pior_unidade: pior ? pior.unidade : null,
+    co2_var_pct,
+    // a frase inteira, pronta. Fica no blob e nao no painel para que os tres idiomas e qualquer
+    // outro consumidor leiam a MESMA conclusao — e para que ela mude sozinha com o dado.
+    texto: naoConf === 0
+      ? 'A frota inteira está conforme'
+      : naoConf + ' laudo' + (naoConf > 1 ? 's' : '') + ' fora de conformidade',
+  };
+
   return { camp_atual: ULT, camp_atual_rot: rot(ULT), camp_anterior: PEN, camp_anterior_rot: rot(PEN),
-    resumo_ensaio, campanhas_meta, tendencia, mapa, co2_local,
+    resumo_ensaio, campanhas_meta, tendencia, mapa, co2_local, saude_local, manchete,
     rank_co2, rank_co, rank_agua, rank_rig, gases_chave, comparativo_local };
 }
 
@@ -289,4 +331,9 @@ async function grava(obj) {
     + ' unidades · co2_local ' + out.co2_local.length + ' · gases-chave ' + out.gases_chave.length
     + ' ocorrencias · comparativo ' + out.comparativo_local.length + ' locais');
   console.log('   campanha atual ' + out.camp_atual_rot + ' · anterior ' + out.camp_anterior_rot);
+  const m = out.manchete;
+  console.log('   manchete: ' + m.texto + ' · pior ' + m.pior_ensaio + ' em ' + m.pior_uso
+    + '% (' + m.pior_margem + '% de margem) · CO2 ' + (m.co2_var_pct > 0 ? '+' : '') + m.co2_var_pct + '%');
+  console.log('   saude por local: ' + out.saude_local.length + ' locais · pior '
+    + out.saude_local[0].site + ' ' + out.saude_local[0].uso + '%');
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
