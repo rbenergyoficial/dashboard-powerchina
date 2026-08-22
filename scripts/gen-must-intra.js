@@ -131,6 +131,14 @@ function porBalde(resp, dia, min) {
     l[parque] = r(o.soma / o.n);
     linhas.set(chave, l);
   }
+  // O COMPLEXO E A SOMA SIMULTANEA, calculada balde a balde — nao a soma dos picos de cada parque,
+  // que aconteceriam em horarios diferentes e dariam um numero que nenhum medidor leu.
+  // GUARDA DE TUDO-OU-NADA: balde sem os nove parques fica sem Complexo. Somar oito subdeclara a
+  // demanda simultanea, e o erro seria maior justamente na hora do pico.
+  for (const l of linhas.values()) {
+    const vs = PARQUES.map(p => l[p]).filter(v => v != null);
+    if (vs.length === PARQUES.length) l.Complexo = r(vs.reduce((a, b) => a + b, 0));
+  }
   return [...linhas.values()].sort((a, b) => a.t < b.t ? -1 : 1);
 }
 
@@ -238,8 +246,9 @@ async function grava(nome, obj) {
       limiar: 'Acima de 100% do contratado e ultrapassagem do MUST do contrato de uso do sistema '
         + 'de transmissao, que e o que gera penalidade. As faixas de 95% (Atencao) e 98% (Alerta) '
         + 'sao avisos da casa, herdados do dashboard v7 — NAO sao limite regulatorio.',
-      parques: PARQUES,
-      contratos: Object.fromEntries(IDS.map(i => [PONTOS[i].parque, PONTOS[i].contrato])),
+      parques: [...PARQUES, 'Complexo'],
+      contratos: Object.assign(Object.fromEntries(IDS.map(i => [PONTOS[i].parque, PONTOS[i].contrato])),
+        { Complexo: r(Object.values(PONTOS).reduce((a, p) => a + p.contrato, 0), 2) }),
       dias: dias.size, linhas: serie.length,
       serie,
     };

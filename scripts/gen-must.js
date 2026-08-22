@@ -157,6 +157,30 @@ function baldes(vs) {
   return b;
 }
 
+// O COMPLEXO NAO E A SOMA DOS PICOS. Cada parque atinge o seu em um horario diferente, entao
+// somar os nove picos produz um numero maior do que qualquer medidor ja leu. O pico do conjunto e
+// o maior valor da SOMA INSTANTANEA — a demanda simultanea — e por isso ele so pode ser calculado
+// aqui, onde a serie de 5 min ainda existe. Foi por nao ter esse numero que a matriz dia x parque
+// saiu sem coluna de total.
+//
+// GUARDA DE TUDO-OU-NADA no slot: se um dos nove pontos nao tem valor naquele instante, o slot
+// inteiro fica de fora. Somar oito e chamar de complexo subdeclara a demanda simultanea, e o erro
+// seria maior justamente nas horas de pico, quando um ponto falha.
+const CONTRATO_CX = Object.values(PONTOS).reduce((a, p) => a + p.contrato, 0);
+function serieComplexo(resp) {
+  const porInstante = new Map();
+  for (const id of IDS) {
+    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === GRANDEZA);
+    for (const v of (s ? s.valores || [] : [])) {
+      if (v.valor == null) continue;
+      const o = porInstante.get(v.data) || { soma: 0, n: 0 };
+      o.soma += v.valor / 1000; o.n++; porInstante.set(v.data, o);
+    }
+  }
+  const completos = [...porInstante.entries()].filter(([, o]) => o.n === IDS.length);
+  return completos.map(([data, o]) => ({ data, valor: o.soma * 1000 }));  // de volta a kW
+}
+
 function doDia(resp, dia) {
   const out = [];
   for (const id of IDS) {
@@ -186,6 +210,27 @@ function doDia(resp, dia) {
       status: pct == null ? null : statusDe(pct),
       slots: vs.length,
     });
+  }
+  // o conjunto entra como uma "usina" a mais, com o mesmo formato das nove — assim todo painel
+  // que ja filtra por parque ganha o Complexo de graca
+  const cx = serieComplexo(resp);
+  if (cx.length) {
+    let pico5 = -Infinity, hora5 = null, soma = 0;
+    for (const v of cx) { const mw = v.valor / 1000; soma += mw;
+      if (mw > pico5) { pico5 = mw; hora5 = String(v.data).slice(11, 16); } }
+    let pico = -Infinity, hora = null;
+    for (const [chave, o] of baldes(cx)) {
+      const md = o.soma / o.n;
+      if (md > pico) { pico = md; hora = chave; }
+    }
+    const pct = 100 * pico / CONTRATO_CX;
+    out.push({ dia, parque: 'Complexo',
+      pico_mw: r(pico, 3), pico_hora: hora,
+      pico5_mw: r(pico5, 3), pico5_hora: hora5,
+      media_mw: r(soma / cx.length, 3),
+      contratado_mw: r(CONTRATO_CX, 2), pct_must: r(pct, 2),
+      margem_mw: r(CONTRATO_CX - pico, 3),
+      status: statusDe(pct), slots: cx.length });
   }
   return out;
 }
@@ -267,7 +312,8 @@ async function grava(obj) {
     faixas: 'Status pelas faixas do dashboard HTML v7: ate 95% Normal, ate 98% Atencao, ate 100% '
       + 'Alerta, acima de 100% Critico. O 100% e CONTRATUAL (MUST do contrato de uso do sistema de '
       + 'transmissao); 95% e 98% sao faixas de aviso da casa, sem norma por tras.',
-    contratos: Object.fromEntries(Object.values(PONTOS).map(p => [p.parque, p.contrato])),
+    contratos: Object.assign(Object.fromEntries(Object.values(PONTOS).map(p => [p.parque, p.contrato])),
+      { Complexo: r(CONTRATO_CX, 2) }),
     dias: dias_distintos, linhas: serie.length, serie,
   };
   const t = await grava(out);
