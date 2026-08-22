@@ -17,6 +17,10 @@ on:
         description: 'dia para o diagnostico detalhado de alinhamento'
         required: false
         default: '2026-08-07'
+      dias_ultrapassagem:
+        description: 'dias com ultrapassagem a reconferir contra a fonte'
+        required: false
+        default: '2026-06-13,2026-06-16,2026-08-03,2026-08-07,2026-08-11'
 jobs:
   audita:
     runs-on: ubuntu-latest
@@ -35,3 +39,8 @@ jobs:
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           DIA_ALVO: ${{ inputs.dia_alinhamento || '2026-08-07' }}
         run: node scripts/audita-must-alinhamento.js
+      - name: Quais ultrapassagens sobrevivem ao quarto de hora da fonte
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS_ALVO: ${{ inputs.dias_ultrapassagem || '2026-06-13,2026-06-16,2026-08-03,2026-08-07,2026-08-11' }}
+        run: node scripts/audita-must-ultrapassagens.js
