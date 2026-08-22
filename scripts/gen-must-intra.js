@@ -38,7 +38,7 @@
  * regrava. Uma rodada que volte vazia nao pode apagar o passado.
  *
  * Env: WAY2_TOKEN [obrigatorio] · DADOS_STORAGE [obrigatorio fora de LOCAL_OUT] ·
- *      DIAS (quantos dias para tras processar, default 2) · FORCAR=1 (reprocessa dia ja presente) ·
+ *      DIAS (quantos dias para tras processar, default 2; o dia de HOJE entra sempre) · FORCAR=1 (reprocessa dia ja presente) ·
  *      SO (processa so uma resolucao: 5, 15, 30 ou 60) · LOCAL_OUT (prefixo de arquivo local).
  */
 const https = require('https');
@@ -132,7 +132,13 @@ function porBalde(resp, dia, min) {
   }
   for (const [k, o] of acum) {
     const [chave, parque] = k.split('|');
-    const l = linhas.get(chave) || { t: dia + 'T' + chave + ':00-03:00' };
+    // 🔴 O EPOCH VAI JUNTO, e nao e redundancia. O JSONata Go NAO parseia o offset '-03:00': ao
+    // falhar ele cai num parse so de DATA e devolve o instante das 00:00 daquele dia. Medido em
+    // 22/08/2026: `$toMillis('2026-08-21T23:45:00-03:00')` deu 1787270400000, que e 21/08 00:00Z —
+    // 23h45min a menos. Com isso o recorte por $__from/$__to errava em ate um dia inteiro, e uma
+    // janela de 24 h nao encontrava linha nenhuma. Comparar numero contra numero e imune a parsing.
+    const l = linhas.get(chave) || { t: dia + 'T' + chave + ':00-03:00',
+      ms: Date.parse(dia + 'T' + chave + ':00-03:00') };
     l[parque] = r(o.soma / o.n);
     linhas.set(chave, l);
   }
@@ -189,7 +195,9 @@ async function grava(nome, obj) {
     const antigo = await leBlob(BASE_LEITURA + res.blob);
     const m = new Map();
     for (const l of ((antigo || {}).serie || [])) m.set(l.t, l);
-    estado.set(res.min, { mapa: m, antes: m.size });
+    const chaves = [...m.keys()].sort();
+    estado.set(res.min, { mapa: m, antes: m.size,
+      ultimoAntes: chaves.length ? chaves[chaves.length - 1] : '' });
   }
 
   // o dia mais antigo que QUALQUER alvo ainda quer; os outros podam depois
@@ -197,11 +205,17 @@ async function grava(nome, obj) {
   const limite = Math.min(DIAS, maxDias);
   let buscados = 0, vazios = 0;
 
-  for (let off = 1; off <= limite; off++) {
+  // 🔴 COMECA EM off=0, O DIA DE HOJE. Ate 22/08/2026 o loop comecava em 1 e o dia corrente nunca
+  // era coletado: o blob terminava sempre na meia-noite passada, e quem pedisse "ultimas 24 horas"
+  // via um painel vazio. O dia de hoje e PARCIAL por natureza e por isso e sempre reprocessado —
+  // ele cresce a cada rodada, preenchendo conforme as leituras chegam.
+  for (let off = 0; off <= limite; off++) {
     const dia = diaBRT(off);
-    // so busca se ALGUM alvo precisa deste dia: dentro da janela dele e ainda ausente
+    const hoje = off === 0;
+    // so busca se ALGUM alvo precisa deste dia: dentro da janela dele e ainda ausente. O dia
+    // corrente nunca conta como "ja presente", porque o que esta la esta incompleto.
     const precisa = alvos.filter(res => off <= res.dias
-      && (FORCAR || ![...estado.get(res.min).mapa.keys()].some(t => t.startsWith(dia))));
+      && (hoje || FORCAR || ![...estado.get(res.min).mapa.keys()].some(t => t.startsWith(dia))));
     if (!precisa.length) continue;
 
     let resp;
@@ -213,6 +227,7 @@ async function grava(nome, obj) {
     for (const res of precisa) {
       const linhas = porBalde(resp, dia, res.min);
       const st = estado.get(res.min);
+      if (hoje) for (const t of [...st.mapa.keys()]) if (t.startsWith(dia)) st.mapa.delete(t);
       for (const l of linhas) st.mapa.set(l.t, l);
       algum += linhas.length;
     }
@@ -234,7 +249,8 @@ async function grava(nome, obj) {
     // GUARDA ANTI-REGRESSAO: rodada que nao mudou nada NAO regrava. Sem isto, uma janela em que a
     // API responde vazia produz um blob identico com data nova — ruido que esconde o momento em
     // que a coleta parou de funcionar.
-    if (serie.length === st.antes && !FORCAR) {
+    const ultimo = serie.length ? serie[serie.length - 1].t : '';
+    if (serie.length === st.antes && ultimo === st.ultimoAntes && !FORCAR) {
       console.log('  ' + res.blob.padEnd(17) + ' nada novo (' + st.antes + ' linhas) — NAO regravado');
       continue;
     }

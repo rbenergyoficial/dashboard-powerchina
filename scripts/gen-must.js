@@ -274,16 +274,20 @@ async function grava(obj) {
   const antes = mapa.size;
 
   let dias = 0, novos = 0, vazios = 0;
-  for (let off = 1; off <= DIAS; off++) {
+  // COMECA EM off=0: o dia de hoje entra PARCIAL e cresce a cada rodada. Sem ele o pico "de hoje"
+  // so apareceria depois da meia-noite, e a pagina nunca mostraria o que esta acontecendo agora.
+  for (let off = 0; off <= DIAS; off++) {
     const dia = diaBRT(off);
-    if (!FORCAR && [...mapa.keys()].some(k => k.startsWith(dia + '|'))) continue;
+    const hoje = off === 0;
+    // o dia corrente nunca conta como "ja presente": o que esta la esta incompleto
+    if (!hoje && !FORCAR && [...mapa.keys()].some(k => k.startsWith(dia + '|'))) continue;
     let resp;
     try { resp = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59', 'CincoMinutos'), token); }
     catch (e) { console.log('  ' + dia + '  ERRO ' + e.message.slice(0, 50)); continue; }
     const linhas = doDia(resp, dia);
     dias++;
     if (!linhas.length) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
-    for (const l of linhas) { mapa.set(l.dia + '|' + l.parque, l); novos++; }
+    for (const l of linhas) { if (hoje) l.parcial = true; mapa.set(l.dia + '|' + l.parque, l); novos++; }
     const pior = linhas.slice().sort((a, b) => b.pct_must - a.pct_must)[0];
     console.log('  ' + dia + '  ' + linhas.length + ' parques  ·  pior: ' + pior.parque + ' '
       + pior.pico_mw + ' MW (' + pior.pct_must + '% do MUST, ' + pior.status + ') as ' + pior.pico_hora);
@@ -294,7 +298,8 @@ async function grava(obj) {
   // GUARDA ANTI-REGRESSAO: rodada que nao acrescentou nada NAO regrava. Sem isto, uma janela em que
   // a API responde vazia produziria um blob identico com data nova — ruido que esconde o momento em
   // que a coleta parou de funcionar.
-  if (serie.length === antes && !FORCAR) {
+  const temHoje = serie.some(l => l.dia === diaBRT(0));
+  if (serie.length === antes && !temHoje && !FORCAR) {
     console.log('\nnada novo (' + antes + ' linhas ja presentes) — blob NAO regravado');
     return;
   }
