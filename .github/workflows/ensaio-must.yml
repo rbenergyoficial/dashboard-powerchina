@@ -1,0 +1,48 @@
+name: Ensaio MUST · geradores em modo local, nada publicado
+
+# Roda gen-must.js e gen-must-intra.js com LOCAL_OUT apontando para um diretorio do runner.
+# NADA vai para o Azure. Depois confere os arquivos produzidos: rotulo de tempo pelo FIM do
+# intervalo, granularidade prometida, e se sobrou alguma ultrapassagem nos dias auditados —
+# onde a resposta correta, medida na fonte, e ZERO.
+#
+# Existe porque a correcao do alinhamento muda o numero que a pagina publica. Subir direto e
+# conferir depois seria descobrir o defeito na tela, que e o que este projeto evita.
+on:
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'quantos dias processar no ensaio'
+        required: false
+        default: '25'
+      dias_alvo:
+        description: 'dias com ultrapassagem a reconferir'
+        required: false
+        default: '2026-08-03,2026-08-07,2026-08-11'
+jobs:
+  ensaio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: mkdir -p /tmp/ensaio
+      - name: gen-must-intra em modo local
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          LOCAL_OUT: /tmp/ensaio/
+          DIAS: ${{ inputs.dias || '25' }}
+          FORCAR: '1'
+        run: node scripts/gen-must-intra.js
+      - name: gen-must em modo local
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          LOCAL_OUT: /tmp/ensaio/must_diario.json
+          DIAS: ${{ inputs.dias || '25' }}
+          FORCAR: '1'
+        run: node scripts/gen-must.js
+      - name: Conferir o que saiu
+        env:
+          ENSAIO_DIR: /tmp/ensaio/
+          DIAS_ALVO: ${{ inputs.dias_alvo || '2026-08-03,2026-08-07,2026-08-11' }}
+        run: node scripts/audita-must-ensaio.js

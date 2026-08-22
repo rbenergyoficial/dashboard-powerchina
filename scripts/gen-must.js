@@ -8,7 +8,8 @@
  * chamando a API da Way2 no navegador a cada carregamento — um painel Grafana lendo blob nao pode.
  *
  * O QUE PUBLICA (must_diario.json), por dia e por parque:
- *   ms (epoch de 00:00 BRT) · pico_mw · hora do pico · media_mw · contratado_mw · pct_must
+ *   ms (epoch de 00:00 BRT) · pico_mw (quarto de hora da FONTE) · hora do pico · media_mw
+ *   · contratado_mw · pct_must
  *   · margem_mw · status
  * Semana, mes e ano saem DAI no JSONata do painel: 365 dias x 9 parques e um frame trivial.
  *
@@ -144,19 +145,17 @@ async function sonda(token) {
 //
 // O de 5 min fica publicado ao lado (`pico5_mw`), como diagnostico: se um dia os dois divergirem
 // muito, e sinal de transitorio, nao de carga.
-const BUCKET_MIN = 15;
-function baldes(vs) {
-  // bucket = borda ESQUERDA, mesma convencao do gen-way2-agg.js. A string de tempo e manipulada
-  // direto (naive-local BRT) — passar por Date arriscaria deslocar 3 h.
-  const b = new Map();
-  for (const v of vs) {
-    const hh = String(v.data).slice(11, 13), mm = +String(v.data).slice(14, 16);
-    const chave = hh + ':' + String(Math.floor(mm / BUCKET_MIN) * BUCKET_MIN).padStart(2, '0');
-    const o = b.get(chave) || { soma: 0, n: 0 };
-    o.soma += v.valor / 1000; o.n++; b.set(chave, o);
-  }
-  return b;
-}
+// 🔴 O QUARTO DE HORA VEM PRONTO DA FONTE, nao e mais agregado aqui. Ate 22/08/2026 este arquivo
+// pedia so CincoMinutos e montava o balde de 15 min por borda ESQUERDA — e a Way2 rotula pela
+// borda DIREITA (o valor em T cobre (T-15, T]). O balde saia deslocado 5 minutos do quarto de hora
+// que o ONS afere, e o efeito nao era sutil: nos cinco dias auditados, 10 intervalos acima de 100%
+// pelo balde caseiro contra ZERO pelo quarto de hora da fonte — nove dia-parque de falso positivo.
+//
+// Agora sao duas chamadas por dia: CincoMinutos para o diagnostico de transitorio (`pico5_mw`) e
+// QuinzeMinutos para o numero contratual.
+const INTERVALO_CONTRATUAL = 'QuinzeMinutos';
+const INTERVALO_DIAGNOSTICO = 'CincoMinutos';
+const AMOSTRAS_DIA = { QuinzeMinutos: 96, CincoMinutos: 288 };
 
 // O COMPLEXO NAO E A SOMA DOS PICOS. Cada parque atinge o seu em um horario diferente, entao
 // somar os nove picos produz um numero maior do que qualquer medidor ja leu. O pico do conjunto e
@@ -182,24 +181,31 @@ function serieComplexo(resp) {
   return completos.map(([data, o]) => ({ data, valor: o.soma * 1000 }));  // de volta a kW
 }
 
-function doDia(resp, dia) {
+// devolve { pico, hora } da serie de um ponto, ja na resolucao que a fonte entregou
+function picoDe(resp, id) {
+  const s = (resp.dados || []).find(x => String(x.pontoId) === String(id)
+    && x.nomeGrandeza === GRANDEZA);
+  const vs = (s ? s.valores || [] : []).filter(v => v.valor != null);
+  if (!vs.length) return null;
+  let pico = -Infinity, hora = null, soma = 0;
+  for (const v of vs) {
+    const mw = v.valor / 1000; soma += mw;      // a API devolve kW; o contrato e em MW
+    if (mw > pico) { pico = mw; hora = String(v.data).slice(11, 16); }
+  }
+  return { pico, hora, media: soma / vs.length, n: vs.length };
+}
+
+function doDia(resp15, resp5, dia) {
   const out = [];
   for (const id of IDS) {
     const p = PONTOS[id];
-    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === GRANDEZA);
-    const vs = (s ? s.valores || [] : []).filter(v => v.valor != null);
-    if (!vs.length) continue;
-    // a API devolve kW; o contrato e em MW
-    let pico5 = -Infinity, hora5 = null, soma = 0;
-    for (const v of vs) {
-      const mw = v.valor / 1000; soma += mw;
-      if (mw > pico5) { pico5 = mw; hora5 = String(v.data).slice(11, 16); }
-    }
-    let pico = -Infinity, hora = null;
-    for (const [chave, o] of baldes(vs)) {
-      const md = o.soma / o.n;
-      if (md > pico) { pico = md; hora = chave; }
-    }
+    const q = picoDe(resp15, id);
+    if (!q) continue;
+    const d5 = picoDe(resp5, id);
+    const pico = q.pico, hora = q.hora;
+    const pico5 = d5 ? d5.pico : null, hora5 = d5 ? d5.hora : null;
+    const soma = q.media * q.n;
+    const vs = { length: q.n };
     const pct = p.contrato > 0 ? 100 * pico / p.contrato : null;
     out.push({
       dia, parque: p.parque,
@@ -209,7 +215,7 @@ function doDia(resp, dia) {
       contratado_mw: p.contrato, pct_must: r(pct, 2),
       margem_mw: r(p.contrato - pico, 3),
       status: pct == null ? null : statusDe(pct),
-      slots: vs.length,
+      slots: vs.length,   // intervalos de 15 min com valor no dia (96 num dia fechado)
     });
   }
   // o conjunto entra como uma "usina" a mais, com o mesmo formato das nove — assim todo painel
@@ -223,16 +229,16 @@ function doDia(resp, dia) {
   // Nao da para derivar isso no painel: o JSONata Go parseia `$toMillis('2026-08-22')` como 00:00
   // UTC — correto, mas UTC — e IGNORA o offset em '2026-08-22T00:00:00-03:00', devolvendo tambem
   // 00:00 UTC. Corrigir no painel exigiria somar 3 h a mao, que e numero de fuso escrito no painel.
-  const cx = serieComplexo(resp);
+  const cx = serieComplexo(resp15);
+  const cx5 = serieComplexo(resp5);
   if (cx.length) {
-    let pico5 = -Infinity, hora5 = null, soma = 0;
-    for (const v of cx) { const mw = v.valor / 1000; soma += mw;
+    let pico5 = -Infinity, hora5 = null;
+    for (const v of cx5) { const mw = v.valor / 1000;
       if (mw > pico5) { pico5 = mw; hora5 = String(v.data).slice(11, 16); } }
-    let pico = -Infinity, hora = null;
-    for (const [chave, o] of baldes(cx)) {
-      const md = o.soma / o.n;
-      if (md > pico) { pico = md; hora = chave; }
-    }
+    if (pico5 === -Infinity) { pico5 = null; hora5 = null; }
+    let pico = -Infinity, hora = null, soma = 0;
+    for (const v of cx) { const mw = v.valor / 1000; soma += mw;
+      if (mw > pico) { pico = mw; hora = String(v.data).slice(11, 16); } }
     const pct = 100 * pico / CONTRATO_CX;
     out.push({ dia, parque: 'Complexo',
       pico_mw: r(pico, 3), pico_hora: hora,
@@ -291,10 +297,25 @@ async function grava(obj) {
     const hoje = off === 0;
     // o dia corrente nunca conta como "ja presente": o que esta la esta incompleto
     if (!hoje && !FORCAR && [...mapa.keys()].some(k => k.startsWith(dia + '|'))) continue;
-    let resp;
-    try { resp = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59', 'CincoMinutos'), token); }
-    catch (e) { console.log('  ' + dia + '  ERRO ' + e.message.slice(0, 50)); continue; }
-    const linhas = doDia(resp, dia);
+    // DUAS chamadas por dia: o quarto de hora contratual vem pronto da fonte, e o de 5 min fica
+    // ao lado so como diagnostico de transitorio
+    let resp15, resp5;
+    try {
+      resp15 = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59', INTERVALO_CONTRATUAL), token);
+      await sleep(600);
+      resp5 = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59', INTERVALO_DIAGNOSTICO), token);
+    } catch (e) { console.log('  ' + dia + '  ERRO ' + e.message.slice(0, 50)); continue; }
+    // GUARDA DE GRANULARIDADE: um dia fechado tem de vir com o numero de amostras da resolucao
+    // pedida. Se a API entender o intervalo de outro jeito, isso falha alto em vez de publicar
+    // um pico apurado na granularidade errada.
+    if (!hoje) for (const [nome, resp] of [[INTERVALO_CONTRATUAL, resp15], [INTERVALO_DIAGNOSTICO, resp5]]) {
+      const s0 = (resp.dados || []).find(x => (x.valores || []).length);
+      const n = s0 ? s0.valores.length : 0;
+      if (n && n !== AMOSTRAS_DIA[nome])
+        throw new Error(dia + ' em ' + nome + ' voltou com ' + n + ' amostras, esperado '
+          + AMOSTRAS_DIA[nome] + ' — a fonte mudou a granularidade');
+    }
+    const linhas = doDia(resp15, resp5, dia);
     dias++;
     if (!linhas.length) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
     // 00:00 no horario de Brasilia. O dia INTEIRO vai de `ms` a `ms + 86.400.000`, e e assim que

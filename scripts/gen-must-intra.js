@@ -64,6 +64,16 @@ const IDS = Object.keys(PONTOS);
 const PARQUES = IDS.map(i => PONTOS[i].parque);
 const GRANDEZA = 'Demat';   // demanda ativa: e ela que o contrato de MUST limita
 
+// 🔴 CADA RESOLUCAO E PEDIDA JA INTEGRALIZADA A FONTE, com o nome que a API entende. Ate
+// 22/08/2026 o gerador pedia so CincoMinutos e agregava o resto por conta propria, por borda
+// ESQUERDA — e a Way2 rotula pela borda DIREITA. O balde saia deslocado 5 min do quarto de hora
+// que o ONS afere, e isso produzia ultrapassagem que nao existe: nos cinco dias auditados, 10
+// intervalos acima de 100% pelo balde caseiro contra ZERO pelo quarto de hora da fonte.
+// Os nomes foram medidos contra a API (audita-must-intervalos.js); nome que ela nao entende
+// devolve HTTP 400, entao errar aqui falha alto em vez de publicar granularidade trocada.
+const INTERVALO_API = { 5: 'CincoMinutos', 15: 'QuinzeMinutos', 30: 'TrintaMinutos', 60: 'UmaHora' };
+const AMOSTRAS_DIA = { 5: 288, 15: 96, 30: 48, 60: 24 };
+
 const RESOLUCOES = [
   { min: 5, dias: 30, blob: 'must_5min.json',
     nota: 'Detalhe do medidor. Base de DIAGNOSTICO, nao contratual: o pico instantaneo de 5 min '
@@ -97,8 +107,8 @@ function apiGet(query, token, timeout = 90000) {
     req.on('error', ko);
   });
 }
-const query = (ini, fim) => 'ids=' + IDS.join(',') + '&grandezas=' + GRANDEZA
-  + '&contextodasdatas=ConsiderarDiaCheio&intervalo=CincoMinutos'
+const query = (ini, fim, intervalo) => 'ids=' + IDS.join(',') + '&grandezas=' + GRANDEZA
+  + '&contextodasdatas=ConsiderarDiaCheio&intervalo=' + intervalo
   + '&medicao-datainicio=' + ini + '&medicao-datafim=' + fim
   + '&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false';
 
@@ -111,47 +121,48 @@ async function comRetry(q, token, tentativas = 3) {
   throw ultimo;
 }
 
-// Agrega os slots de 5 min em baldes de `min`, pela borda ESQUERDA — a mesma convencao do
-// gen-way2-agg.js e do gen-must.js. A string de tempo e manipulada direto (naive-local BRT):
-// passar por Date arriscaria deslocar 3 h, que foi o defeito que essa convencao existe para evitar.
-function porBalde(resp, dia, min) {
-  const linhas = new Map();   // 'HH:MM' -> { M1: mw, ... }
-  const acum = new Map();     // 'HH:MM|parque' -> { soma, n }
+// Converte o que a fonte JA ENTREGOU integralizado no formato largo do blob. Nao agrega nada:
+// a agregacao caseira era a origem do defeito de alinhamento.
+//
+// 🔴 O ROTULO DE TEMPO E O FIM DO INTERVALO. Medido em 22/08/2026 contra a API: pedindo um dia,
+// a serie de 5 min vai de `DIA 00:05` a `DIA+1 00:00`, a de 15 min de `DIA 00:15` a `DIA+1 00:00`,
+// e a de 1 h de `DIA 01:00` a `DIA+1 00:00`. Ou seja, o valor rotulado T cobre (T-passo, T], e o
+// ULTIMO balde de cada dia carrega a data do dia SEGUINTE.
+//
+// Isso e o que o ONS afere, e por isso o rotulo vai para o blob COMO A FONTE ENTREGA — converter
+// para borda esquerda seria reintroduzir uma convencao caseira entre a medicao e o painel.
+function montaLinhas(resp) {
+  const linhas = new Map();   // instante ISO -> { t, ms, M1..M9, Complexo }
   for (const id of IDS) {
     const parque = PONTOS[id].parque;
-    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === GRANDEZA);
+    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id)
+      && x.nomeGrandeza === GRANDEZA);
     for (const v of (s ? s.valores || [] : [])) {
       if (v.valor == null) continue;
-      const hh = String(v.data).slice(11, 13), mm = +String(v.data).slice(14, 16);
-      const chave = hh + ':' + String(Math.floor(mm / min) * min).padStart(2, '0');
-      const k = chave + '|' + parque;
-      const o = acum.get(k) || { soma: 0, n: 0 };
-      o.soma += v.valor / 1000;   // a API devolve kW; o contrato e em MW
-      o.n++; acum.set(k, o);
+      // a API devolve 'AAAA-MM-DDTHH:MM:SS' em hora local de Brasilia, sem offset
+      const iso = String(v.data).slice(0, 19);
+      const l = linhas.get(iso) || { t: iso + '-03:00', ms: Date.parse(iso + '-03:00') };
+      l[parque] = r(v.valor / 1000);   // a API devolve kW; o contrato e em MW
+      linhas.set(iso, l);
     }
   }
-  for (const [k, o] of acum) {
-    const [chave, parque] = k.split('|');
-    // 🔴 O EPOCH VAI JUNTO, e nao e redundancia. O JSONata Go NAO parseia o offset '-03:00': ao
-    // falhar ele cai num parse so de DATA e devolve o instante das 00:00 daquele dia. Medido em
-    // 22/08/2026: `$toMillis('2026-08-21T23:45:00-03:00')` deu 1787270400000, que e 21/08 00:00Z —
-    // 23h45min a menos. Com isso o recorte por $__from/$__to errava em ate um dia inteiro, e uma
-    // janela de 24 h nao encontrava linha nenhuma. Comparar numero contra numero e imune a parsing.
-    const l = linhas.get(chave) || { t: dia + 'T' + chave + ':00-03:00',
-      ms: Date.parse(dia + 'T' + chave + ':00-03:00') };
-    l[parque] = r(o.soma / o.n);
-    linhas.set(chave, l);
-  }
-  // O COMPLEXO E A SOMA SIMULTANEA, calculada balde a balde — nao a soma dos picos de cada parque,
-  // que aconteceriam em horarios diferentes e dariam um numero que nenhum medidor leu.
+  // O COMPLEXO E A SOMA SIMULTANEA, balde a balde — nao a soma dos picos de cada parque, que
+  // aconteceriam em horarios diferentes e dariam um numero que nenhum medidor leu.
   // GUARDA DE TUDO-OU-NADA: balde sem os nove parques fica sem Complexo. Somar oito subdeclara a
   // demanda simultanea, e o erro seria maior justamente na hora do pico.
   for (const l of linhas.values()) {
     const vs = PARQUES.map(p => l[p]).filter(v => v != null);
     if (vs.length === PARQUES.length) l.Complexo = r(vs.reduce((a, b) => a + b, 0));
   }
-  return [...linhas.values()].sort((a, b) => a.t < b.t ? -1 : 1);
+  return [...linhas.values()].sort((a, b) => a.ms - b.ms);
 }
+
+// O dia D cobre (D 00:00, D+1 00:00] — o mesmo recorte que a fonte usa. Comparar por EPOCH, e nao
+// por prefixo de texto, e o que impede apagar o balde 00:00 que pertence ao dia anterior.
+const faixaDoDia = dia => ({
+  de: Date.parse(dia + 'T00:00:00-03:00'),
+  ate: Date.parse(dia + 'T00:00:00-03:00') + 86400000,
+});
 
 async function leBlob(url) {
   return new Promise(ok => {
@@ -209,32 +220,54 @@ async function grava(nome, obj) {
   // era coletado: o blob terminava sempre na meia-noite passada, e quem pedisse "ultimas 24 horas"
   // via um painel vazio. O dia de hoje e PARCIAL por natureza e por isso e sempre reprocessado —
   // ele cresce a cada rodada, preenchendo conforme as leituras chegam.
+  // Uma chamada por (dia, resolucao). Ate 22/08/2026 era uma chamada por dia servindo as quatro,
+  // porque a agregacao era caseira; com cada resolucao vindo pronta da fonte, cada uma tem de ser
+  // pedida. Custa mais chamadas por dia e MENOS no total da carga historica, porque cada resolucao
+  // so busca os dias da janela dela: 30 + 90 + 180 + 365 = 665, contra 365 x 4 se todas fossem ao
+  // ano inteiro.
   for (let off = 0; off <= limite; off++) {
     const dia = diaBRT(off);
     const hoje = off === 0;
-    // so busca se ALGUM alvo precisa deste dia: dentro da janela dele e ainda ausente. O dia
-    // corrente nunca conta como "ja presente", porque o que esta la esta incompleto.
+    const { de, ate } = faixaDoDia(dia);
+    // so busca se o alvo precisa deste dia: dentro da janela dele e ainda ausente. O dia corrente
+    // nunca conta como "ja presente", porque o que esta la esta incompleto.
     const precisa = alvos.filter(res => off <= res.dias
-      && (hoje || FORCAR || ![...estado.get(res.min).mapa.keys()].some(t => t.startsWith(dia))));
+      && (hoje || FORCAR
+        || ![...estado.get(res.min).mapa.values()].some(l => l.ms > de && l.ms <= ate)));
     if (!precisa.length) continue;
 
-    let resp;
-    try { resp = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59'), token); }
-    catch (e) { console.log('  ' + dia + '  ERRO ' + e.message.slice(0, 50)); continue; }
-    buscados++;
-
+    const conta = [];
     let algum = 0;
     for (const res of precisa) {
-      const linhas = porBalde(resp, dia, res.min);
+      let resp;
+      try {
+        resp = await comRetry(query(dia + 'T00:00:00', dia + 'T23:59:59',
+          INTERVALO_API[res.min]), token);
+      } catch (e) {
+        console.log('  ' + dia + ' ' + res.min + 'min  ERRO ' + e.message.slice(0, 50));
+        continue;
+      }
+      buscados++;
+      const linhas = montaLinhas(resp);
+      // GUARDA DE GRANULARIDADE: um dia fechado tem de vir com o numero de amostras da resolucao
+      // pedida. Se a API entender o intervalo de outro jeito, isso aparece aqui em vez de virar
+      // um blob com o rotulo de uma resolucao e o conteudo de outra.
+      if (!hoje && linhas.length && linhas.length !== AMOSTRAS_DIA[res.min])
+        throw new Error(dia + ' em ' + res.min + 'min voltou com ' + linhas.length
+          + ' amostras, esperado ' + AMOSTRAS_DIA[res.min]
+          + ' — a fonte mudou a granularidade e o blob nao pode ser gravado assim');
       const st = estado.get(res.min);
-      if (hoje) for (const t of [...st.mapa.keys()]) if (t.startsWith(dia)) st.mapa.delete(t);
+      // o dia corrente e sempre reprocessado; a exclusao e por EPOCH, para nao apagar o balde
+      // 00:00 que pertence ao dia ANTERIOR
+      if (hoje) for (const [k, l] of [...st.mapa.entries()])
+        if (l.ms > de && l.ms <= ate) st.mapa.delete(k);
       for (const l of linhas) st.mapa.set(l.t, l);
       algum += linhas.length;
+      conta.push(res.min + 'min:' + linhas.length);
+      await sleep(600);
     }
     if (!algum) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
-    if (off % 20 === 0 || off <= 3)
-      console.log('  ' + dia + '  ' + precisa.map(x => x.min + 'min:' + porBalde(resp, dia, x.min).length).join(' · '));
-    await sleep(600);
+    if (off % 20 === 0 || off <= 3) console.log('  ' + dia + '  ' + conta.join(' · '));
   }
 
   console.log('\ndias buscados na API: ' + buscados + (vazios ? ' (' + vazios + ' vazios)' : ''));
@@ -242,9 +275,10 @@ async function grava(nome, obj) {
     const st = estado.get(res.min);
     // PODA o que saiu da janela: sem isto o blob de 5 min cresceria para o ano inteiro e a pagina
     // passaria a baixar 25 MB para desenhar uma semana
-    const corte = diaBRT(res.dias);
-    const serie = [...st.mapa.values()].filter(l => l.t.slice(0, 10) >= corte)
-      .sort((a, b) => a.t < b.t ? -1 : 1);
+    // por EPOCH, pela mesma razao da exclusao do dia corrente: o balde 00:00 pertence ao dia
+    // anterior, e cortar por prefixo de texto o classificaria no dia errado
+    const corte = faixaDoDia(diaBRT(res.dias)).de;
+    const serie = [...st.mapa.values()].filter(l => l.ms > corte).sort((a, b) => a.ms - b.ms);
 
     // GUARDA ANTI-REGRESSAO: rodada que nao mudou nada NAO regrava. Sem isto, uma janela em que a
     // API responde vazia produz um blob identico com data nova — ruido que esconde o momento em
@@ -254,13 +288,18 @@ async function grava(nome, obj) {
       console.log('  ' + res.blob.padEnd(17) + ' nada novo (' + st.antes + ' linhas) — NAO regravado');
       continue;
     }
-    const dias = new Set(serie.map(l => l.t.slice(0, 10)));
+    // o balde 00:00 pertence ao dia ANTERIOR (o rotulo e o fim do intervalo), entao a contagem
+    // de dias desconta um passo antes de olhar a data
+    const dias = new Set(serie.map(l => new Date(l.ms - res.min * 60000).toISOString().slice(0, 10)));
     const out = {
       gerado_em: new Date().toISOString(),
       resolucao_min: res.min, janela_dias: res.dias,
-      fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, coletada '
-        + 'em 5 min e agregada por MEDIA no balde, pela borda esquerda. A API devolve kW; aqui vai '
-        + 'em MW.',
+      fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, pedida a '
+        + 'API JA INTEGRALIZADA na resolucao deste arquivo (' + INTERVALO_API[res.min] + '). A API '
+        + 'devolve kW; aqui vai em MW.',
+      rotulo_de_tempo: 'O instante e o FIM do intervalo: o valor em T cobre (T menos '
+        + res.min + ' min, T]. E a convencao da fonte e do ONS, e o ultimo balde de cada dia '
+        + 'carrega a data do dia seguinte (00:00).',
       metodo: res.nota + ' Janela de ' + res.dias + ' dias: a resolucao e a janela sao um produto, '
         + 'e o Infinity baixa a URL inteira antes de aplicar o JSONata — quem decide o peso da '
         + 'pagina e o recorte do arquivo.',
