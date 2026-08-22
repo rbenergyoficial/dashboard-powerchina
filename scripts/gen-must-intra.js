@@ -9,10 +9,15 @@
  *
  * QUATRO BLOBS, UM POR RESOLUCAO — e cada um com a JANELA que a resolucao comporta:
  *
- *   must_5min.json    5 min ·   7 dias  ·  2.016 linhas   — a semana, no detalhe do medidor
- *   must_15min.json  15 min ·  30 dias  ·  2.880 linhas   — o mes na base CONTRATUAL
- *   must_30min.json  30 min ·  90 dias  ·  4.320 linhas   — o trimestre
+ *   must_5min.json    5 min ·  30 dias  ·  8.640 linhas   — o mes, no detalhe do medidor
+ *   must_15min.json  15 min ·  90 dias  ·  8.640 linhas   — o trimestre na base CONTRATUAL
+ *   must_30min.json  30 min · 180 dias  ·  8.640 linhas   — o semestre
  *   must_60min.json  60 min · 365 dias  ·  8.760 linhas   — o ano inteiro
+ *
+ * As quatro janelas saem do MESMO teto de linhas (~8.700, medido em 1,1 MB por arquivo), e nao de
+ * um numero escolhido a esmo. Ate 22/08/2026 o de 5 min gastava 2.016 de um orcamento de 8.700:
+ * cobria 7 dias quando podia cobrir 30, e era essa folga desperdicada que deixava o grafico vazio
+ * quando alguem pedia um periodo maior do que a cobertura.
  *
  * A janela cresce quando a resolucao afrouxa porque o custo e o produto das duas. Um unico blob de
  * 5 min cobrindo o ano teria 935 mil pontos: o Infinity baixa a URL INTEIRA antes de aplicar o
@@ -60,12 +65,12 @@ const PARQUES = IDS.map(i => PONTOS[i].parque);
 const GRANDEZA = 'Demat';   // demanda ativa: e ela que o contrato de MUST limita
 
 const RESOLUCOES = [
-  { min: 5, dias: 7, blob: 'must_5min.json',
+  { min: 5, dias: 30, blob: 'must_5min.json',
     nota: 'Detalhe do medidor. Base de DIAGNOSTICO, nao contratual: o pico instantaneo de 5 min '
       + 'passa da outorga do parque com frequencia por transitorio de medicao.' },
-  { min: 15, dias: 30, blob: 'must_15min.json',
+  { min: 15, dias: 90, blob: 'must_15min.json',
     nota: 'Base CONTRATUAL. E nesta integralizacao que o pico do dia e apurado contra o MUST.' },
-  { min: 30, dias: 90, blob: 'must_30min.json',
+  { min: 30, dias: 180, blob: 'must_30min.json',
     nota: 'Meia hora, a mesma integralizacao dos arquivos do ONS.' },
   { min: 60, dias: 365, blob: 'must_60min.json',
     nota: 'Hora cheia. E a resolucao que comporta o ano inteiro num blob que a pagina consegue '
