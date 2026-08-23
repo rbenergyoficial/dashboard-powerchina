@@ -176,15 +176,27 @@ const faixaDoDia = dia => ({
   ate: Date.parse(dia + 'T00:00:00-03:00') + 86400000,
 });
 
+// 🔴 A DIFERENCA ENTRE "NAO EXISTE" E "NAO DEU PARA LER" E O HISTORICO INTEIRO. Antes, qualquer
+// falha — 500 da rede, gzip corrompido, JSON truncado — devolvia `null`, o gerador tratava como
+// primeira execucao e regravava o blob so com os dias desta rodada. Com DIAS=2 isso apagaria 365.
+//
+// O risco cresceu quando o blob passou a ser gravado comprimido: virou mais um ponto onde a
+// leitura pode falhar. Agora so o 404 devolve "vazio"; o resto ESTOURA, o job fica vermelho e o
+// blob antigo continua no ar — que e o comportamento certo.
 async function leBlob(url) {
-  return new Promise(ok => {
+  return new Promise((ok, ko) => {
     https.get(url, { headers: { 'accept-encoding': 'gzip' } }, res => {
-      if (res.statusCode !== 200) { res.resume(); return ok(null); }
+      if (res.statusCode === 404) { res.resume(); return ok(null); }
+      if (res.statusCode !== 200) { res.resume(); return ko(new Error('HTTP ' + res.statusCode + ' ao ler ' + url)); }
       const cru = /gzip/i.test(res.headers['content-encoding'] || '')
         ? res.pipe(require('zlib').createGunzip()) : res;
       const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ok(null); } });
-    }).on('error', () => ok(null));
+      cru.on('error', e => ko(new Error('descompressao falhou em ' + url + ': ' + e.message)));
+      cru.on('end', () => {
+        try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); }
+        catch (e) { ko(new Error('JSON invalido em ' + url + ': ' + e.message)); }
+      });
+    }).on('error', e => ko(new Error('rede falhou em ' + url + ': ' + e.message)));
   });
 }
 
@@ -195,11 +207,20 @@ async function grava(nome, obj) {
   }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
+// 🔴 O BLOB VAI COMPRIMIDO. Medido em 23/08/2026: o Azure Blob NAO comprime sozinho — ele serve
+// exatamente os bytes gravados, e o `must_15min.json` saia com 1.281 KB na rede mesmo com o
+// cliente pedindo gzip. O download levava de 3,6 a 8,8 segundos, e era o maior custo de cada
+// troca de filtro na pagina.
+//
+// Gravando JA comprimido, com o header `Content-Encoding: gzip`, o mesmo arquivo vai a 209 KB —
+// 84% menos. Navegador e datasource descomprimem sozinhos; nenhum consumidor precisa saber.
   const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
   await cont.createIfNotExists();
-  await cont.getBlockBlobClient(nome).upload(json, Buffer.byteLength(json),
-    { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
-  return json.length;
+  const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
+  await cont.getBlockBlobClient(nome).upload(gz, gz.length,
+    { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip',
+      blobCacheControl: 'public, max-age=300' } });
+  return gz.length;
 }
 
 (async () => {
@@ -326,7 +347,8 @@ async function grava(nome, obj) {
     };
     const t = await grava(res.blob, out);
     console.log('  ' + res.blob.padEnd(17) + ' ' + String(serie.length).padStart(6) + ' linhas · '
-      + String(dias.size).padStart(3) + ' dias · ' + Math.round(t / 1024) + ' KB'
+      + String(dias.size).padStart(3) + ' dias · ' + Math.round(t / 1024) + ' KB comprimido ('
+      + Math.round(JSON.stringify(out).length / 1024) + ' KB cru)'
       + (st.antes ? '  (+' + (serie.length - st.antes) + ')' : ''));
   }
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
