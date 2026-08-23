@@ -363,13 +363,31 @@ async function grava(nome, obj) {
     // por EPOCH, pela mesma razao da exclusao do dia corrente: o balde 00:00 pertence ao dia
     // anterior, e cortar por prefixo de texto o classificaria no dia errado
     const corte = faixaDoDia(diaBRT(res.dias)).de;
+    // 🔴 COLUNA REMOVIDA DO GERADOR FICA PENDURADA EM LINHA ANTIGA. O blob e acumulativo: linha
+    // que a rodada nao reprocessa mantem as chaves que tinha. Em 23/08/2026 uma versao
+    // intermediaria publicou `<parque>_g`, e as linhas daquele dia ficaram com a coluna mesmo
+    // depois de o gerador parar de produzi-la — a mesma forma do `Totalizador` que assombrou o
+    // painel de saude: campo que o gerador nao entrega mais e que o painel continua achando.
+    //
+    // Podar na gravacao faz o ESQUEMA do blob ser sempre o do gerador de hoje, sem depender de
+    // uma recarga com FORCAR para limpar o passado.
+    const permitido = new Set(['t', 'ms']);
+    for (const e of PARQUES.concat(['Complexo']))
+      for (const suf of Object.values(SUFIXO)) if (suf !== '_v') permitido.add(e + suf);
+    let podadas = 0;
+    for (const l of st.mapa.values())
+      for (const k of Object.keys(l)) if (!permitido.has(k)) { delete l[k]; podadas++; }
+    if (podadas) console.log('  ' + res.blob + ': ' + podadas + ' chaves de esquema antigo podadas');
     const serie = [...st.mapa.values()].filter(l => l.ms > corte).sort((a, b) => a.ms - b.ms);
 
     // GUARDA ANTI-REGRESSAO: rodada que nao mudou nada NAO regrava. Sem isto, uma janela em que a
     // API responde vazia produz um blob identico com data nova — ruido que esconde o momento em
     // que a coleta parou de funcionar.
     const ultimo = serie.length ? serie[serie.length - 1].t : '';
-    if (serie.length === st.antes && ultimo === st.ultimoAntes && !FORCAR) {
+    // ⚠️ PODAR NAO MUDA CONTAGEM NEM ULTIMO INSTANTE, entao a guarda calaria a gravacao e o
+    // esquema antigo sobreviveria — exatamente o que aconteceu com o remendo retroativo do `ms`.
+    // Uma limpeza que a guarda engole e uma limpeza que nunca acontece.
+    if (serie.length === st.antes && ultimo === st.ultimoAntes && !FORCAR && !podadas) {
       console.log('  ' + res.blob.padEnd(17) + ' nada novo (' + st.antes + ' linhas) — NAO regravado');
       continue;
     }
@@ -379,9 +397,14 @@ async function grava(nome, obj) {
     const out = {
       gerado_em: new Date().toISOString(),
       resolucao_min: res.min, janela_dias: res.dias,
-      fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, pedida a '
-        + 'API JA INTEGRALIZADA na resolucao deste arquivo (' + INTERVALO_API[res.min] + '). A API '
+      fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), pedida a API JA '
+        + 'INTEGRALIZADA na resolucao deste arquivo (' + INTERVALO_API[res.min] + '). A API '
         + 'devolve kW; aqui vai em MW.',
+      colunas: '<parque> = demanda de GERACAO (o sentido que o contrato de MUST limita). '
+        + '<parque>_c = demanda de CONSUMO dos servicos auxiliares, que nao tem contrato. '
+        + 'O medidor nao neta: registra os dois sentidos separados, e por isso <parque> nunca '
+        + 'e negativo. Os dois so se sobrepoem no nascer e no por do sol, quando a transicao cabe '
+        + 'dentro do intervalo de medicao.',
       rotulo_de_tempo: 'O instante e o FIM do intervalo: o valor em T cobre (T menos '
         + res.min + ' min, T]. E a convencao da fonte e do ONS, e o ultimo balde de cada dia '
         + 'carrega a data do dia seguinte (00:00).',
