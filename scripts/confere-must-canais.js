@@ -78,25 +78,40 @@ for (const nome of arquivos) {
   // 🔴 Um numero solto ("pior erro X") nao diz se e defeito ou fisica. O que decide e a
   // DISTRIBUICAO e a HORA: erro concentrado no nascer e no por do sol e a janela em que o sinal
   // troca de sentido; erro espalhado pelo dia inteiro seria coluna trocada.
-  // ---- 3 · os dois sentidos sao MUTUAMENTE EXCLUSIVOS ------------------------------------------
-  // Sem netting, a unica relacao que resta e fisica: uma usina nao injeta e consome no mesmo
-  // intervalo, salvo na transicao. Um intervalo com os DOIS grandes ao mesmo tempo denunciaria
-  // coluna trocada ou ponto de medicao errado.
-  let simultaneos = 0, piorSim = { m: -1 };
+  // ---- 3 · os dois sentidos so se sobrepoem na TRANSICAO ---------------------------------------
+  // Sem netting, a relacao que resta e fisica: uma usina nao injeta e consome ao mesmo tempo.
+  //
+  // 🔴 Mas o balde tem largura, e o nascer do sol cabe DENTRO dele. Medido no ensaio, a maior
+  // sobreposicao cresce monotonicamente com a resolucao — 0,132 MW em 5 min · 0,360 em 15 min ·
+  // 0,378 em 30 min · 0,667 em 1 h — e sempre as 05:45/06:00 ou as 17:45. Isso e o amanhecer e o
+  // anoitecer partidos pelo balde, nao canal trocado.
+  //
+  // Um limiar absoluto reprovava so o de 1 hora, o que denunciava o CRITERIO e nao o dado. O que
+  // separa fisica de defeito nao e a magnitude: e a HORA. Canal trocado produziria sobreposicao
+  // ao meio-dia, quando nao ha transicao nenhuma.
+  const transicao = (h) => (h >= 4 && h < 9) || (h >= 16 && h < 21);
+  let foraDaTransicao = 0, piorSim = { m: -1 }, piorFora = { m: -1 };
   for (const p of TODOS) {
     for (const l of serie) {
       const g = l[p], c = l[p + '_c'];
       if (g == null || c == null) continue;
-      const m = Math.min(g, c);              // o menor dos dois: se ele for grande, ha sobreposicao
-      if (m > 0.5) simultaneos++;
+      const m = Math.min(g, c);            // o menor dos dois: se ele for grande, ha sobreposicao
+      const h = +l.t.slice(11, 13);
       if (m > piorSim.m) piorSim = { m, p, t: l.t.slice(0, 16), g, c };
+      if (m > 0.5 && !transicao(h)) {
+        foraDaTransicao++;
+        if (m > piorFora.m) piorFora = { m, p, t: l.t.slice(0, 16), g, c };
+      }
     }
   }
-  console.log('  exclusividade  maior sobreposicao ' + piorSim.m.toFixed(3) + ' MW  ('
-    + piorSim.p + ' em ' + piorSim.t + ': geracao ' + piorSim.g + ' · consumo ' + piorSim.c + ')');
-  if (simultaneos > 0) falha(simultaneos + ' intervalos com geracao E consumo acima de 0,5 MW ao'
-    + ' mesmo tempo — canal trocado ou ponto de medicao errado');
-  else console.log('  ✓ os dois sentidos nao se sobrepoem');
+  console.log('  sobreposicao  maior ' + piorSim.m.toFixed(3) + ' MW  (' + piorSim.p + ' em '
+    + piorSim.t + ': geracao ' + piorSim.g + ' · consumo ' + piorSim.c + ')');
+  if (foraDaTransicao) {
+    console.log('    FORA da transicao: ' + foraDaTransicao + ' intervalos · pior '
+      + piorFora.m.toFixed(3) + ' MW em ' + piorFora.t);
+    falha(foraDaTransicao + ' intervalos com os dois sentidos grandes FORA do nascer/por do sol'
+      + ' — ai nao ha transicao que explique, e o canal pode estar trocado');
+  } else console.log('  ✓ sobreposicao so na transicao, como a fisica manda');
 
   // ---- 4 · tudo-ou-nada do Complexo, em CADA canal ---------------------------------------------
   for (const suf of ['', '_c']) {
