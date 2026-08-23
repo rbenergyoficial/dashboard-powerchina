@@ -62,32 +62,34 @@ const PONTOS = {
 };
 const IDS = Object.keys(PONTOS);
 const PARQUES = IDS.map(i => PONTOS[i].parque);
-// ══ OS DOIS SENTIDOS DO MEDIDOR, medidos em 23/08/2026 (audita-must-grandezas.js) ═════════════
+// ══ OS DOIS SENTIDOS DO MEDIDOR, medidos em 23/08/2026 ═══════════════════════════════════════
 // O medidor expoe tres registros. Qual e geracao e qual e consumo NAO se decide pelo nome do
 // canal — o dado decide, e sem empate, porque uma usina fotovoltaica tem assinatura inequivoca:
 //
 //   canal       media 10h-15h   media 01h-04h   maximo     o que e
-//   Demat            89,67 MW        0,000 MW   282,8 MW   LIQUIDA (Rec - Del)
 //   DematRec         89,67 MW        0,000 MW   282,8 MW   GERACAO   (zero de madrugada)
 //   DematDel          0,00 MW        0,956 MW     6,0 MW   CONSUMO   (zero enquanto gera)
+//   Demat            89,67 MW        0,000 MW   282,8 MW   IDENTICO a DematRec
 //
-// Prova cruzada nos nove parques: `Demat = Rec - Del` fecha com erro de 0,007 a 0,31 MW.
+// 🔴 `Demat` NAO E A LIQUIDA NESTES MEDIDORES, ao contrario do que eu supus. No medidor de
+// GERACAO (ponto 6233) ela e: vai a -0,745 MW de madrugada, medido. Aqui nao — o ensaio comparou
+// as duas leituras em 2.430 pontos:
 //
-// 🔴 A convencao de metrologia nao ajudaria: "Delivered" tanto pode ser entregue A CARGA quanto
-// A REDE. Chutar produziria um painel que troca geracao por consumo com o rotulo certo.
+//     H1  Demat = geracao - consumo   ->  erro maximo 1,5000 MW
+//     H2  Demat = geracao             ->  erro maximo 0,0000 MW
+//
+// Sao o MESMO numero. O medidor de MUST nao faz netting: ele registra os dois sentidos separados,
+// e `Demat` e o sentido de injecao. Por isso a coluna `<parque>` que os paineis leem desde sempre
+// JA E a geracao — publicar um `_g` ao lado seria a mesma coluna duas vezes.
+//
+// ⚠️ A suposicao virou GUARDA: se um dia o medidor passar a netar, o job falha em vez de rotular
+// consumo de geracao em silencio. `DematRec` continua sendo buscado so para essa conferencia.
 const GRANDEZAS = ['Demat', 'DematRec', 'DematDel'];
-// sufixo da coluna no blob: '' = liquida (o que ja existia), '_g' = geracao, '_c' = consumo
-const SUFIXO = { Demat: '', DematRec: '_g', DematDel: '_c' };
-// 🔴 A LIQUIDA CONTINUA SEM SUFIXO e inalterada. Os paineis de ranking, situacao e ultrapassagem
-// leem `<parque>` desde sempre, e o pico deles e diurno — onde Demat e DematRec sao o MESMO
-// numero (medido: identicos a duas casas). Trocar a semantica da coluna existente mudaria o
-// historico por nada.
-//
-// ⚠️ O `_g` parece redundante com a liquida e nao e: de madrugada a liquida vai NEGATIVA (e o
-// consumo com sinal trocado) e a geracao e zero. Rotular a liquida de "Demanda Geracao" faria o
-// painel desenhar geracao negativa a noite. Custo medido de publicar os dois: o blob cru cresce
-// 76%, o DOWNLOAD cresce 4% (+9 KB) — a coluna de consumo e quase toda zero e comprime a nada.
-// Quem paga a conta e o gzip, e ele mal sente.
+// sufixo da coluna no blob. '_v' e de VERIFICACAO: entra na montagem, e conferido e some antes de
+// gravar — nao vai para o blob.
+const SUFIXO = { Demat: '', DematRec: '_v', DematDel: '_c' };
+// Custo medido de publicar o consumo: o blob cru cresce 76%, o DOWNLOAD cresce 4% (+9 KB) — a
+// coluna e quase toda zero e comprime a nada. Quem paga a conta e o gzip, e ele mal sente.
 
 // 🔴 CADA RESOLUCAO E PEDIDA JA INTEGRALIZADA A FONTE, com o nome que a API entende. Ate
 // 22/08/2026 o gerador pedia so CincoMinutos e agregava o resto por conta propria, por borda
@@ -200,6 +202,22 @@ function montaLinhas(resp) {
       if (vs.length === PARQUES.length) l['Complexo' + suf] = r(vs.reduce((a, b) => a + b, 0));
     }
   }
+  // 🔴 A GUARDA QUE SUBSTITUI A SUPOSICAO: `Demat` tem de continuar sendo exatamente a geracao.
+  // Medido em 2.430 pontos com erro 0,0000 — entao qualquer divergencia aqui e mudanca de
+  // comportamento da fonte, nao ruido, e publicar por cima disso significaria rotular consumo de
+  // geracao sem que nada acusasse.
+  for (const l of linhas.values()) {
+    for (const p of PARQUES) {
+      const a = l[p], b = l[p + '_v'];
+      if (a == null || b == null) continue;
+      if (Math.abs(a - b) > 0.001)
+        throw new Error('em ' + l.t + ' o parque ' + p + ' tem Demat=' + a + ' e DematRec=' + b
+          + ' — a fonte deixou de tratar Demat como o sentido de injecao, e a coluna `<parque>`'
+          + ' que os paineis leem como geracao passaria a significar outra coisa');
+    }
+  }
+  // a coluna de verificacao nao vai para o blob
+  for (const l of linhas.values()) for (const p of PARQUES.concat(['Complexo'])) delete l[p + '_v'];
   return [...linhas.values()].sort((a, b) => a.ms - b.ms);
 }
 

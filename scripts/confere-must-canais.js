@@ -5,20 +5,24 @@
  *
  * A auditoria contra a fonte (audita-must-grandezas.js) ja disse QUAL canal e qual. Este confere
  * o passo seguinte, que e onde o erro caberia agora: se o GERADOR colocou cada canal na coluna
- * certa, se o Complexo respeita tudo-ou-nada em CADA um deles, e se a identidade fecha linha a
- * linha em vez de so na media.
+ * certa e se o Complexo respeita tudo-ou-nada em CADA um deles.
+ *
+ * 🔴 A primeira versao cobrava a identidade `Demat = geracao - consumo` e REPROVOU — com os
+ * desvios concentrados na madrugada e o pior caso em liquida 0 / geracao 0 / consumo 1,5. Nao era
+ * ruido de transicao: era a suposicao. Medido em 2.430 pontos, `Demat` e a GERACAO com erro
+ * 0,0000, e o medidor de MUST simplesmente nao neta. Por isso a coluna `_g` saiu do blob (era a
+ * mesma coluna duas vezes) e virou guarda no gerador.
  *
  * 🔴 A media esconde troca de sinal e troca de coluna. Um gerador que invertesse `_g` e `_c`
  * passaria por qualquer teste de media diaria feito sobre o modulo. Aqui a checagem e por LINHA
  * e por JANELA (dia contra madrugada), que e onde a assinatura solar aparece.
  *
- * Env: LOCAL_OUT (diretorio do ensaio), TOL_MW (tolerancia da identidade, default 0,05).
+ * Env: LOCAL_OUT (diretorio do ensaio).
  */
 const fs = require('fs');
 
 const PARQUES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const TODOS = PARQUES.concat(['Complexo']);
-const TOL = parseFloat(process.env.TOL_MW || '0.05');
 
 const dir = process.env.LOCAL_OUT || '/tmp/ensaio/';
 const arquivos = ['must_5min.json', 'must_15min.json', 'must_30min.json', 'must_60min.json']
@@ -39,9 +43,12 @@ for (const nome of arquivos) {
   const chaves = new Set();
   for (const l of serie) for (const k of Object.keys(l)) chaves.add(k);
   const faltando = [];
-  for (const p of TODOS) for (const suf of ['', '_g', '_c']) if (!chaves.has(p + suf)) faltando.push(p + suf);
+  for (const p of TODOS) for (const suf of ['', '_c']) if (!chaves.has(p + suf)) faltando.push(p + suf);
   if (faltando.length) falha('colunas ausentes: ' + faltando.join(', '));
-  else console.log('  ✓ as 30 colunas presentes (9 parques + Complexo × liquida/geracao/consumo)');
+  else console.log('  ✓ as 20 colunas presentes (9 parques + Complexo × geracao/consumo)');
+  // `_g` era duplicata exata de `<parque>`; se voltar, alguem reintroduziu a coluna redundante
+  const dup = TODOS.filter(p => chaves.has(p + '_g') || chaves.has(p + '_v'));
+  if (dup.length) falha('colunas redundantes de volta no blob: ' + dup.map(p => p + '_g/_v').join(', '));
 
   // ---- 2 · a assinatura solar poe cada canal no seu lugar --------------------------------------
   const jan = (h0, h1, campo) => {
@@ -49,7 +56,7 @@ for (const nome of arquivos) {
       .map(l => l[campo]);
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
   };
-  const gDia = jan(10, 15, 'Complexo_g'), gNoite = jan(1, 4, 'Complexo_g');
+  const gDia = jan(10, 15, 'Complexo'), gNoite = jan(1, 4, 'Complexo');
   const cDia = jan(10, 15, 'Complexo_c'), cNoite = jan(1, 4, 'Complexo_c');
   console.log('  geracao  dia ' + (gDia == null ? '—' : gDia.toFixed(2)) + ' MW   madrugada '
     + (gNoite == null ? '—' : gNoite.toFixed(3)) + ' MW');
@@ -71,52 +78,28 @@ for (const nome of arquivos) {
   // 🔴 Um numero solto ("pior erro X") nao diz se e defeito ou fisica. O que decide e a
   // DISTRIBUICAO e a HORA: erro concentrado no nascer e no por do sol e a janela em que o sinal
   // troca de sentido; erro espalhado pelo dia inteiro seria coluna trocada.
-  // 🔴 DUAS HIPOTESES, e o dado escolhe. Ate 23/08/2026 eu supunha que `Demat` fosse a LIQUIDA
-  // (Rec - Del) — e no medidor de GERACAO (ponto 6233) ela e mesmo: vai negativa de madrugada.
-  // Nos medidores de MUST o ensaio mostrou o contrario. Em vez de afrouxar a tolerancia ate a
-  // suposicao caber, o teste passa a comparar as duas leituras e dizer qual fecha:
-  //
-  //   H1  Demat = geracao - consumo   (liquida)
-  //   H2  Demat = geracao             (so o sentido de injecao, sem netting)
-  const erros = [];
-  const errosH2 = [];
-  const porHora = {};
-  let pior = { e: -1 };
+  // ---- 3 · os dois sentidos sao MUTUAMENTE EXCLUSIVOS ------------------------------------------
+  // Sem netting, a unica relacao que resta e fisica: uma usina nao injeta e consome no mesmo
+  // intervalo, salvo na transicao. Um intervalo com os DOIS grandes ao mesmo tempo denunciaria
+  // coluna trocada ou ponto de medicao errado.
+  let simultaneos = 0, piorSim = { m: -1 };
   for (const p of TODOS) {
     for (const l of serie) {
-      if (l[p] == null || l[p + '_g'] == null || l[p + '_c'] == null) continue;
-      const e = Math.abs(l[p] - (l[p + '_g'] - l[p + '_c']));
-      erros.push(e);
-      errosH2.push(Math.abs(l[p] - l[p + '_g']));
-      if (e > TOL) { const h = l.t.slice(11, 13); porHora[h] = (porHora[h] || 0) + 1; }
-      if (e > pior.e) pior = { e, p, t: l.t.slice(0, 16), liq: l[p], g: l[p + '_g'], c: l[p + '_c'] };
+      const g = l[p], c = l[p + '_c'];
+      if (g == null || c == null) continue;
+      const m = Math.min(g, c);              // o menor dos dois: se ele for grande, ha sobreposicao
+      if (m > 0.5) simultaneos++;
+      if (m > piorSim.m) piorSim = { m, p, t: l.t.slice(0, 16), g, c };
     }
   }
-  const maxH2 = errosH2.length ? Math.max.apply(null, errosH2) : 0;
-  const maxH1 = erros.length ? Math.max.apply(null, erros) : 0;
-  console.log('  QUAL LEITURA FECHA?   H1 (liquida) maximo ' + maxH1.toFixed(4)
-    + ' MW   ·   H2 (so injecao) maximo ' + maxH2.toFixed(4) + ' MW');
-  console.log('    ➜ ' + (maxH2 < maxH1 ? 'H2: `Demat` E a geracao — a coluna `_g` e IDENTICA a liquida'
-                                        : 'H1: `Demat` e a liquida, como se supunha'));
-  erros.sort((x, y) => x - y);
-  const q = (f) => erros.length ? erros[Math.min(erros.length - 1, Math.floor(erros.length * f))] : 0;
-  const acima = erros.filter(e => e > TOL).length;
-  console.log('  identidade  liquida = geracao - consumo   ·   ' + erros.length + ' comparacoes');
-  console.log('    mediana ' + q(0.5).toFixed(4) + '   p95 ' + q(0.95).toFixed(4)
-    + '   p99 ' + q(0.99).toFixed(4) + '   maximo ' + q(1).toFixed(4) + ' MW');
-  console.log('    acima de ' + TOL + ' MW: ' + acima + ' (' + (acima / erros.length * 100).toFixed(2) + '%)');
-  if (acima) {
-    const hs = Object.entries(porHora).sort((x, y) => y[1] - x[1]).slice(0, 6);
-    console.log('    horas com mais desvio: ' + hs.map(([h, n]) => h + 'h(' + n + ')').join(' · '));
-    console.log('    PIOR CASO ' + pior.p + ' em ' + pior.t + ':  liquida ' + pior.liq
-      + '   geracao ' + pior.g + '   consumo ' + pior.c
-      + '   ->  g-c = ' + (pior.g - pior.c).toFixed(3) + '   erro ' + pior.e.toFixed(3));
-  }
-  if (acima) falha('a identidade nao fecha dentro de ' + TOL + ' MW em ' + acima + ' comparacoes');
-  else console.log('  ✓ identidade fecha em todas as linhas dos dez');
+  console.log('  exclusividade  maior sobreposicao ' + piorSim.m.toFixed(3) + ' MW  ('
+    + piorSim.p + ' em ' + piorSim.t + ': geracao ' + piorSim.g + ' · consumo ' + piorSim.c + ')');
+  if (simultaneos > 0) falha(simultaneos + ' intervalos com geracao E consumo acima de 0,5 MW ao'
+    + ' mesmo tempo — canal trocado ou ponto de medicao errado');
+  else console.log('  ✓ os dois sentidos nao se sobrepoem');
 
   // ---- 4 · tudo-ou-nada do Complexo, em CADA canal ---------------------------------------------
-  for (const suf of ['', '_g', '_c']) {
+  for (const suf of ['', '_c']) {
     let erro = 0;
     for (const l of serie) {
       const n = PARQUES.filter(p => l[p + suf] != null).length;
@@ -126,7 +109,7 @@ for (const nome of arquivos) {
     if (erro) falha('Complexo' + (suf || ' (liquida)') + ': ' + erro
       + ' linhas em que a guarda de tudo-ou-nada nao foi respeitada');
   }
-  if (!falhas) console.log('  ✓ tudo-ou-nada respeitado nos tres canais');
+  if (!falhas) console.log('  ✓ tudo-ou-nada respeitado nos dois canais');
 }
 
 console.log('');
