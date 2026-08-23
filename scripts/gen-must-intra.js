@@ -88,8 +88,14 @@ const GRANDEZAS = ['Demat', 'DematRec', 'DematDel'];
 // sufixo da coluna no blob. '_v' e de VERIFICACAO: entra na montagem, e conferido e some antes de
 // gravar — nao vai para o blob.
 const SUFIXO = { Demat: '', DematRec: '_v', DematDel: '_c' };
-// Custo medido de publicar o consumo: o blob cru cresce 76%, o DOWNLOAD cresce 4% (+9 KB) — a
-// coluna e quase toda zero e comprime a nada. Quem paga a conta e o gzip, e ele mal sente.
+// Custo de publicar o consumo: MEDIDO depois, o must_15min foi de 212 para 277 KB — +31%, e nao
+// os +4% que a simulacao previu. 🔴 A simulacao usou valor CONSTANTE, e coluna constante comprime
+// a quase nada; o consumo real varia balde a balde. Simulacao com valor sintetico mede a
+// estrutura, nao a ENTROPIA — e e a entropia que o compressor cobra.
+//
+// ⚠️ E o custo que quase derrubou a recarga nao foi o de bytes, foi o de TEMPO: pedir tres
+// grandezas por chamada levou o custo de ~2 s para ~7,7 s por chamada, e a carga historica
+// completa passou de ~45 para ~85 min. Por isso ela e feita em fatias (`SO`).
 
 // 🔴 CADA RESOLUCAO E PEDIDA JA INTEGRALIZADA A FONTE, com o nome que a API entende. Ate
 // 22/08/2026 o gerador pedia so CincoMinutos e agregava o resto por conta propria, por borda
