@@ -62,7 +62,32 @@ const PONTOS = {
 };
 const IDS = Object.keys(PONTOS);
 const PARQUES = IDS.map(i => PONTOS[i].parque);
-const GRANDEZA = 'Demat';   // demanda ativa: e ela que o contrato de MUST limita
+// ══ OS DOIS SENTIDOS DO MEDIDOR, medidos em 23/08/2026 (audita-must-grandezas.js) ═════════════
+// O medidor expoe tres registros. Qual e geracao e qual e consumo NAO se decide pelo nome do
+// canal — o dado decide, e sem empate, porque uma usina fotovoltaica tem assinatura inequivoca:
+//
+//   canal       media 10h-15h   media 01h-04h   maximo     o que e
+//   Demat            89,67 MW        0,000 MW   282,8 MW   LIQUIDA (Rec - Del)
+//   DematRec         89,67 MW        0,000 MW   282,8 MW   GERACAO   (zero de madrugada)
+//   DematDel          0,00 MW        0,956 MW     6,0 MW   CONSUMO   (zero enquanto gera)
+//
+// Prova cruzada nos nove parques: `Demat = Rec - Del` fecha com erro de 0,007 a 0,31 MW.
+//
+// 🔴 A convencao de metrologia nao ajudaria: "Delivered" tanto pode ser entregue A CARGA quanto
+// A REDE. Chutar produziria um painel que troca geracao por consumo com o rotulo certo.
+const GRANDEZAS = ['Demat', 'DematRec', 'DematDel'];
+// sufixo da coluna no blob: '' = liquida (o que ja existia), '_g' = geracao, '_c' = consumo
+const SUFIXO = { Demat: '', DematRec: '_g', DematDel: '_c' };
+// 🔴 A LIQUIDA CONTINUA SEM SUFIXO e inalterada. Os paineis de ranking, situacao e ultrapassagem
+// leem `<parque>` desde sempre, e o pico deles e diurno — onde Demat e DematRec sao o MESMO
+// numero (medido: identicos a duas casas). Trocar a semantica da coluna existente mudaria o
+// historico por nada.
+//
+// ⚠️ O `_g` parece redundante com a liquida e nao e: de madrugada a liquida vai NEGATIVA (e o
+// consumo com sinal trocado) e a geracao e zero. Rotular a liquida de "Demanda Geracao" faria o
+// painel desenhar geracao negativa a noite. Custo medido de publicar os dois: o blob cru cresce
+// 76%, o DOWNLOAD cresce 4% (+9 KB) — a coluna de consumo e quase toda zero e comprime a nada.
+// Quem paga a conta e o gzip, e ele mal sente.
 
 // 🔴 CADA RESOLUCAO E PEDIDA JA INTEGRALIZADA A FONTE, com o nome que a API entende. Ate
 // 22/08/2026 o gerador pedia so CincoMinutos e agregava o resto por conta propria, por borda
@@ -107,7 +132,7 @@ function apiGet(query, token, timeout = 90000) {
     req.on('error', ko);
   });
 }
-const query = (ini, fim, intervalo) => 'ids=' + IDS.join(',') + '&grandezas=' + GRANDEZA
+const query = (ini, fim, intervalo) => 'ids=' + IDS.join(',') + '&grandezas=' + GRANDEZAS.join(',')
   + '&contextodasdatas=ConsiderarDiaCheio&intervalo=' + intervalo
   + '&medicao-datainicio=' + ini + '&medicao-datafim=' + fim
   + '&aplicarhorariodeverao=false&separardadoscomcpsemcp=false&medicao-hasvalue=false';
@@ -144,27 +169,36 @@ async function comRetry(q, token, tentativas = 5) {
 // Isso e o que o ONS afere, e por isso o rotulo vai para o blob COMO A FONTE ENTREGA — converter
 // para borda esquerda seria reintroduzir uma convencao caseira entre a medicao e o painel.
 function montaLinhas(resp) {
-  const linhas = new Map();   // instante ISO -> { t, ms, M1..M9, Complexo }
-  for (const id of IDS) {
-    const parque = PONTOS[id].parque;
-    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id)
-      && x.nomeGrandeza === GRANDEZA);
-    for (const v of (s ? s.valores || [] : [])) {
-      if (v.valor == null) continue;
-      // a API devolve 'AAAA-MM-DDTHH:MM:SS' em hora local de Brasilia, sem offset
-      const iso = String(v.data).slice(0, 19);
-      const l = linhas.get(iso) || { t: iso + '-03:00', ms: Date.parse(iso + '-03:00') };
-      l[parque] = r(v.valor / 1000);   // a API devolve kW; o contrato e em MW
-      linhas.set(iso, l);
+  const linhas = new Map();   // instante ISO -> { t, ms, M1..M9, M1_g.., M1_c.., Complexo* }
+  for (const g of GRANDEZAS) {
+    const suf = SUFIXO[g];
+    for (const id of IDS) {
+      const parque = PONTOS[id].parque;
+      const s = (resp.dados || []).find(x => String(x.pontoId) === String(id)
+        && x.nomeGrandeza === g);
+      for (const v of (s ? s.valores || [] : [])) {
+        if (v.valor == null) continue;
+        // a API devolve 'AAAA-MM-DDTHH:MM:SS' em hora local de Brasilia, sem offset
+        const iso = String(v.data).slice(0, 19);
+        const l = linhas.get(iso) || { t: iso + '-03:00', ms: Date.parse(iso + '-03:00') };
+        l[parque + suf] = r(v.valor / 1000);   // a API devolve kW; o contrato e em MW
+        linhas.set(iso, l);
+      }
     }
   }
   // O COMPLEXO E A SOMA SIMULTANEA, balde a balde — nao a soma dos picos de cada parque, que
   // aconteceriam em horarios diferentes e dariam um numero que nenhum medidor leu.
   // GUARDA DE TUDO-OU-NADA: balde sem os nove parques fica sem Complexo. Somar oito subdeclara a
   // demanda simultanea, e o erro seria maior justamente na hora do pico.
+  //
+  // ⚠️ A guarda vale POR GRANDEZA, e nao uma vez so: um medidor pode entregar a liquida e falhar
+  // no canal de consumo. Somar oito consumos e chamar de Complexo repetiria o mesmo defeito num
+  // campo diferente — e ali ele seria ainda mais dificil de notar, porque o consumo e pequeno.
   for (const l of linhas.values()) {
-    const vs = PARQUES.map(p => l[p]).filter(v => v != null);
-    if (vs.length === PARQUES.length) l.Complexo = r(vs.reduce((a, b) => a + b, 0));
+    for (const suf of Object.values(SUFIXO)) {
+      const vs = PARQUES.map(p => l[p + suf]).filter(v => v != null);
+      if (vs.length === PARQUES.length) l['Complexo' + suf] = r(vs.reduce((a, b) => a + b, 0));
+    }
   }
   return [...linhas.values()].sort((a, b) => a.ms - b.ms);
 }

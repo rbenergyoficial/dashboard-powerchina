@@ -34,6 +34,12 @@ jobs:
           DIAS: ${{ inputs.dias || '25' }}
           FORCAR: '1'
         run: node scripts/gen-must-intra.js
+      # 🔴 O gerador passou a publicar os DOIS sentidos do medidor. A media diaria nao pega
+      # canal trocado; este confere por LINHA e por JANELA, que e onde a assinatura solar aparece.
+      - name: Conferir os canais de geracao e consumo
+        env:
+          LOCAL_OUT: /tmp/ensaio/
+        run: node scripts/confere-must-canais.js
       - name: gen-must em modo local
         env:
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
