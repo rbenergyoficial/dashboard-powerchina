@@ -46,10 +46,16 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    # 60 min por causa da CARGA HISTORICA: 365 chamadas de dia inteiro em 5 min, com pausa de 0,6 s
-    # entre elas mais a latencia da API. A rodada diaria gasta segundos — o teto existe para a
-    # primeira, que reconstroi as quatro series.
-    timeout-minutes: 60
+    # 🔴 90 min, e o numero saiu de MEDICAO. A carga historica de 23/08/2026 foi CANCELADA aos 60:
+    # com o gerador pedindo tres grandezas por chamada em vez de uma, o custo por chamada subiu de
+    # ~2 s para ~7,7 s (medido no log: 20 dias em 461 s com 3 chamadas por dia). As 665 chamadas da
+    # janela completa passaram de ~45 min para ~85.
+    #
+    # ⚠️ O teto maior e folga, NAO a solucao: a recarga completa passou a ser feita em FATIAS, uma
+    # resolucao por vez (`so`), porque cada fatia cabe com margem — 5min ~4 min · 15min ~12 ·
+    # 30min ~23 · 60min ~47 — e porque um dispatch longo BLOQUEIA o agendamento de 15 min, que e
+    # quem alimenta a pagina e o vigia.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
