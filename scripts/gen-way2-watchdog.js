@@ -18,8 +18,35 @@ const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
 
 const CONTAINER = 'dados';
+// 🔴 REGISTRAR E NOTIFICAR SAO COISAS DIFERENTES, e misturar as duas e o que enche a caixa de
+// e-mail. Ate 23/08/2026 havia um limiar so: aos 30 min o watchdog registrava a falha E mandava
+// e-mail. Uma oscilacao de 35 min — que se resolve sozinha — custava dois e-mails, o da queda e o
+// da normalizacao.
+//
+//   LIMIAR_REGISTRO (30 min) — marca a falha no estado, que o Grafana le. NAO manda e-mail.
+//   LIMIAR_EMAIL    (60 min) — a partir daqui a interrupcao deixou de ser oscilacao e vira
+//                              evento: sai o primeiro aviso, e depois os lembretes.
+//
+// O registro continua fino para o painel ter historico; a notificacao fica grossa para so
+// interromper alguem quando ha o que fazer.
 const LIMIAR = Math.max(10, (parseInt(process.env.LIMIAR_MIN || '30', 10) || 30));
+const LIMIAR_EMAIL = Math.max(LIMIAR, (parseInt(process.env.LIMIAR_EMAIL_MIN || '60', 10) || 60));
 const WEBHOOK = (process.env.PA_ALERT_WEBHOOK || '').trim();
+// 🔴 UM ALERTA SO NAO BASTA NUMA PARADA LONGA. Ate 23/08/2026 o watchdog avisava 1x por evento:
+// a telemetria caiu as 02:10, o e-mail saiu as 02:41, e as seis horas seguintes correram em
+// silencio. Quem abriu a caixa de manha tinha um unico aviso, com um numero de 31 minutos.
+// Agora, enquanto a falha persistir, sai um LEMBRETE a cada LEMBRETE_H horas, com a duracao
+// recontada — assim o e-mail mais recente e sempre verdadeiro.
+// 🔴 LEMBRETE DE INTERVALO FIXO VIRA ENXURRADA NUMA INTERRUPCAO LONGA. Simulado: com lembrete a
+// cada 2 h, uma queda de 24 h renderia 13 e-mails — o oposto de "recebo e-mail demais".
+//
+// O espacamento DOBRA a cada aviso, com teto de 12 h: 2h, 4h, 8h, 12h, 12h... Assim a queda nova
+// avisa cedo e com frequencia, e a que ja se arrasta por um dia lembra duas vezes por dia. Numa
+// interrupcao de 24 h sao 5 e-mails em vez de 13, e nenhum deles chega tarde.
+const LEMBRETE_BASE = Math.max(30, (parseInt(process.env.LEMBRETE_H || '2', 10) || 2) * 60);
+const LEMBRETE_TETO = Math.max(LEMBRETE_BASE, (parseInt(process.env.LEMBRETE_TETO_H || '12', 10) || 12) * 60);
+// avisos ja enviados -> quanto esperar antes do proximo
+const proximoLembrete = (n) => Math.min(LEMBRETE_TETO, LEMBRETE_BASE * Math.pow(2, Math.max(0, n - 1)));
 const SUPORTE = 'suporte@way2.com.br';
 const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medicao/pontos' };
 const PID = 6233, GRAND = 'Demat'; // totalizador de geração — representa o frescor do complexo
@@ -101,33 +128,64 @@ function postJson(url, obj) {
     if (st.estado !== 'falha') st = { estado: 'falha', desde: desdeTxt, origem, idade_disparo: idadeTxt, alertado_em: null };
     st.idadeTxt = idadeTxt;
     st.origem = origem;
-    if (!st.alertado_em) { // só considera "avisado" quando o POST deu certo (senão re-tenta no próximo run)
+    // 🔴 O REGISTRO JA FOI FEITO ACIMA (estado 'falha' no blob, que o Grafana le). O e-mail so
+    // sai quando a interrupcao passa do limiar MAIOR — abaixo dele e oscilacao, e oscilacao que
+    // se resolve sozinha nao merece interromper ninguem.
+    const maduro = (st.idadeTxt != null && st.idadeTxt >= LIMIAR_EMAIL) || semDado;
+    // reenvia enquanto durar: o alerta mais recente na caixa tem de estar certo
+    const lembrete = !!st.alertado_em && ageMin(st.alertado_em) >= proximoLembrete(st.avisos || 1);
+    if (maduro && (!st.alertado_em || lembrete)) { // só considera "avisado" quando o POST deu certo (senão re-tenta no próximo run)
       const fonte = origem === 'way2';
-      const haX = st.idadeTxt != null ? 'há ' + st.idadeTxt + ' min' : 'sem leitura hoje ainda';
+      // 🔴 DURACAO RELATIVA NUM E-MAIL ENVELHECE. "sem dados ha 31 min" era verdade no instante do
+      // disparo e vira mentira em quem abre a caixa horas depois — foi exatamente o que aconteceu
+      // na parada de 23/08/2026, com o alerta das 02:41 sendo lido as 08:00 dizendo "31 min".
+      //
+      // O que NAO envelhece e o INSTANTE em que parou. Ele vai no assunto e na primeira linha; a
+      // duracao continua no corpo, mas rotulada como "no momento deste alerta", que e o unico
+      // jeito de um numero relativo continuar verdadeiro depois.
+      const desdeFmt = fmtTs(st.desde);
+      const haX = st.idadeTxt != null ? fmtDur(st.idadeTxt) + ' no momento deste alerta'
+        : 'sem leitura hoje ainda';
       acao = {
         tipo: 'falha', origem, idade_min: st.idadeTxt, sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
-        assunto: (fonte ? '🔴' : '🟠') + ' Falha de comunicação Way2 · Mauriti · ' + (st.idadeTxt != null ? 'sem dados há ' + st.idadeTxt + ' min' : 'sem dados novos'),
-        corpo: '<b>A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + fmtTs(st.desde) + ' (' + haX + ').</b><br><br>'
+        lembrete,
+        assunto: (fonte ? '🔴' : '🟠') + ' ' + (lembrete ? 'AINDA sem dados' : 'Falha de comunicação')
+          + ' Way2 · Mauriti · desde ' + desdeFmt
+          + (st.idadeTxt != null ? ' (' + fmtDur(st.idadeTxt) + ')' : ''),
+        corpo: '<b>A telemetria do Complexo Mauriti está SEM ATUALIZAR desde ' + desdeFmt + '.</b><br>'
+          + '<i>' + (lembrete ? 'Lembrete' : 'Primeiro aviso') + ' gerado em ' + fmtTs(nowBRT())
+          + ' — ' + haX + '. Se você está lendo isto mais tarde, a interrupção pode ser maior: '
+          + 'confira o painel MUST para o valor de agora.</i><br><br>'
           + 'Verificação automática: ' + detalhe + '<br><br>'
           + (fonte
             ? '➡ <b>ORIGEM: FALHA NA FONTE (Way2)</b>. O serviço da Way2 não está entregando dados novos.<br>➡ <b>AÇÃO: contatar o suporte Way2 — ' + SUPORTE + '</b>'
             : '➡ <b>ORIGEM: NOSSO PIPELINE</b>. A Way2 tem dados novos, mas o fluxo Power Automate parou de gravar o blob.<br>➡ <b>AÇÃO: verificar o fluxo "Way2 Eletrico 5min"</b> no Power Automate.')
-          + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min)</i>'
+          + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIMIAR + ' min · e-mail a partir de ' + LIMIAR_EMAIL + ' min)</i>'
       };
     }
   } else if (st.estado === 'falha' && idade != null && idade <= LIMIAR) {
     // 4) NORMALIZOU — dispara com a duração (só com dado REAL fresco; não "normaliza" no vazio da virada)
     const dur = st.desde ? ageMin(st.desde) : 0;
     const ate = nowBRT();
-    acao = {
-      tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: ate, origem: st.origem || '—',
-      assunto: '✅ Way2 NORMALIZADA · Mauriti (ficou fora ' + fmtDur(dur) + ')',
+    // 🔴 A CONFIRMACAO SO SAI SE HOUVE AVISO. Normalizar uma queda que nunca gerou e-mail seria
+    // avisar do fim de algo que ninguem soube que comecou — e e-mail sem par e ruido puro.
+    const houveAviso = (st.avisos || 0) > 0;
+    acao = houveAviso ? {
+      tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: ate,
+      origem: st.origem || '—', avisos: st.avisos || 0,
+      assunto: '✅ Way2 NORMALIZADA · Mauriti · ficou fora ' + fmtDur(dur),
       corpo: '<b>A telemetria do Complexo Mauriti VOLTOU a atualizar.</b><br><br>'
-        + 'Ficou indisponível por <b>' + fmtDur(dur) + '</b>.<br>'
-        + '↳ Início da falha: <b>' + fmtTs(st.desde) + '</b><br>'
+        + '<b>PRAZO TOTAL DE INDISPONIBILIDADE: ' + fmtDur(dur) + '</b><br>'
+        + '↳ Início: <b>' + fmtTs(st.desde) + '</b><br>'
         + '↳ Normalização: <b>' + fmtTs(ate) + '</b><br>'
-        + 'Origem da queda: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'nosso pipeline') + '.<br><br><i>(Alerta automático · watchdog Mauriti)</i>'
-    };
+        + '↳ Origem: ' + (st.origem === 'way2' ? 'Way2 (fonte)' : 'nosso pipeline') + '<br>'
+        + '↳ Avisos enviados durante a interrupção: ' + (st.avisos || 0) + '<br><br>'
+        + '<i>Este é o fechamento do evento — o prazo acima é o definitivo, medido do primeiro '
+        + 'intervalo sem dado até a volta.</i><br>'
+        + '<i>(Alerta automático · watchdog Mauriti)</i>'
+    } : null;
+    if (!houveAviso) console.log('watchdog: normalizou em ' + fmtDur(dur)
+      + ' sem ter gerado aviso (abaixo de ' + LIMIAR_EMAIL + ' min) — sem e-mail de fechamento.');
     st = { estado: 'ok' };
   }
 
@@ -136,7 +194,12 @@ function postJson(url, obj) {
     let entregue = false;
     if (WEBHOOK) { try { const code = await postJson(WEBHOOK, acao); entregue = true; console.log('ALERTA enviado (HTTP ' + code + '):', acao.tipo, '·', acao.assunto); } catch (e) { console.error('FALHA ao enviar alerta:', e.message); } }
     else console.log('ALERTA (sem PA_ALERT_WEBHOOK — só log):', JSON.stringify(acao));
-    if (acao.tipo === 'falha' && entregue && st.estado === 'falha') st.alertado_em = nowBRT(); // marca entregue só se o POST deu certo
+    // `alertado_em` passa a ser a hora do ULTIMO envio, nao a do primeiro: e dela que o
+    // proximo lembrete conta
+    if (acao.tipo === 'falha' && entregue && st.estado === 'falha') {
+      st.alertado_em = nowBRT();
+      st.avisos = (st.avisos || 0) + 1;
+    }
   }
 
   /* ────────────────────────────────────────────────────────────────────────────

@@ -99,7 +99,28 @@ function gerarSaude(dados, agoraMs) {
   const resumo = { total: MEDIDORES.length, ok: 0, atraso: 0, falha: 0 };
   for (const m of medidores) resumo[m.estado]++;
 
-  const todos = new Set();
+  // 🔴 A GRADE DE SLOTS NAO PODE VIR DO DADO. Ate 23/08/2026 os slots eram a uniao dos instantes
+  // RECEBIDOS: sem dado novo, nao nascia slot novo, e a serie e a timeline simplesmente TERMINAVAM
+  // no ultimo instante bom. O `state-timeline` estende o ultimo estado ate o fim da janela, entao
+  // a tela ficava VERDE justamente enquanto a coleta estava parada.
+  //
+  // Foi o que aconteceu na parada de 23/08/2026: a telemetria morreu as 02:10, e as 6 horas
+  // seguintes apareceram como "todos reportando" no painel de disponibilidade. Um painel de saude
+  // que emudece quando a saude piora e pior que nao ter painel — ele CONFIRMA que esta tudo bem.
+  //
+  // Agora a grade e GERADA de 5 em 5 minutos cobrindo a janela inteira ate agora, e o medidor que
+  // nao aparecer nela conta como ausente. O vazio passa a ser desenhado.
+  const PASSO_MIN = 5;
+  const gradeSlots = () => {
+    const fim = Math.floor(agoraMs / (PASSO_MIN * 60000)) * PASSO_MIN * 60000;
+    const ini = fim - JANELA_TL_H * 60 * 60000;
+    const out = [];
+    for (let t = ini; t <= fim; t += PASSO_MIN * 60000)
+      out.push(new Date(t - 3 * 3600 * 1000).toISOString().slice(0, 19));
+    return out;
+  };
+  // a uniao com o que veio da API cobre o caso de a fonte publicar um instante fora da grade
+  const todos = new Set(gradeSlots());
   for (const o of porPid.values()) for (const t of o.set) todos.add(t);
   const slots = [...todos].sort();
   const assentados = slots.filter(t => idade(t) >= ASSENTA_MIN);
