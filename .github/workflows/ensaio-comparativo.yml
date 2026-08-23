@@ -1,0 +1,70 @@
+name: Ensaio do comparativo (roda e confere SEM publicar)
+
+# POR QUE EXISTE
+#
+# As tres conversoes do gen-comparativo falham em silencio quando erram: unidade trocada desenha
+# uma curva plausivel, rotulo deslocado vira serrilha que parece ruido de medicao, e mapa de ponto
+# errado produz "o operador nacional mede 20% a mais que o medidor" — uma frase que soa a
+# descoberta e e um defeito nosso. Nenhuma das tres deixa o job vermelho.
+#
+# Este workflow roda o gerador de verdade, com o segredo de verdade, gravando em ARQUIVO LOCAL
+# (LOCAL_OUT) em vez do blob — e depois audita o que saiu. Nada e publicado.
+#
+# E o unico lugar onde o caminho da Way2 intradiaria pode ser exercitado: o token e segredo do
+# Actions e nao existe na maquina de desenvolvimento.
+on:
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'quantos dias buscar no ensaio'
+        required: false
+        default: '3'
+      resolucao:
+        description: 'so uma resolucao: 5, 15, 30, 60, 0 (vazio = todas)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  ensaio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # As pecas que nao dependem do segredo — deslocamento, alinhamento, fechamento das tres,
+      # esquema, agregacao e a guarda de granularidade.
+      - name: Conferir as pecas puras contra dado de producao
+        run: node scripts/ensaio-comparativo.js
+
+      # E o auditor tem de REPROVAR os defeitos conhecidos. Auditor que nunca foi visto reprovando
+      # pode nunca ter funcionado — foi assim com a guarda de nulo que existia ha meses e so
+      # falhou no dia em que uma chave faltou.
+      - name: Provar que o auditor reprova
+        run: node scripts/ensaio-audita-comparativo.js
+
+      # E agora o gerador inteiro, com a API de verdade, escrevendo em disco.
+      - name: Rodar o gerador SEM publicar
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS: ${{ inputs.dias || '3' }}
+          SO: ${{ inputs.resolucao || '' }}
+          FORCAR: '1'
+          LOCAL_OUT: ${{ github.workspace }}/ensaio/
+        run: |
+          mkdir -p ensaio
+          node scripts/gen-comparativo.js
+
+      - name: Auditar o que saiu
+        run: node scripts/audita-comparativo.js ensaio
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cmp-ensaio
+          path: ensaio/
+          retention-days: 7

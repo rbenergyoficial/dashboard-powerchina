@@ -95,11 +95,15 @@ function parseParkBuffer(buf, park) {
   const fixK = (park === RTC_M3.park) ? wattCols.findIndex(c => RTC_M3.colRe.test(String(hdr[c]))) : -1;
 
   const diario = {}, intra15 = {};
+  // SLOT DE 5 MIN. A planilha ja e amostrada de 5 em 5 min, entao o de 15 nunca foi a resolucao
+  // da fonte — era a resolucao do consumidor. O comparativo contra o medidor precisa do detalhe
+  // fino, e derivar 5 a partir de 15 seria inventar um patamar que ninguem mediu.
+  const intra5 = {};
   // energia por COLUNA ate 11/07 (pre-reparo) — diagnostico e guard do reparo do RTC.
   const porCol = wattCols.map((c) => ({ ate11: 0, cabeca: String(hdr[c]) }));
   // contribuicao do circuito defeituoso, por dia/slot, SO pre-reparo — usada p/ aplicar o ×2
   // depois do guard passar (nao dobro antes, senao um cabecalho errado corromperia o dado).
-  const fixDay = {}, fixIntra = {};
+  const fixDay = {}, fixIntra = {}, fixIntra5 = {};
   // REATIVA: acumuladores de SOMA e CONTAGEM por slot (a reativa vira MEDIA de MVAr, nao energia
   // integrada como a ativa) e por dia (media/min/max do dia).
   const reaSum = {}, reaN = {}, reaDia = {};
@@ -112,6 +116,7 @@ function parseParkBuffer(buf, park) {
     const day = t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate());
     const idx = Math.floor((t.getHours() * 60 + t.getMinutes()) / 15);
     if (idx < 0 || idx > 95) continue;
+    const idx5 = Math.floor((t.getHours() * 60 + t.getMinutes()) / 5);
     const pre = day < RTC_M3.before;
     // ---- potencia ATIVA (energia MWh, somada) ----
     if (wattCols.length) {
@@ -121,12 +126,15 @@ function parseParkBuffer(buf, park) {
         algum = true; const e = (+v) * 5 / 60; P += +v;
         if (pre) porCol[k].ate11 += e;
         if (k === fixK && pre) { fixDay[day] = (fixDay[day] || 0) + e;
-          (fixIntra[day] = fixIntra[day] || new Array(96).fill(0))[idx] += e; }
+          (fixIntra[day] = fixIntra[day] || new Array(96).fill(0))[idx] += e;
+          (fixIntra5[day] = fixIntra5[day] || new Array(288).fill(0))[idx5] += e; }
       }
       if (algum) {
         const e = P * 5 / 60; // MWh nesta amostra de 5min
         if (!intra15[day]) intra15[day] = new Array(96).fill(0);
         intra15[day][idx] += e;
+        if (!intra5[day]) intra5[day] = new Array(288).fill(0);
+        intra5[day][idx5] += e;
         diario[day] = (diario[day] || 0) + e;
       }
     }
@@ -155,6 +163,10 @@ function parseParkBuffer(buf, park) {
       const f = RTC_M3.factor - 1;
       for (const d in fixDay) diario[d] += f * fixDay[d];
       for (const d in fixIntra) for (let i = 0; i < 96; i++) intra15[d][i] += f * fixIntra[d][i];
+      // 🔴 O reparo tem de alcancar as DUAS resolucoes. Corrigir so o de 15 min deixaria o M3
+      // com metade da potencia no de 5 — e a divergencia contra o medidor apareceria como se o
+      // supervisorio estivesse errado, quando o errado seria este gerador.
+      for (const d in fixIntra5) for (let i = 0; i < 288; i++) intra5[d][i] += f * fixIntra5[d][i];
     }
     rtc = { col: porCol[fixK].cabeca, razao, aplicado: ok, dias: Object.keys(fixDay).length };
   }
@@ -172,7 +184,7 @@ function parseParkBuffer(buf, park) {
     }
     reativa = { intra15: intra, diario: dia, circuitos: varCols.length };
   }
-  return { diario, intra15, porCol, rtc, reativa };
+  return { diario, intra15, intra5, porCol, rtc, reativa };
 }
 
 // ---- IO helpers (blob) ----
@@ -207,32 +219,126 @@ async function loadRawBuffers() {
   return out;
 }
 
-async function loadExistingOut() {
-  if (process.env.LOCAL_OUT) {
-    const fs = require('fs');
-    if (fs.existsSync(process.env.LOCAL_OUT)) {
-      try { let t = fs.readFileSync(process.env.LOCAL_OUT, 'utf8'); if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1); return JSON.parse(t); } catch (e) {}
-    }
-    return { diario: {}, intra15: {} };
-  }
+// O blob de 5 minutos e SEPARADO e limitado. Enfiar o detalhe fino no scada_comparativo.json
+// triplicaria um arquivo que ja levava ~10 s para baixar, e penalizaria toda pagina que so quer o
+// diario. A janela cobre com folga a do comparativo de 5 min (30 dias).
+const BLOB_5MIN = process.env.OUT_BLOB_5MIN || 'scada_5min.json';
+
+// O caminho do arquivo de 5 min no modo de ensaio sai do MESMO diretorio do principal.
+// Nao usar expressao regular aqui e deliberado: a versao anterior recortava o nome com
+// `[^/]*$` e, num caminho Windows com barra invertida, casava a string INTEIRA — o arquivo
+// ia parar no diretorio corrente em vez do de destino, calado.
+function caminho5(principal) {
+  const path = require('path');
+  return path.join(path.dirname(principal), BLOB_5MIN);
+}
+const JANELA_5MIN = Math.max(1, parseInt(process.env.JANELA_5MIN || '40', 10) || 40);
+
+// 🔴 O BLOB PASSOU A SER GRAVADO COMPRIMIDO, entao a leitura tem de saber descomprimir. Um blob
+// gravado em gzip e lido como texto vira JSON invalido — e o `catch` que devolvia estrutura vazia
+// transformaria isso em "primeira execucao", regravando 597 dias com os poucos desta rodada.
+// Por isso o gunzip vem antes do parse, e a deteccao e pelos dois bytes magicos do gzip.
+function descomprime(buf) {
+  if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) return require('zlib').gunzipSync(buf);
+  return buf;
+}
+
+function parseJson(buf) {
+  let t = descomprime(buf).toString('utf8');
+  if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+  return JSON.parse(t);
+}
+
+async function leBlobOpcional(nome) {
   try {
     const svc = await getBlobClient();
-    const bc = svc.getContainerClient(OUT_CONTAINER).getBlobClient(OUT_BLOB);
-    if (!(await bc.exists())) return { diario: {}, intra15: {} };
-    let t = (await streamToBuffer((await bc.download()).readableStreamBody)).toString('utf8');
-    if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
-    return JSON.parse(t);
-  } catch (e) { return { diario: {}, intra15: {} }; }
+    const bc = svc.getContainerClient(OUT_CONTAINER).getBlobClient(nome);
+    if (!(await bc.exists())) return null;
+    return parseJson(await streamToBuffer((await bc.download()).readableStreamBody));
+  } catch (e) { return null; }
+}
+
+async function loadExistingOut() {
+  const vazio = { diario: {}, intra15: {}, intra5: {} };
+  if (process.env.LOCAL_OUT) {
+    const fs = require('fs');
+    let base = vazio;
+    if (fs.existsSync(process.env.LOCAL_OUT)) {
+      try { base = parseJson(fs.readFileSync(process.env.LOCAL_OUT)); } catch (e) {}
+    }
+    const p5 = caminho5(process.env.LOCAL_OUT);
+    if (fs.existsSync(p5)) {
+      try { base.intra5 = (parseJson(fs.readFileSync(p5)) || {}).intra5 || {}; } catch (e) {}
+    }
+    return base;
+  }
+  const base = (await leBlobOpcional(OUT_BLOB)) || vazio;
+  // O detalhe de 5 min mora noutro arquivo, entao tem de ser recarregado — senao a gravacao
+  // seguinte publicaria so os dias desta rodada e apagaria a janela inteira em silencio.
+  const cinco = await leBlobOpcional(BLOB_5MIN);
+  base.intra5 = (cinco && cinco.intra5) || {};
+  return base;
+}
+
+// 🔴 O AZURE NAO COMPRIME SOZINHO — ele serve exatamente os bytes gravados. Medido em 23/08/2026:
+// o scada_comparativo.json saia com 6.501 KB na rede e levava ~10 s, mesmo com o cliente pedindo
+// gzip. Gravando ja comprimido, com o header Content-Encoding, navegador e datasource descomprimem
+// sozinhos e nenhum consumidor precisa mudar.
+async function gravaUm(cont, nome, obj, segundos) {
+  const json = JSON.stringify(obj);
+  const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
+  await cont.getBlockBlobClient(nome).upload(gz, gz.length, {
+    blobHTTPHeaders: {
+      blobContentType: 'application/json',
+      blobContentEncoding: 'gzip',
+      blobCacheControl: 'public, max-age=' + segundos,
+    },
+  });
+  return { cru: Buffer.byteLength(json), gz: gz.length };
+}
+
+// Separa o detalhe de 5 min do resto e poda a janela dele. A poda e por data e nao por contagem:
+// a contagem nao muda quando um dia e reprocessado, e a janela ficaria crescendo calada.
+function separa5min(obj) {
+  const { intra5, ...resto } = obj;
+  const dias = Object.keys(intra5 || {}).sort();
+  const mantidos = dias.slice(-JANELA_5MIN);
+  const podado = {};
+  for (const d of mantidos) podado[d] = intra5[d];
+  return { resto, cinco: podado, descartados: dias.length - mantidos.length };
 }
 
 async function writeOut(obj) {
-  const json = JSON.stringify(obj);
-  if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return; }
+  const { resto, cinco, descartados } = separa5min(obj);
+  const dias5 = Object.keys(cinco).length;
+  const meta5 = {
+    gerado: new Date().toISOString(),
+    resolucao_min: 5,
+    unidade: 'MWh por intervalo de 5 minutos',
+    origem: 'Potencia ativa em MW amostrada de 5 em 5 minutos no supervisorio da usina; a energia '
+      + 'do intervalo e a potencia multiplicada pela duracao. O arquivo ja traz energia.',
+    janela_dias: JANELA_5MIN,
+    intra5: cinco,
+  };
+  if (process.env.LOCAL_OUT) {
+    const fs = require('fs');
+    fs.writeFileSync(process.env.LOCAL_OUT, JSON.stringify(resto));
+    fs.writeFileSync(caminho5(process.env.LOCAL_OUT), JSON.stringify(meta5));
+    console.log('Gravado local: ' + BLOB_5MIN + ' com ' + dias5 + ' dias'
+      + (descartados ? ' (' + descartados + ' fora da janela)' : ''));
+    return;
+  }
   const svc = await getBlobClient();
   const cont = svc.getContainerClient(OUT_CONTAINER);
   await cont.createIfNotExists();
-  const bc = cont.getBlockBlobClient(OUT_BLOB);
-  await bc.upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+  const a = await gravaUm(cont, OUT_BLOB, resto, 3600);
+  const b = await gravaUm(cont, BLOB_5MIN, meta5, 3600);
+  console.log('Gravado ' + OUT_BLOB + ': ' + Math.round(a.cru / 1024) + ' KB -> '
+    + Math.round(a.gz / 1024) + ' KB comprimido ('
+    + Math.round((1 - a.gz / a.cru) * 100) + '% menos na rede).');
+  console.log('Gravado ' + BLOB_5MIN + ': ' + dias5 + ' dias · ' + Math.round(b.cru / 1024)
+    + ' KB -> ' + Math.round(b.gz / 1024) + ' KB comprimido'
+    + (descartados ? ' · ' + descartados + ' dia(s) fora da janela de ' + JANELA_5MIN : '') + '.');
 }
 
 (async () => {
@@ -241,6 +347,7 @@ async function writeOut(obj) {
   const out = await loadExistingOut();
   if (!out.diario) out.diario = {};
   if (!out.intra15) out.intra15 = {};
+  if (!out.intra5) out.intra5 = {};
   // estruturas PARALELAS de potencia reativa (MVAr medio) — mesma forma da ativa
   if (!out.diario_reativa) out.diario_reativa = {};
   if (!out.intra15_reativa) out.intra15_reativa = {};
@@ -254,6 +361,7 @@ async function writeOut(obj) {
   let purgados = 0;
   for (const pk of Object.keys(out.diario)) for (const d of Object.keys(out.diario[pk])) if (d >= hojeBRT) { delete out.diario[pk][d]; purgados++; }
   for (const d of Object.keys(out.intra15)) if (d >= hojeBRT) delete out.intra15[d];
+  for (const d of Object.keys(out.intra5)) if (d >= hojeBRT) delete out.intra5[d];
   // mesma purga anti-parcial na reativa
   for (const pk of Object.keys(out.diario_reativa)) for (const d of Object.keys(out.diario_reativa[pk])) if (d >= hojeBRT) delete out.diario_reativa[pk][d];
   for (const d of Object.keys(out.intra15_reativa)) if (d >= hojeBRT) delete out.intra15_reativa[d];
@@ -268,8 +376,8 @@ async function writeOut(obj) {
     // O arquivo ruim e PULADO, nao derruba o backfill inteiro: numa carga de centenas de planilhas
     // um cabecalho fora do padrao nao pode custar as outras. Mas aparece no log e no resumo final —
     // o que nunca pode acontecer e passar despercebido virando zero.
-    let diario, intra15, porCol, rtc, reativa;
-    try { ({ diario, intra15, porCol, rtc, reativa } = parseParkBuffer(buf, pk)); }
+    let diario, intra15, intra5, porCol, rtc, reativa;
+    try { ({ diario, intra15, intra5, porCol, rtc, reativa } = parseParkBuffer(buf, pk)); }
     catch (e) { console.warn('IGNORADO (' + e.message + '):', name); ignorados.push(name); continue; }
     const temAtiva = Object.keys(diario).length > 0;
     // REPARO DO RTC DO M3 (circuito 2 = CUB_10.1, 50% ate 11/07). Loga o que fez, com o guard.
@@ -295,6 +403,10 @@ async function writeOut(obj) {
       if (!out.intra15[d]) out.intra15[d] = {};
       if (gapOnly && out.intra15[d][pk] != null) continue;
       out.intra15[d][pk] = intra15[d].map(v => +v.toFixed(3));
+      if (intra5[d]) {
+        if (!out.intra5[d]) out.intra5[d] = {};
+        out.intra5[d][pk] = intra5[d].map(v => +v.toFixed(3));
+      }
     }
     // ---- grava a REATIVA (do arquivo P_RE OU inline dos arquivos novos) ----
     let reaEscritos = 0;
@@ -320,6 +432,7 @@ async function writeOut(obj) {
   const removidos = [];
   for (const pk of Object.keys(out.diario)) if (!CANON.has(pk)) { delete out.diario[pk]; removidos.push(pk); }
   for (const day of Object.keys(out.intra15)) for (const pk of Object.keys(out.intra15[day])) if (!CANON.has(pk)) delete out.intra15[day][pk];
+  for (const day of Object.keys(out.intra5)) for (const pk of Object.keys(out.intra5[day])) if (!CANON.has(pk)) delete out.intra5[day][pk];
   if (removidos.length) console.log('Removidos parques nao-canonicos:', [...new Set(removidos)].join(', '));
   await writeOut(out);
   console.log(`Gravado ${OUT_BLOB}: ${parks} parques, ${days.size} dias novos/atualizados, ${Object.keys(out.intra15).length} dias no total.`);

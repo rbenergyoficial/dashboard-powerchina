@@ -1,0 +1,56 @@
+name: Comparativo -> cmp_*.json (ONS x Way2 x SCADA no mesmo balde)
+
+# Roda DEPOIS das duas fontes que ele consome:
+#   scada.yml          11:30 UTC  (08:30 BRT)  -> scada_comparativo.json e scada_5min.json
+#   irradiancia-ons    ate 22:30 UTC           -> ons_irradiancia_<mes>.json
+#
+# Duas rodadas por dia: uma logo depois do SCADA, outra a noite, quando o ONS ja publicou o dia.
+# O minuto quebrado e de proposito — no :00 o GitHub Actions atrasa de 30 a 90 min.
+on:
+  schedule:
+    - cron: '40 13 * * *'   # 10:40 BRT, depois do SCADA das 08:30
+    - cron: '40 23 * * *'   # 20:40 BRT, depois da ultima rodada do ONS
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'quantos dias para tras reprocessar (carga inicial: 365)'
+        required: false
+        default: '3'
+      resolucao:
+        description: 'so uma resolucao: 5, 15, 30, 60, ou 0 para o diario (vazio = todas)'
+        required: false
+        default: ''
+      forcar:
+        description: 'sim = regrava mesmo sem mudanca'
+        required: false
+        default: 'nao'
+
+# O CRON NAO PODE CANCELAR UMA CARGA HISTORICA. Mesma licao do MUST, em que o agendamento matou
+# aos 12 minutos a recarga que corrigia o alinhamento e o historico ficou com o dado velho:
+# o dispatch limpa a fila, o cron ESPERA.
+concurrency:
+  group: gen-comparativo
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    # A rodada diaria gasta pouco. O teto existe para a CARGA INICIAL, que percorre as quatro
+    # janelas em blocos (11 dias por requisicao em 5 min, 138 em 1 hora).
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar cmp_*.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIAS: ${{ inputs.dias || '3' }}
+          SO: ${{ inputs.resolucao || '' }}
+          FORCAR: ${{ inputs.forcar == 'sim' && '1' || '' }}
+        run: node scripts/gen-comparativo.js
