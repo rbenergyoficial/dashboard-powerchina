@@ -68,21 +68,36 @@ for (const nome of arquivos) {
   }
 
   // ---- 3 · a identidade fecha LINHA A LINHA ----------------------------------------------------
-  let piores = [];
+  // 🔴 Um numero solto ("pior erro X") nao diz se e defeito ou fisica. O que decide e a
+  // DISTRIBUICAO e a HORA: erro concentrado no nascer e no por do sol e a janela em que o sinal
+  // troca de sentido; erro espalhado pelo dia inteiro seria coluna trocada.
+  const erros = [];
+  const porHora = {};
+  let pior = { e: -1 };
   for (const p of TODOS) {
-    let pior = 0, onde = '';
     for (const l of serie) {
       if (l[p] == null || l[p + '_g'] == null || l[p + '_c'] == null) continue;
       const e = Math.abs(l[p] - (l[p + '_g'] - l[p + '_c']));
-      if (e > pior) { pior = e; onde = l.t.slice(0, 16); }
+      erros.push(e);
+      if (e > TOL) { const h = l.t.slice(11, 13); porHora[h] = (porHora[h] || 0) + 1; }
+      if (e > pior.e) pior = { e, p, t: l.t.slice(0, 16), liq: l[p], g: l[p + '_g'], c: l[p + '_c'] };
     }
-    piores.push([pior, p, onde]);
   }
-  piores.sort((a, b) => b[0] - a[0]);
-  const [pv, pp, po] = piores[0];
-  console.log('  identidade  liquida = geracao - consumo   ·   pior erro ' + pv.toFixed(4)
-    + ' MW  (' + pp + ' em ' + po + ')');
-  if (pv > TOL) falha('a identidade nao fecha dentro de ' + TOL + ' MW');
+  erros.sort((x, y) => x - y);
+  const q = (f) => erros.length ? erros[Math.min(erros.length - 1, Math.floor(erros.length * f))] : 0;
+  const acima = erros.filter(e => e > TOL).length;
+  console.log('  identidade  liquida = geracao - consumo   ·   ' + erros.length + ' comparacoes');
+  console.log('    mediana ' + q(0.5).toFixed(4) + '   p95 ' + q(0.95).toFixed(4)
+    + '   p99 ' + q(0.99).toFixed(4) + '   maximo ' + q(1).toFixed(4) + ' MW');
+  console.log('    acima de ' + TOL + ' MW: ' + acima + ' (' + (acima / erros.length * 100).toFixed(2) + '%)');
+  if (acima) {
+    const hs = Object.entries(porHora).sort((x, y) => y[1] - x[1]).slice(0, 6);
+    console.log('    horas com mais desvio: ' + hs.map(([h, n]) => h + 'h(' + n + ')').join(' · '));
+    console.log('    PIOR CASO ' + pior.p + ' em ' + pior.t + ':  liquida ' + pior.liq
+      + '   geracao ' + pior.g + '   consumo ' + pior.c
+      + '   ->  g-c = ' + (pior.g - pior.c).toFixed(3) + '   erro ' + pior.e.toFixed(3));
+  }
+  if (acima) falha('a identidade nao fecha dentro de ' + TOL + ' MW em ' + acima + ' comparacoes');
   else console.log('  ✓ identidade fecha em todas as linhas dos dez');
 
   // ---- 4 · tudo-ou-nada do Complexo, em CADA canal ---------------------------------------------
