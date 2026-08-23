@@ -21,6 +21,10 @@ on:
         description: 'dias com ultrapassagem a reconferir contra a fonte'
         required: false
         default: '2026-06-13,2026-06-16,2026-08-03,2026-08-07,2026-08-11'
+      dia_grandezas:
+        description: 'dia para auditar os canais Demat/DematDel/DematRec (vazio = ontem)'
+        required: false
+        default: ''
 jobs:
   audita:
     runs-on: ubuntu-latest
@@ -29,6 +33,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
+      # 🔴 QUAL canal e geracao e qual e consumo nao se decide pelo nome. Roda PRIMEIRO porque a
+      # resposta dele condiciona tudo o que o painel vai rotular.
+      - name: Qual canal e geracao e qual e consumo
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIA_ALVO: ${{ inputs.dia_grandezas }}
+        run: node scripts/audita-must-grandezas.js
       - name: Comparar 5 min agregado contra 15 min da fonte
         env:
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
