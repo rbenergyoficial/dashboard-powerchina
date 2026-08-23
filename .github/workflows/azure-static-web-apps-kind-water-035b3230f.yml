@@ -19,6 +19,21 @@ jobs:
         with:
           submodules: true
           lfs: false
+          # a guarda compara com o commit anterior; com fetch-depth 1 nao ha anterior
+          fetch-depth: 2
+      # 🔴 ANTES DE PUBLICAR, e nao num job paralelo. Um workflow separado ficaria vermelho DEPOIS
+      # do site ja ter sido atualizado — que e exatamente o que nao adianta. Aqui a falha impede o
+      # passo seguinte.
+      #
+      # Em 17/08/2026 uma copia de 28/06 foi publicada por cima e levou embora o comparativo SCADA,
+      # o painel do ONS e o monitor. O site serviu a versao amputada por seis dias, sem nenhum job
+      # vermelho: publicar MENOS nao e erro para ferramenta nenhuma.
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'push'
+        with: { node-version: '20' }
+      - name: Guarda — o index.html nao pode encolher
+        if: github.event_name == 'push'
+        run: node scripts/guarda-index.js
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
