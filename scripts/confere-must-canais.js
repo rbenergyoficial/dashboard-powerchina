@@ -71,7 +71,15 @@ for (const nome of arquivos) {
   // 🔴 Um numero solto ("pior erro X") nao diz se e defeito ou fisica. O que decide e a
   // DISTRIBUICAO e a HORA: erro concentrado no nascer e no por do sol e a janela em que o sinal
   // troca de sentido; erro espalhado pelo dia inteiro seria coluna trocada.
+  // 🔴 DUAS HIPOTESES, e o dado escolhe. Ate 23/08/2026 eu supunha que `Demat` fosse a LIQUIDA
+  // (Rec - Del) — e no medidor de GERACAO (ponto 6233) ela e mesmo: vai negativa de madrugada.
+  // Nos medidores de MUST o ensaio mostrou o contrario. Em vez de afrouxar a tolerancia ate a
+  // suposicao caber, o teste passa a comparar as duas leituras e dizer qual fecha:
+  //
+  //   H1  Demat = geracao - consumo   (liquida)
+  //   H2  Demat = geracao             (so o sentido de injecao, sem netting)
   const erros = [];
+  const errosH2 = [];
   const porHora = {};
   let pior = { e: -1 };
   for (const p of TODOS) {
@@ -79,10 +87,17 @@ for (const nome of arquivos) {
       if (l[p] == null || l[p + '_g'] == null || l[p + '_c'] == null) continue;
       const e = Math.abs(l[p] - (l[p + '_g'] - l[p + '_c']));
       erros.push(e);
+      errosH2.push(Math.abs(l[p] - l[p + '_g']));
       if (e > TOL) { const h = l.t.slice(11, 13); porHora[h] = (porHora[h] || 0) + 1; }
       if (e > pior.e) pior = { e, p, t: l.t.slice(0, 16), liq: l[p], g: l[p + '_g'], c: l[p + '_c'] };
     }
   }
+  const maxH2 = errosH2.length ? Math.max.apply(null, errosH2) : 0;
+  const maxH1 = erros.length ? Math.max.apply(null, erros) : 0;
+  console.log('  QUAL LEITURA FECHA?   H1 (liquida) maximo ' + maxH1.toFixed(4)
+    + ' MW   ·   H2 (so injecao) maximo ' + maxH2.toFixed(4) + ' MW');
+  console.log('    ➜ ' + (maxH2 < maxH1 ? 'H2: `Demat` E a geracao — a coluna `_g` e IDENTICA a liquida'
+                                        : 'H1: `Demat` e a liquida, como se supunha'));
   erros.sort((x, y) => x - y);
   const q = (f) => erros.length ? erros[Math.min(erros.length - 1, Math.floor(erros.length * f))] : 0;
   const acima = erros.filter(e => e > TOL).length;
