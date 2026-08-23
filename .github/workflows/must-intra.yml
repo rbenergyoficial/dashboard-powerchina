@@ -64,3 +64,16 @@ jobs:
           FORCAR: ${{ inputs.forcar == 'sim' && '1' || '' }}
           SO: ${{ inputs.so }}
         run: node scripts/gen-must-intra.js
+      # 🔴 O VIGIA RODA SEMPRE, mesmo se o gerador falhar — e justamente ai que ele importa mais.
+      # Sem `if: always()` um must-intra quebrado silenciaria o unico aviso de que o dado parou,
+      # que e a forma exata do defeito de 23/08: a queda so apareceu porque um humano olhou a tela.
+      #
+      # Na carga historica (dispatch com muitos dias) ele nao roda: ali o blob e reescrito inteiro
+      # e a idade do dado nao significa saude de medidor.
+      - name: Vigiar os nove medidores de MUST
+        if: always() && github.event_name == 'schedule'
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+        run: node scripts/gen-must-watchdog.js
