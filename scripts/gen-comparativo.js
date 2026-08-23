@@ -491,7 +491,11 @@ if (require.main !== module) return;
 (async () => {
   const token = process.env.WAY2_TOKEN;
   if (!token) { console.error('ERRO: WAY2_TOKEN ausente.'); process.exit(1); }
-  const DIAS = Math.max(1, parseInt(process.env.DIAS || '3', 10) || 3);
+  // 🔴 SETE DIAS, NAO TRES. Medido no ensaio de 23/08/2026: com janela de 3 dias o SCADA vinha
+  // com ZERO baldes em todas as resolucoes — ele chega com ~3 dias de atraso (a planilha depende
+  // da carga no SharePoint), entao a janela curta nunca o alcanca. O merge e por chave, entao uma
+  // rodada mais larga simplesmente completa as linhas que ja existem quando a fonte lenta chega.
+  const DIAS = Math.max(1, parseInt(process.env.DIAS || '7', 10) || 7);
   const FORCAR = /^(1|true|sim)$/i.test(process.env.FORCAR || '');
   const SO = process.env.SO != null && process.env.SO !== '' ? parseInt(process.env.SO, 10) : null;
   const alvos = SO != null ? RESOLUCOES.filter((x) => x.min === SO) : RESOLUCOES;

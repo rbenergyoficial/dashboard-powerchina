@@ -110,6 +110,40 @@ Percentual é exceção: `%` fica inline, é um caractere.
 Separador de milhar: espaço estreito (U+202F), nunca ponto. O ponto significa
 apenas decimal, em toda a página.
 
+## Geometria das barras — como o Grafana se comporta de verdade
+
+Apurado por medição em 11/08/2026, depois de três tentativas erradas baseadas em
+suposição. Vale a pena ler antes de mexer nesses valores.
+
+**`groupWidth` MENOR fecha o grupo. `barWidth` MAIOR engorda a barra dentro dele.**
+O contrário do que o nome sugere. Subir `groupWidth` afasta as barras do mesmo mês
+umas das outras, e o par deixa de se formar.
+
+O sintoma de agrupamento quebrado é medível: comparar, num render, a distância
+entre os centros das barras DENTRO de um mês contra a distância da última barra de
+um mês à primeira do mês seguinte. Se as duas forem parecidas, não há grupo — o
+leitor vê uma fileira de barras soltas. Antes da correção, o painel 16 tinha 43 px
+de vão interno contra 39 px de vão externo.
+
+Valores que funcionam, com `barWidth` sempre perto de 0,9:
+
+| Séries | `groupWidth` | `barWidth` | Barra resultante |
+|---|---|---|---|
+| 1 | irrelevante | 0,42 | 31,5% da categoria |
+| 2 | 0,45 | 0,90 | 20% da categoria |
+| 3 | 0,675 | 0,90 | 20% da categoria |
+
+A regra por trás: `groupWidth` ≈ 0,225 × número de séries. Isso mantém a barra com
+a mesma largura em qualquer contagem de séries e preserva o vão entre meses.
+
+Série única usa barra mais larga de propósito — não há grupo a formar, e igualar a
+20% deixa o gráfico anêmico ao lado dos agrupados.
+
+`barRadius` uniforme em 0,04.
+
+`showValue`: usar `auto`, não `always`. Com muitas barras num painel de meia
+largura, `always` sobrepõe rótulos e corta o último contra a borda.
+
 ## Método usado nas verificações
 
 As conferências numéricas foram feitas consultando o `executivo.json` e os

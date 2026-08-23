@@ -15,7 +15,7 @@ on:
       dias:
         description: 'quantos dias para tras reprocessar (carga inicial: 365)'
         required: false
-        default: '3'
+        default: '7'
       resolucao:
         description: 'so uma resolucao: 5, 15, 30, 60, ou 0 para o diario (vazio = todas)'
         required: false
@@ -50,7 +50,7 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
-          DIAS: ${{ inputs.dias || '3' }}
+          DIAS: ${{ inputs.dias || '7' }}
           SO: ${{ inputs.resolucao || '' }}
           FORCAR: ${{ inputs.forcar == 'sim' && '1' || '' }}
         run: node scripts/gen-comparativo.js
