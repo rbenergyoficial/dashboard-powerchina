@@ -10,7 +10,7 @@
  * 🔴 A primeira versao cobrava a identidade `Demat = geracao - consumo` e REPROVOU — com os
  * desvios concentrados na madrugada e o pior caso em liquida 0 / geracao 0 / consumo 1,5. Nao era
  * ruido de transicao: era a suposicao. Medido em 2.430 pontos, `Demat` e a GERACAO com erro
- * 0,0000, e o medidor de MUST simplesmente nao neta. Por isso a coluna `_g` saiu do blob (era a
+ * 0,0000, e o ponto de MUST simplesmente nao neta. Por isso a coluna `_g` saiu do blob (era a
  * mesma coluna duas vezes) e virou guarda no gerador.
  *
  * 🔴 A media esconde troca de sinal e troca de coluna. Um gerador que invertesse `_g` e `_c`

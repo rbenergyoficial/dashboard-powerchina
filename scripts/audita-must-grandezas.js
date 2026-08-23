@@ -5,7 +5,8 @@
  *
  * ══ POR QUE ISTO EXISTE ══════════════════════════════════════════════════════════════════════
  *
- * Os medidores do MUST expoem tres grandezas de demanda ativa: `Demat`, `DematDel` e `DematRec`.
+ * Os pontos de MUST (calculados da mesma medicao da geracao, com equacao de perdas) expoem tres
+ * grandezas de demanda ativa: `Demat`, `DematDel` e `DematRec`.
  * O dashboard HTML as chama de "demanda canal Del" e "demanda canal Rec" — ou seja, ele TAMBEM
  * nao afirma a semantica, so nomeia o canal.
  *

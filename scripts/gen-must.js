@@ -35,7 +35,9 @@ const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'must_diario.json';
 const BASE_LEITURA = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 
-// pontoId -> parque, e o limite CONTRATADO em MW. Os pontos 6380-6388 sao os medidores dedicados
+// pontoId -> parque, e o limite CONTRATADO em MW. ⚠️ Os pontos 6380-6388 NAO sao medidores: sao
+// a demanda no ponto de conexao CALCULADA a partir da mesma medicao da geracao, com equacao de
+// perdas. O que os distingue dos
 // do MUST, distintos dos 6196-6233 que o gen-way2-hist.js le para geracao. Os limites conferem com
 // a outorga de cada usina e sao os mesmos configurados no "Compor Limites" do fluxo de alerta.
 const PONTOS = {
@@ -379,7 +381,8 @@ async function grava(obj) {
   const dias_distintos = new Set(serie.map(x => x.dia)).size;
   const out = {
     gerado_em: new Date().toISOString(),
-    fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), grandeza Demat, 5 min. '
+    fonte: 'Way2 PIM, pontos 6380-6388 — demanda no ponto de conexao, CALCULADA da mesma medicao '
+      + 'da geracao com equacao de perdas (nao ha medidor dedicado). Grandeza Demat, 5 min. '
       + 'A API devolve kW; aqui vai em MW.',
     metodo: 'Pico do dia por parque em INTEGRALIZACAO DE 15 MINUTOS (media dos slots de 5 min no '
       + 'quarto de hora), com o horario do balde. pct_must = pico / contratado x 100 · '

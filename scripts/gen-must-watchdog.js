@@ -1,56 +1,41 @@
 /*
- * gen-must-watchdog.js — VIGIA dos nove medidores dedicados do MUST.
+ * gen-must-watchdog.js — VIGIA da medicao de MUST.
  *
- * ══ POR QUE ELE EXISTE ═══════════════════════════════════════════════════════════════════════
+ * ══ 🔴 CORRECAO DE PREMISSA (23/08/2026, apontada pelo humano) ════════════════════════════════
  *
- * 🔴 Em 23/08/2026 o M6 parou de reportar as 02:15 e a telemetria de MUST inteira parou as 05:35.
- * O painel de saude continuou marcando MEDIDORES 24/24 — e estava CERTO: o `way2_saude.json` e
- * construido a partir do `way2_eletrico.json`, que tem exatamente 25 pontos (6196-6219 + 6233),
- * os medidores de GERACAO. Conferido no blob: nenhum dos pontos 6380-6388 esta la, porque o fluxo
- * do Power Automate nao os coleta.
+ * A primeira versao deste arquivo chamava os pontos 6380-6388 de "medidores dedicados do MUST".
+ * ISSO ESTA ERRADO, e o erro saiu por e-mail para outras pessoas antes de ser visto.
  *
- * Ou seja: os nove medidores que sustentam a pagina de MUST NAO ERAM VIGIADOS POR NINGUEM. A queda
- * so apareceu porque um humano abriu a pagina e viu "Sem dados".
+ * NAO EXISTE MEDIDOR DE MUST. Sao os MESMOS medidores fisicos da geracao; o que a fonte publica
+ * nesses pontos e um valor CALCULADO — a demanda no ponto de conexao, obtida aplicando uma equacao
+ * de perdas sobre a mesma medicao. Ponto calculado, nao instrumento.
  *
- * ⚠️ E a ausencia nao deixa rastro no blob: o gerador descarta valor nulo, entao um instante em que
- * TODOS os parques estao fora simplesmente nao vira linha. A serie termina, e nao ha registro
- * dizendo que ela deveria continuar. Mesma forma do defeito do painel de saude corrigido de manha:
- * ausencia representada por ausencia. Por isso o vigia compara com o RELOGIO, nunca com o proprio
- * dado.
+ * A consequencia nao e so de vocabulario. Se a origem e a mesma, os dois vigias caem JUNTOS:
+ * medido em 23/08/2026, `way2_watchdog` e `must_watchdog` registraram falha no MESMO instante
+ * (13:30) e mandaram DOIS e-mails para UMA queda — as 14:30 e as 15:09. Eu tinha acabado de
+ * reduzir o volume de e-mail a pedido do humano, e criei um segundo remetente para o mesmo evento.
  *
- * ══ 🔴 A MEDICAO QUE MUDOU O DESENHO ═════════════════════════════════════════════════════════
+ * ══ O QUE ELE VIGIA, ENTAO ═══════════════════════════════════════════════════════════════════
  *
- * A primeira versao vigiava a idade do BLOB, com limiares de 45/90 min derivados do cron de 15 min
- * declarado no must-intra.yml. Medindo as 48 execucoes agendadas mais recentes, o cron REAL:
+ * O que este vigia acrescenta ao da geracao NAO e a coleta — e a CONTA. A medicao pode chegar e o
+ * valor de MUST nao ser publicado (equacao, ponto calculado, publicacao do ponto). Esse e o caso
+ * que so ele enxerga, e e o unico em que ele avisa por conta propria.
  *
- *     intervalo entre execucoes   minimo 14 · mediana 23 · p90 47 · MAXIMO 101 min
- *     duracao do job              mediana 0,5 · maximo 11 min
- *     -----------------------------------------------------------------------------
- *     idade normal do blob no pior caso = 101 + 11 + 16 (latencia da fonte) = 128 min
- *
- * A deriva do agendador do GitHub e MAIOR que a interrupcao que se quer detectar. Vigiar o blob
- * com limiar apertado daria alarme falso todo dia; afrouxa-lo ate 128 min tornaria o vigia cego
- * a uma queda de duas horas. Os dois lados perdem — o sinal esta na variavel errada.
- *
- * ══ O DESENHO QUE FICOU: DUAS IDADES, DOIS PROPOSITOS ════════════════════════════════════════
- *
- * IDADE NA FONTE (sinal primario) — consulta direta a Way2 a cada rodada. Nao depende do nosso
- *   cron, entao aceita limiar apertado: registro 45 min, e-mail 90 min. E ela que responde a
- *   pergunta que interessa: "o medidor esta medindo?".
- *
- * IDADE DO BLOB (sinal secundario) — so denuncia PIPELINE PARADO, e por isso leva limiar folgado
- *   (registro 180, e-mail 240), acima do pior caso normal medido de 128 min. Sem ele, um
- *   must-intra quebrado passaria despercebido enquanto a fonte seguisse sadia.
- *
- * A combinacao tambem CLASSIFICA a origem sem adivinhar:
- *     fonte velha                  -> a Way2 parou           -> suporte
- *     fonte fresca + blob velho    -> o nosso pipeline parou -> workflow
- *     sem credencial               -> INDETERMINADA          -> nao acusa ninguem
+ * 🔴 QUANDO A COLETA INTEIRA CAI, ELE FICA CALADO. O registro continua (o painel le o estado), mas
+ * o e-mail e do vigia da geracao, que e quem tem a origem certa. Dois avisos para um evento nao
+ * informam o dobro: fazem o leitor parar de ler os dois.
  *
  * ══ O QUE ELE PRODUZ ═════════════════════════════════════════════════════════════════════════
  *
  *   must_saude.json     — estado por parque, para o painel (leitura)
  *   must_watchdog.json  — estado do EVENTO, para nao repetir e-mail e medir a duracao
+ *
+ * ══ LIMIARES, medidos ════════════════════════════════════════════════════════════════════════
+ *
+ * IDADE NA FONTE (primaria) — consulta direta a cada rodada, nao depende do nosso cron:
+ *   registro 45 min, e-mail 90 min.
+ * IDADE DO BLOB (secundaria) — so denuncia pipeline parado, e leva limiar folgado (180/240),
+ *   acima do pior caso NORMAL medido de 128 min, porque o cron do GitHub deriva ate 101 min.
  *
  * Env: DADOS_STORAGE (obrig. fora de LOCAL_OUT), WAY2_TOKEN (o sinal primario depende dele),
  *      PA_ALERT_WEBHOOK (vazio = so loga), LIMIAR_MIN (45), LIMIAR_EMAIL_MIN (90),
@@ -201,6 +186,16 @@ function postJson(url, obj) {
   const minDoDia = (() => { const s = nowBRT().slice(11, 19).split(':').map(Number); return s[0] * 60 + s[1]; })();
   const carencia = minDoDia < (LIMIAR + 20);
 
+  // ══ 2b · A COLETA INTEIRA CAIU? ══════════════════════════════════════════════════════════════
+  // 🔴 Se sim, o e-mail e do vigia da GERACAO. Este registra e cala. Medido em 23/08/2026: os dois
+  // marcaram falha no MESMO instante (13:30) e mandaram dois e-mails para uma queda — porque a
+  // origem e a mesma medicao. Dois avisos para um evento nao informam o dobro.
+  let coletaCaida = false, estadoGer = null;
+  try {
+    estadoGer = await leBlob(BASE + 'way2_watchdog.json');
+    coletaCaida = !!estadoGer && estadoGer.estado === 'falha';
+  } catch (e) { /* sem o estado da geracao, este vigia volta a decidir sozinho */ }
+
   // ══ 3 · estado anterior ══════════════════════════════════════════════════════════════════════
   let cont = null, st = { estado: 'ok' };
   if (!ensaio) {
@@ -238,36 +233,34 @@ function postJson(url, obj) {
     st.parques = nomes; st.origem = origem; st.idadeTxt = idadeTxt;
     const maduro = (idadeTxt == null) || (idadeTxt >= limiarEmail);
     const lembrete = !!st.alertado_em && ageMin(st.alertado_em) >= proximoLembrete(st.avisos || 1);
-    if (maduro && (!st.alertado_em || lembrete)) {
+    st.calado_por_coleta = coletaCaida || undefined;
+    if (coletaCaida) {
+      console.log('  a coleta inteira esta em falha (vigia da geracao desde '
+        + ((estadoGer || {}).desde || '?') + ') — REGISTRADO, sem e-mail: o aviso e de la.');
+    } else if (maduro && (!st.alertado_em || lembrete)) {
       const parcial = nomes.length < PARQUES.length;
       const desdeFmt = fmtTs(st.desde);
       acao = {
         tipo: 'falha', escopo: 'must', origem, parques: nomes, idade_min: idadeTxt,
         sem_dados_desde: st.desde, verificado_em: nowBRT(), lembrete,
         contato_suporte: origem === 'way2' ? SUPORTE : '',
-        assunto: (origem === 'way2' ? '🔴' : origem === 'pipeline' ? '🟠' : '⚠️') + ' '
-          + (lembrete ? 'AINDA sem dados' : 'Falha de comunicação')
-          + ' · medidores de MUST · ' + (parcial ? lista(nomes) : 'os nove parques')
-          + ' · desde ' + desdeFmt,
-        corpo: '<b>Os medidores dedicados do MUST pararam de atualizar.</b><br><br>'
-          + '↳ Afetados: <b>' + lista(nomes) + '</b>' + (parcial ? ' (' + nomes.length + ' de 9)' : ' — todos') + '<br>'
-          + '↳ Última leitura registrada: <b>' + desdeFmt + '</b><br>'
-          + '↳ ' + (idadeTxt != null ? fmtDur(idadeTxt) + ' no momento deste alerta' : 'sem leitura na janela verificada')
+        assunto: (origem === 'way2' ? '🔴' : origem === 'pipeline' ? '🟠' : '⚠️') + ' MUST '
+          + (lembrete ? 'AINDA sem dados' : 'sem dados') + ' desde ' + fmtTs(st.desde)
+          + ' · ' + (parcial ? lista(nomes) : 'os nove parques'),
+        // 🔴 CURTO DE PROPOSITO. O primeiro aviso tinha oito paragrafos, e o humano apontou:
+        // "estou vendo muita informacao para um aviso". Um alerta e uma INTERRUPCAO — ele precisa
+        // dizer o que parou, ha quanto tempo, e o que fazer. O resto disputa atencao com essas
+        // tres coisas e faz o leitor parar de ler.
+        corpo: '<b>A medição de MUST parou às ' + fmtTs(st.desde) + '</b>'
+          + (idadeTxt != null ? ' — ' + fmtDur(idadeTxt) + ' no momento deste alerta.' : '.')
           + '<br><br>'
-          + '<i>' + (lembrete ? 'Lembrete' : 'Primeiro aviso') + ' gerado em ' + fmtTs(nowBRT())
-          + '. Se você está lendo isto mais tarde, a interrupção pode ser maior.</i><br><br>'
-          + 'Verificação automática: ' + detalhe + '<br><br>'
+          + 'Afetados: <b>' + (parcial ? lista(nomes) + ' (' + nomes.length + ' de 9)' : 'os nove parques') + '</b><br>'
           + (origem === 'way2'
-            ? '➡ <b>ORIGEM: FALHA NA FONTE (Way2)</b>.<br>➡ <b>AÇÃO: contatar o suporte Way2 — ' + SUPORTE + '</b>'
+            ? 'Origem: falha na fonte · <b>Ação: suporte@way2.com.br</b>'
             : origem === 'pipeline'
-              ? '➡ <b>ORIGEM: NOSSO PIPELINE</b>. A fonte tem leitura nova, mas o blob do MUST não recebeu.<br>➡ <b>AÇÃO: verificar o workflow must-intra.</b>'
-              : '➡ <b>ORIGEM NÃO CONFIRMADA.</b> A verificação contra a fonte não pôde ser feita, então este '
-                + 'alerta afirma apenas o que mediu: o dado parou de chegar.<br>'
-                + '➡ <b>AÇÃO: verificar primeiro o workflow must-intra; se ele estiver verde, contatar ' + SUPORTE + '.</b>')
-          + '<br><br><b>O que fica sem número enquanto durar:</b> a demanda contra o MUST contratado '
-          + 'destes parques, e o Complexo — que é a soma simultânea dos nove e por isso não é '
-          + 'calculado quando falta um.'
-          + '<br><br><i>(Alerta automático · vigia de MUST · e-mail a partir de ' + limiarEmail + ' min)</i>',
+              ? 'Origem: nosso pipeline · <b>Ação: verificar o workflow must-intra</b>'
+              : 'Origem não confirmada · <b>Ação: verificar o must-intra; se estiver verde, ' + SUPORTE + '</b>')
+          + '<br><br><i>vigia de MUST · e-mail a partir de ' + limiarEmail + ' min</i>',
       };
     }
   } else if (!origem && st.estado === 'falha') {
@@ -277,14 +270,10 @@ function postJson(url, obj) {
     acao = (st.avisos || 0) > 0 ? {
       tipo: 'normalizado', escopo: 'must', duracao_min: Math.round(dur),
       ficou_fora_desde: st.desde, ate: nowBRT(), parques: st.parques || [], avisos: st.avisos || 0,
-      assunto: '✅ Medidores de MUST NORMALIZADOS · ficaram fora ' + fmtDur(dur),
-      corpo: '<b>Os medidores do MUST voltaram a atualizar.</b><br><br>'
-        + '<b>PRAZO TOTAL DE INDISPONIBILIDADE: ' + fmtDur(dur) + '</b><br>'
-        + '↳ Afetados: <b>' + lista(st.parques || []) + '</b><br>'
-        + '↳ Início: <b>' + fmtTs(st.desde) + '</b><br>'
-        + '↳ Normalização: <b>' + fmtTs(nowBRT()) + '</b><br>'
-        + '↳ Avisos enviados no período: <b>' + (st.avisos || 0) + '</b><br><br>'
-        + '<i>(Alerta automático · vigia de MUST)</i>',
+      assunto: '✅ MUST normalizado · ficou fora ' + fmtDur(dur),
+      corpo: '<b>A medição de MUST voltou às ' + fmtTs(nowBRT()) + '.</b><br><br>'
+        + 'Ficou fora <b>' + fmtDur(dur) + '</b>, de ' + fmtTs(st.desde) + '.'
+        + '<br><br><i>vigia de MUST</i>',
     } : null;
     st = { estado: 'ok', normalizado_em: nowBRT(), duracao_min: Math.round(dur) };
   } else if (!origem) {

@@ -47,7 +47,10 @@ const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medica
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const BASE_LEITURA = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 
-// os mesmos medidores dedicados do MUST que o gen-must.js le — 6380-6388, distintos dos 6196-6233
+// os mesmos pontos de MUST que o gen-must.js le — 6380-6388. ⚠️ NAO sao medidores: sao pontos
+// CALCULADOS a partir da MESMA medicao fisica da geracao, com uma equacao de perdas aplicada
+// para dar a demanda no ponto de conexao. Chamei-os de "medidores dedicados" ate 23/08/2026,
+// e o erro saiu por e-mail antes de ser visto.
 // da geracao. Os limites conferem com a outorga de cada usina.
 const PONTOS = {
   6380: { parque: 'M1', contrato: 49.11 },
@@ -78,7 +81,7 @@ const PARQUES = IDS.map(i => PONTOS[i].parque);
 //     H1  Demat = geracao - consumo   ->  erro maximo 1,5000 MW
 //     H2  Demat = geracao             ->  erro maximo 0,0000 MW
 //
-// Sao o MESMO numero. O medidor de MUST nao faz netting: ele registra os dois sentidos separados,
+// Sao o MESMO numero. O ponto de MUST nao neta: publica os dois sentidos separados,
 // e `Demat` e o sentido de injecao. Por isso a coluna `<parque>` que os paineis leem desde sempre
 // JA E a geracao — publicar um `_g` ao lado seria a mesma coluna duas vezes.
 //
@@ -403,7 +406,9 @@ async function grava(nome, obj) {
     const out = {
       gerado_em: new Date().toISOString(),
       resolucao_min: res.min, janela_dias: res.dias,
-      fonte: 'Way2 PIM, pontos 6380-6388 (medidores dedicados do MUST), pedida a API JA '
+      fonte: 'Way2 PIM, pontos 6380-6388 — demanda no ponto de conexao, CALCULADA a partir da '
+        + 'mesma medicao da geracao com uma equacao de perdas (nao ha medidor dedicado de MUST). '
+        + 'Pedida a API JA '
         + 'INTEGRALIZADA na resolucao deste arquivo (' + INTERVALO_API[res.min] + '). A API '
         + 'devolve kW; aqui vai em MW.',
       colunas: '<parque> = demanda de GERACAO (o sentido que o contrato de MUST limita). '
