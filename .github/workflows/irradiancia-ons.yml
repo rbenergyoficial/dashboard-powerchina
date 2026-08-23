@@ -1,9 +1,25 @@
 name: Irradiância ONS → Blob (diário)
 
+# O ONS publica este conjunto DUAS vezes por dia (12h e 19h), e o proprio dataset avisa que o dado
+# passa por conferencia continua e pode ser corrigido depois da primeira publicacao. Por isso as
+# cinco rodadas continuam: 15:30 e 22:30 UTC pegam as publicacoes, as outras pegam correcao.
+#
+# ⚠️ Eu tinha proposto CORTAR rodadas por causa do custo de rede. A migracao para parquet tirou
+# 94% desse custo (67 MB -> 3,8 MB por mes), entao o motivo do corte deixou de existir — e cortar
+# passaria a trocar frescor por nada.
 on:
   schedule:
     - cron: '30 6,15,17,19,22 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      meses:
+        description: 'meses a reprocessar, separados por virgula (ex.: 2026_07,2026_08). Vazio = corrente + anterior'
+        required: false
+        default: ''
+      ensaio:
+        description: 'sim = comparar o caminho do parquet com o do CSV linha a linha, SEM publicar'
+        required: false
+        default: 'nao'
 
 permissions:
   contents: read
@@ -11,14 +27,24 @@ permissions:
 jobs:
   gerar-irradiancia:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Instalar dependência (SDK do Blob)
-        run: npm install @azure/storage-blob@^12
-      - name: Gerar e enviar irradiância (mês corrente + anterior)
+      - name: Instalar dependencias (SDK do Blob e leitor de parquet)
+        run: npm install @azure/storage-blob@^12 hyparquet
+
+      # O ensaio baixa o CSV de ~67 MB de proposito, para comparar com a referencia. Por isso ele
+      # e sob demanda e nao entra na rodada agendada.
+      - name: Comparar parquet com CSV (sem publicar)
+        if: ${{ inputs.ensaio == 'sim' }}
+        run: node scripts/ensaio-irradiancia-parquet.js
+
+      - name: Gerar e enviar irradiância
+        if: ${{ inputs.ensaio != 'sim' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          MESES: ${{ inputs.meses || '' }}
         run: node scripts/gen-irradiancia-ons.js
