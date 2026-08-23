@@ -78,10 +78,18 @@ jobs:
       # e a idade do dado nao significa saude de medidor. Ja o dispatch com a janela padrao E a
       # mesma coisa que a rodada agendada — e e o unico jeito de conferir o vigia sob demanda,
       # em vez de esperar o proximo cron para descobrir se ele funciona.
-      - name: Vigiar a medicao de MUST
+      # 🔴 SEM PA_ALERT_WEBHOOK: o aviso por e-mail foi APOSENTADO em 23/08/2026. Medido naquele
+      # dia: os nove pontos de MUST caem no MESMO instante que os medidores de 230 kV (13:30) e
+      # nao voltam com os coletores — porque o MUST e calculado do ponto de conexao. Um aviso que
+      # so dispara quando o TR1/TR2 param avisa do que o selo de medidores ja diz, agora que ele
+      # pinta por GRUPO. Dois remetentes para um evento fazem o leitor parar de ler os dois.
+      #
+      # O passo CONTINUA rodando: ele mantem o must_saude.json fresco, que e o diagnostico de
+      # "chegou medicao mas o MUST nao foi publicado" — o unico caso que os medidores nao contam.
+      # Sem webhook o script apenas loga o que faria.
+      - name: Medir o frescor do MUST (sem alerta)
         if: always() && (github.event_name == 'schedule' || (inputs.dias || '2') == '2')
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
         run: node scripts/gen-must-watchdog.js

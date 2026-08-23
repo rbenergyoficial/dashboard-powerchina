@@ -164,10 +164,26 @@ function gerarSaude(dados, agoraMs) {
   // número = medidores saudáveis (≤40 min). Antes pintava pela contagem de FRESCOS (≤25 min), então o
   // jitter normal de latência da Way2 (1-2 medidores a 26-40 min = "atraso", não falha) já gritava laranja.
   const medSaudaveis = resumo.total - resumo.falha;
-  const corMed = resumo.falha === 0 ? '#2FBF71' : (resumo.falha <= 2 ? '#FF8A3D' : '#E5484D');
+  // 🔴 A GRAVIDADE E POR GRUPO, NAO POR CONTAGEM. Ate 23/08/2026 a cor saia de `resumo.falha <= 2`,
+  // e naquele dia os DOIS medidores fora eram exatamente o TR1 e o TR2 de 230 kV — o ponto de
+  // conexao. O selo mostrou `22/24` em AMBAR, que le como "quase tudo bem", enquanto a medicao que
+  // sustenta o faturamento e o MUST estava parada havia quase 3 horas. O humano olhou e disse que
+  // o painel estava errado; o numero estava certo e a LEITURA e que era falsa.
+  //
+  // Dois de vinte e quatro nunca e "quase tudo bem" quando os dois sao a conexao. E os 22
+  // coletores de 34,5 kV voltaram as 16:05 enquanto os de 230 kV seguiram fora — a contagem
+  // melhorou e a situacao nao.
+  const falhas = medidores.filter(m => m.estado === 'falha');
+  const f230 = falhas.filter(m => m.grupo === '230 kV').length;
+  const f345 = falhas.length - f230;
+  const corMed = f230 > 0 ? '#E5484D'
+    : f345 === 0 ? '#2FBF71'
+      : (f345 <= 2 ? '#FF8A3D' : '#E5484D');
+  // e o selo DIZ qual grupo caiu, senao a cor vermelha obriga a abrir a pagina para descobrir
+  const sufMed = f230 > 0 ? (f230 === 1 ? '230 kV parcial' : '230 kV fora') : '';
   const badges = [
     { ic: '⏱', l: 'Way2', v: String(idadeAncora), u: 'min', c: corIdade },
-    { ic: '📡', l: 'Medidores', v: medSaudaveis + '/' + resumo.total, u: '', c: corMed },
+    { ic: '📡', l: 'Medidores', v: medSaudaveis + '/' + resumo.total, u: sufMed, c: corMed },
   ];
 
   return {

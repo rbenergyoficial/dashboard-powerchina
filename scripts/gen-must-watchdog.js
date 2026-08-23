@@ -20,6 +20,20 @@
  * (13:30) e mandaram DOIS e-mails para UMA queda — as 14:30 e as 15:09. Eu tinha acabado de
  * reduzir o volume de e-mail a pedido do humano, e criei um segundo remetente para o mesmo evento.
  *
+ * ══ 🔴 O E-MAIL FOI APOSENTADO (23/08/2026) ══════════════════════════════════════════════════
+ *
+ * O passo do workflow roda SEM `PA_ALERT_WEBHOOK`, entao este script mede e loga, mas nao envia.
+ * A composicao do texto continua aqui (e `PREVIEW=1` continua imprimindo) porque o dia em que ele
+ * voltar a avisar, o texto tem de estar revisado — nao porque esteja em uso.
+ *
+ * O motivo: medido em 23/08/2026, os nove pontos de MUST caem no MESMO instante que os medidores
+ * de 230 kV (13:30) e NAO voltam com os coletores de 34,5 kV (16:05), porque o MUST e calculado do
+ * ponto de conexao. Um aviso que so dispara quando o TR1/TR2 param avisa do que o selo de
+ * medidores ja diz — desde que ele pinte por GRUPO, o que passou a fazer no mesmo dia.
+ *
+ * ⚠️ NAO RELIGUE o webhook sem antes conferir se o selo continua distinguindo 230 kV de 34,5 kV.
+ * Se aquela distincao sumir, este aviso volta a ser o unico lugar onde a queda da conexao aparece.
+ *
  * ══ O QUE ELE VIGIA, ENTAO ═══════════════════════════════════════════════════════════════════
  *
  * O que este vigia acrescenta ao da geracao NAO e a coleta — e a CONTA. A medicao pode chegar e o
