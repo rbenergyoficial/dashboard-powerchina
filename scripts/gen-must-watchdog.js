@@ -6,9 +6,14 @@
  * A primeira versao deste arquivo chamava os pontos 6380-6388 de "medidores dedicados do MUST".
  * ISSO ESTA ERRADO, e o erro saiu por e-mail para outras pessoas antes de ser visto.
  *
- * NAO EXISTE MEDIDOR DE MUST. Sao os MESMOS medidores fisicos da geracao; o que a fonte publica
- * nesses pontos e um valor CALCULADO — a demanda no ponto de conexao, obtida aplicando uma equacao
- * de perdas sobre a mesma medicao. Ponto calculado, nao instrumento.
+ * NAO EXISTE MEDIDOR DE MUST. A aquisicao vem dos MEDIDORES DE FATURAMENTO, que alimentam o Way2
+ * e o SCDE; o que a fonte publica nos pontos 6380-6388 e um valor CALCULADO a partir deles — a
+ * demanda no ponto de conexao, obtida aplicando uma equacao de perdas sobre a mesma medicao.
+ * Ponto calculado, nao instrumento.
+ *
+ * 🔴 Por isso o AVISO nomeia os medidores de faturamento, e nao "a medicao de MUST": o MUST e um
+ * dos calculos que dependem deles, nao a coisa que falhou. Anunciar o produto no lugar da origem
+ * manda o leitor procurar defeito no lugar errado — e esconde que o SCDE esta no mesmo barco.
  *
  * A consequencia nao e so de vocabulario. Se a origem e a mesma, os dois vigias caem JUNTOS:
  * medido em 23/08/2026, `way2_watchdog` e `must_watchdog` registraram falha no MESMO instante
@@ -113,6 +118,87 @@ function postJson(url, obj) {
       (res) => { res.resume(); res.on('end', () => (res.statusCode < 300 ? resolve(res.statusCode) : reject(new Error('webhook HTTP ' + res.statusCode)))); });
     req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', reject); req.write(body); req.end();
   });
+}
+
+// == O TEXTO DO AVISO MORA AQUI, e num lugar so ==============================================
+//
+// 🔴 O AVISO NOMEIA A ORIGEM, nao o produto. Correcao do humano em 23/08/2026: quem para de
+// reportar sao os MEDIDORES DE FATURAMENTO, que alimentam o Way2 e o SCDE — o MUST e um dos
+// calculos que dependem deles, nao a coisa que falhou. Anunciar "a medicao de MUST parou" manda o
+// leitor procurar defeito no lugar errado, e esconde que o SCDE esta no mesmo barco.
+//
+// ⚠️ Isso so vale quando a origem E a fonte. Se a medicao chega e o nosso lado nao publica, os
+// medidores estao bem, e dize-lo seria acusar quem nao errou. Por isso os tres ramos.
+//
+// 🔴 EXTRAIDO PARA CA para que a previa leia O MESMO TEXTO que sai por e-mail. Foram tres rodadas
+// de correcao em cima de e-mails JA ENVIADOS — cada uma descoberta na caixa de entrada. Um texto
+// que so pode ser lido esperando uma queda e um texto que se revisa tarde demais.
+function montaAviso({ origem, nomes, desde, idadeTxt, limiarEmail, lembrete, total }) {
+  const parcial = nomes.length < total;
+  const quem = parcial ? lista(nomes) : 'os nove parques';
+  const assunto = (origem === 'way2' ? '🔴' : origem === 'pipeline' ? '🟠' : '⚠️') + ' '
+    + (origem === 'way2' ? 'Medidores de faturamento' : 'MUST')
+    + ' ' + (lembrete ? 'AINDA sem dados' : 'sem dados')
+    + ' desde ' + fmtTs(desde) + (parcial ? ' · ' + lista(nomes) : '');
+  const abre = origem === 'way2'
+    ? '<b>Os medidores de faturamento pararam de reportar às ' + fmtTs(desde) + '</b>'
+    : origem === 'pipeline'
+      ? '<b>O valor de MUST não é publicado desde ' + fmtTs(desde) + '</b>'
+      : '<b>Sem dados de MUST desde ' + fmtTs(desde) + '</b>';
+  const meio = origem === 'way2'
+    ? 'Sem eles, o MUST fica sem número em <b>'
+      + (parcial ? lista(nomes) + ' (' + nomes.length + ' de ' + total + ')' : 'todos os nove parques')
+      + '</b> — e o mesmo dado alimenta o SCDE.<br>'
+      + 'Origem: falha na fonte · <b>Ação: ' + SUPORTE + '</b>'
+    : origem === 'pipeline'
+      ? 'Afetados: <b>' + quem + '</b><br>'
+        + 'Os medidores estão reportando · <b>Ação: verificar o workflow must-intra</b>'
+      : 'Afetados: <b>' + quem + '</b><br>'
+        + 'Origem não confirmada · <b>Ação: verificar o must-intra; se estiver verde, '
+        + SUPORTE + '</b>';
+  return {
+    assunto,
+    corpo: abre + (idadeTxt != null ? ' — ' + fmtDur(idadeTxt) + ' no momento deste alerta.' : '.')
+      + '<br><br>' + meio
+      + '<br><br><i>vigia de MUST · e-mail a partir de ' + limiarEmail + ' min</i>',
+  };
+}
+
+function montaNormalizado({ origem, desde, ate, dur }) {
+  const fonte = origem === 'way2';
+  return {
+    assunto: '✅ ' + (fonte ? 'Medidores de faturamento normalizados' : 'MUST normalizado')
+      + ' · ficou fora ' + fmtDur(dur),
+    corpo: '<b>' + (fonte ? 'Os medidores de faturamento voltaram a reportar'
+                          : 'O MUST voltou a ser publicado')
+      + ' às ' + fmtTs(ate) + '.</b><br><br>'
+      + 'Ficou fora <b>' + fmtDur(dur) + '</b>, de ' + fmtTs(desde) + '.'
+      + '<br><br><i>vigia de MUST</i>',
+  };
+}
+
+// PREVIEW=1 imprime os textos possiveis, sem rede, sem gravar e sem disparar.
+if (process.env.PREVIEW) {
+  const nove = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+  const D = '2026-08-23T13:30:00';
+  const NL = String.fromCharCode(10);
+  const limpa = (h) => h.split('<br>').join(NL).replace(/<[^>]+>/g, '');
+  const mostra = (nome, o) => {
+    console.log('');
+    console.log('== ' + nome + ' ==');
+    console.log('ASSUNTO: ' + o.assunto);
+    limpa(o.corpo).split(NL).forEach(l => console.log('  ' + l));
+  };
+  for (const [nome, cfg] of [
+    ['fonte parada (o caso comum)', { origem: 'way2', nomes: nove }],
+    ['fonte parada, so um parque', { origem: 'way2', nomes: ['M6'] }],
+    ['nosso pipeline', { origem: 'pipeline', nomes: nove }],
+    ['origem nao confirmada', { origem: 'indeterminada', nomes: ['M3', 'M7'] }],
+  ]) mostra(nome, montaAviso({ ...cfg, desde: D, idadeTxt: 99, limiarEmail: LIMIAR_EMAIL,
+                               lembrete: false, total: 9 }));
+  mostra('normalizado', montaNormalizado({ origem: 'way2', desde: D,
+                                           ate: '2026-08-23T17:04:00', dur: 214 }));
+  process.exit(0);
 }
 
 (async () => {
@@ -238,29 +324,13 @@ function postJson(url, obj) {
       console.log('  a coleta inteira esta em falha (vigia da geracao desde '
         + ((estadoGer || {}).desde || '?') + ') — REGISTRADO, sem e-mail: o aviso e de la.');
     } else if (maduro && (!st.alertado_em || lembrete)) {
-      const parcial = nomes.length < PARQUES.length;
-      const desdeFmt = fmtTs(st.desde);
+      const aviso = montaAviso({ origem, nomes, desde: st.desde, idadeTxt, limiarEmail,
+                                 lembrete, total: PARQUES.length });
       acao = {
         tipo: 'falha', escopo: 'must', origem, parques: nomes, idade_min: idadeTxt,
         sem_dados_desde: st.desde, verificado_em: nowBRT(), lembrete,
         contato_suporte: origem === 'way2' ? SUPORTE : '',
-        assunto: (origem === 'way2' ? '🔴' : origem === 'pipeline' ? '🟠' : '⚠️') + ' MUST '
-          + (lembrete ? 'AINDA sem dados' : 'sem dados') + ' desde ' + fmtTs(st.desde)
-          + ' · ' + (parcial ? lista(nomes) : 'os nove parques'),
-        // 🔴 CURTO DE PROPOSITO. O primeiro aviso tinha oito paragrafos, e o humano apontou:
-        // "estou vendo muita informacao para um aviso". Um alerta e uma INTERRUPCAO — ele precisa
-        // dizer o que parou, ha quanto tempo, e o que fazer. O resto disputa atencao com essas
-        // tres coisas e faz o leitor parar de ler.
-        corpo: '<b>A medição de MUST parou às ' + fmtTs(st.desde) + '</b>'
-          + (idadeTxt != null ? ' — ' + fmtDur(idadeTxt) + ' no momento deste alerta.' : '.')
-          + '<br><br>'
-          + 'Afetados: <b>' + (parcial ? lista(nomes) + ' (' + nomes.length + ' de 9)' : 'os nove parques') + '</b><br>'
-          + (origem === 'way2'
-            ? 'Origem: falha na fonte · <b>Ação: suporte@way2.com.br</b>'
-            : origem === 'pipeline'
-              ? 'Origem: nosso pipeline · <b>Ação: verificar o workflow must-intra</b>'
-              : 'Origem não confirmada · <b>Ação: verificar o must-intra; se estiver verde, ' + SUPORTE + '</b>')
-          + '<br><br><i>vigia de MUST · e-mail a partir de ' + limiarEmail + ' min</i>',
+        assunto: aviso.assunto, corpo: aviso.corpo,
       };
     }
   } else if (!origem && st.estado === 'falha') {
@@ -270,10 +340,7 @@ function postJson(url, obj) {
     acao = (st.avisos || 0) > 0 ? {
       tipo: 'normalizado', escopo: 'must', duracao_min: Math.round(dur),
       ficou_fora_desde: st.desde, ate: nowBRT(), parques: st.parques || [], avisos: st.avisos || 0,
-      assunto: '✅ MUST normalizado · ficou fora ' + fmtDur(dur),
-      corpo: '<b>A medição de MUST voltou às ' + fmtTs(nowBRT()) + '.</b><br><br>'
-        + 'Ficou fora <b>' + fmtDur(dur) + '</b>, de ' + fmtTs(st.desde) + '.'
-        + '<br><br><i>vigia de MUST</i>',
+      ...montaNormalizado({ origem: st.origem, desde: st.desde, ate: nowBRT(), dur }),
     } : null;
     st = { estado: 'ok', normalizado_em: nowBRT(), duracao_min: Math.round(dur) };
   } else if (!origem) {
