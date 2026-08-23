@@ -20,6 +20,15 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-way2-recent.js
+      # 🔴 A REGRA DE COR DO SELO ESTA DUPLICADA no ensaio, porque o gerador nao a exporta. Divida
+      # assumida — e esta e a guarda contra ela apodrecer: o ensaio confere os sete casos sinteticos
+      # (incluindo o de 23/08, dois medidores de 230 kV fora) e depois compara o proprio resultado
+      # com o selo que o gerador ACABOU de gravar. Se as duas regras divergirem, o job fica vermelho
+      # em vez de o painel passar a mentir em silencio.
+      - name: Ensaio do selo de medidores
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/ensaio-selo-medidores.js --real
       - name: Watchdog frescor Way2 (alerta)
         if: always()
         env:
