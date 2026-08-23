@@ -69,9 +69,11 @@ jobs:
       # que e a forma exata do defeito de 23/08: a queda so apareceu porque um humano olhou a tela.
       #
       # Na carga historica (dispatch com muitos dias) ele nao roda: ali o blob e reescrito inteiro
-      # e a idade do dado nao significa saude de medidor.
+      # e a idade do dado nao significa saude de medidor. Ja o dispatch com a janela padrao E a
+      # mesma coisa que a rodada agendada — e e o unico jeito de conferir o vigia sob demanda,
+      # em vez de esperar o proximo cron para descobrir se ele funciona.
       - name: Vigiar os nove medidores de MUST
-        if: always() && github.event_name == 'schedule'
+        if: always() && (github.event_name == 'schedule' || (inputs.dias || '2') == '2')
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
