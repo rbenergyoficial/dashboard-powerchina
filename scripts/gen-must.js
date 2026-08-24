@@ -330,8 +330,17 @@ async function grava(obj) {
   for (let off = 0; off <= DIAS; off++) {
     const dia = diaBRT(off);
     const hoje = off === 0;
-    // o dia corrente nunca conta como "ja presente": o que esta la esta incompleto
-    if (!hoje && !FORCAR && [...mapa.keys()].some(k => k.startsWith(dia + '|'))) continue;
+    // o dia corrente nunca conta como "ja presente": o que esta la esta incompleto.
+    // 🔴 E DIA MARCADO PARCIAL TAMBEM NAO. Ate 24/08/2026 so o dia corrente era isento, entao um
+    // dia gravado enquanto ainda estava incompleto virava PERMANENTE: a rodada seguinte via a
+    // chave presente e pulava, e ninguem nunca o completava. Medido no incidente de 23/08, em que
+    // a telemetria caiu as 05:35: o dia foi gravado so com as horas da madrugada, o pico da
+    // madrugada e 0,00 MW, e o painel passou a mostrar ZERO nos nove parques — indistinguivel de
+    // usina parada. O intradiario, que rebusca, media 197,67 MW no mesmo dia.
+    // O campo parcial existia desde sempre e era ESCRITO SEM NUNCA SER LIDO. Marca que ninguem
+    // le nao protege de nada.
+    const completo = [...mapa.values()].some(l => l.dia === dia && !l.parcial);
+    if (!hoje && !FORCAR && completo) continue;
     // DUAS chamadas por dia: o quarto de hora contratual vem pronto da fonte, e o de 5 min fica
     // ao lado so como diagnostico de transitorio
     let resp15, resp5;
@@ -356,8 +365,13 @@ async function grava(obj) {
     // 00:00 no horario de Brasilia. O dia INTEIRO vai de `ms` a `ms + 86.400.000`, e e assim que
     // o painel decide se ele toca a janela selecionada.
     const ms = Date.parse(dia + 'T03:00:00Z');
-    for (const l of linhas) { l.ms = ms; if (hoje) l.parcial = true;
+    // ⚠️ Dia FECHADO que volta com menos amostras que o esperado tambem e parcial: a fonte ainda
+    // esta repondo o que perdeu. Sem isto ele seria gravado como definitivo com o pico do pedaco
+    // que chegou, e o pedaco pode ser so a madrugada.
+    const faltando = linhas.some(l => l.slots < AMOSTRAS_DIA[INTERVALO_CONTRATUAL]);
+    for (const l of linhas) { l.ms = ms; if (hoje || faltando) l.parcial = true;
       mapa.set(l.dia + '|' + l.parque, l); novos++; }
+    if (!hoje && faltando) console.log('  ' + dia + '  INCOMPLETO — fica marcado e sera rebuscado');
     const pior = linhas.slice().sort((a, b) => b.pct_must - a.pct_must)[0];
     console.log('  ' + dia + '  ' + linhas.length + ' parques  ·  pior: ' + pior.parque + ' '
       + pior.pico_mw + ' MW (' + pior.pct_must + '% do MUST, ' + pior.status + ') as ' + pior.pico_hora);
