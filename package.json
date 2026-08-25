@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@azure/storage-blob": "^12.33.0",
+    "hyparquet": "^1.29.1",
+    "xlsx": "^0.18.5"
+  }
+}

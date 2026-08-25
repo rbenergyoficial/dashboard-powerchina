@@ -168,11 +168,57 @@ function comparaComPares(reg) {
     const { BlobServiceClient } = require('@azure/storage-blob');
     const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
     const nomes = [];
-    for await (const b of c.listBlobsFlat()) nomes.push(b.name.split('/').pop().replace(/^d+_/, '') + '|' + b.properties.contentLength);
+    // 🔴 O `\d` aqui ja esteve SEM a barra (`/^d+_/`), que casa a letra "d" e nao um digito: o
+    // prefixo do item nunca era removido e a lista saia com `77884_IIRR_...`. Nao quebrou nada
+    // porque quem analisa tira o prefixo de novo — mas era o padrao mentindo em silencio, o mesmo
+    // modo de falha que ja custou quatro rodadas nesta familia de scripts.
+    for await (const b of c.listBlobsFlat()) nomes.push(b.name.split('/').pop().replace(/^\d+_/, '') + '|' + b.properties.contentLength);
     nomes.sort();
     console.log('LISTA_INICIO ' + nomes.length);
     for (const x of nomes) console.log('  L ' + x);
     console.log('LISTA_FIM');
+    return;
+  }
+
+  // ⏱️ MODO ESPIAR: ESPIAR=<pedaco>,<pedaco> baixa cada blob cujo NOME contenha um dos pedacos e
+  // imprime forma e alcance — cabecalho, primeiras e ultimas linhas, contagem, e a menor e a maior
+  // data encontradas. Le e sai; nao grava nada.
+  //
+  // 🔴 A busca e por SUBSTRING, sem ancora e sem formato: a pergunta que este modo responde e
+  // "o que ha DENTRO deste arquivo que ninguem le", e um padrao ancorado ja me fez concluir
+  // "nao existe" com o arquivo presente. Quem filtra e o humano, no parametro.
+  if (process.env.ESPIAR) {
+    const { BlobServiceClient } = require('@azure/storage-blob');
+    const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+    const alvos = process.env.ESPIAR.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    const achados = [];
+    for await (const b of c.listBlobsFlat()) {
+      if (alvos.some((a) => b.name.toLowerCase().includes(a))) {
+        achados.push({ nome: b.name, bytes: b.properties.contentLength || 0 });
+      }
+    }
+    achados.sort((a, b) => b.bytes - a.bytes);
+    console.log('ESPIA_INICIO ' + achados.length + ' blob(s) para ' + JSON.stringify(alvos));
+    for (const a of achados.slice(0, Number(process.env.ESPIAR_MAX || 6))) {
+      console.log('  E ==== ' + a.nome + '  ' + Math.round(a.bytes / 1024) + ' KB');
+      let txt;
+      try {
+        const buf = await c.getBlobClient(a.nome).downloadToBuffer();   // o mesmo caminho da linha 75
+        txt = (buf[0] === 0x1f && buf[1] === 0x8b) ? require('zlib').gunzipSync(buf).toString('utf8') : buf.toString('utf8');
+      } catch (e) { console.log('  E   NAO LI: ' + e.message); continue; }
+      const linhas = txt.split(/\r?\n/).filter((l) => l.length);
+      console.log('  E   linhas: ' + linhas.length);
+      for (let i = 0; i < Math.min(3, linhas.length); i++) console.log('  E   [' + (i + 1) + '] ' + linhas[i].slice(0, 400));
+      for (let i = Math.max(3, linhas.length - 2); i < linhas.length; i++) console.log('  E   [' + (i + 1) + '] ' + linhas[i].slice(0, 400));
+      // alcance: qualquer data ISO ou dd/mm/aaaa que apareca no corpo
+      const datas = txt.match(/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/g) || [];
+      const norm = (d) => (d.includes('/') ? d.slice(6) + '-' + d.slice(3, 5) + '-' + d.slice(0, 2) : d);
+      if (datas.length) {
+        const ord = [...new Set(datas.map(norm))].sort();
+        console.log('  E   datas: ' + ord.length + ' distintas · de ' + ord[0] + ' a ' + ord[ord.length - 1]);
+      } else { console.log('  E   datas: nenhuma reconhecida no corpo'); }
+    }
+    console.log('ESPIA_FIM');
     return;
   }
   if (!arqs.length) throw new Error('nenhum M<NN>_<data>_<hora>.csv em "' + RAW_CONTAINER
