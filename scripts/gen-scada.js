@@ -234,10 +234,35 @@ async function loadRawBuffers() {
     }
     console.log('  exports IIRR/Trafo: ' + (iirr.slice(0, 6).join(' | ') || 'NENHUM'));
   }
-for await (const b of cont.listBlobsFlat()) {
+  // ---- so a versao MAIS RECENTE de cada planilha ---------------------------------------------
+  // 🔴 O container ACUMULA: a ponte grava <id-do-item>_<nome>, entao cada reenvio vira um blob
+  // novo. Medido em 25/08/2026: 564 blobs .xlsx para apenas 19 nomes distintos — o M4.xlsx
+  // aparece 59 vezes. Em bytes: 1.419 MB baixados e abertos a cada rodada, dos quais 1.187 MB
+  // (84%) sao versoes velhas. So a mais recente de cada da 232 MB.
+  //
+  // 🔴 E NAO E SO CUSTO. O merge la embaixo e "o ultimo a escrever vence", e a ordem vinha da
+  // listagem, que e LEXICOGRAFICA pelo nome. Hoje funciona por acaso: todos os ids tem 5 digitos,
+  // entao a ordem alfabetica coincide com a numerica. Quando os ids passarem de 99999,
+  // "100000_M4.xlsx" vira ANTES de "79210_M4.xlsx" e a versao VELHA passa a vencer — dado antigo
+  // sobrescrevendo o novo, em silencio. Escolher pelo id NUMERICO remove a armadilha inteira.
+  const versoes = new Map();
+  let cand = 0;
+  for await (const b of cont.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name)) continue;
-    const buf = await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody);
-    out.push({ name: b.name, buf });
+    cand++;
+    const arq = b.name.split('/').pop();
+    const m = arq.match(/^(\d+)_(.+)$/);
+    const chave = m ? m[2] : arq;
+    const id = m ? Number(m[1]) : 0;
+    const ant = versoes.get(chave);
+    if (!ant || id > ant.id) versoes.set(chave, { id, nome: b.name, bytes: b.properties.contentLength || 0 });
+  }
+  const escolhidos = [...versoes.values()];
+  console.log('  planilhas: ' + cand + ' blob(s) .xlsx · ' + versoes.size + ' nome(s) distinto(s) · baixando '
+    + escolhidos.length + ' (' + Math.round(escolhidos.reduce((a, x) => a + x.bytes, 0) / 1048576) + ' MB)');
+  for (const e of escolhidos) {
+    const buf = await streamToBuffer((await cont.getBlobClient(e.nome).download()).readableStreamBody);
+    out.push({ name: e.nome, buf });
   }
   return out;
 }
