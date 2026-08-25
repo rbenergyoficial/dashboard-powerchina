@@ -100,9 +100,17 @@ const GRANDEZAS = {
   v2ab: 'VMMXU2_PPV_phsAB', v2bc: 'VMMXU2_PPV_phsBC', v2ca: 'VMMXU2_PPV_phsCA',
   v3ab: 'VMMXU3_PPV_phsAB', v3bc: 'VMMXU3_PPV_phsBC', v3ca: 'VMMXU3_PPV_phsCA',
   p: 'CVMMXN1_Watt', q: 'CVMMXN1_VolAmpr', s: 'CVMMXN1_VolAmp', fp: 'CVMMXN1_PwrFact',
-  an16: 'AnIn16_InstMag_f', an30: 'AnIn30_InstMag_f',
-  an31: 'AnIn31_InstMag_f', an32: 'AnIn32_InstMag_f',
+  // TEMPERATURAS, em graus Celsius. A grandeza foi confirmada pela operacao em 25/08/2026; o
+  // arquivo nao a declara. O nome guarda a entrada analogica de origem de proposito: QUAL
+  // temperatura cada uma e (oleo, enrolamento, ambiente) continua SEM fonte, e batizar `temp30`
+  // de "temperatura do oleo" produziria um painel com o rotulo certo e a grandeza errada.
+  temp30: 'AnIn30_InstMag_f', temp31: 'AnIn31_InstMag_f', temp32: 'AnIn32_InstMag_f',
+  // ⚠️ an16 NAO entra nessa conclusao: mediana exatamente 8,00 e maximo 11 a 12 nos dois trafos.
+  // Nao se comporta como temperatura — tem cara de posicao de comutador ou de um discreto. Fica
+  // sem nome de negocio ate alguem dizer o que e.
+  an16: 'AnIn16_InstMag_f',
 };
+const TEMPS = ['temp30', 'temp31', 'temp32'];
 
 // ---------- entrada ---------------------------------------------------------------------------
 async function listaArquivos() {
@@ -180,9 +188,15 @@ function leArquivo(buf, nome) {
     }
     if (melhorN) mapa[k] = melhor;
   }
-  const esperadas = TRAFOS.length * Object.keys(GRANDEZAS).length;
+  // 🔴 NOMEIA o que faltou. "48/52" nao permite decidir nada: a serie so fica furada se o que
+  // falta for coluna que importa, e um arquivo diario sem as temperaturas congela a serie de
+  // temperatura no ultimo despejo — em silencio, porque as outras 48 continuam chegando.
+  const esperadas = [];
+  for (const t of TRAFOS) for (const k of Object.keys(GRANDEZAS)) esperadas.push(t + '|' + k);
+  const faltam = esperadas.filter((k) => mapa[k] == null);
   console.log('    ' + nome.split('/').pop() + ': ' + corpo.length + ' linha(s) · '
-    + Object.keys(mapa).length + '/' + esperadas + ' colunas com dado'
+    + Object.keys(mapa).length + '/' + esperadas.length + ' colunas com dado'
+    + (faltam.length ? ' · SEM: ' + faltam.join(' ') : '')
     + (recusadas ? ' · ' + recusadas + ' linha(s) com carimbo irreconhecivel' : ''));
   return { linhas: corpo, mapa, recusadas };
 }
@@ -216,6 +230,21 @@ function confereFisica(serie) {
     if (fp != null && !(fp > 0.85)) throw new Error('trafo ' + t + ': |FP| medio de ' + fp.toFixed(3)
       + ' no decil de maior carga. Sob carga alta o fator de potencia tem de estar perto de 1; '
       + 'abaixo disso a coluna nao e cos(fi) e nao pode ser publicada como tal.');
+
+    // TEMPERATURA: a grandeza foi confirmada pela operacao, entao a faixa vira guarda. Ela nao
+    // diz qual sensor e qual — diz que continua sendo temperatura. Se a escala do transdutor
+    // mudar (4-20 mA reescalado, por exemplo), o job fica vermelho em vez de publicar "1.480
+    // graus" com rotulo certo.
+    for (const k of TEMPS) {
+      const vs = serie.map((r) => (r[t] || {})[k]).filter((x) => x != null);
+      if (!vs.length) { console.log('  guarda ' + t + ' ' + k + ': sem dado'); continue; }
+      const mx = Math.max(...vs), mn = Math.min(...vs);
+      console.log('  guarda ' + t + ' ' + k + ': ' + mn.toFixed(1) + ' a ' + mx.toFixed(1)
+        + ' °C · mediana ' + media(vs).toFixed(1));
+      if (mx > 130 || mn < -10) throw new Error('trafo ' + t + ' ' + k + ': faixa de ' + mn.toFixed(1)
+        + ' a ' + mx.toFixed(1) + ' fora do que uma temperatura de transformador pode ser. '
+        + 'A escala do transdutor mudou — nao publicar como °C.');
+    }
   }
 }
 
@@ -274,9 +303,12 @@ async function grava(nome, obj) {
     trafos: TRAFOS,
     // ⚠️ ver a nota no cabecalho: a borda do balde nao foi determinada.
     rotulo_de_tempo: 'como a fonte entrega — borda do intervalo INDETERMINADA',
-    unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA', fp: 'modulo de cos(fi), 0..1' },
+    unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA',
+      fp: 'modulo de cos(fi), 0..1', temp30: '°C', temp31: '°C', temp32: '°C' },
     pontos: { 1: '230 kV', 2: '34,5 kV (enrolamento 1)', 3: '34,5 kV (enrolamento 2)' },
-    analogicas_sem_identificacao: ['an16', 'an30', 'an31', 'an32'],
+    // as tres SAO temperatura; QUAL e qual (oleo, enrolamento, ambiente) segue sem fonte
+    temperaturas_sem_posicao: TEMPS,
+    analogicas_sem_identificacao: ['an16'],
   };
   const saidas = [];
   for (const { min, dias } of RESOLUCOES) {
@@ -330,6 +362,14 @@ async function grava(nome, obj) {
         if (m > 20) des.push(((Math.max(...f) - Math.min(...f)) / m) * 100);   // a vazio nao diz nada
       }
       if (des.length) { o[t + '_deseq_max'] = r2(Math.max(...des)); o[t + '_deseq_med'] = r2(media(des)); }
+      // temperatura: o PICO do dia e o que interessa a vida do isolante, e e o que cruza com a
+      // pagina de Oleo — a media esconde justamente a hora quente.
+      for (const k of TEMPS) {
+        const vs = rs.map((r) => (r[t] || {})[k]).filter((x) => x != null);
+        if (!vs.length) continue;
+        o[t + '_' + k + '_max'] = r2(Math.max(...vs));
+        o[t + '_' + k + '_med'] = r2(media(vs));
+      }
     }
     return o;
   });
