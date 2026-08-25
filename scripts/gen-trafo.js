@@ -46,10 +46,23 @@
  *   `CMMXU1` = "CORRENTE LADO 230kV", `CMMXU2`/`CMMXU3` = "LADO 1X/2X 34,5kV", e Watt/VolAmp/
  *   VolAmpr em MW/MVA/MVAr. Duas rotas independentes no mesmo resultado.
  *
- * 🔴 ZERO EM TEMPERATURA NAO E MEDICAO — e sensor mudo. Sao transformadores em Mauriti, no Ceara;
- *   0,0 °C nunca acontece. Mantido como valor ele derruba media e mediana, e derrubaria de forma
- *   DESIGUAL entre os dois trafos: foi exatamente isso que quase me fez anunciar que o 04T1 corre
- *   20 °C mais quente que o 04T2. Vira nulo, e a contagem do descarte vai ao log e ao blob.
+ * 🔴 O CANAL DE TEMPERATURA DO 04T2 ESTA COM DEFEITO, e o gerador NAO o esconde. Medido em
+ *   25/08/2026, histograma da ponta baixa das tres grandezas:
+ *        04T1  0-2:3   2-5:2   5-10:9    10-15:5    15-20:4    20-25:4    25+:18034
+ *        04T2  0-2:490 2-5:745 5-10:1239 10-15:1238 15-20:1246 20-25:1237 25+:10204
+ *   No 04T2 sao ~7.800 leituras (43% da serie) abaixo de 25 °C, com distribuicao UNIFORME —
+ *   ~1.240 em cada faixa de 5 °C, ate 0,01 °C. Temperatura se AGRUPA; distribuicao chata assim e
+ *   um canal descendo em rampa ate zero e voltando.
+ *
+ *   Primeiro eu filtrei o zero exato. Estava errado por duas razoes: pegava so a ponta da rampa
+ *   (o minimo continuava saindo 0,0 porque 0,01 passava), e sobretudo ALISAVA a curva, deixando
+ *   o defeito invisivel justamente na tela que existe para revela-lo. Hoje o valor implausivel
+ *   FICA na serie — a rampa se reconhece de relance — e o que o blob acrescenta e a CONTAGEM, em
+ *   `temperaturas_implausiveis`, para o painel poder dizer "este canal nao esta medindo" em vez
+ *   de desenhar uma media que nao significa nada.
+ *
+ *   ⚠️ Enquanto isso durar, a media e a mediana de temperatura do 04T2 NAO representam o
+ *   transformador. Comparar 04T1 com 04T2 em temperatura, hoje, compara um sensor com um defeito.
  *
  * ⚠️ O CARIMBO DE TEMPO E `dd/mm/aaaa HH:MM` no despejo, e os exports irmaos (IRR, IIRR) usam
  *   `aaaa-mm-dd HH:MM:SS`. O parser aceita as DUAS formas e RECUSA linha que nao case nenhuma —
@@ -115,6 +128,11 @@ const GRANDEZAS = {
   tap: 'AnIn16_InstMag_f',          // POSICAO TAP · sem unidade
 };
 const TEMPS = ['t_oleo', 't_oleo_cdc', 't_enrol'];
+// Piso de PLAUSIBILIDADE, deliberadamente conservador. Nao e limiar de alarme nem corta dado: so
+// serve para CONTAR leitura que nenhuma das tres grandezas pode ter num transformador em Mauriti
+// — nem o oleo, nem o enrolamento, nem o ambiente da regiao chegam a 10 °C. Escolhido abaixo de
+// qualquer valor defensavel justamente para que a contagem seja indiscutivel.
+const IMPLAUSIVEL = 10;
 
 // ---------- entrada ---------------------------------------------------------------------------
 async function listaArquivos() {
@@ -283,7 +301,7 @@ async function grava(nome, obj) {
   // mescla por carimbo de tempo; o arquivo mais NOVO vence, porque vem depois na ordem
   const porMs = new Map();
   let recusadasTotal = 0;
-  const zeros = {};                      // (trafo|grandeza) -> quantas leituras de 0 °C foram descartadas
+  const ruins = {};                      // (trafo|grandeza) -> leituras abaixo do piso de plausibilidade
   for (const a of arqs) {
     const { linhas, mapa, recusadas } = leArquivo(await a.ler(), a.nome);
     recusadasTotal += recusadas;
@@ -294,13 +312,18 @@ async function grava(nome, obj) {
         for (const chave of Object.keys(GRANDEZAS)) {
           const j = mapa[t + '|' + chave];
           if (j == null) continue;
-          let v = num(l.p[j]);
-          // 🔴 ZERO EM TEMPERATURA NAO E MEDICAO. O transformador fica em Mauriti, no Ceara:
-          // 0,0 °C e sensor mudo, nao dia frio. Mantido como valor, ele derruba media e mediana
-          // — e derrubaria de forma DESIGUAL entre os dois trafos, fabricando uma diferenca de
-          // temperatura que ninguem mediu. Vira nulo e e CONTADO, para a perda aparecer no blob
-          // em vez de sumir.
-          if (v === 0 && TEMPS.includes(chave)) { zeros[t + '|' + chave] = (zeros[t + '|' + chave] || 0) + 1; v = null; }
+          const v = num(l.p[j]);
+          // 🔴 A LEITURA IMPLAUSIVEL FICA, e e CONTADA. Filtrar esconderia a prova.
+          // Medido em 25/08/2026: o canal de temperatura do 04T2 tem 43% da serie abaixo de 25 °C
+          // com distribuicao UNIFORME (~1.240 leituras em cada faixa de 5 °C, ate 0,01 °C).
+          // Temperatura se agrupa; distribuicao chata assim e um canal descendo em rampa ate zero
+          // e voltando — defeito sistematico do sensor, nao dia frio. Um filtro deixaria a curva
+          // lisa e o defeito invisivel; publicando, a rampa aparece na tela e se reconhece de
+          // relance. O que o blob acrescenta e a CONTAGEM, para o painel poder dizer que aquele
+          // canal nao esta medindo em vez de desenhar uma media que nao significa nada.
+          if (v != null && TEMPS.includes(chave) && v < IMPLAUSIVEL) {
+            ruins[t + '|' + chave] = (ruins[t + '|' + chave] || 0) + 1;
+          }
           if (v != null) o[chave] = v;
         }
         if (Object.keys(o).length) reg[t] = o;
@@ -310,8 +333,9 @@ async function grava(nome, obj) {
   }
   const serie = [...porMs.values()].sort((a, b) => a.ms - b.ms);
   if (!serie.length) throw new Error('nenhuma linha aproveitada de ' + arqs.length + ' arquivo(s)');
-  for (const [k, n] of Object.entries(zeros)) console.log('  descartado: ' + k + ' -> ' + n
-    + ' leitura(s) de 0 °C (' + ((n / serie.length) * 100).toFixed(1) + '% da serie) — sensor mudo, nao medicao');
+  for (const [k, n] of Object.entries(ruins)) console.log('  IMPLAUSIVEL: ' + k + ' -> ' + n
+    + ' leitura(s) abaixo de ' + IMPLAUSIVEL + ' °C (' + ((n / serie.length) * 100).toFixed(1)
+    + '% da serie) — o canal nao esta medindo nessas horas');
   console.log('  serie mesclada: ' + serie.length + ' instante(s) · '
     + iso(serie[0].ms) + ' a ' + iso(serie[serie.length - 1].ms)
     + (recusadasTotal ? ' · ' + recusadasTotal + ' linha(s) recusadas por carimbo' : ''));
@@ -333,7 +357,8 @@ async function grava(nome, obj) {
       t_enrol: 'temperatura do enrolamento', tap: 'posição do tap' },
     fonte_dos_nomes: 'lista de pontos da subestação',
     // leituras de 0 °C descartadas por grandeza e por trafo — sensor mudo, nao dia frio
-    temperaturas_descartadas: zeros,
+    temperaturas_implausiveis: ruins,
+    piso_de_plausibilidade_c: IMPLAUSIVEL,
   };
   const saidas = [];
   for (const { min, dias } of RESOLUCOES) {
