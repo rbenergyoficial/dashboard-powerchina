@@ -162,6 +162,19 @@ function comparaComPares(reg) {
 // ---------- principal -------------------------------------------------------------------------
 (async () => {
   const arqs = await listaArquivos();
+  // ⏱️ MODO INVENTARIO: LISTAR=1 imprime todo nome de blob e sai. Existe para responder
+  // "o que ha no container?" sem precisar de listagem anonima, que o Azure nao permite aqui.
+  if (process.env.LISTAR) {
+    const { BlobServiceClient } = require('@azure/storage-blob');
+    const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+    const nomes = [];
+    for await (const b of c.listBlobsFlat()) nomes.push(b.name.split('/').pop().replace(/^d+_/, '') + '|' + b.properties.contentLength);
+    nomes.sort();
+    console.log('LISTA_INICIO ' + nomes.length);
+    for (const x of nomes) console.log('  L ' + x);
+    console.log('LISTA_FIM');
+    return;
+  }
   if (!arqs.length) throw new Error('nenhum M<NN>_<data>_<hora>.csv em "' + RAW_CONTAINER
     + '" — a ponte SharePoint->blob copiou os arquivos por usina?');
 
