@@ -33,6 +33,11 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
-          # sem IIRR_URL o gerador republica data/irr_seed.json. Quando o fluxo do Power Automate
-          # estiver gravando o CSV do SCADA no blob, apontar IIRR_URL para ele e o seed sai de cena.
+          # A ponte do Power Automate ("SCADA SharePoint para Blob") ja grava os exports do SCADA
+          # aqui. IIRR_CONTAINER faz o gerador LISTAR o container e usar o export MAIS RECENTE —
+          # nao IIRR_URL, porque o nome e datado (IIRR_<AAAAMMDD>_<HHMMSS>.csv) e uma URL fixa
+          # apodreceria no export seguinte. Com isso a semente do repo sai de cena.
+          # 🔴 Se nao houver export no container, o passo FALHA de proposito: cair na semente
+          # deixaria o painel congelado sem nada dizer por que.
+          IIRR_CONTAINER: scada-raw
         run: node scripts/gen-irradiancia.js

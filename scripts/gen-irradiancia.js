@@ -21,8 +21,12 @@
  *   ela mesma um indicador.
  *
  * Env: DADOS_STORAGE (RW no container dados).
- *   IIRR_LOCAL  = caminho de um CSV local (carga historica e testes)
- *   IIRR_URL    = CSV cru no blob — e o modo definitivo, quando a ponte SharePoint->blob existir
+ *   IIRR_LOCAL     = caminho de um CSV local (carga historica e testes)
+ *   IIRR_CONTAINER = container do blob com os CSV crus (ex.: scada-raw). O gerador LISTA e pega o
+ *     export MAIS RECENTE. E o modo definitivo: o nome do export e datado, entao URL fixa apodrece
+ *     no proximo export — e foi exatamente a falta de endereco estavel que manteve este gerador
+ *     preso na semente. Precisa de DADOS_STORAGE, que o workflow ja tem.
+ *   IIRR_URL       = um CSV especifico por URL (util para apontar um export antigo a mao)
  *   nenhum dos dois = republica data/irr_seed.json, o historico ja processado que vive no repo.
  *     O seed existe para o painel funcionar ANTES da automacao; assim que IIRR_URL for definida,
  *     ele deixa de ser usado e o dado passa a vir do CSV.
@@ -87,11 +91,41 @@ const DIURNO = [8, 15];                           // janela de sol alto p/ conta
 const r2 = v => (v == null || !isFinite(v) ? null : Math.round(v * 100) / 100);
 const r3 = v => (v == null || !isFinite(v) ? null : Math.round(v * 1000) / 1000);
 
-function fonteLinhas() {
+async function fonteLinhas() {
   const local = process.env.IIRR_LOCAL;
   if (local) return readline.createInterface({ input: fs.createReadStream(local, 'utf8'), crlfDelay: Infinity });
+
+  // 🔴 NOME DATADO NAO VIRA URL FIXA. O export chega como IIRR_<AAAAMMDD>_<HHMMSS>.csv, e apontar
+  // IIRR_URL para um nome congela o gerador naquele arquivo. Listar o container e escolher o mais
+  // recente e o que faz a ponte funcionar sem ninguem editar o workflow a cada export.
+  const cont = process.env.IIRR_CONTAINER;
+  if (cont) {
+    const { BlobServiceClient } = require('@azure/storage-blob');
+    const conn = process.env.DADOS_STORAGE;
+    if (!conn) throw new Error('IIRR_CONTAINER exige DADOS_STORAGE');
+    const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(cont);
+    // ⚠️ Comparo pelo NOME DO ARQUIVO, nao pelo caminho: o arquivo pode estar em subpasta, e
+    // "2026/IIRR_..." contra "IIRR_..." ordenaria pela pasta em vez de pela data.
+    const base = (x) => x.split('/').pop();
+    let melhor = null, vistos = 0;
+    for await (const b of c.listBlobsFlat()) {
+      if (!/^IIRR_\d{8}_\d{6}\.csv$/i.test(base(b.name))) continue;
+      vistos++;
+      if (!melhor || base(b.name) > base(melhor.name)) melhor = b;
+    }
+    // 🔴 FALHA ALTO. Cair na semente aqui recriaria o defeito original: o painel mostraria dado
+    // congelado e NADA diria por que. Job vermelho com o container no texto custa uma correcao.
+    if (!melhor) throw new Error('nenhum IIRR_<data>_<hora>.csv em "' + cont
+      + '" — a ponte SharePoint->blob copiou o export? (' + vistos + ' candidatos)');
+    const mb = Math.round((melhor.properties.contentLength || 0) / 1048576);
+    console.log('  fonte: ' + cont + '/' + melhor.name + '  (' + mb + ' MB · '
+      + String(melhor.properties.lastModified).slice(0, 24) + ' · ' + vistos + ' export(s) no container)');
+    const dl = await c.getBlobClient(melhor.name).download();
+    return readline.createInterface({ input: dl.readableStreamBody, crlfDelay: Infinity });
+  }
+
   const url = process.env.IIRR_URL;
-  if (!url) throw new Error('defina IIRR_URL (blob) ou IIRR_LOCAL (arquivo)');
+  if (!url) throw new Error('defina IIRR_CONTAINER, IIRR_URL ou IIRR_LOCAL');
   const { PassThrough } = require('stream');
   const pt = new PassThrough();
   https.get(url, r => { if (r.statusCode >= 300) pt.destroy(new Error('HTTP ' + r.statusCode)); else r.pipe(pt); })
@@ -214,17 +248,24 @@ async function emiteResolucoes(meta, semihora, resFonte) {
       throw new Error('irr_' + min + 'min ficou com ' + serie.length + ' linhas, acima do teto de '
         + TETO_LINHAS + ' — a janela precisa encolher');
     }
+    // 🔴 JANELA MEDIDA, NAO DECLARADA. Ate 25/08/2026 este campo publicava `janela`, o numero da
+    // CONFIGURACAO — e com a fonte na semente, cortada em 120 dias, o arquivo dizia 180 e 365 e
+    // tinha 120. O painel monta o rotulo do seletor a partir daqui: numero declarado que nao
+    // corresponde ao dado vira promessa quebrada na tela, e o leitor culpa o dado.
+    // `janela_dias_alvo` fica ao lado para a diferenca entre o pedido e o obtido ser visivel.
+    const diasReais = new Set(serie.map((l) => l.t.slice(0, 10))).size;
     bytes += await writeOut({
       gerado_em: meta.gerado_em, fonte: meta.fonte, modo: meta.modo,
       grandeza: 'Irradiancia no plano dos modulos (GTI), W/m2',
-      resolucao_min: min, janela_dias: janela,
+      resolucao_min: min, janela_dias: diasReais, janela_dias_alvo: janela,
       rotulo_de_tempo: 'O instante e o INICIO do intervalo: o valor em T cobre [T, T+' + min + ' min).',
       nota: 'Uma coluna por usina. As demais grandezas ficam nos arquivos por nivel de zoom '
         + '(irr_hora_<mes>-<dia>.json).',
       ufvs, linhas: serie.length, serie,
     }, 'irr_' + min + 'min.json', true);
     n++;
-    linha.push(min + 'min: ' + serie.length + ' linhas · ' + janela + ' dias');
+    linha.push(min + 'min: ' + serie.length + ' linhas · ' + diasReais + ' dias'
+      + (diasReais < janela ? ' (alvo ' + janela + ' — a fonte nao tem tudo isso)' : ''));
   }
   return { arquivos: n, bytes, pulados, detalhe: linha };
 }
@@ -260,7 +301,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
 
 (async () => {
   // modo seed: sem CSV nenhum, republica o historico do repo e sai
-  if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL) {
+  if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL && !process.env.IIRR_CONTAINER) {
     const seed = 'data/irr_seed.json.gz';
     if (!fs.existsSync(seed)) throw new Error('sem IIRR_URL/IIRR_LOCAL e sem ' + seed);
     const j = leSeed(seed);
@@ -292,7 +333,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       + ' dias com hora · janela ' + j.janela.ini + ' a ' + j.janela.fim);
     return;
   }
-  const rl = fonteLinhas();
+  const rl = await fonteLinhas();
   let cab = null;
   const mapa = [];                 // { i, ufv, gr }
   const acc = {};                  // dia -> ufv -> gr -> {sB,nB,sL,nL,minL,maxL,fora,zd,nd}
