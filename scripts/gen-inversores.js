@@ -8,6 +8,10 @@
  */
 const XLSX = require('xlsx');
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'inversores-raw';
+// planilha que o nome declara NÃO ser a vigente. O humano foi explícito: cópia antiga e rascunho
+// não valem como fonte. Sai por NOME porque é o que o autor marca de propósito — conteúdo não diz
+// "isto é rascunho".
+const NAO_FINAL = /em\s*revis|revis[aã]o|(^|[^a-z])old([^a-z]|$)|antig|backup|c[oó]pia|(^|[^a-z])copy([^a-z]|$)|rascunho|^~\$/i;
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'inversores.json';
 const HOJE = new Date(Date.now() - 3 * 3600 * 1000); HOJE.setUTCHours(0, 0, 0, 0);
@@ -374,12 +378,28 @@ function analyze(wb1, wb2) {
   const raws = await loadRawBuffers();
   if (!raws.length) { console.log('Nenhuma planilha .xlsx/.xlsm em "' + RAW_CONTAINER + '" — nada a processar.'); return; }
   // se o container acumular versões (nome do arquivo tem data), fica sempre com a MAIS RECENTE de cada tipo
-  let wb1, wb2, m1 = -1, m2 = -1;
-  for (const { name, buf, mod } of raws) { const wb = XLSX.read(buf, { cellDates: true, type: 'buffer' }); const cls = classifyWb(wb);
+  let wb1, wb2, m1 = -1, m2 = -1, escolhido1 = null, escolhido2 = null;
+  // 🔴 ARQUIVO ILEGIVEL NAO DERRUBA A RODADA. O fluxo do Power Automate aceita agora qualquer
+  // nome que CONTENHA ".xls" — mais largo que o "termina com .xlsx" de antes, de proposito, para
+  // o .xlsm de 5 abas passar. O preco e que um arquivo que nao seja planilha pode aparecer aqui,
+  // e XLSX.read estoura nele. Pular com aviso e o certo: se o que falhou for o P1 de verdade, a
+  // guarda logo abaixo ("faltou P1") ainda derruba o job — o que se perde e so o falso positivo.
+  for (const { name, buf, mod } of raws) {
+    let wb; try { wb = XLSX.read(buf, { cellDates: true, type: 'buffer' }); }
+    catch (e) { console.log('  ATENCAO · nao consegui ler como planilha, pulando: ' + name + ' (' + e.message.slice(0, 60) + ')'); continue; }
+    const cls = classifyWb(wb);
     const t = mod ? new Date(mod).getTime() : 0;
-    if (cls === 'P1') { if (t >= m1) { wb1 = wb; m1 = t; console.log('P1 <-', name); } }
-    else if (cls === 'P2') { if (t >= m2) { wb2 = wb; m2 = t; console.log('P2 <-', name); } }
+    // 🔴 O CONTAINER ACUMULA. O nome do blob é o nome do arquivo, então cada versão que a equipe
+    // salva vira um arquivo novo aqui — hoje são quatro P1, o mais antigo de 15/07. Escolher "o
+    // mais recente por data de modificação" está certo para VERSÃO, e errado para RASCUNHO: uma
+    // planilha marcada "Em revisao" que seja tocada passa a ganhar de todas, e o painel inteiro
+    // passa a mostrar dado provisório sem nada ficar vermelho.
+    if (NAO_FINAL.test(name)) { console.log('ignorado (marcado como não final):', name); continue; }
+    if (cls === 'P1') { if (t >= m1) { wb1 = wb; m1 = t; escolhido1 = name; } }
+    else if (cls === 'P2') { if (t >= m2) { wb2 = wb; m2 = t; escolhido2 = name; } }
     else console.log('ignorado (não é P1 nem P2):', name); }
+  console.log('P1 <- ' + (escolhido1 || '(nenhum)') + '   [o mais recente de ' + raws.length + ' arquivo(s) no container]');
+  console.log('P2 <- ' + (escolhido2 || '(nenhum)'));
   if (!wb1 || !wb2) throw new Error('faltou ' + (!wb1 ? 'P1 (Failure Control)' : '') + (!wb2 ? ' P2 (Registro Falhas)' : '') + ' no container');
   const out = analyze(wb1, wb2);
   const size = await writeOut(out);
