@@ -39,5 +39,8 @@ jobs:
           # apodreceria no export seguinte. Com isso a semente do repo sai de cena.
           # 🔴 Se nao houver export no container, o passo FALHA de proposito: cair na semente
           # deixaria o painel congelado sem nada dizer por que.
-          IIRR_CONTAINER: scada-raw
+          # ⏸️ IIRR_CONTAINER: scada-raw  — DESLIGADO em 25/08/2026: o container nao tem
+          # nenhum IIRR_<data>_<hora>.csv (0 candidatos). A ponte do Power Automate copia a
+          # pasta 11 - Dados_Scada_PWC, mas o export de irradiancia nao esta chegando la.
+          # Religar esta linha assim que o CSV aparecer — o gerador ja sabe acha-lo sozinho.
         run: node scripts/gen-irradiancia.js
