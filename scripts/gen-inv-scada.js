@@ -101,9 +101,17 @@ function leUsinaDia(buf) {
 
   // (TS, INV, grandeza) -> lista de colunas candidatas, QUALQUER sufixo
   const cand = new Map();
-  const RE = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_.*?\s(.+?)(_\d)?$/;
+  // 🔴 O RETROVISOR (\1 \2 \3) E O QUE ANCORA. A coluna repete o proprio prefixo antes do rotulo:
+  //   UFV_MRT02_TS1_INV01_MRT02 TS1 INV01 TENSÃO MPPT 01
+  // Esta forma foi MEDIDA contra o arquivo real. A primeira versao deste gerador a "simplificou"
+  // para /_.*?\s(.+?)(_\d)?$/ — lazy e sem ancora — e nao casou NADA: 45 arquivos, zero
+  // inversores, e a mensagem so dizia "o layout mudou?". Trocar padrao verificado por padrao
+  // parecido e a mesma familia do regex ancorado em ^ que ja custou uma rodada hoje.
+  const RE = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_\1 \2 \3 (.+?)(_\d)?$/;
+  const vistas = [];
   cols.forEach((c, i) => {
-    const m = norm(c).match(RE); if (!m) return;
+    const m = norm(c).match(RE);
+    if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
     const g = m[4];
     if (g !== GRANDEZA && !SAUDE.includes(g)) return;
     const k = m[2] + '|' + m[3] + '|' + g;
@@ -126,7 +134,11 @@ function leUsinaDia(buf) {
     if (g === GRANDEZA) o.kwh = Math.max(...vals);          // contador diario: o dia e o MAIOR valor
     else o.saude[g] = r2(vals[vals.length - 1]);            // saude: a ultima leitura do dia
   }
-  return { dia: linhas[0][0].slice(0, 10), inversores: [...inv.values()].filter((x) => x.kwh != null) };
+  // ⚠️ A falha tem de DIZER O QUE VIU. Sem isto, "nenhum inversor com energia" manda adivinhar
+  // entre layout mudado, grandeza renomeada e regex errado — e foi o regex, das tres vezes.
+  const achados = [...inv.values()].filter((x) => x.kwh != null);
+  if (!achados.length && vistas.length) console.log('    colunas de inversor que NAO casaram: ' + vistas.join(' | '));
+  return { dia: linhas[0][0].slice(0, 10), inversores: achados };
 }
 
 // ---------- razao contra os pares ------------------------------------------------------------
