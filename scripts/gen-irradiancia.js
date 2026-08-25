@@ -99,7 +99,10 @@ function fonteLinhas() {
   return readline.createInterface({ input: pt, crlfDelay: Infinity });
 }
 
-async function writeOut(obj, nome) {
+// 🔴 O AZURE NAO COMPRIME SOZINHO: ele serve exatamente os bytes gravados. Com o terceiro
+// argumento, o arquivo vai gzipado e DECLARADO como tal — navegador e datasource descomprimem sem
+// precisar saber. Medido nos arquivos por resolucao: 829 KB caem para ~120.
+async function writeOut(obj, nome, comprime) {
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) {
     // mesmo diretorio do LOCAL_OUT, mas com o nome do blob. Sem isso os dois writeOut escreviam no
@@ -108,16 +111,20 @@ async function writeOut(obj, nome) {
     const alvo = nome
       ? process.env.LOCAL_OUT.split(/[\\/]/).slice(0, -1).concat(nome).join('/')
       : process.env.LOCAL_OUT;
-    fs.writeFileSync(alvo, json); return json.length;
+    const corpo = comprime ? zlib.gzipSync(Buffer.from(json)) : json;
+    fs.writeFileSync(alvo, corpo);
+    return Buffer.byteLength(corpo);
   }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE;
   if (!conn) throw new Error('DADOS_STORAGE nao definido');
   const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
   await cont.createIfNotExists();
-  await cont.getBlockBlobClient(nome || OUT_BLOB).upload(json, Buffer.byteLength(json),
-    { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
-  return json.length;
+  const corpo = comprime ? zlib.gzipSync(Buffer.from(json)) : Buffer.from(json);
+  const cab = { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' };
+  if (comprime) cab.blobContentEncoding = 'gzip';
+  await cont.getBlockBlobClient(nome || OUT_BLOB).upload(corpo, corpo.length, { blobHTTPHeaders: cab });
+  return corpo.length;
 }
 
 // UM ARQUIVO POR NIVEL DE ZOOM, nomeado pelo par (mes, dia) que o painel monta na URL com as duas
@@ -138,6 +145,90 @@ async function writeOut(obj, nome) {
 // possiveis sao exatamente: (tudo,tudo), (cada mes,tudo) e (cada dia de dias_hora).
 // Os arquivos do formato anterior (irr_hora_<mes>.json, sem o dia) recebem LAPIDE: sem isso ficariam
 // no container com nome plausivel e dado congelado, esperando alguem apontar para eles.
+// ---------------------------------------------------------------------------------------------
+// ARQUIVOS POR RESOLUCAO — irr_5min | irr_15min | irr_30min | irr_60min
+//
+// Sao OUTRO produto, ao lado dos arquivos por nivel de zoom. O zoom responde "que recorte",
+// a resolucao responde "que passo de tempo", e as duas perguntas sao independentes.
+//
+// 🔴 FORMATO LARGO, uma coluna por UFV. A serie fina daqui e LONGA (dia · ufv · t), 432 linhas
+// por dia: um ano em 5 minutos daria 946 mil linhas. Em largo o instante deixa de ser repetido
+// nove vezes e o mesmo ano cabe em 8.760.
+//
+// 🔴 AS JANELAS SAEM DO MESMO TETO DE ~8.700 LINHAS que dimensiona os blobs do MUST, e nao de
+// numero escolhido a esmo: 30 dias em 5 min, 90 em 15, 180 em 30, 365 em 60. So um arquivo e
+// baixado por vez, entao o detalhe fino nao custa rede a quem esta olhando o ano.
+//
+// ⚠️ SO SE EMITE O QUE A FONTE TEM. Passo mais fino que a fonte nao se inventa reparticionando:
+// repartir meia hora em seis pedacos iguais desenharia um patamar que ninguem mediu, e ele
+// apareceria como curva plausivel. Com a fonte em 30 min saem `irr_30min` e `irr_60min`; no dia
+// em que ela for de 5, os outros dois passam a existir sozinhos, sem tocar neste arquivo.
+//
+// A grandeza e a IRRADIANCIA NO PLANO (GTI, W/m2), que e a serie principal da pagina. As demais
+// continuam nos arquivos por nivel de zoom — um arquivo por resolucao com dezesseis grandezas
+// vezes nove usinas teria 144 colunas e nao serviria a leitura nenhuma.
+const RESOLUCOES = [{ min: 5, dias: 30 }, { min: 15, dias: 90 },
+  { min: 30, dias: 180 }, { min: 60, dias: 365 }];
+const TETO_LINHAS = 8800;
+
+async function emiteResolucoes(meta, semihora, resFonte) {
+  if (!semihora || !semihora.length) return { arquivos: 0, bytes: 0, pulados: RESOLUCOES.length };
+  const ufvs = [...new Set(semihora.map(x => x.ufv))].sort();
+  const dias = [...new Set(semihora.map(x => x.dia))].sort();
+  const ultimo = dias[dias.length - 1];
+  let n = 0, bytes = 0, pulados = 0;
+  const linha = [];
+
+  for (const { min, dias: janela } of RESOLUCOES) {
+    if (min < resFonte) { pulados++; linha.push(min + 'min: fonte e de ' + resFonte + ' min'); continue; }
+    const corte = new Date(Date.parse(ultimo + 'T00:00:00Z') - (janela - 1) * 86400000)
+      .toISOString().slice(0, 10);
+    // agrega no balde do passo pedido; a irradiancia e POTENCIA, entao o balde e a media
+    const acc = {};
+    for (const l of semihora) {
+      if (l.dia < corte || l.gti_w == null) continue;
+      const mm = Math.round(l.t * 60);                    // t vem em hora decimal
+      const slot = Math.floor(mm / min) * min;            // borda ESQUERDA, como o SCADA rotula
+      const k = l.dia + '|' + slot;
+      const a = acc[k] || (acc[k] = { dia: l.dia, slot, v: {} });
+      const c = a.v[l.ufv] || (a.v[l.ufv] = { s: 0, n: 0 });
+      c.s += l.gti_w; c.n++;
+    }
+    const chaves = Object.keys(acc).sort((x, y) => {
+      const [dx, sx] = x.split('|'); const [dy, sy] = y.split('|');
+      return dx === dy ? (+sx) - (+sy) : (dx < dy ? -1 : 1);
+    });
+    const serie = chaves.map(k => {
+      const a = acc[k];
+      const hh = String(Math.floor(a.slot / 60)).padStart(2, '0');
+      const mi = String(a.slot % 60).padStart(2, '0');
+      const t = a.dia + 'T' + hh + ':' + mi + ':00-03:00';
+      // 🔴 o EPOCH vai publicado. O JSONata do Grafana ignora o offset ao parsear a data, entao
+      // derivar o instante no painel erraria em ate um dia — o mesmo defeito que ja custou caro
+      // no MUST. Com `ms` o painel compara numero com numero.
+      const l = { t, ms: Date.parse(t) };
+      for (const u of ufvs) { const c = a.v[u]; if (c && c.n) l[u] = r2(c.s / c.n); }
+      return l;
+    });
+    if (serie.length > TETO_LINHAS) {
+      throw new Error('irr_' + min + 'min ficou com ' + serie.length + ' linhas, acima do teto de '
+        + TETO_LINHAS + ' — a janela precisa encolher');
+    }
+    bytes += await writeOut({
+      gerado_em: meta.gerado_em, fonte: meta.fonte, modo: meta.modo,
+      grandeza: 'Irradiancia no plano dos modulos (GTI), W/m2',
+      resolucao_min: min, janela_dias: janela,
+      rotulo_de_tempo: 'O instante e o INICIO do intervalo: o valor em T cobre [T, T+' + min + ' min).',
+      nota: 'Uma coluna por usina. As demais grandezas ficam nos arquivos por nivel de zoom '
+        + '(irr_hora_<mes>-<dia>.json).',
+      ufvs, linhas: serie.length, serie,
+    }, 'irr_' + min + 'min.json', true);
+    n++;
+    linha.push(min + 'min: ' + serie.length + ' linhas · ' + janela + ' dias');
+  }
+  return { arquivos: n, bytes, pulados, detalhe: linha };
+}
+
 async function emiteNiveis(meta, semihora, serieDia, serieMes, mesesTodos, antigos) {
   const shDia = {}, diaMes = {};
   semihora.forEach(l => (shDia[l.dia] = shDia[l.dia] || []).push(l));
@@ -189,6 +280,11 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       j.meses || [], (j.meses || []).concat('tudo').map(m => HORA_PRE + m + '.json'));
       console.log('niveis republicados do seed · ' + rh.arquivos + ' arquivos · '
         + Math.round(rh.bytes / 1024) + ' KB · ' + rh.dias + ' dias · ' + rh.linhas + ' linhas de 30 min');
+      const rr = await emiteResolucoes({ gerado_em: h.gerado_em, fonte: h.fonte, modo: 'seed' },
+        linhas, h.resolucao_min || 30);
+      console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
+        + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
+      (rr.detalhe || []).forEach(x => console.log('    ' + x));
     }
     const t = await writeOut(j);
     console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
@@ -517,6 +613,14 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   }, hora, serie_dia, serie_mes, meses, meses.concat('tudo').map(m => HORA_PRE + m + '.json'));
   console.log('niveis OK · ' + rh.arquivos + ' arquivos · ' + Math.round(rh.bytes / 1024) + ' KB · '
     + rh.dias + ' dias de 30 min desde ' + corte);
+
+  // ⚠️ Aqui vai a serie INTEIRA, nao a recortada em 120 dias que alimenta os niveis de zoom: o
+  // arquivo de 60 min cobre um ano, e passar `hora` o deixaria com quatro meses sem nada avisar.
+  const rr = await emiteResolucoes({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'csv' },
+    serie_semihora, 30);
+  console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
+    + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
+  (rr.detalhe || []).forEach(x => console.log('    ' + x));
 
   const tam = await writeOut(out);
   console.log('irr_ufv.json OK · ' + Math.round(tam / 1024) + ' KB');
