@@ -39,8 +39,9 @@ jobs:
           # apodreceria no export seguinte. Com isso a semente do repo sai de cena.
           # 🔴 Se nao houver export no container, o passo FALHA de proposito: cair na semente
           # deixaria o painel congelado sem nada dizer por que.
-          # ⏸️ IIRR_CONTAINER: scada-raw  — DESLIGADO em 25/08/2026: o container nao tem
-          # nenhum IIRR_<data>_<hora>.csv (0 candidatos). A ponte do Power Automate copia a
-          # pasta 11 - Dados_Scada_PWC, mas o export de irradiancia nao esta chegando la.
-          # Religar esta linha assim que o CSV aparecer — o gerador ja sabe acha-lo sozinho.
+          # A ponte do Power Automate ("SCADA SharePoint para Blob") grava os exports do SCADA aqui.
+          # IIRR_CONTAINER faz o gerador LISTAR e usar o mais recente. Nao IIRR_URL: o nome e datado
+          # E vem PREFIXADO pelo id do item (77884_IIRR_20260808_095901.csv) — nao ha endereco fixo.
+          # 🔴 Falha de proposito se nao houver export: cair na semente congelaria o painel calado.
+          IIRR_CONTAINER: scada-raw
         run: node scripts/gen-irradiancia.js
