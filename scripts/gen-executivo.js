@@ -20,6 +20,7 @@
  * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
 const https = require('https');
+const zlib = require('zlib');
 // rateio MUST reaproveitado do arquivador — ver nota em gen-way2-hist.js
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
@@ -211,10 +212,28 @@ const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFix
   const [i, f2] = t.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (f2 ? '.' + f2 : ''); };
 const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 
-function getJSON(url) { return new Promise((res, rej) => { https.get(url, x => { if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
-  // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os que vem
-  // crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
-  let s = ''; x.on('data', c => s += c); x.on('end', () => { try { res(JSON.parse(s.replace(/^﻿/, ''))); } catch (e) { rej(e); } }); }).on('error', rej); }); }
+// 🔴 ACUMULA EM BUFFER, NAO EM STRING. Alguns blobs nossos sao gravados em GZIP (o Azure serve
+// exatamente os bytes gravados), e concatenar bytes comprimidos numa string produz lixo que o
+// JSON.parse recusa. Foi assim que o detalhe do ONS parou de ser lido, calado, por vinte horas.
+// A deteccao e pelos bytes magicos, nao pelo cabecalho: quem grava pode esquecer de declarar.
+function getJSON(url) {
+  return new Promise((res, rej) => {
+    https.get(url, x => {
+      if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
+      const partes = [];
+      x.on('data', c => partes.push(c));
+      x.on('end', () => {
+        try {
+          let b = Buffer.concat(partes);
+          if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+          // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os
+          // que vem crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
+          res(JSON.parse(b.toString('utf8').replace(/^﻿/, '')));
+        } catch (e) { rej(e); }
+      });
+    }).on('error', rej);
+  });
+}
 async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
@@ -356,7 +375,24 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const util = r => String(r.inv) !== 'True' && num(r.irr) > 5;      // ponto aproveitável (irradiância válida e com sol)
 
   const CRU = {};   // mes -> consolidado
-  for (const mes of meses) { try { CRU[mes] = (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; } catch (e) { } }
+  // 🔴 O `catch` MUDO daqui escondeu uma quebra de producao por vinte horas. Quando o blob passou a
+  // ser gravado em gzip, o JSON.parse comecou a estourar, o erro foi engolido, CRU ficou VAZIO e o
+  // gerador seguiu ate morrer bem adiante com "Invalid time value" — mensagem sem relacao nenhuma
+  // com a causa. Falha de leitura de FONTE agora e contada e reportada; e se NENHUM mes vier, o
+  // gerador para aqui, onde o problema esta, em vez de tropecar la na frente.
+  const falhas = [];
+  for (const mes of meses) {
+    try { CRU[mes] = (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
+    catch (e) { falhas.push(mes + ': ' + String(e.message).slice(0, 60)); }
+  }
+  if (falhas.length) {
+    console.log('  ATENCAO · ' + falhas.length + ' de ' + meses.length + ' meses do detalhe do ONS nao foram lidos:');
+    falhas.slice(0, 6).forEach(x => console.log('    ' + x));
+  }
+  if (!Object.keys(CRU).length) {
+    throw new Error('nenhum mes do detalhe do ONS foi lido (' + meses.length + ' tentados) — '
+      + 'sem essa fonte o perfil e o corte por usina saem vazios');
+  }
 
   // 2a) quais meses são SADIOS (ge presente em >95% dos pontos com sol) → base do ajuste
   const saude = {};
@@ -2141,13 +2177,25 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // O QUE NÃO VEM: irradiância e potencial — os dois só existem no ONS. Ficam null, e o gráfico
     // abre buraco em vez de fingir dado. Cada ponto leva `fonte`, para o painel poder rotular.
     {
-      const ultOns = [...new Set(perfil.map(x => x.dia))].sort().pop() || '0000-00-00';
+      // 🔴 GUARDA QUE PRODUZ DATA INVALIDA NAO E GUARDA. O sentinela era '0000-00-00', e
+      // `new Date('0000-00-00T12:00:00Z')` da Invalid Date — a linha seguinte estoura com
+      // "Invalid time value", mensagem que nao aponta para nada. Com o perfil vazio nao ha vao a
+      // completar: o certo e nao entrar no bloco, dizendo por que.
+      const diasOns = [...new Set(perfil.map(x => x.dia))]
+        .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
+      const ultOns = diasOns.pop();
       const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
       const faltam = [];
-      for (let d = new Date(ultOns + 'T12:00:00Z'); ; ) {
-        d = new Date(d.getTime() + 86400000);
-        const s = d.toISOString().slice(0, 10);
-        if (s > hoje) break; faltam.push(s);
+      if (!ultOns) {
+        console.log('  perfil do ONS vazio — nada a completar pelo Way2 (o vao D+0 fica de fora)');
+      } else {
+        for (let d = new Date(ultOns + 'T12:00:00Z'); ; ) {
+          d = new Date(d.getTime() + 86400000);
+          const s = d.toISOString().slice(0, 10);
+          if (s > hoje) break; faltam.push(s);
+          if (faltam.length > 60) throw new Error('vao D+0 maior que 60 dias a partir de ' + ultOns
+            + ' — o detalhe do ONS parou de ser publicado');
+        }
       }
       let novos = 0;
       for (const dia of faltam) {
