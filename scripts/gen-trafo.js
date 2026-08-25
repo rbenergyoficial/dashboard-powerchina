@@ -36,13 +36,20 @@
  *   Publicar o valor cru poria "FP -1,00" no pico de geracao, que le como pessimo sendo perfeito.
  *   Publica-se o MODULO; o sentido ja esta no sinal de `p_mw`.
  *
- * ⚠️ AS ENTRADAS ANALOGICAS FICAM SEM NOME DE NEGOCIO. `AnIn16/30/31/32` nao sao identificadas no
- *   arquivo. As faixas sugerem temperatura em graus (30 a 78), mas as medianas do 04T1 sao
- *   50/46/56 e as do 04T2 sao 30/28/28: trafos iguais sob carga parecida nao abrem 20 graus, entao
- *   ou nao sao temperatura, ou nao sao a mesma grandeza nos dois. Batizar `an30` de "temperatura
- *   do oleo" daria um painel com o rotulo certo e a grandeza errada — o modo de falhar do canal
- *   `Demat`. Elas vao ao blob com o nome que tem, e so ganham rotulo quando a lista de sinais do
- *   fabricante ou o as-built da SE disser qual e qual.
+ * AS ANALOGICAS SAIRAM DA LISTA DE PONTOS OFICIAL DA SE — `ETX-24007-LP-HV-R1`, aba
+ *   "Lista de Pontos". O CSV do supervisorio nao as identifica, e a assinatura do dado nao bastava:
+ *        AnIn30 = TEMPERATURA OLEO TRANSFORMADOR (°C)
+ *        AnIn31 = TEMPERATURA OLEO CDC (°C)          <- comutador sob carga, nao o tanque principal
+ *        AnIn32 = TEMPERATURA ENROLAMENTO (°C)
+ *        AnIn16 = POSICAO TAP (sem unidade)
+ *   A mesma lista confirma, PALAVRA POR PALAVRA, a identificacao que eu havia derivado da fisica:
+ *   `CMMXU1` = "CORRENTE LADO 230kV", `CMMXU2`/`CMMXU3` = "LADO 1X/2X 34,5kV", e Watt/VolAmp/
+ *   VolAmpr em MW/MVA/MVAr. Duas rotas independentes no mesmo resultado.
+ *
+ * 🔴 ZERO EM TEMPERATURA NAO E MEDICAO — e sensor mudo. Sao transformadores em Mauriti, no Ceara;
+ *   0,0 °C nunca acontece. Mantido como valor ele derruba media e mediana, e derrubaria de forma
+ *   DESIGUAL entre os dois trafos: foi exatamente isso que quase me fez anunciar que o 04T1 corre
+ *   20 °C mais quente que o 04T2. Vira nulo, e a contagem do descarte vai ao log e ao blob.
  *
  * ⚠️ O CARIMBO DE TEMPO E `dd/mm/aaaa HH:MM` no despejo, e os exports irmaos (IRR, IIRR) usam
  *   `aaaa-mm-dd HH:MM:SS`. O parser aceita as DUAS formas e RECUSA linha que nao case nenhuma —
@@ -100,17 +107,14 @@ const GRANDEZAS = {
   v2ab: 'VMMXU2_PPV_phsAB', v2bc: 'VMMXU2_PPV_phsBC', v2ca: 'VMMXU2_PPV_phsCA',
   v3ab: 'VMMXU3_PPV_phsAB', v3bc: 'VMMXU3_PPV_phsBC', v3ca: 'VMMXU3_PPV_phsCA',
   p: 'CVMMXN1_Watt', q: 'CVMMXN1_VolAmpr', s: 'CVMMXN1_VolAmp', fp: 'CVMMXN1_PwrFact',
-  // TEMPERATURAS, em graus Celsius. A grandeza foi confirmada pela operacao em 25/08/2026; o
-  // arquivo nao a declara. O nome guarda a entrada analogica de origem de proposito: QUAL
-  // temperatura cada uma e (oleo, enrolamento, ambiente) continua SEM fonte, e batizar `temp30`
-  // de "temperatura do oleo" produziria um painel com o rotulo certo e a grandeza errada.
-  temp30: 'AnIn30_InstMag_f', temp31: 'AnIn31_InstMag_f', temp32: 'AnIn32_InstMag_f',
-  // ⚠️ an16 NAO entra nessa conclusao: mediana exatamente 8,00 e maximo 11 a 12 nos dois trafos.
-  // Nao se comporta como temperatura — tem cara de posicao de comutador ou de um discreto. Fica
-  // sem nome de negocio ate alguem dizer o que e.
-  an16: 'AnIn16_InstMag_f',
+  // Nomes da LISTA DE PONTOS oficial da SE (ETX-24007-LP-HV-R1, aba "Lista de Pontos"), que e o
+  // que resolveu as analogicas — o CSV do supervisorio nao as identifica.
+  t_oleo: 'AnIn30_InstMag_f',       // TEMPERATURA OLEO TRANSFORMADOR · °C
+  t_oleo_cdc: 'AnIn31_InstMag_f',   // TEMPERATURA OLEO CDC (comutador sob carga) · °C
+  t_enrol: 'AnIn32_InstMag_f',      // TEMPERATURA ENROLAMENTO · °C
+  tap: 'AnIn16_InstMag_f',          // POSICAO TAP · sem unidade
 };
-const TEMPS = ['temp30', 'temp31', 'temp32'];
+const TEMPS = ['t_oleo', 't_oleo_cdc', 't_enrol'];
 
 // ---------- entrada ---------------------------------------------------------------------------
 async function listaArquivos() {
@@ -270,6 +274,7 @@ async function grava(nome, obj) {
   // mescla por carimbo de tempo; o arquivo mais NOVO vence, porque vem depois na ordem
   const porMs = new Map();
   let recusadasTotal = 0;
+  const zeros = {};                      // (trafo|grandeza) -> quantas leituras de 0 °C foram descartadas
   for (const a of arqs) {
     const { linhas, mapa, recusadas } = leArquivo(await a.ler(), a.nome);
     recusadasTotal += recusadas;
@@ -280,7 +285,13 @@ async function grava(nome, obj) {
         for (const chave of Object.keys(GRANDEZAS)) {
           const j = mapa[t + '|' + chave];
           if (j == null) continue;
-          const v = num(l.p[j]);
+          let v = num(l.p[j]);
+          // 🔴 ZERO EM TEMPERATURA NAO E MEDICAO. O transformador fica em Mauriti, no Ceara:
+          // 0,0 °C e sensor mudo, nao dia frio. Mantido como valor, ele derruba media e mediana
+          // — e derrubaria de forma DESIGUAL entre os dois trafos, fabricando uma diferenca de
+          // temperatura que ninguem mediu. Vira nulo e e CONTADO, para a perda aparecer no blob
+          // em vez de sumir.
+          if (v === 0 && TEMPS.includes(chave)) { zeros[t + '|' + chave] = (zeros[t + '|' + chave] || 0) + 1; v = null; }
           if (v != null) o[chave] = v;
         }
         if (Object.keys(o).length) reg[t] = o;
@@ -290,6 +301,8 @@ async function grava(nome, obj) {
   }
   const serie = [...porMs.values()].sort((a, b) => a.ms - b.ms);
   if (!serie.length) throw new Error('nenhuma linha aproveitada de ' + arqs.length + ' arquivo(s)');
+  for (const [k, n] of Object.entries(zeros)) console.log('  descartado: ' + k + ' -> ' + n
+    + ' leitura(s) de 0 °C (' + ((n / serie.length) * 100).toFixed(1) + '% da serie) — sensor mudo, nao medicao');
   console.log('  serie mesclada: ' + serie.length + ' instante(s) · '
     + iso(serie[0].ms) + ' a ' + iso(serie[serie.length - 1].ms)
     + (recusadasTotal ? ' · ' + recusadasTotal + ' linha(s) recusadas por carimbo' : ''));
@@ -304,11 +317,14 @@ async function grava(nome, obj) {
     // ⚠️ ver a nota no cabecalho: a borda do balde nao foi determinada.
     rotulo_de_tempo: 'como a fonte entrega — borda do intervalo INDETERMINADA',
     unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA',
-      fp: 'modulo de cos(fi), 0..1', temp30: '°C', temp31: '°C', temp32: '°C' },
-    pontos: { 1: '230 kV', 2: '34,5 kV (enrolamento 1)', 3: '34,5 kV (enrolamento 2)' },
-    // as tres SAO temperatura; QUAL e qual (oleo, enrolamento, ambiente) segue sem fonte
-    temperaturas_sem_posicao: TEMPS,
-    analogicas_sem_identificacao: ['an16'],
+      fp: 'modulo de cos(fi), 0..1', t_oleo: '°C', t_oleo_cdc: '°C', t_enrol: '°C', tap: 'degrau' },
+    pontos: { 1: 'lado 230 kV', 2: 'lado 1X 34,5 kV', 3: 'lado 2X 34,5 kV' },
+    rotulos: { t_oleo: 'temperatura do óleo do transformador',
+      t_oleo_cdc: 'temperatura do óleo do comutador sob carga',
+      t_enrol: 'temperatura do enrolamento', tap: 'posição do tap' },
+    fonte_dos_nomes: 'lista de pontos da subestação',
+    // leituras de 0 °C descartadas por grandeza e por trafo — sensor mudo, nao dia frio
+    temperaturas_descartadas: zeros,
   };
   const saidas = [];
   for (const { min, dias } of RESOLUCOES) {
