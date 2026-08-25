@@ -1,0 +1,47 @@
+name: Audita scada-raw (so leitura, nao grava nada)
+# Sem cron de proposito: e ferramenta de investigacao, roda quando alguem pergunta.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'vocab (vocabulario de colunas) ou par (compara duas colunas)'
+        required: false
+        default: 'vocab'
+      alvos:
+        description: 'modo vocab: pedacos de nome de blob, separados por virgula'
+        required: false
+        default: ''
+      par_a:
+        description: 'modo par: pedaco do nome do arquivo A'
+        required: false
+        default: ''
+      par_b:
+        description: 'modo par: pedaco do nome do arquivo B'
+        required: false
+        default: ''
+      par_col:
+        description: 'modo par: pedaco do nome da coluna a comparar'
+        required: false
+        default: ''
+concurrency:
+  group: audita-scada-raw
+  cancel-in-progress: true
+jobs:
+  audita:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Auditar
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          MODO: ${{ github.event.inputs.modo }}
+          ALVOS: ${{ github.event.inputs.alvos }}
+          PAR_A: ${{ github.event.inputs.par_a }}
+          PAR_B: ${{ github.event.inputs.par_b }}
+          PAR_COL: ${{ github.event.inputs.par_col }}
+        run: node scripts/audita-scada-raw.js
