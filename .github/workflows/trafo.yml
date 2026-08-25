@@ -1,0 +1,35 @@
+name: Transformadores da SE -> trafo_*.json
+on:
+  schedule:
+    # 07:38 BRT — o arquivo diario do Trafo chega ao container por volta das 03:30 BRT.
+    # Minuto quebrado de proposito: no :00 o agendador do GitHub atrasa 30 a 90 min.
+    - cron: '38 10 * * *'
+  workflow_dispatch:
+    inputs:
+      ensaio:
+        description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
+        required: false
+        default: ''
+concurrency:
+  group: gen-trafo
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar trafo_*.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          OUT_CONTAINER: dados
+          # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo' || '' }}
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-trafo.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
