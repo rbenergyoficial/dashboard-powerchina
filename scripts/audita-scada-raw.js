@@ -147,9 +147,43 @@ async function par(c) {
       + '  ' + (sb ? (sa / sb).toFixed(4) : '-').padStart(11)
       + '  ' + ((ident / n) * 100).toFixed(1) + '%');
   }
-  console.log('\n  🔴 "iguais" perto de 100% e max|dif| ~ 0 significam a MESMA medicao publicada sob');
-  console.log('     dois nomes — o arquivo redundante nao acrescenta nada. Diferenca consistente');
-  console.log('     significa sensor distinto, e ai os dois viram conferencia independente.');
+  // 🔴 A TERCEIRA LEITURA, que a primeira versao deste auditor nao oferecia e por isso quase me
+  // fez concluir errado: media igual com diferenca instantanea enorme e a assinatura de ROTULO DE
+  // TEMPO DESLOCADO, nao de sensor diferente. Ao longo de um ano um deslocamento de um balde nao
+  // mexe na media e estoura o maximo em toda rampa e toda nuvem. Ja inverteu conclusao duas vezes
+  // neste projeto (o balde do MUST e a borda da Way2), entao aqui ele e MEDIDO, nao suposto:
+  // varre-se o deslocamento e escolhe-se pelo erro, como o gen-comparativo faz.
+  const ca0 = colsA[0], cb0 = colsB.find((o) => usinaDe(o.x) === usinaDe(ca0.x));
+  if (ca0 && cb0) {
+    const linsA = a.linhas.slice(1).map((l) => l.split(';'));
+    const carimbos = b.linhas.slice(1).map((l) => l.split(';')[0].trim());
+    const posB = new Map(carimbos.map((t, i) => [t, i]));
+    const linsB = b.linhas.slice(1).map((l) => l.split(';'));
+    console.log('\n  varredura de deslocamento em ' + ('MRT' + usinaDe(ca0.x)) + ' (balde de 30 min):');
+    console.log('  desloc    pares    media|dif|     max|dif|   iguais');
+    for (let d = -2; d <= 2; d++) {
+      let n = 0, soma = 0, maxd = 0, ident = 0;
+      for (let i = 0; i < linsA.length; i++) {
+        const j = posB.get(linsA[i][0].trim());
+        if (j == null) continue;
+        const k = j + d;
+        if (k < 0 || k >= linsB.length) continue;
+        const va = num(linsA[i][ca0.j]), vb = num(linsB[k][cb0.j]);
+        if (va == null || vb == null) continue;
+        n++; const dif = Math.abs(va - vb); soma += dif;
+        if (dif > maxd) maxd = dif;
+        if (dif < 1e-9) ident++;
+      }
+      if (!n) { console.log('  ' + String(d).padStart(6) + '        sem par'); continue; }
+      console.log('  ' + String(d).padStart(6) + '  ' + String(n).padStart(7) + '  '
+        + (soma / n).toFixed(3).padStart(12) + '  ' + maxd.toFixed(3).padStart(11)
+        + '  ' + ((ident / n) * 100).toFixed(1) + '%');
+    }
+    console.log('\n  Se o menor erro cair em desloc 0 e ainda assim for grande, sao MEDICOES');
+    console.log('  DISTINTAS — dois sensores, e os dois viram conferencia independente.');
+    console.log('  Se o menor erro cair em -1 ou +1 e ficar perto de zero, e a MESMA medicao com');
+    console.log('  rotulo de tempo diferente, e o arquivo redundante nao acrescenta nada.');
+  }
 }
 
 (async () => {
