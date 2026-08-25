@@ -228,7 +228,9 @@ async function loadRawBuffers() {
     const iirr = [];
     for await (const b of cont.listBlobsFlat()) {
       const n = b.name.split('/').pop();
-      if (/^IIRR/i.test(n) || /^Trafo/i.test(n)) iirr.push(n + ' (' + Math.round((b.properties.contentLength || 0) / 1048576) + ' MB)');
+      // ⚠️ CONTENDO, nao comecando por: o blob chega como <id>_<nome> e ancorar no inicio faz a
+      // investigacao confirmar a hipotese errada — foi o que aconteceu na primeira rodada.
+      if (/IIRR/i.test(n) || /Trafo/i.test(n)) iirr.push(n + ' (' + Math.round((b.properties.contentLength || 0) / 1048576) + ' MB)');
     }
     console.log('  exports IIRR/Trafo: ' + (iirr.slice(0, 6).join(' | ') || 'NENHUM'));
   }

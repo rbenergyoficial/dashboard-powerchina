@@ -104,19 +104,26 @@ async function fonteLinhas() {
     const conn = process.env.DADOS_STORAGE;
     if (!conn) throw new Error('IIRR_CONTAINER exige DADOS_STORAGE');
     const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(cont);
-    // ⚠️ Comparo pelo NOME DO ARQUIVO, nao pelo caminho: o arquivo pode estar em subpasta, e
-    // "2026/IIRR_..." contra "IIRR_..." ordenaria pela pasta em vez de pela data.
-    const base = (x) => x.split('/').pop();
-    let melhor = null, vistos = 0;
+    // 🔴 O NOME CHEGA PREFIXADO. A ponte do Power Automate grava <id-do-item>_<nome-original>:
+    // medido no container, "68656_M04.xlsx". Expressao ancorada em ^IIRR nunca casa — foi o que
+    // deu "0 candidatos" na primeira tentativa.
+    // ⚠️ E a ordenacao tem de usar a DATA do export, nao o nome inteiro: com o prefixo numerico,
+    // comparar o nome todo ordena pelo ID DO ITEM, que nao tem relacao com a data.
+    const carimbo = (x) => { const m = x.split('/').pop().match(/IIRR_(\d{8}_\d{6})\.csv$/i); return m ? m[1] : null; };
+    let melhor = null, marca = null, vistos = 0, totalBlobs = 0;
     for await (const b of c.listBlobsFlat()) {
-      if (!/^IIRR_\d{8}_\d{6}\.csv$/i.test(base(b.name))) continue;
+      totalBlobs++;
+      const k = carimbo(b.name);
+      if (!k) continue;
       vistos++;
-      if (!melhor || base(b.name) > base(melhor.name)) melhor = b;
+      if (!marca || k > marca) { melhor = b; marca = k; }
     }
     // 🔴 FALHA ALTO. Cair na semente aqui recriaria o defeito original: o painel mostraria dado
     // congelado e NADA diria por que. Job vermelho com o container no texto custa uma correcao.
-    if (!melhor) throw new Error('nenhum IIRR_<data>_<hora>.csv em "' + cont
-      + '" — a ponte SharePoint->blob copiou o export? (' + vistos + ' candidatos)');
+    // ⚠️ A mensagem diz o TOTAL, nao so os que casaram: "0 de 972" e "0 de 0" mandam procurar
+    // em lugares opostos, e a primeira versao desta guarda so dizia o primeiro numero.
+    if (!melhor) throw new Error('nenhum *IIRR_<data>_<hora>.csv em "' + cont + '" — '
+      + vistos + ' casaram de ' + totalBlobs + ' blob(s) no container');
     const mb = Math.round((melhor.properties.contentLength || 0) / 1048576);
     console.log('  fonte: ' + cont + '/' + melhor.name + '  (' + mb + ' MB · '
       + String(melhor.properties.lastModified).slice(0, 24) + ' · ' + vistos + ' export(s) no container)');
