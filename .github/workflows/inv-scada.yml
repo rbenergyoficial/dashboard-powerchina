@@ -1,0 +1,30 @@
+name: Inversores SCADA -> inv_scada.json (subdesempenho por inversor)
+on:
+  schedule:
+    - cron: '47 12 * * *' # 09:47 BRT — depois do export do SCADA (~03:00 BRT) e do scada.yml
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Janela em dias (padrao 60)'
+        required: false
+        default: '60'
+concurrency:
+  group: gen-inv-scada
+  cancel-in-progress: true
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar inv_scada.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          OUT_CONTAINER: dados
+          OUT_BLOB: inv_scada.json
+          DIAS: ${{ github.event.inputs.dias || '60' }}
+        run: node scripts/gen-inv-scada.js
