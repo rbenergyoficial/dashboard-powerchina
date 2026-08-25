@@ -211,7 +211,28 @@ async function loadRawBuffers() {
   const svc = await getBlobClient();
   const cont = svc.getContainerClient(RAW_CONTAINER);
   const out = [];
-  for await (const b of cont.listBlobsFlat()) {
+    // ---- inventario do container, antes de qualquer filtro -------------------------------------
+  // 🔴 Saber O QUE HA no container e diferente de saber o que o filtro aceitou. Sem isto, um
+  // "nenhuma planilha encontrada" nao diz se o container esta vazio ou se o padrao nao casou —
+  // e as duas hipoteses mandam procurar em lugares opostos.
+  { const inv = {}; let tot = 0; const amostra = [];
+    for await (const b of cont.listBlobsFlat()) {
+      tot++;
+      const e = (b.name.split('/').pop().match(/\.[a-z0-9]+$/i) || ['(sem)'])[0].toLowerCase();
+      inv[e] = (inv[e] || 0) + 1;
+      if (amostra.length < 8) amostra.push(b.name.split('/').pop().slice(0, 44));
+    }
+    console.log('INVENTARIO de "' + RAW_CONTAINER + '": ' + tot + ' blob(s) · '
+      + Object.entries(inv).map(([e, c]) => e + ':' + c).join(' '));
+    console.log('  primeiros nomes: ' + (amostra.join(' | ') || '(vazio)'));
+    const iirr = [];
+    for await (const b of cont.listBlobsFlat()) {
+      const n = b.name.split('/').pop();
+      if (/^IIRR/i.test(n) || /^Trafo/i.test(n)) iirr.push(n + ' (' + Math.round((b.properties.contentLength || 0) / 1048576) + ' MB)');
+    }
+    console.log('  exports IIRR/Trafo: ' + (iirr.slice(0, 6).join(' | ') || 'NENHUM'));
+  }
+for await (const b of cont.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name)) continue;
     const buf = await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody);
     out.push({ name: b.name, buf });
