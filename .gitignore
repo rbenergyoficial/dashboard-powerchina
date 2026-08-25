@@ -4,3 +4,8 @@ data/irr_hora_seed.json
 
 # documentacao de trabalho do Claude — fica local, o repo e PUBLICO
 CLAUDE.md
+
+# resto de npm i local — nao entra no repo: um lockfile aqui muda o que TODOS os workflows instalam
+package.json
+package-lock.json
+node_modules/
