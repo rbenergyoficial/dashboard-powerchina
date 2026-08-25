@@ -243,8 +243,17 @@ function confereFisica(serie) {
       const vs = serie.map((r) => (r[t] || {})[k]).filter((x) => x != null);
       if (!vs.length) { console.log('  guarda ' + t + ' ' + k + ': sem dado'); continue; }
       const mx = Math.max(...vs), mn = Math.min(...vs);
-      console.log('  guarda ' + t + ' ' + k + ': ' + mn.toFixed(1) + ' a ' + mx.toFixed(1)
-        + ' °C · mediana ' + media(vs).toFixed(1));
+      // 🔴 histograma da PONTA BAIXA. O filtro de zero exato nao basta: leituras de 0,04 °C
+      // passam e sao tao impossiveis quanto o zero. Em vez de inventar um piso, mede-se onde o
+      // dado se separa — se ha um vao entre o amontoado do sensor mudo e o dado de verdade,
+      // qualquer piso dentro do vao e defensavel, e o numero sai da medicao.
+      const faixas = [0, 2, 5, 10, 15, 20, 25];
+      const h = faixas.map((f, n) => {
+        const ate = faixas[n + 1] == null ? Infinity : faixas[n + 1];
+        return f + '-' + (ate === Infinity ? '+' : ate) + ':' + vs.filter((v) => v >= f && v < ate).length;
+      });
+      console.log('  guarda ' + t + ' ' + k + ': ' + mn.toFixed(2) + ' a ' + mx.toFixed(1)
+        + ' °C · mediana ' + media(vs).toFixed(1) + ' · ponta baixa ' + h.join(' '));
       if (mx > 130 || mn < -10) throw new Error('trafo ' + t + ' ' + k + ': faixa de ' + mn.toFixed(1)
         + ' a ' + mx.toFixed(1) + ' fora do que uma temperatura de transformador pode ser. '
         + 'A escala do transdutor mudou — nao publicar como °C.');
