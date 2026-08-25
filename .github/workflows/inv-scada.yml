@@ -37,4 +37,5 @@ jobs:
           DIAS: ${{ github.event.inputs.dias || '60' }}
           LISTAR: ${{ github.event.inputs.listar }}
           ESPIAR: ${{ github.event.inputs.espiar }}
+          ESPIAR_COLS: "1"
         run: node scripts/gen-inv-scada.js

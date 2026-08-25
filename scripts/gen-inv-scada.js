@@ -210,6 +210,27 @@ function comparaComPares(reg) {
       console.log('  E   linhas: ' + linhas.length);
       for (let i = 0; i < Math.min(3, linhas.length); i++) console.log('  E   [' + (i + 1) + '] ' + linhas[i].slice(0, 400));
       for (let i = Math.max(3, linhas.length - 2); i < linhas.length; i++) console.log('  E   [' + (i + 1) + '] ' + linhas[i].slice(0, 400));
+      // vocabulario de COLUNAS: e o que decide se da para desenhar painel, e nao cabe nos 400
+      // caracteres do cabecalho cru. Separa o IDENTIFICADOR (equipamento) da GRANDEZA, contando
+      // cada um, sem supor formato: o que vem antes do primeiro espaco e o identificador; o resto
+      // e a grandeza. Onde nao ha espaco (tag IEC 61850) a quebra e o ultimo ponto.
+      if (process.env.ESPIAR_COLS) {
+        const cols = linhas[0].replace(/^﻿/, '').split(';');
+        console.log('  E   colunas: ' + cols.length);
+        const ident = new Map(), grand = new Map();
+        for (const c0 of cols.slice(1)) {
+          const c = c0.trim();
+          let id, g;
+          if (c.includes(' ')) { id = c.slice(0, c.indexOf(' ')); g = c.slice(c.indexOf(' ') + 1); }
+          else { const i = c.lastIndexOf('.'); id = i < 0 ? c : c.slice(0, i); g = i < 0 ? '(sem)' : c.slice(i + 1); }
+          ident.set(id, (ident.get(id) || 0) + 1);
+          grand.set(g, (grand.get(g) || 0) + 1);
+        }
+        const top = (m, n) => [...m].sort((a, b) => b[1] - a[1]).slice(0, n)
+          .map(([k, v]) => k + ' x' + v).join(' | ');
+        console.log('  E   identificadores: ' + ident.size + ' -> ' + top(ident, 14));
+        console.log('  E   grandezas: ' + grand.size + ' -> ' + top(grand, 30));
+      }
       // alcance: qualquer data ISO ou dd/mm/aaaa que apareca no corpo
       const datas = txt.match(/\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}/g) || [];
       const norm = (d) => (d.includes('/') ? d.slice(6) + '-' + d.slice(3, 5) + '-' + d.slice(0, 2) : d);
