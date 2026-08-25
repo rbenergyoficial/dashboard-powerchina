@@ -234,33 +234,30 @@ async function loadRawBuffers() {
     }
     console.log('  exports IIRR/Trafo: ' + (iirr.slice(0, 6).join(' | ') || 'NENHUM'));
   }
-  // ---- so a versao MAIS RECENTE de cada planilha ---------------------------------------------
-  // 🔴 O container ACUMULA: a ponte grava <id-do-item>_<nome>, entao cada reenvio vira um blob
-  // novo. Medido em 25/08/2026: 564 blobs .xlsx para apenas 19 nomes distintos — o M4.xlsx
-  // aparece 59 vezes. Em bytes: 1.419 MB baixados e abertos a cada rodada, dos quais 1.187 MB
-  // (84%) sao versoes velhas. So a mais recente de cada da 232 MB.
+  // ---- LE TODAS, em ordem NUMERICA de id ------------------------------------------------------
+  // 🔴 NAO filtrar por "a mais recente de cada nome". Tentei em 25/08/2026 e era PERIGOSO: o
+  // export virou INCREMENTAL — medido, a versao mais nova de M4.xlsx tem 0,2 MB e a maior tem
+  // 38,2 MB. As recentes sao a fatia do dia; as grandes sao o despejo historico. Ler so a mais
+  // recente perderia o historico numa reconstrucao do zero, e a rodada passaria VERDE porque o
+  // gerador mescla com o blob anterior — nada quebra, e a capacidade de reconstruir some calada.
   //
-  // 🔴 E NAO E SO CUSTO. O merge la embaixo e "o ultimo a escrever vence", e a ordem vinha da
-  // listagem, que e LEXICOGRAFICA pelo nome. Hoje funciona por acaso: todos os ids tem 5 digitos,
-  // entao a ordem alfabetica coincide com a numerica. Quando os ids passarem de 99999,
-  // "100000_M4.xlsx" vira ANTES de "79210_M4.xlsx" e a versao VELHA passa a vencer — dado antigo
-  // sobrescrevendo o novo, em silencio. Escolher pelo id NUMERICO remove a armadilha inteira.
-  const versoes = new Map();
-  let cand = 0;
+  // O que a ordem numerica conserta: o merge la embaixo e "o ultimo a escrever vence", e a ordem
+  // vinha da listagem, que e LEXICOGRAFICA pelo nome. Hoje coincide porque todos os ids tem cinco
+  // digitos; quando passarem de 99999, "100000_M4.xlsx" viria ANTES de "79210_M4.xlsx" e a versao
+  // VELHA venceria. Ordenar pelo id numerico remove a armadilha antes de ela disparar.
+  //
+  // ⚠️ Custa 1,4 GB e ~8 min por rodada, e isso e o preco de poder reconstruir. Se um dia doer,
+  // a saida NAO e filtrar aqui: e o container parar de acumular, do lado de quem escreve.
+  const todos = [];
   for await (const b of cont.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name)) continue;
-    cand++;
-    const arq = b.name.split('/').pop();
-    const m = arq.match(/^(\d+)_(.+)$/);
-    const chave = m ? m[2] : arq;
-    const id = m ? Number(m[1]) : 0;
-    const ant = versoes.get(chave);
-    if (!ant || id > ant.id) versoes.set(chave, { id, nome: b.name, bytes: b.properties.contentLength || 0 });
+    const m = b.name.split('/').pop().match(/^(\d+)_/);
+    todos.push({ nome: b.name, id: m ? Number(m[1]) : 0, bytes: b.properties.contentLength || 0 });
   }
-  const escolhidos = [...versoes.values()];
-  console.log('  planilhas: ' + cand + ' blob(s) .xlsx · ' + versoes.size + ' nome(s) distinto(s) · baixando '
-    + escolhidos.length + ' (' + Math.round(escolhidos.reduce((a, x) => a + x.bytes, 0) / 1048576) + ' MB)');
-  for (const e of escolhidos) {
+  todos.sort((a, b) => a.id - b.id || (a.nome < b.nome ? -1 : 1));
+  console.log('  planilhas: ' + todos.length + ' blob(s) .xlsx · '
+    + Math.round(todos.reduce((a, x) => a + x.bytes, 0) / 1048576) + ' MB · lidas da mais ANTIGA para a mais NOVA');
+  for (const e of todos) {
     const buf = await streamToBuffer((await cont.getBlobClient(e.nome).download()).readableStreamBody);
     out.push({ name: e.nome, buf });
   }
