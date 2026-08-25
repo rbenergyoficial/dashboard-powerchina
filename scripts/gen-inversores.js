@@ -322,14 +322,52 @@ function analyze(wb1, wb2) {
     { k: 'MTBF frota', v: String(P1.mtbf_anos), u: 'anos', c: 'falhas reais (P1) · 1155 inv', cor: COR.blue },
     { k: 'Alarmes = rede', v: String(P2.rede_pct), u: '%', c: 'não é defeito', cor: COR.faint },
   ];
-  // abas novas: dicionário de códigos, regras de inferência e estoque por número de série.
-  // A aba Dash NÃO entra, a pedido: são KPIs já calculados na planilha, e número derivado que
+  // 🔴 O BLOB É ANÔNIMO. `inversores.json` responde HTTP 200 sem autenticação nenhuma — é assim
+  // que a datasource do Grafana o lê, do navegador do leitor. Então tudo o que entra aqui é
+  // PÚBLICO, e vale a mesma regra da description de painel: publica-se o NÚMERO, não o acervo.
+  //
+  //   - o DICIONÁRIO do fabricante não sai: são 512 procedimentos do manual Sungrow, material
+  //     autoral de terceiro. O nome curto da falha continua indo, embutido nos 12 códigos do
+  //     Pareto — rótulo factual é o que a página precisa ler, e é o que ela mostra;
+  //   - as REGRAS DE INFERÊNCIA não saem: são método interno. A página precisa da ressalva
+  //     "reportado × inferido", e ela já está em `por_origem_codigo`;
+  //   - o ESTOQUE sai em CONTAGEM: o painel mostra nível de estoque, nunca número de série.
+  //
+  // De cada aba fica a contagem, que serve de prova de que ela foi lida — sem isso, aba que
+  // parasse de chegar viraria silêncio em vez de sinal.
+  //
+  // ⚠️ A aba Dash não entra, a pedido: são KPIs já calculados na planilha, e número derivado que
   // chega pronto passa a divergir do que a página calcula sem ninguém perceber.
-  const dicionario = { fault_codes: DIC, desc_map: leDescMap(wb1) };
-  const estoqueSN = leEstoqueSN(wb1);
-  return { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
+  const dm = leDescMap(wb1);
+  const es = leEstoqueSN(wb1);
+  const dicionario = { fault_codes_lidos: DIC ? DIC.n : 0, desc_map_lidas: dm ? dm.n : 0 };
+  const estoqueSN = es ? { aba: es.aba, blocos: es.blocos.map(b => ({ grupo: b.grupo, n: b.n, disponiveis: b.disponiveis })) } : null;
+
+  const saida = { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
     escopo: { inversores_planta: 1155, inversores_por_parque: INV_POR_PARQUE, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado,
     dicionario, estoque_sn: estoqueSN };
+
+  // ---- guarda de exposição ------------------------------------------------------------------
+  // 🔴 "Lembrar de não publicar" não é mecanismo. Esta guarda monta a lista do que é sensível a
+  // partir da PRÓPRIA planilha — número de série, chamado, RNC e os procedimentos do manual — e
+  // ABORTA a rodada se qualquer um chegar à saída. Sem ela, bastaria alguém acrescentar um campo
+  // para o vazamento voltar em silêncio, e o blob é lido sem autenticação por quem tiver a URL.
+  {
+    const proibidos = new Set();
+    const iSN = cIdx(H1, 'SN'), iCh = cIdxAny(H1, 'CHAMADO', 'Ticket'), iRn = cIdxAny(H1, 'RNC PWC', 'RNC');
+    for (const i of [iSN, iCh, iRn]) { if (i < 0) continue;
+      for (const r of R1.slice(hr + 1)) { const v = norm(r[i]); if (v.length >= 5) proibidos.add(v); } }
+    for (const x of (DIC ? DIC.itens : [])) if (x.acao && x.acao.length >= 40) proibidos.add(x.acao);
+    const txt = JSON.stringify(saida);
+    // ⚠️ valor só de dígitos precisa de fronteira: um chamado de 6 dígitos casaria dentro de um
+    // epoch e abortaria a rodada por engano — guarda que dá alarme falso é guarda que se desliga.
+    const vazou = [...proibidos].filter(v => (/^[0-9]+$/.test(v)
+      ? new RegExp('(^|[^0-9])' + v + '([^0-9]|$)').test(txt) : txt.includes(v)));
+    if (vazou.length) throw new Error('EXPOSIÇÃO: ' + vazou.length + ' valor(es) sensível(is) chegaram ao blob PÚBLICO'
+      + ' — ex.: "' + String(vazou[0]).slice(0, 40) + '". Corrigir a projeção antes de publicar.');
+    console.log('  guarda de exposição: ' + proibidos.size + ' valores sensíveis conferidos, nenhum na saída');
+  }
+  return saida;
 }
 
 (async () => {
@@ -347,7 +385,9 @@ function analyze(wb1, wb2) {
   const size = await writeOut(out);
   const d = out.dicionario || {}; const e = out.estoque_sn;
   console.log('inversores.json OK · P1=' + out.p1.total + ' trocas (' + out.p1.termico_pct + '% térmico) · P2=' + out.p2.eventos + ' eventos / ' + out.p2.parques.join(',') + ' · bad-actor ' + ((out.p2.bad_actors[0] || {}).inv) + ' · ' + round(size / 1024) + ' KB');
-  console.log('  abas extras · dicionário de códigos: ' + (d.fault_codes ? d.fault_codes.n + ' códigos' : 'AUSENTE')
-    + ' · regras de inferência: ' + (d.desc_map ? d.desc_map.n + ' palavras-chave' : 'AUSENTE')
-    + ' · estoque por série: ' + (e ? e.blocos.map(b => b.grupo + ' ' + b.disponiveis + '/' + b.n).join(' · ') : 'AUSENTE'));
+  console.log('  abas extras LIDAS · dicionário: ' + (d.fault_codes_lidos || 'AUSENTE') + ' códigos'
+    + ' · regras de inferência: ' + (d.desc_map_lidas || 'AUSENTE')
+    + ' · estoque: ' + (e ? e.blocos.map(b => b.grupo + ' ' + b.disponiveis + '/' + b.n).join(' · ') : 'AUSENTE'));
+  console.log('  publicado: contagens. Fora do blob por ser público: procedimentos do manual, '
+    + 'regras de inferência e números de série.');
 })().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
