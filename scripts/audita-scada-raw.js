@@ -186,10 +186,52 @@ async function par(c) {
   }
 }
 
+/*
+ * MODO=stats — faixa de cada coluna com dado.
+ *
+ * 🔴 Existe para NAO batizar coluna no chute. Uma tag `CMMXU1_A_phsA` diz "corrente do ponto de
+ * medicao 1", e nao diz se o ponto 1 e a alta ou a baixa tensao. Isso a FISICA responde sem
+ * empate: um barramento de 230 kV le ~238, um de 34,5 kV le ~35. E a mesma forma com que o canal
+ * `Demat` foi identificado — a assinatura do dado decide, nunca o nome.
+ */
+async function stats(c, pedaco) {
+  const a = await acha(c, pedaco);
+  const { cab, linhas } = await le(c, a.nome);
+  console.log('\n==== ' + a.nome + '  ' + cab.length + ' colunas · ' + (linhas.length - 1) + ' linhas');
+  const acc = cab.map(() => ({ n: 0, min: Infinity, max: -Infinity, soma: 0, vals: [] }));
+  const PASSO = Math.max(1, Math.floor((linhas.length - 1) / 4000));   // amostra para a mediana
+  for (let i = 1; i < linhas.length; i++) {
+    const p = linhas[i].split(';');
+    for (let j = 1; j < cab.length; j++) {
+      const v = num(p[j]);
+      if (v == null) continue;
+      const o = acc[j];
+      o.n++; o.soma += v;
+      if (v < o.min) o.min = v;
+      if (v > o.max) o.max = v;
+      if (i % PASSO === 0) o.vals.push(v);
+    }
+  }
+  console.log('  coluna                                              n        min      mediana         max');
+  for (let j = 1; j < cab.length; j++) {
+    const o = acc[j];
+    if (!o.n) continue;
+    o.vals.sort((x, y) => x - y);
+    const med = o.vals.length ? o.vals[o.vals.length >> 1] : o.soma / o.n;
+    console.log('  ' + cab[j].slice(-50).padEnd(50) + ' ' + String(o.n).padStart(6)
+      + ' ' + o.min.toFixed(2).padStart(10) + ' ' + med.toFixed(2).padStart(12)
+      + ' ' + o.max.toFixed(2).padStart(11));
+  }
+}
+
 (async () => {
   if (!process.env.DADOS_STORAGE) throw new Error('sem DADOS_STORAGE');
   const c = cli();
   if (MODO === 'par') { await par(c); return; }
+  if (MODO === 'stats') {
+    for (const p of (process.env.ALVOS || '').split(',').map((x) => x.trim()).filter(Boolean)) await stats(c, p);
+    return;
+  }
   for (const p of (process.env.ALVOS || '').split(',').map((x) => x.trim()).filter(Boolean)) {
     await vocab(c, p);
   }

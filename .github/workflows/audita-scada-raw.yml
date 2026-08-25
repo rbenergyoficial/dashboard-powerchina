@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: 'vocab (vocabulario de colunas) ou par (compara duas colunas)'
+        description: 'vocab, stats (faixa de cada coluna) ou par (compara duas colunas)'
         required: false
         default: 'vocab'
       alvos:
