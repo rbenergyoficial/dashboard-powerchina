@@ -169,11 +169,28 @@ function analyze(wb1, wb2) {
   // estoque de sobressalentes: caixa "Spare Parts WareHouse" no topo — rótulos New/Repair (ou Novo/Reparado) + valor na linha seguinte
   let estoque = null;
   for (let i = 0; i < Math.min(6, R1.length); i++) { const row = R1[i].map(x => norm(x).toLowerCase());
-    const iN = row.findIndex(x => x === 'new' || x === 'novo' || x === 'novos'); const iR = row.findIndex(x => /^(repair|reparad)/.test(x));
+    // 🔴 "REPARADOS" virou "REPAROS" na planilha de 20/08 e /^(repair|reparad)/ deixou de casar:
+    // o campo saiu NULO, o painel abriu "No data" e a cobertura de estoque foi calculada só com os
+    // novos — 1,48 mês em vez de ~2,8. Raspar rótulo escrito por humano quebra assim, calado.
+    const iN = row.findIndex(x => /^(new|novo)/.test(x)); const iR = row.findIndex(x => /^(repair|repar)/.test(x));
     const iF = row.findIndex(x => /^spare\s*fuse|fus[ií]ve/.test(x));
     if (iN >= 0 || iR >= 0) { const nx = R1[i + 1] || []; const num = v => { const n = parseInt(norm(v).replace(/[^0-9-]/g, ''), 10); return isNaN(n) ? null : n; };
       estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null, fusivel: iF >= 0 ? num(nx[iF]) : null };
       break; } }
+  // 🔴 QUANDO A ABA ESTRUTURADA EXISTE, ELA MANDA. A própria planilha declara, na instrução do
+  // topo: "TODO o painel Spare Parts (C4:E4) é CALCULADO — todo cadastro é feito na aba
+  // ESTOQUE_SN". Ler a caixa é ler o resultado; ler a aba é ler a origem, e ela tem número de
+  // série e situação em vez de um rótulo que alguém pode reescrever.
+  // ⚠️ O FUSÍVEL continua vindo da caixa: ele não tem cadastro por série na aba.
+  const esSN = leEstoqueSN(wb1);
+  if (esSN) {
+    const acha = (re) => (esSN.blocos.find((b) => re.test(semAcento(b.grupo))) || {}).disponiveis;
+    const nv = acha(/NOVO/), rp = acha(/REPARAD|REPARO|CONSERT/);
+    estoque = estoque || { novo: null, reparado: null, fusivel: null };
+    if (nv != null) estoque.novo = nv;
+    if (rp != null) estoque.reparado = rp;
+    estoque.origem = 'aba ESTOQUE_SN (disponíveis)';
+  } else if (estoque) estoque.origem = 'caixa Spare Parts no topo da planilha';
   let hr = R1.findIndex(r => cIdx(r, 'FAILURE DESCRIPTION') >= 0 || cIdx(r, 'ITEM') >= 0); if (hr < 0) hr = 5;
   const cIdxAny = (H, ...ns) => { for (const n of ns) { const i = cIdx(H, n); if (i >= 0) return i; } return -1; };
   // cabeçalhos aceitam EN (atual) e PT (versões antigas) — a planilha já mudou de idioma uma vez
@@ -242,6 +259,10 @@ function analyze(wb1, wb2) {
   // Ritmo de consumo de sobressalentes — vira o LIMIAR do alerta de estoque (nada de chute):
   // quantos inversores a planta queima por mês, e quantos meses o estoque atual cobre.
   P1.consumo_mensal = perDias > 0 ? round(P1.total / (perDias / 30.44), 2) : null;
+  // ⚠️ Campo nulo aqui não é neutro: ele entra como ZERO no total e encolhe a cobertura sem
+  // dizer nada. Avisar no log é o que transforma "No data" num painel em algo rastreável.
+  if (estoque) for (const k of ['novo', 'reparado', 'fusivel'])
+    if (estoque[k] == null) console.log('  ATENÇÃO · estoque.' + k + ' ficou NULO — o painel abrirá "No data" e o total o conta como zero');
   if (estoque && P1.consumo_mensal) { estoque.total = (estoque.novo || 0) + (estoque.reparado || 0);
     estoque.cobertura_meses = round(estoque.total / P1.consumo_mensal, 2);
     estoque.cobertura_novos_meses = round((estoque.novo || 0) / P1.consumo_mensal, 2); }
@@ -343,7 +364,7 @@ function analyze(wb1, wb2) {
   // ⚠️ A aba Dash não entra, a pedido: são KPIs já calculados na planilha, e número derivado que
   // chega pronto passa a divergir do que a página calcula sem ninguém perceber.
   const dm = leDescMap(wb1);
-  const es = leEstoqueSN(wb1);
+  const es = esSN;                                   // já lida lá em cima, junto com o estoque
   const dicionario = { fault_codes_lidos: DIC ? DIC.n : 0, desc_map_lidas: dm ? dm.n : 0 };
   const estoqueSN = es ? { aba: es.aba, blocos: es.blocos.map(b => ({ grupo: b.grupo, n: b.n, disponiveis: b.disponiveis })) } : null;
 
