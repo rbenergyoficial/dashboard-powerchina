@@ -208,12 +208,35 @@ function gerarSaude(dados, agoraMs) {
   gerarClima(conn).catch(e => console.error('clima.json FALHOU (segue sem bloquear):', e.message));
 
   // 1) snapshot de hoje
+  //
+  // 🔴 VALIDAR ANTES DE GRAVAR. Até 25/08/2026 esta ordem estava invertida: o buffer baixado ia
+  // para o snapshot e só DEPOIS passava pelo JSON.parse. Num download truncado — medido, ~1 em 20
+  // execuções, "Unexpected end of JSON input" — o arquivo do dia já tinha sido sobrescrito com
+  // lixo quando o job estourava. Nas rodadas seguintes o dia é reescrito e o estrago some; mas se
+  // a falha cair na ÚLTIMA rodada do dia, aquele arquivo fica corrompido para sempre e a mesclagem
+  // do dia seguinte passa a estourar em toda rodada. A falha de 24/08 caiu às 23:31 BRT.
+  //
+  // ⚠️ A tentativa extra NÃO existe para esconder fonte fora do ar: são 3 tentativas curtas e, se
+  // todas falharem, o job continua vermelho. O que ela remove é o e-mail por soluço de rede — a
+  // cada 5 min isso vira ruído, e ruído ensina a ignorar o alarme.
   let eletJson = null;
   const live = container.getBlockBlobClient(LIVE_BLOB);
   if (await live.exists()) {
-    const buf = await live.downloadToBuffer();
+    let buf = null, ultimo = null;
+    for (let t = 1; t <= 3 && !buf; t++) {
+      try {
+        const b = await live.downloadToBuffer();
+        const j = parseJson(b);                                  // valida ANTES de gravar
+        if (!Array.isArray(j.dados) || !j.dados.length) throw new Error('JSON sem o campo dados');
+        buf = b; eletJson = j;
+      } catch (e) {
+        ultimo = e;
+        console.log(`  leitura de ${LIVE_BLOB} falhou (tentativa ${t}/3): ${e.message}`);
+        if (t < 3) await new Promise(r => setTimeout(r, 2000 * t));
+      }
+    }
+    if (!buf) throw ultimo;
     await container.getBlockBlobClient(`hist/way2_${day}.json`).upload(buf, buf.length, { blobHTTPHeaders: { blobContentType: 'application/json' } });
-    eletJson = parseJson(buf);
     console.log(`snapshot hist/way2_${day}.json OK · ${(buf.length / 1048576).toFixed(1)} MB`);
   } else {
     console.log(`${LIVE_BLOB} não existe — snapshot pulado`);
@@ -255,7 +278,12 @@ function gerarSaude(dados, agoraMs) {
     if (dd === day) { jb = eletJson; }
     else {
       const bc = container.getBlockBlobClient(`hist/way2_${dd}.json`);
-      if (await bc.exists()) jb = parseJson(await bc.downloadToBuffer());
+      // snapshot antigo corrompido tem de DIZER qual arquivo é: a mensagem crua do JSON.parse
+      // manda procurar em cinco arquivos diferentes.
+      if (await bc.exists()) {
+        try { jb = parseJson(await bc.downloadToBuffer()); }
+        catch (e) { throw new Error(`hist/way2_${dd}.json está corrompido (${e.message}) — regravar o dia`); }
+      }
     }
     if (!jb || !jb.dados) continue;
     usados++;
