@@ -304,6 +304,109 @@ const RESOLUCOES = [{ min: 5, dias: 30 }, { min: 15, dias: 90 },
   { min: 30, dias: 180 }, { min: 60, dias: 365 }];
 const TETO_LINHAS = 8800;
 
+// ---------------------------------------------------------------------------------------------
+// ARQUIVOS POR FAMILIA DE GRANDEZA — irr_<familia>_<res>.json
+//
+// 🔴 O QUE ESTES ARQUIVOS SUBSTITUEM, e por que o corte mudou de eixo. Os arquivos por nivel de
+//    zoom sao recortados por MES e por DIA, e e isso que obriga a pagina a ter os filtros Mes e
+//    Dia: eles nao filtram, eles ESCOLHEM O ARQUIVO. Com o recorte por FAMILIA, quem escolhe o
+//    periodo volta a ser o seletor de tempo do Grafana, e os dois filtros somem.
+//
+// 🔴 O CORTE E POR FAMILIA PORQUE A PAGINA E ASSIM. Cada grandeza mora numa row RECOLHIDA — ao
+//    abrir, so a de irradiancia no plano carrega. Um arquivo unico com todas as grandezas por
+//    resolucao daria 6,4 MB (medido); por familia, a pagina baixa 447 KB ao abrir e cada row
+//    aberta puxa a sua, uma vez. Medido, gzipado, com dado real:
+//      plano 447 · difusa/direta 515 · albedo 846 · temperatura 1254 · umidade 307
+//      vento 630 · chuva 33 · sujeira 581 · bateria 97   (KB, 365 dias em 1 h)
+//
+// ⚠️ AS FAMILIAS SAEM DO USO REAL DOS PAINEIS, nao de uma taxonomia inventada: cada uma cobre
+//    exatamente as grandezas de uma row. `plano` serve o painel do topo E a row do comparativo,
+//    e `temp` serve as duas rows de temperatura — por isso sao 9 familias para 11 rows.
+const FAMILIAS = {
+  plano: ['gti_w', 'ons_w'],
+  comp: ['dif_w', 'dni_w'],
+  albedo: ['alb_cima_w', 'alb_baixo_w', 'albedo'],
+  // as DUAS rows de temperatura sao familias separadas: juntas dariam 72 colunas e ~2,3 MB no
+  // ano, e quem abre so uma pagaria pelas duas. `t_mod1` aparece nas duas — repetir UMA coluna
+  // custa menos que fazer cada leitor baixar a familia inteira do vizinho.
+  temp: ['t_mod1', 't_amb', 't_int', 't_orvalho'],
+  tmod: ['t_mod1', 't_mod2', 't_mod3', 't_mod4'],
+  umid: ['umid'],
+  vento: ['vento', 'vento_dir'],
+  chuva: ['chuva'],
+  sujeira: ['suj1', 'suj2', 'perda_suj1', 'perda_suj2'],
+  bateria: ['bateria'],
+};
+// ⚠️ chuva ACUMULA no balde; todo o resto e intensidade e se promedia. Somar umidade ou
+//    temperatura ao juntar dois baldes de 30 min daria o dobro do valor, calado.
+const CAMPO_SOMA = new Set(['chuva']);
+
+async function emiteFamilias(meta, semihora, resFonte) {
+  if (!semihora || !semihora.length) return { arquivos: 0, bytes: 0, detalhe: [] };
+  const dias = [...new Set(semihora.map((x) => x.dia))].sort();
+  const ultimo = dias[dias.length - 1];
+  let n = 0, bytes = 0;
+  const detalhe = [];
+
+  for (const { min, dias: janela } of RESOLUCOES) {
+    if (min < resFonte) continue;
+    const corte = new Date(Date.parse(ultimo + 'T00:00:00Z') - (janela - 1) * 86400000)
+      .toISOString().slice(0, 10);
+    for (const [fam, campos] of Object.entries(FAMILIAS)) {
+      const acc = {};
+      for (const l of semihora) {
+        if (l.dia < corte) continue;
+        const slot = Math.floor(Math.round(l.t * 60) / min) * min;   // borda ESQUERDA
+        const k = l.dia + '|' + slot;
+        const a = acc[k] || (acc[k] = { dia: l.dia, slot, v: {} });
+        for (const c of campos) {
+          if (l[c] == null) continue;
+          const kk = c + '_' + l.ufv;
+          const o = a.v[kk] || (a.v[kk] = { s: 0, n: 0 });
+          o.s += l[c]; o.n++;
+        }
+      }
+      const chaves = Object.keys(acc).sort((x, y) => {
+        const [dx, sx] = x.split('|'); const [dy, sy] = y.split('|');
+        return dx === dy ? (+sx) - (+sy) : (dx < dy ? -1 : 1);
+      });
+      const serie = chaves.map((k) => {
+        const a = acc[k];
+        const hh = String(Math.floor(a.slot / 60)).padStart(2, '0');
+        const mi = String(a.slot % 60).padStart(2, '0');
+        const t = a.dia + 'T' + hh + ':' + mi + ':00-03:00';
+        // o EPOCH vai publicado, pela mesma razao do irr_<res>: o JSONata do Grafana ignora o
+        // offset ao parsear a data, e derivar o instante no painel erraria em ate um dia
+        const l = { t, ms: Date.parse(t) };
+        for (const [kk, o] of Object.entries(a.v)) {
+          const nome = kk.slice(0, kk.lastIndexOf('_'));
+          l[kk] = r2(CAMPO_SOMA.has(nome) ? o.s : o.s / o.n);
+        }
+        return l;
+      });
+      if (serie.length > TETO_LINHAS) {
+        throw new Error('irr_' + fam + '_' + min + 'min ficou com ' + serie.length
+          + ' linhas, acima do teto de ' + TETO_LINHAS);
+      }
+      // JANELA MEDIDA, NAO DECLARADA — o painel monta o rotulo do seletor a partir daqui
+      const ds = [...new Set(serie.map((x) => x.t.slice(0, 10)))];
+      const nome = 'irr_' + fam + '_' + min + 'min.json';
+      bytes += await writeOut(Object.assign({}, meta, {
+        familia: fam, grandezas: campos, resolucao_min: min,
+        janela_dias: ds.length, janela_dias_alvo: janela,
+        rotulo_de_tempo: 'inicio do intervalo',
+        nota: 'Uma coluna por grandeza e entidade (<grandeza>_<entidade>). O recorte do periodo e '
+          + 'do seletor de tempo do painel; este arquivo define o ALCANCE MAXIMO.',
+        serie,
+      }), nome, true);
+      n++;
+      if (min === 60) detalhe.push(fam + ': ' + Math.round(JSON.stringify(serie).length / 1024)
+        + ' KB cru · ' + serie.length + ' linhas · ' + ds.length + ' dias');
+    }
+  }
+  return { arquivos: n, bytes, detalhe };
+}
+
 async function emiteResolucoes(meta, semihora, resFonte) {
   if (!semihora || !semihora.length) return { arquivos: 0, bytes: 0, pulados: RESOLUCOES.length };
   const ufvs = [...new Set(semihora.map(x => x.ufv))].sort();
@@ -436,6 +539,10 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
         + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
       (rr.detalhe || []).forEach(x => console.log('    ' + x));
+      const rf = await emiteFamilias({ gerado_em: h.gerado_em, fonte: h.fonte, modo: 'seed' },
+        linhas, h.resolucao_min || 30);
+      console.log('familias · ' + rf.arquivos + ' arquivo(s) · ' + Math.round(rf.bytes / 1024) + ' KB');
+      (rf.detalhe || []).forEach(x => console.log('    ' + x));
     }
     const t = await writeOut(j);
     console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
@@ -779,6 +886,12 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
     + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
   (rr.detalhe || []).forEach(x => console.log('    ' + x));
+
+  // as familias saem da serie INTEIRA, como as resolucoes: sao elas que dao a pagina o passado
+  const rf = await emiteFamilias({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'csv' },
+    serie_semihora, 30);
+  console.log('familias · ' + rf.arquivos + ' arquivo(s) · ' + Math.round(rf.bytes / 1024) + ' KB');
+  (rf.detalhe || []).forEach(x => console.log('    ' + x));
 
   const tam = await writeOut(out);
   console.log('irr_ufv.json OK · ' + Math.round(tam / 1024) + ' KB');
