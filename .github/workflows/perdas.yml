@@ -1,0 +1,39 @@
+name: Perdas (cascata CC -> CA -> medidor) -> perdas_*.json
+on:
+  schedule:
+    # 09:52 BRT — depois do export do SCADA (~03:00 BRT) e depois do comparativo, de quem ele lê
+    # o medidor. Minuto quebrado de propósito: no :00 o agendador do GitHub atrasa 30 a 90 min.
+    - cron: '52 12 * * *'
+  workflow_dispatch:
+    inputs:
+      dias:
+        description: 'Janela em dias (padrao 30)'
+        required: false
+        default: '30'
+      ensaio:
+        description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
+        required: false
+        default: ''
+concurrency:
+  group: gen-perdas
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Gerar perdas_*.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          OUT_CONTAINER: dados
+          DIAS: ${{ github.event.inputs.dias || '30' }}
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-perdas.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi

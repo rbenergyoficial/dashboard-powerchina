@@ -1,0 +1,411 @@
+/*
+ * gen-perdas.js — a cascata de perdas do complexo -> dados/perdas_*.json
+ *
+ * A PERGUNTA QUE ELE RESPONDE: onde a energia se perde entre o arranjo fotovoltaico e o ponto de
+ * medicao, e quanto em cada degrau. Hoje a suite mostra o que ENTROU no medidor; ela nao mostra o
+ * que existia antes dele.
+ *
+ * A CASCATA, e o que e MEDIDO em cada etapa:
+ *
+ *   arranjo CC  --[POTENCIA DC TOTAL]-->  inversor  --[POTENCIA ATIVA TOTAL]-->  coletor 34,5 kV
+ *        --[EneatRec do medidor]-->  ponto de faturamento
+ *
+ *   1. conversao       = (E_cc - E_ca) / E_cc          <- os DOIS lados medidos no MESMO inversor
+ *   2. coletor         = (E_ca - E_medidor) / E_ca     <- inversores contra o medidor da usina
+ *   3. consumo proprio = EneatDel / EneatRec           <- bruto contra liquido no mesmo medidor
+ *
+ * 🔴 NADA AQUI E ESTIMADO. A etapa 1 e a mais forte da cascata: e o mesmo equipamento, no mesmo
+ *    instante, com as duas grandezas publicadas lado a lado pelo proprio inversor.
+ *
+ * 🔴 ENERGIA CC E CA SAO INTEGRADAS DO MESMO JEITO, e isso e uma decisao, nao um detalhe. O
+ *    inversor publica `ENERGIA DIARIA GERADA`, que e um contador REAL do lado CA — mas nao existe
+ *    contador equivalente do lado CC. Se eu usasse o contador para o CA e integrasse o CC, o erro
+ *    de integracao cairia INTEIRO dentro da eficiencia, que e justamente o numero que a pagina
+ *    existe para mostrar. Entao para a eficiencia os dois lados sao integrados por soma de
+ *    amostras; o contador entra separado, onde a energia absoluta importa (a comparacao com o
+ *    medidor).
+ *
+ * ⚠️ A amostra e INSTANTANEA a cada 30 min, nao um intervalo integrado — a mesma natureza do
+ *    export dos transformadores. `p x 0,5 h` e aproximacao. Ela se cancela em boa parte na RAZAO
+ *    (os dois lados erram junto), e nao se cancela no valor absoluto.
+ *
+ * 🔴 O DADO NAO ESTA NA COLUNA QUE O NOME SUGERE. O export repete cada bloco de inversor ate tres
+ *    vezes, com sufixo _2 e _3, e a que tem dado varia. A regra e a mesma do gen-inv-scada: para
+ *    cada (TS, inversor, grandeza) escolhe-se a coluna que REALMENTE tem valores naquele dia.
+ *
+ * FONTES: `M<NN>_<AAAAMMDD>_<HHMMSS>.csv` no container scada-raw (lado do inversor) e o blob
+ *    PUBLICO `cmp_diario.json` (medidor de faturamento por usina). Ler o blob publico evita
+ *    precisar da credencial da Way2 aqui, e garante que o numero do medidor seja exatamente o
+ *    mesmo que a pagina de Comparativo mostra — divergencia entre duas paginas sobre o mesmo
+ *    medidor seria pior que nao ter a comparacao.
+ *
+ * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DIAS=30
+ *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio.
+ */
+const zlib = require('zlib');
+const https = require('https');
+
+const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
+const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
+const DIAS = Number(process.env.DIAS || 30);
+const CMP = 'https://rbenergydata.blob.core.windows.net/dados/cmp_diario.json';
+
+// M<NN>_<AAAAMMDD>_<HHMMSS>.csv em qualquer posicao (o blob vem prefixado pelo id do SharePoint)
+const CARIMBO = /M(\d{2})_(\d{8})_\d{6}\.csv$/i;
+const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
+
+// 🔴 A capacidade CA de cada usina e o que permite DESCOBRIR a unidade da coluna de potencia sem
+//    supor. Ver `confereUnidade`.
+const CAP_CA_MW = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11,
+  M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };
+
+// A PLACA DOS MODULOS, da folha de dados do fabricante. Fica aqui pela mesma razao pela qual a
+// placa do transformador mora no gen-trafo: duplicar a constante em N paineis garante que uma
+// copia envelheca diferente.
+const MODULOS = {
+  jinko: { modelo: 'JKM575N/580N-72HL4-BDV', wp: [575, 580], eficiencia_pct: 22.70,
+    coef_pmax_por_c: -0.29, noct_c: 45, fator_bifacial_pct: 80,
+    dimensoes_mm: [2278, 1134], usinas: ['M1', 'M2', 'M3', 'M6'] },
+  ja: { modelo: 'JAM72D40-575/580MB', wp: [575, 580], potencia_cc_mw: 211.14,
+    usinas: ['M4', 'M5', 'M7', 'M8', 'M9'] },
+};
+
+const GRANDEZAS = {
+  p_cc: 'POTÊNCIA DC TOTAL',
+  p_ca: 'POTÊNCIA ATIVA TOTAL',
+  e_conta: 'ENERGIA DIÁRIA GERADA',      // contador diario do lado CA
+  setpoint: 'SETPOINT POTÊNCIA ATIVA',   // separa curtailment de defeito
+  nominal: 'POTÊNCIA ATIVA NOMINAL',
+  temp: 'TEMPERATURA INTERNA',
+};
+
+const norm = (s) => String(s == null ? '' : s).trim();
+const num = (v) => { const s = norm(v).replace(',', '.'); if (!s) return null;
+  const n = Number(s); return isFinite(n) ? n : null; };
+const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
+const r4 = (x) => (x == null ? null : Math.round(x * 10000) / 10000);
+const soma = (a) => a.reduce((s, x) => s + x, 0);
+const media = (a) => (a.length ? soma(a) / a.length : null);
+
+// ---------- entrada ---------------------------------------------------------------------------
+function puxa(url) {
+  return new Promise((ok, ko) => {
+    const u = new URL(url);
+    https.get({ host: u.host, path: u.pathname, family: 4,
+      headers: { 'accept-encoding': 'gzip' } }, (r) => {
+      if (r.statusCode !== 200) { ko(new Error(url + ' -> HTTP ' + r.statusCode)); return; }
+      const c = []; r.on('data', (d) => c.push(d));
+      r.on('end', () => {
+        let b = Buffer.concat(c);
+        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+        try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); }
+      });
+    }).on('error', ko);
+  });
+}
+
+async function listaArquivos() {
+  if (process.env.LOCAL_DIR) {
+    const fs = require('fs'), path = require('path');
+    return fs.readdirSync(process.env.LOCAL_DIR).filter((n) => CARIMBO.test(n))
+      .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
+  }
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
+  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+  const out = []; let total = 0;
+  for await (const b of c.listBlobsFlat()) {
+    total++;
+    if (!CARIMBO.test(b.name)) continue;
+    out.push({ nome: b.name, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+  }
+  if (!out.length) throw new Error('nenhum M<NN>_<data>_<hora>.csv em "' + RAW_CONTAINER
+    + '" — 0 de ' + total + ' blob(s)');
+  return out;
+}
+
+// ---------- um arquivo = uma usina num dia ----------------------------------------------------
+function leUsinaDia(buf) {
+  const txt = buf.toString('utf8').replace(/^﻿/, '').replace(/\r/g, '');
+  const L = txt.split('\n');
+  const cols = L[0].split(';');
+  const linhas = [];
+  for (let k = 1; k < L.length; k++) {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2};/.test(L[k])) linhas.push(L[k].split(';'));
+  }
+  if (!linhas.length) return null;
+
+  // 🔴 O RETROVISOR (\1 \2 \3) E O QUE ANCORA — a coluna repete o proprio prefixo antes do rotulo.
+  //    Esta forma foi MEDIDA contra o arquivo real, e "simplifica-la" ja fez o gerador irmao casar
+  //    ZERO colunas em 45 arquivos. Copiada de la, nao reescrita.
+  const RE = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_\1 \2 \3 (.+?)(_\d)?$/;
+  const alvo = new Map(Object.entries(GRANDEZAS).map(([k, v]) => [v, k]));
+  const cand = new Map();
+  const vistas = [];
+  cols.forEach((c, i) => {
+    const m = norm(c).match(RE);
+    if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
+    const chave = alvo.get(m[4]);
+    if (!chave) return;
+    const k = m[2] + '|' + m[3] + '|' + chave;
+    if (!cand.has(k)) cand.set(k, []);
+    cand.get(k).push(i);
+  });
+  if (!cand.size) {
+    throw new Error('nenhuma coluna de inversor casou o padrao'
+      + (vistas.length ? ' — vistas: ' + vistas.join(' | ') : ''));
+  }
+
+  // 🔴 escolhe a coluna que TEM dado, em vez de supor o sufixo
+  const inv = new Map();                      // "TS|INV" -> { serie: {chave: [v por linha]} }
+  for (const [k, idxs] of cand) {
+    const [ts, iv, chave] = k.split('|');
+    let melhor = null, melhorN = 0;
+    for (const i of idxs) {
+      let n = 0; for (const l of linhas) if (num(l[i]) != null) n++;
+      if (n > melhorN) { melhorN = n; melhor = i; }
+    }
+    if (!melhorN) continue;
+    const kk = ts + '|' + iv;
+    if (!inv.has(kk)) inv.set(kk, { ts, inv: iv, serie: {} });
+    inv.get(kk).serie[chave] = linhas.map((l) => num(l[melhor]));
+  }
+  return { linhas, inv, instantes: linhas.map((l) => l[0]) };
+}
+
+// ---------- a unidade da coluna de potencia sai da MEDICAO -------------------------------------
+// 🔴 O export nao declara unidade. Supor kW e publicar potencia mil vezes maior com o rotulo certo
+//    e o modo de falhar mais caro desta familia. Aqui o pico da SOMA dos inversores da usina e
+//    comparado com a capacidade CA declarada dela: a razao so pode dar ~1 (MW), ~1000 (kW) ou
+//    ~1e6 (W). Qualquer outra coisa significa que a coluna nao e o que o nome diz, e o job para.
+function confereUnidade(ufv, picoSomaCA) {
+  const cap = CAP_CA_MW[ufv];
+  if (!cap) throw new Error('usina desconhecida: ' + ufv);
+  const cand = [{ f: 1, u: 'MW' }, { f: 1e-3, u: 'kW' }, { f: 1e-6, u: 'W' }];
+  for (const c of cand) {
+    const razao = (picoSomaCA * c.f) / cap;
+    if (razao > 0.55 && razao < 1.25) return { fator: c.f, unidade: c.u, razao };
+  }
+  throw new Error(ufv + ': pico da soma CA = ' + picoSomaCA + ', e a capacidade e ' + cap
+    + ' MW. Nenhuma unidade (MW/kW/W) explica a razao — a coluna de potencia ativa mudou de '
+    + 'significado, e publicar assim poria a grandeza errada com o rotulo certo.');
+}
+
+// ---------- saida -------------------------------------------------------------------------------
+async function grava(nome, obj) {
+  const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
+  if (process.env.LOCAL_OUT_DIR) {
+    require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, nome), gz);
+    return gz.length;
+  }
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
+  await c.createIfNotExists();
+  await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
+    blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
+  return gz.length;
+}
+
+// ---------- principal ---------------------------------------------------------------------------
+(async () => {
+  const arqs = await listaArquivos();
+  // so a versao MAIS RECENTE de cada (usina, dia): o export pode ser repetido no mesmo dia
+  const porChave = new Map();
+  for (const a of arqs) {
+    const m = a.nome.split('/').pop().match(CARIMBO);
+    const dia = m[2].slice(0, 4) + '-' + m[2].slice(4, 6) + '-' + m[2].slice(6);
+    const k = parque(m[1]) + '|' + dia;
+    const ant = porChave.get(k);
+    if (!ant || a.nome > ant.nome) porChave.set(k, { ...a, ufv: parque(m[1]), dia });
+  }
+  const dias = [...new Set([...porChave.values()].map((x) => x.dia))].sort();
+  const corte = dias.slice(-DIAS)[0];
+  const escolhidos = [...porChave.values()].filter((x) => x.dia >= corte)
+    .sort((a, b) => (a.dia + a.ufv < b.dia + b.ufv ? -1 : 1));
+  console.log('  arquivos: ' + arqs.length + ' · ' + porChave.size + ' pares usina-dia · '
+    + dias.length + ' dias (' + dias[0] + ' a ' + dias[dias.length - 1] + ') · lendo '
+    + escolhidos.length + ' desde ' + corte);
+
+  const diario = new Map();          // dia -> { ufv -> {...} }
+  const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
+  const porInv = [];                 // uma linha por (dia, ufv, ts, inv)
+  const unidades = {};
+
+  for (const a of escolhidos) {
+    let d;
+    try { d = leUsinaDia(await a.ler()); }
+    catch (e) { console.log('    ' + a.ufv + ' ' + a.dia + ': ' + e.message); continue; }
+    if (!d) continue;
+
+    // pico da soma CA, para descobrir a unidade
+    const nLin = d.linhas.length;
+    const somaCA = new Array(nLin).fill(0), somaCC = new Array(nLin).fill(0);
+    const nCA = new Array(nLin).fill(0), nCC = new Array(nLin).fill(0);
+    for (const o of d.inv.values()) {
+      const ca = o.serie.p_ca, cc = o.serie.p_cc;
+      for (let i = 0; i < nLin; i++) {
+        if (ca && ca[i] != null) { somaCA[i] += ca[i]; nCA[i]++; }
+        if (cc && cc[i] != null) { somaCC[i] += cc[i]; nCC[i]++; }
+      }
+    }
+    const totalInv = d.inv.size;
+    const u = confereUnidade(a.ufv, Math.max(...somaCA));
+    unidades[a.ufv] = u.unidade;
+    const f = u.fator;                                  // leva a MW
+
+    // ---- por instante, com TUDO-OU-NADA -------------------------------------------------------
+    // 🔴 Somar 800 inversores de 1.104 e chamar de usina INVENTA perda: o que falta some do lado
+    //    CA e do CC em proporcoes diferentes, e a diferenca vira "perda" que ninguem teve.
+    for (let i = 0; i < nLin; i++) {
+      if (nCA[i] !== totalInv || nCC[i] !== totalInv) continue;
+      const ms = Date.parse(d.instantes[i].replace(' ', 'T') + 'Z') + 3 * 3600e3;
+      if (!meia.has(ms)) meia.set(ms, {});
+      meia.get(ms)[a.ufv] = { cc: somaCC[i] * f, ca: somaCA[i] * f, n: totalInv };
+    }
+
+    // ---- energia do dia: integra os DOIS lados do mesmo jeito ---------------------------------
+    const completos = [];
+    for (let i = 0; i < nLin; i++) if (nCA[i] === totalInv && nCC[i] === totalInv) completos.push(i);
+    const e_cc = soma(completos.map((i) => somaCC[i] * f)) * 0.5;      // MWh
+    const e_ca = soma(completos.map((i) => somaCA[i] * f)) * 0.5;
+    // o contador do lado CA, para a comparacao com o medidor (energia absoluta)
+    let e_conta = 0, comConta = 0;
+    for (const o of d.inv.values()) {
+      const v = (o.serie.e_conta || []).filter((x) => x != null);
+      if (v.length) { e_conta += Math.max(...v); comConta++; }
+    }
+    if (!diario.has(a.dia)) diario.set(a.dia, {});
+    diario.get(a.dia)[a.ufv] = { e_cc, e_ca, e_conta: e_conta / 1000, n_inv: totalInv,
+      n_conta: comConta, slots: completos.length, slots_totais: nLin };
+
+    // ---- por inversor -------------------------------------------------------------------------
+    for (const o of d.inv.values()) {
+      const cc = o.serie.p_cc || [], ca = o.serie.p_ca || [];
+      const bons = [];
+      for (let i = 0; i < nLin; i++) if (cc[i] != null && ca[i] != null) bons.push(i);
+      if (!bons.length) continue;
+      const eCC = soma(bons.map((i) => cc[i] * f)) * 0.5;
+      const eCA = soma(bons.map((i) => ca[i] * f)) * 0.5;
+      const t = (o.serie.temp || []).filter((x) => x != null);
+      const sp = (o.serie.setpoint || []).filter((x) => x != null);
+      const nom = (o.serie.nominal || []).filter((x) => x != null);
+      porInv.push({ dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
+        e_cc: r4(eCC), e_ca: r4(eCA),
+        ef: eCC > 0.001 ? r4(eCA / eCC) : null,
+        p_ca_max: r2(Math.max(...bons.map((i) => ca[i] * f)) * 1000),   // kW
+        temp_max: t.length ? r2(Math.max(...t)) : null,
+        setpoint_min: sp.length ? r2(Math.min(...sp)) : null,
+        nominal: nom.length ? r2(nom[nom.length - 1]) : null,
+        n: bons.length });
+    }
+    if (escolhidos.indexOf(a) % 40 === 0) {
+      console.log('    ' + a.dia + ' ' + a.ufv + ': ' + totalInv + ' inversores · '
+        + completos.length + '/' + nLin + ' slots completos · unidade ' + u.unidade
+        + ' (razao ' + u.razao.toFixed(2) + ')');
+    }
+  }
+
+  if (!diario.size) throw new Error('nenhum dia aproveitado');
+  const us = [...new Set(Object.keys(CAP_CA_MW))];
+
+  // ---- o medidor, do blob PUBLICO --------------------------------------------------------------
+  const cmp = await puxa(CMP);
+  const med = new Map();
+  for (const l of (cmp.serie || [])) {
+    const dia = String(l.t || '').slice(0, 10);
+    const o = {};
+    for (let i = 1; i <= 9; i++) if (l['w' + i] != null) o['M' + i] = l['w' + i];
+    if (Object.keys(o).length) med.set(dia, o);
+  }
+  console.log('  medidor lido do blob publico: ' + med.size + ' dias');
+
+  // ---- guardas ----------------------------------------------------------------------------------
+  const efs = [], razMed = [];
+  for (const [dia, porU] of diario) {
+    for (const [ufv, o] of Object.entries(porU)) {
+      if (o.e_cc > 1) efs.push(o.e_ca / o.e_cc);
+      const m = (med.get(dia) || {})[ufv];
+      if (m != null && o.e_ca > 1) razMed.push(m / o.e_ca);
+    }
+  }
+  efs.sort((a, b) => a - b); razMed.sort((a, b) => a - b);
+  const efMed = efs[efs.length >> 1], medMed = razMed[razMed.length >> 1];
+  console.log('  eficiencia de conversao (mediana dos dias-usina): ' + (efMed * 100).toFixed(2) + '%'
+    + ' · faixa ' + (efs[0] * 100).toFixed(1) + '% a ' + (efs[efs.length - 1] * 100).toFixed(1) + '%');
+  console.log('  medidor / energia CA dos inversores (mediana): ' + (medMed * 100).toFixed(2) + '%');
+
+  // 🔴 A eficiencia de um inversor de string moderno fica entre 96% e 99% em carga util. Fora
+  //    disso a coluna nao e o que o nome diz — e um numero plausivel com rotulo certo e o modo de
+  //    falhar mais caro desta familia.
+  if (!(efMed > 0.90 && efMed < 0.995)) {
+    throw new Error('eficiencia mediana de ' + (efMed * 100).toFixed(2) + '% esta fora de 90..99,5%. '
+      + 'As colunas de potencia CC e CA nao estao no papel que o nome sugere — NAO publicar.');
+  }
+  // O medidor esta DEPOIS dos inversores, entao ele tem de ser MENOR. Acima de 100% significa
+  // inversor faltando na soma ou medidor de outra usina.
+  if (!(medMed > 0.80 && medMed < 1.02)) {
+    throw new Error('o medidor marca ' + (medMed * 100).toFixed(1) + '% da energia CA dos '
+      + 'inversores. Abaixo de 80% ou acima de 102% nao e perda de coletor — e mapa de usina '
+      + 'trocado ou inversor faltando na soma.');
+  }
+
+  // ---- saida ------------------------------------------------------------------------------------
+  const meta = {
+    gerado_em: new Date().toISOString(),
+    usinas: us, unidades_de_origem: unidades,
+    unidade: 'energia em MWh; potencia em MW; eficiencia adimensional (0..1)',
+    rotulo_de_tempo: 'amostra instantânea a cada 30 min (não é média de intervalo)',
+    metodo: 'energia CC e CA integradas da MESMA forma (soma das amostras × 0,5 h), para que o '
+      + 'erro de integração se cancele na razão; o contador do inversor entra separado, onde a '
+      + 'energia absoluta importa',
+    tudo_ou_nada: 'instante só entra se TODOS os inversores da usina reportarem os dois lados',
+    modulos: MODULOS,
+    capacidade_ca_mw: CAP_CA_MW,
+    fonte_medidor: 'medidor de faturamento, o mesmo número publicado na página de comparação de fontes',
+  };
+
+  const serieDiaria = [...diario.entries()].sort().map(([dia, porU]) => {
+    const o = { dia, ms: Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3 };
+    let scc = 0, sca = 0, smed = 0, ok = 0;
+    for (const ufv of us) {
+      const x = porU[ufv]; if (!x) continue;
+      o[ufv + '_e_cc'] = r2(x.e_cc);
+      o[ufv + '_e_ca'] = r2(x.e_ca);
+      o[ufv + '_n_inv'] = x.n_inv;
+      o[ufv + '_slots'] = x.slots;
+      if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
+      const m = (med.get(dia) || {})[ufv];
+      if (m != null) {
+        o[ufv + '_e_med'] = r2(m);
+        if (x.e_ca > 1) o[ufv + '_perda_col_pct'] = r2(((x.e_ca - m) / x.e_ca) * 100);
+        smed += m; ok++;
+      }
+      scc += x.e_cc; sca += x.e_ca;
+    }
+    if (ok === us.length) {          // tudo-ou-nada tambem no agregado
+      o.Complexo_e_cc = r2(scc); o.Complexo_e_ca = r2(sca); o.Complexo_e_med = r2(smed);
+      o.Complexo_perda_conv_pct = r2(((scc - sca) / scc) * 100);
+      o.Complexo_perda_col_pct = r2(((sca - smed) / sca) * 100);
+    }
+    return o;
+  });
+
+  const serie30 = [...meia.entries()].sort((a, b) => a[0] - b[0]).map(([ms, porU]) => {
+    const o = { ms, t: new Date(ms - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') };
+    for (const ufv of us) {
+      const x = porU[ufv]; if (!x) continue;
+      o[ufv + '_p_cc'] = r2(x.cc); o[ufv + '_p_ca'] = r2(x.ca);
+      if (x.cc > 0.5) o[ufv + '_ef'] = r4(x.ca / x.cc);
+    }
+    return o;
+  });
+
+  const saidas = [];
+  saidas.push('perdas_diario.json: ' + serieDiaria.length + ' dias · '
+    + Math.round(await grava('perdas_diario.json', { ...meta, serie: serieDiaria }) / 1024) + ' KB');
+  saidas.push('perdas_30min.json: ' + serie30.length + ' instantes · '
+    + Math.round(await grava('perdas_30min.json', { ...meta, serie: serie30 }) / 1024) + ' KB');
+  saidas.push('perdas_inv.json: ' + porInv.length + ' linhas · '
+    + Math.round(await grava('perdas_inv.json', { ...meta, serie: porInv }) / 1024) + ' KB');
+  for (const s of saidas) console.log('  ' + s);
+})().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
