@@ -245,7 +245,7 @@ async function grava(nome, obj) {
   const diario = new Map();          // dia -> { ufv -> {...} }
   const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
   const porInv = new Map();          // (dia|ufv|ts|inv) -> linha; lendo em ordem, o ultimo vence
-  const picos = {}, nInv = {};
+  const picos = {}, nInv = {}, cobertura = {};
   let avisouDia = false;       // pico CRU da soma CA e n de inversores, por usina
 
   for (const a of escolhidos) {
@@ -415,12 +415,40 @@ async function grava(nome, obj) {
     throw new Error('eficiencia mediana de ' + (efMed * 100).toFixed(2) + '% esta fora de 90..99,5%. '
       + 'As colunas de potencia CC e CA nao estao no papel que o nome sugere — NAO publicar.');
   }
-  // O medidor esta DEPOIS dos inversores, entao ele tem de ser MENOR. Acima de 100% significa
-  // inversor faltando na soma ou medidor de outra usina.
-  if (!(medMed > 0.80 && medMed < 1.02)) {
-    throw new Error('o medidor marca ' + (medMed * 100).toFixed(1) + '% da energia CA dos '
-      + 'inversores. Abaixo de 80% ou acima de 102% nao e perda de coletor — e mapa de usina '
-      + 'trocado ou inversor faltando na soma.');
+  // 🔴 A PRIMEIRA VERSAO DESTA GUARDA ESTAVA ERRADA, e vale registrar por que. Eu exigi que o
+  //    medidor fosse MENOR que a soma dos inversores — ele esta depois deles, afinal — e pus o teto
+  //    em 102%. Medido: sete usinas dao 100,9% a 104,2%, de forma consistente. O motivo e que a
+  //    amostra do inversor e INSTANTANEA a cada 30 min e o medidor e integrador de verdade: a
+  //    integracao por soma de amostras erra alguns por cento, nos dois sentidos, e essa faixa
+  //    engole a perda de coletor, que e de 1% a 2%. Guarda apertada demais transforma o metodo em
+  //    defeito.
+  //
+  //    O que a guarda julga agora e o SISTEMATICO — a mediana entre usinas. Usina fora da faixa
+  //    NAO aborta: vira ACHADO de cobertura, porque e exatamente assim que o export incompleto se
+  //    manifesta. Medido no mesmo dia: M7 com 39 inversores da 111%, e M9 com 18 da 154% — nos
+  //    dois o medidor ve energia que nenhum inversor do arquivo reportou.
+  if (!(medMed > 0.90 && medMed < 1.10)) {
+    throw new Error('a mediana entre usinas do medidor contra a energia CA dos inversores e '
+      + (medMed * 100).toFixed(1) + '%, fora de 90..110%. Isso nao e erro de integracao — e mapa '
+      + 'de usina trocado ou grandeza errada.');
+  }
+  // cobertura por usina: acima de 108% o arquivo nao tem todos os inversores daquela usina
+  for (const ufv of us) {
+    const rs = [];
+    for (const [dia, porU] of diario) {
+      const o = porU[ufv], m = (med.get(dia) || {})[ufv];
+      if (o && m != null && o.e_ca > 1) rs.push(m / o.e_ca);
+    }
+    if (!rs.length) continue;
+    rs.sort((a, b) => a - b);
+    const r = rs[rs.length >> 1];
+    cobertura[ufv] = { razao_medidor: r4(r), n_inversores: nInv[ufv] || null,
+      pico_pct_da_capacidade: r2(((picos[ufv] || 0) * u.fator / CAP_CA_MW[ufv]) * 100),
+      completa: r <= 1.08 };
+    if (r > 1.08) {
+      console.log('  ⚠️ ' + ufv + ': o medidor ve ' + (r * 100).toFixed(1) + '% da energia dos '
+        + (nInv[ufv] || 0) + ' inversores do arquivo — ha inversor desta usina FORA do export');
+    }
   }
 
   // ---- saida ------------------------------------------------------------------------------------
@@ -435,6 +463,7 @@ async function grava(nome, obj) {
     tudo_ou_nada: 'instante só entra se TODOS os inversores da usina reportarem os dois lados',
     modulos: MODULOS,
     capacidade_ca_mw: CAP_CA_MW,
+    cobertura_por_usina: cobertura,
     fonte_medidor: 'medidor de faturamento, o mesmo número publicado na página de comparação de fontes',
   };
 
