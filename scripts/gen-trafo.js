@@ -143,6 +143,30 @@ const GRANDEZAS = {
   tap: 'AnIn16_InstMag_f',          // POSICAO TAP · sem unidade
 };
 const TEMPS = ['t_oleo', 't_oleo_cdc', 't_enrol'];
+
+// ---------- a PLACA -----------------------------------------------------------------------
+// Folha de dados do fabricante para o complexo. A regra do equipamento mora AQUI, no gerador, e
+// nao no JSONata de cada painel: e a mesma razao pela qual a interpretacao da norma do oleo mora
+// no gen-oleo — duplicar a constante em N paineis garante que uma copia envelheca diferente.
+const PLACA = {
+  fabricante: 'Hitachi Energy Chongqing Transformer',
+  tipo: 'trifasico, instalacao externa, imerso em oleo, nucleo envolvido',
+  ligacao: 'YNyn0yn0d1',
+  resfriamento: 'ONAN / ONAF1 / ONAF2',
+  tensao_kv: { at: 230, mt1: 34.5, mt2: 34.5, terciario: 13.8 },
+  // 🔴 TRES potencias, uma por estagio de ventilacao. Um numero so de "% de carregamento"
+  //   mentiria: o maximo medido, 187,5 MVA, e 81% de ONAF2 e 125% de ONAN.
+  potencia_at_mva: { onan: 150, onaf1: 180, onaf2: 230 },
+  potencia_mt_mva: { onan: 75, onaf1: 90, onaf2: 115 },
+  potencia_terciario_mva: 76,
+  // ⚠️ ELEVACAO sobre o ambiente, em kelvin — NAO e temperatura absoluta. O sensor le absoluto,
+  //   entao comparar exige o ambiente do instante. Ver a nota no cabecalho.
+  elevacao_k: { topo_oleo: 60, enrolamento_medio: 65, ponto_quente: 78 },
+  ambiente_projeto_c: { maximo: 47.5, media_anual: 26, minimo: 19 },
+  tap: { posicoes: 21, neutro: 11, passo_pct: 1.25 },
+  perdas_kw: { vazio: 90, carga_a_230mva: 600 },
+};
+const NOMINAL = PLACA.potencia_at_mva.onaf2;   // o % publicado usa a plena, com os estagios no meta
 // Piso de PLAUSIBILIDADE, deliberadamente conservador. Nao e limiar de alarme nem corta dado: so
 // serve para CONTAR leitura que nenhuma das tres grandezas pode ter num transformador em Mauriti
 // — nem o oleo, nem o enrolamento, nem o ambiente da regiao chegam a 10 °C. Escolhido abaixo de
@@ -268,6 +292,20 @@ function confereFisica(serie) {
       + ' no decil de maior carga. Sob carga alta o fator de potencia tem de estar perto de 1; '
       + 'abaixo disso a coluna nao e cos(fi) e nao pode ser publicada como tal.');
 
+    // CARREGAMENTO contra os TRES estagios de ventilacao. Nao aborta — e informacao, nao defeito —
+    // mas fica visivel no log, porque o mesmo MVA muda de significado conforme o estagio: passar
+    // de ONAN ou de ONAF1 quer dizer que os ventiladores TEM de estar ligados naquela hora.
+    const ss = serie.map((r) => (r[t] || {}).s).filter((x) => x != null);
+    if (ss.length) {
+      const mx = Math.max(...ss);
+      const est = Object.entries(PLACA.potencia_at_mva)
+        .map(([n, v]) => n.toUpperCase() + ' ' + ((mx / v) * 100).toFixed(1) + '%').join(' · ');
+      console.log('  carga ' + t + ': maximo ' + mx.toFixed(1) + ' MVA -> ' + est);
+      if (mx > PLACA.potencia_at_mva.onaf2) {
+        console.log('  ⚠️ ' + t + ' passou da potencia PLENA de ' + PLACA.potencia_at_mva.onaf2 + ' MVA');
+      }
+    }
+
     // TEMPERATURA: a grandeza foi confirmada pela operacao, entao a faixa vira guarda. Ela nao
     // diz qual sensor e qual — diz que continua sendo temperatura. Se a escala do transdutor
     // mudar (4-20 mA reescalado, por exemplo), o job fica vermelho em vez de publicar "1.480
@@ -372,6 +410,8 @@ async function grava(nome, obj) {
       t_oleo_cdc: 'temperatura do óleo do comutador sob carga',
       t_enrol: 'temperatura do enrolamento', tap: 'posição do tap' },
     fonte_dos_nomes: 'lista de pontos da subestação',
+    placa: PLACA,
+    carga_pct_referencia: 'ONAF2 (' + NOMINAL + ' MVA); os estágios ONAN e ONAF1 estão em placa.potencia_at_mva',
     // leituras de 0 °C descartadas por grandeza e por trafo — sensor mudo, nao dia frio
     temperaturas_implausiveis: ruins,
     piso_de_plausibilidade_c: IMPLAUSIVEL,
@@ -396,6 +436,9 @@ async function grava(nome, obj) {
           // FP vai em MODULO: a fonte o entrega negativo exportando (ver o cabecalho)
           o[t + '_' + chave] = r2(chave === 'fp' ? media(vs.map(Math.abs)) : media(vs));
         }
+        // carregamento em % da potencia PLENA (ONAF2). Os tres estagios vao no meta:
+        // o mesmo MVA e 81% de ONAF2 e 125% de ONAN, entao um numero so nao basta para julgar.
+        if (o[t + '_s'] != null) o[t + '_carga_pct'] = r2((o[t + '_s'] / NOMINAL) * 100);
       }
       return o;
     });
@@ -418,6 +461,7 @@ async function grava(nome, obj) {
       const s = rs.map((r) => (r[t] || {}).s).filter((x) => x != null);
       const p = rs.map((r) => (r[t] || {}).p).filter((x) => x != null);
       if (s.length) { o[t + '_s_max'] = r2(Math.max(...s)); o[t + '_s_med'] = r2(media(s)); }
+      if (s.length) o[t + '_carga_pct_max'] = r2((Math.max(...s) / NOMINAL) * 100);
       if (p.length) { o[t + '_p_max'] = r2(Math.max(...p)); o[t + '_p_med'] = r2(media(p)); }
       // desequilibrio de corrente no lado de 230 kV: (max-min)/media entre as tres fases, em %
       const des = [];
