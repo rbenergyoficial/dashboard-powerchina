@@ -658,7 +658,18 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     https.get(url, r => {
       if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode)); }
       const c = []; r.on('data', b => c.push(b));
-      r.on('end', () => { try { res(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { rej(e); } });
+      r.on('end', () => {
+        try {
+          // 🔴 GZIP POR BYTES MAGICOS. Os blobs do ONS passaram a ser gravados comprimidos e este
+          //    leitor os lia como texto: o JSON.parse estourava, o catch de fora contava "mes sem
+          //    arquivo", e o gerador PUBLICAVA assim mesmo. Medido em 26/08/2026: "ONS: 0 de 13
+          //    meses lidos, 0 leituras" — a linha do ONS sumiu do comparativo e ninguem foi
+          //    avisado. Mesma familia do gzip que ja cegou a medicao do gauntlet.
+          let b = Buffer.concat(c);
+          if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+          res(JSON.parse(b.toString('utf8')));
+        } catch (e) { rej(e); }
+      });
     }).on('error', rej);
   });
   const ons = {};                 // 'dia|ufv|slot' -> W/m2 verificado
@@ -676,6 +687,14 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       });
       onsOk++;
     } catch (e) { onsFalta.push(m + ' (' + e.message + ')'); }
+  }
+  // 🔴 NENHUM MES LIDO NAO E "o ONS nao tem dado" — e o LEITOR quebrado. A versao anterior
+  //    registrava a falha no log e publicava assim mesmo: a linha do ONS sumiu do comparativo e
+  //    so foi notada quando alguem foi montar outra coisa em cima. Arquivo que nao existe (404) e
+  //    legitimo — mes ainda nao gerado; erro de LEITURA em todos eles, nao.
+  if (onsMes.length && onsOk === 0 && onsFalta.some((x) => !/HTTP 404/.test(x))) {
+    throw new Error('nenhum dos ' + onsMes.length + ' meses do ONS pode ser lido, e nem todos sao '
+      + '404 — o leitor esta quebrado, nao a fonte. Primeiros: ' + onsFalta.slice(0, 3).join(' · '));
   }
   console.log('ONS: ' + onsOk + ' de ' + onsMes.length + ' meses lidos, ' + Object.keys(ons).length
     + ' leituras' + (onsFalta.length ? ' · sem arquivo: ' + onsFalta.join(', ') : ''));
