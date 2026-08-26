@@ -711,6 +711,11 @@ async function grava(nome, obj) {
       o[ufv + '_e_ca'] = r2(x.e_ca);
       o[ufv + '_e_conta'] = r2(x.e_conta);
       o[ufv + '_n_inv'] = x.n_inv;
+      // 🔴 A cobertura sai AQUI, do lado da placa, e nao no JSONata do painel: dividir pela
+      //    contagem de placa dentro da consulta seria escrever a placa em cada painel que a usa,
+      //    e a primeira usina que ganhasse inversor deixaria as copias divergindo em silencio.
+      o[ufv + '_cob_pct'] = r2((x.n_inv / PLACA[ufv].inversores) * 100);
+      o[ufv + '_n_placa'] = PLACA[ufv].inversores;
       const D = (desp.get(dia) || {})[ufv];
       if (D && D.rs.length) {
         const rs = D.rs.slice().sort((p, q) => p - q);
