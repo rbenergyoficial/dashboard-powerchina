@@ -48,8 +48,9 @@
  *
  * 🔴 O CANAL DE TEMPERATURA DO 04T2 ESTA COM DEFEITO, e o gerador NAO o esconde. Medido em
  *   25/08/2026, histograma da ponta baixa das tres grandezas:
- *        04T1  0-2:3   2-5:2   5-10:9    10-15:5    15-20:4    20-25:4    25+:18034
- *        04T2  0-2:490 2-5:745 5-10:1239 10-15:1238 15-20:1246 20-25:1237 25+:10204
+ *        04T1  0-2:8    2-5:2   5-10:9    10-15:5    15-20:4    20-25:4    25+:18034
+ *        04T2  0-2:1585 2-5:745 5-10:1239 10-15:1238 15-20:1246 20-25:1237 25+:10204
+ *   Abaixo do piso conservador de 10 °C: 19,7% a 20,8% no 04T2 contra 0,1% no 04T1.
  *   No 04T2 sao ~7.800 leituras (43% da serie) abaixo de 25 °C, com distribuicao UNIFORME —
  *   ~1.240 em cada faixa de 5 °C, ate 0,01 °C. Temperatura se AGRUPA; distribuicao chata assim e
  *   um canal descendo em rampa ate zero e voltando.
@@ -68,11 +69,25 @@
  *   `aaaa-mm-dd HH:MM:SS`. O parser aceita as DUAS formas e RECUSA linha que nao case nenhuma —
  *   adivinhar aqui troca dia por mes calado nos doze primeiros dias de cada mes.
  *
- * ⚠️ DIVIDA DECLARADA: a borda do balde (se o rotulo marca o inicio ou o fim do intervalo) esta
- *   INDETERMINADA. O blob guarda o rotulo como a fonte entrega e declara isso em
- *   `rotulo_de_tempo`. Para resolver, o caminho e o mesmo do comparativo: varrer o deslocamento
- *   contra a potencia ja medida em `cmp_30min.json` e escolher pelo erro. Ate la, nenhum painel
- *   deste blob pode ser comparado instante a instante com outra fonte.
+ * ✅ NAO EXISTE BALDE: o valor e uma AMOSTRA INSTANTANEA no instante do rotulo. Medido em
+ *   25/08/2026 contra o medidor de faturamento a 5 min (`cmp_5min.json`, borda esquerda), em 667
+ *   instantes com geracao — erro medio da potencia do trafo contra a energia de cada janela:
+ *        esquerda [T, T+30)    8,422 MWh   · vence em 20,4% dos casos
+ *        CENTRO   [T-15, T+15) 3,028 MWh   · vence em 59,5%      <- 2,57x melhor
+ *        direita  [T-30, T)    7,792 MWh   · vence em 24,0%
+ *   Uma amostra instantanea em T se parece com a media da janela CENTRADA em T; e o que a
+ *   medicao mostra, e a propria tag ja dizia: `AnIn30_InstMag_f`, `...$cVal$mag$f` — *instantaneous
+ *   magnitude*. Nao ha borda a escolher porque nao ha intervalo integrado.
+ *
+ * 🔴 A VARREDURA DE 30 MIN NAO TINHA RESOLVIDO, e a razao vale para a proxima vez: deslocar de
+ *   balde em balde compara em passos do MESMO tamanho da duvida. Desloc -1 deu 8,646 MWh e desloc
+ *   0 deu 8,969 — 4% de diferenca, dentro do ruido, enquanto +-2 saltavam para 19. Empate assim
+ *   NAO significa "os dois servem": significa que a resposta esta ENTRE eles, e que a referencia
+ *   precisa ser mais fina que a ambiguidade.
+ *
+ * ⚠️ CONSEQUENCIA PARA QUEM SOMAR ENERGIA: amostra a cada 30 min nao integra. `p x 0,5 h` e uma
+ *   aproximacao — sobra ~3,9% de erro medio contra o medidor —, e o pico diario e o maior valor
+ *   AMOSTRADO, que subestima o pico real. Para energia, a fonte continua sendo o medidor.
  *
  * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados
  *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio sem segredo.
@@ -347,8 +362,9 @@ async function grava(nome, obj) {
   const meta = {
     gerado_em: new Date().toISOString(),
     trafos: TRAFOS,
-    // ⚠️ ver a nota no cabecalho: a borda do balde nao foi determinada.
-    rotulo_de_tempo: 'como a fonte entrega — borda do intervalo INDETERMINADA',
+    // Medido contra o medidor a 5 min: nao ha intervalo integrado, ha amostra pontual.
+    rotulo_de_tempo: 'amostra instantânea no instante do rótulo (não é média de intervalo)',
+    energia_derivada: 'p × 0,5 h é aproximação — amostra de 30 min não integra; para energia, use o medidor',
     unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA',
       fp: 'modulo de cos(fi), 0..1', t_oleo: '°C', t_oleo_cdc: '°C', t_enrol: '°C', tap: 'degrau' },
     pontos: { 1: 'lado 230 kV', 2: 'lado 1X 34,5 kV', 3: 'lado 2X 34,5 kV' },
