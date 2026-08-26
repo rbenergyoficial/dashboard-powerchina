@@ -106,8 +106,9 @@ const MODULOS = {
 //   3. trackers x capacidade (Sti-H250 = 116 modulos, Trina Vanguard 1x87 = 87, 1x58 = 58)
 //      reproduz a contagem de modulos EXATA nas nove.
 //
-// ⚠️ A planilha tem UM erro, e ele se prova sozinho: em M05 as 11 e as 22 unidades estao TROCADAS
-//    entre TS7 e TS8. A linha do TS8 traz metade do kWp, metade do kW, metade dos modulos e
+// ⚠️ A planilha tem UM erro, CONFIRMADO pelo usuario em 26/08/2026: em M05 as 11 e as 22 unidades
+//    estao TROCADAS entre TS7 e TS8 — o TS7 tem 22 e o TS8 tem 11. Ele tambem se prova sozinho:
+//    a linha do TS8 traz metade do kWp, metade do kW, metade dos modulos e
 //    metade dos trackers do TS7 — e mesmo assim 22 inversores contra 11. A telemetria concorda
 //    com a fisica (TS7 com 22, TS8 com 11). Fica registrado com o numero que sustenta a decisao,
 //    para que a proxima leitura da planilha encontre a conclusao em vez da duvida.
