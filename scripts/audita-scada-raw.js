@@ -266,10 +266,13 @@ async function inventario(c, pedaco) {
     if (!m) return;
     if (!porTs.has(m[1])) porTs.set(m[1], new Map());
     const t = porTs.get(m[1]);
-    if (!t.has(m[2])) t.set(m[2], { cols: [], cheias: 0, gerador: 0 });
+    if (!t.has(m[2])) t.set(m[2], { cols: [], cheias: 0, gerador: 0, exemplo: null });
     const o = t.get(m[2]);
     o.cols.push(j);
     if (INV_GERADOR.test(col)) o.gerador++;
+    // 🔴 guarda-se UM nome de coluna recusada. Sem ele o auditor diz QUANTAS o gerador rejeita e
+    //    nao diz por que — e mexer no regex as cegas e como reescrever o padrao de memoria.
+    else if (!o.exemplo) o.exemplo = col;
   });
   // preenchimento: uma passada so pelo arquivo, contando por coluna
   const cheias = new Array(cab.length).fill(0);
@@ -293,6 +296,9 @@ async function inventario(c, pedaco) {
       + ' · com algum valor: ' + String(ivs.length - vazios.length).padStart(3)
       + (vazios.length ? '   VAZIOS: ' + vazios.join(' ') : '')
       + (soFrouxo.length ? '   SO NO PADRAO FROUXO: ' + soFrouxo.join(' ') : ''));
+    for (const [i, o] of ivs) {
+      if (!o.gerador && o.exemplo) console.log('        ' + ts + ' ' + i + ' recusada: ' + o.exemplo);
+    }
   }
   console.log('  TOTAL no cabecalho ' + nInv + ' · vazios ' + nVazios
     + ' · com dado ' + (nInv - nVazios) + ' · rejeitados pelo padrao do gerador ' + nSoFrouxo);
