@@ -1,9 +1,11 @@
 name: Perdas (cascata CC -> CA -> medidor) -> perdas_*.json
 on:
   schedule:
-    # 09:52 BRT — depois do export do SCADA (~03:00 BRT) e depois do comparativo, de quem ele lê
-    # o medidor. Minuto quebrado de propósito: no :00 o agendador do GitHub atrasa 30 a 90 min.
-    - cron: '52 12 * * *'
+    # 11:12 BRT — DEPOIS do comparativo (10:40 BRT), de quem ele lê o medidor de faturamento.
+    # 🔴 A ordem importa: no horário anterior (09:52 BRT) ele leria sempre o blob da rodada da
+    # véspera, e a comparação inversor-contra-medidor ficaria um dia atrás sem avisar.
+    # Minuto quebrado de propósito: no :00 o agendador do GitHub atrasa 30 a 90 min.
+    - cron: '12 14 * * *'
   workflow_dispatch:
     inputs:
       dias:
