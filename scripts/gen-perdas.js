@@ -63,6 +63,9 @@ const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const DIAS = Number(process.env.DIAS || 30);
 const CMP = 'https://rbenergydata.blob.core.windows.net/dados/cmp_diario.json';
+// BRUTO x LIQUIDO: o consumo proprio da usina. O bruto (energia recebida) vem do cmp_diario e o
+// liquido do way2_daily — os dois publicos, os dois do MESMO medidor de faturamento.
+const W2D = 'https://rbenergydata.blob.core.windows.net/dados/way2_daily.json';
 
 // M<NN>_<AAAAMMDD>_<HHMMSS>.csv em qualquer posicao (o blob vem prefixado pelo id do SharePoint)
 const CARIMBO = /M(\d{2})_(\d{8})_\d{6}\.csv$/i;
@@ -91,7 +94,17 @@ const GRANDEZAS = {
   setpoint: 'SETPOINT POTÊNCIA ATIVA',   // separa curtailment de defeito
   nominal: 'POTÊNCIA ATIVA NOMINAL',
   temp: 'TEMPERATURA INTERNA',
+  isol: 'RESISTÊNCIA DE ISOLAÇÃO',
+  freq: 'FREQUÊNCIA DA REDE',
+  fp: 'FATOR DE POTÊNCIA TOTAL',
+  horas: 'TEMPO DE OPERAÇÃO DIÁRIA',
 };
+// 🔴 As 12 correntes de MPPT e as 24 de string NAO vao para o blob uma a uma: seriam ~40 mil
+//    series para 1.104 inversores, e nenhum painel le isso. O que vai e a DISPERSAO entre elas
+//    no instante de maior potencia do inversor — que e o sinal fino de string suja, sombreada ou
+//    desconectada, reduzido a um numero por inversor por dia.
+const MPPT_RE = /^CORRENTE MPPT (\d+)$/;
+const STRING_RE = /^CORRENTE STRING (\d+)$/;
 
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const s = norm(v).replace(',', '.'); if (!s) return null;
@@ -159,7 +172,9 @@ function leUsinaDia(buf) {
   cols.forEach((c, i) => {
     const m = norm(c).match(RE);
     if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
-    const chave = alvo.get(m[4]);
+    let chave = alvo.get(m[4]);
+    if (!chave && MPPT_RE.test(m[4])) chave = 'mppt#' + m[4].match(MPPT_RE)[1];
+    if (!chave && STRING_RE.test(m[4])) chave = 'str#' + m[4].match(STRING_RE)[1];
     if (!chave) return;
     const k = m[2] + '|' + m[3] + '|' + chave;
     if (!cand.has(k)) cand.set(k, []);
@@ -330,6 +345,21 @@ async function grava(nome, obj) {
       if (!bons.length) continue;
       const eCC = soma(bons.map((i) => cc[i] * f)) * 0.5;
       const eCA = soma(bons.map((i) => ca[i] * f)) * 0.5;
+      // dispersao entre MPPTs e entre strings NO INSTANTE DE MAIOR POTENCIA do proprio inversor.
+      // ⚠️ Tem de ser no pico: em baixa irradiancia todas as correntes sao pequenas e a dispersao
+      //    relativa estoura por ruido, apontando defeito onde ha so amanhecer.
+      let iPico = bons[0];
+      for (const i of bons) if ((ca[i] || 0) > (ca[iPico] || 0)) iPico = i;
+      const disp = (pref) => {
+        const v = Object.keys(o.serie).filter((k) => k.startsWith(pref))
+          .map((k) => o.serie[k][iPico]).filter((x) => x != null && x > 0);
+        if (v.length < 3) return null;
+        const ord = v.slice().sort((x, y) => x - y);
+        const md = ord[ord.length >> 1];
+        return md > 0.2 ? { n: v.length, med: r2(md),
+          min_pct: r2((ord[0] / md) * 100), max_pct: r2((ord[ord.length - 1] / md) * 100) } : null;
+      };
+      const dm = disp('mppt#'), ds = disp('str#');
       const t = (o.serie.temp || []).filter((x) => x != null);
       const sp = (o.serie.setpoint || []).filter((x) => x != null);
       const nom = (o.serie.nominal || []).filter((x) => x != null);
@@ -340,6 +370,14 @@ async function grava(nome, obj) {
         temp_max: t.length ? r2(Math.max(...t)) : null,
         setpoint_min: sp.length ? r2(Math.min(...sp)) : null,
         nominal: nom.length ? r2(nom[nom.length - 1]) : null,
+        // no pico do proprio inversor: quanto a MENOR corrente vale em relacao a mediana das suas
+        // irmas. 100% e equilibrio perfeito; string desconectada leva isso perto de zero.
+        mppt_min_pct: dm ? dm.min_pct : null, mppt_n: dm ? dm.n : null,
+        str_min_pct: ds ? ds.min_pct : null, str_max_pct: ds ? ds.max_pct : null, str_n: ds ? ds.n : null,
+        isol_min: (o.serie.isol || []).filter((x) => x != null).length
+          ? r2(Math.min(...(o.serie.isol || []).filter((x) => x != null))) : null,
+        horas: (o.serie.horas || []).filter((x) => x != null).length
+          ? r2(Math.max(...(o.serie.horas || []).filter((x) => x != null))) : null,
         n: bons.length });
     }
     if (escolhidos.indexOf(a) % 40 === 0) {
@@ -389,6 +427,15 @@ async function grava(nome, obj) {
     if (Object.keys(o).length) med.set(dia, o);
   }
   console.log('  medidor lido do blob publico: ' + med.size + ' dias');
+
+  // ---- bruto x liquido: o consumo proprio ------------------------------------------------------
+  const w2 = await puxa(W2D);
+  const liq = new Map();
+  for (const l of (w2.dias || [])) {
+    if (!l.completo) continue;          // dia parcial nao serve para consumo, que e quase fixo
+    liq.set(l.dia, { ufv: l.ufv_liq_mwh || {}, ger: l.ene_ger_mwh, lq: l.ene_liq_mwh });
+  }
+  console.log('  liquido lido do blob publico: ' + liq.size + ' dias completos');
 
   // ---- guardas ----------------------------------------------------------------------------------
   const efs = [], razMed = [];
@@ -499,6 +546,16 @@ async function grava(nome, obj) {
       o[ufv + '_n_conta'] = x.n_conta;
       o[ufv + '_slots'] = x.slots;
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
+      // consumo proprio da usina: o que o medidor recebeu menos o que ficou liquido
+      const L = liq.get(dia);
+      if (L && L.ufv[ufv] != null) {
+        const bruto = (med.get(dia) || {})[ufv];
+        if (bruto != null && bruto > 1) {
+          o[ufv + '_e_liq'] = r2(L.ufv[ufv]);
+          o[ufv + '_consumo_mwh'] = r2(bruto - L.ufv[ufv]);
+          o[ufv + '_consumo_pct'] = r2(((bruto - L.ufv[ufv]) / bruto) * 100);
+        }
+      }
       const m = (med.get(dia) || {})[ufv];
       if (m != null) {
         o[ufv + '_e_med'] = r2(m);
@@ -525,6 +582,16 @@ async function grava(nome, obj) {
       o.Complexo_e_cc = r2(scc); o.Complexo_e_ca = r2(sca);
       o.Complexo_e_conta = r2(scon); o.Complexo_e_med = r2(smed);
       o.Complexo_perda_conv_pct = r2(((scc - sca) / scc) * 100);
+      // ⚠️ No complexo o bruto e o liquido saem do MESMO blob, medidos no mesmo ponto — nao ha
+      //    mistura de fontes. O consumo em MWh e quase FIXO ao longo dos dias; e a geracao que
+      //    varia. Publicar so o percentual faria o dia nublado parecer desperdicio, entao vao os
+      //    dois: o absoluto diz quanto se consome, o percentual diz quanto isso pesa.
+      const L = liq.get(dia);
+      if (L && L.ger > 1) {
+        o.Complexo_e_bruto = r2(L.ger); o.Complexo_e_liq = r2(L.lq);
+        o.Complexo_consumo_mwh = r2(L.ger - L.lq);
+        o.Complexo_consumo_pct = r2(((L.ger - L.lq) / L.ger) * 100);
+      }
       if (scon > 1) o.Complexo_razao_med_conta = r4(smed / scon);
     }
     return o;
