@@ -91,6 +91,98 @@ const DIURNO = [8, 15];                           // janela de sol alto p/ conta
 const r2 = v => (v == null || !isFinite(v) ? null : Math.round(v * 100) / 100);
 const r3 = v => (v == null || !isFinite(v) ? null : Math.round(v * 1000) / 1000);
 
+// ---------- O CONJUNTO: a media das nove estacoes ----------------------------------------------
+//
+// 🔴 TODA grandeza da solarimetria e INTENSIVA — W/m2, kWh/m2, graus, %, m/s, mm. NENHUMA se soma:
+//    a do conjunto e a MEDIA das estacoes. Somar irradiancia daria nove sois. Nao ha aqui a
+//    duvida que existe na energia, onde o conjunto e soma; e por isso que este agregado nao herda
+//    a regra do MUST nem a do comparativo.
+//
+// 🔴 TUDO-OU-NADA, e POR CAMPO. Media sobre subconjunto variavel muda sozinha quando uma estacao
+//    cai, e o painel mostra a mudanca como se fosse do ceu. Medido em 26/08/2026 nos 333 dias
+//    completos: tirar uma estacao desloca a media diaria em 0,37% na media do ano e ate 12,50%
+//    num dia. O custo do tudo-ou-nada foi medido junto e e pequeno: a irradiancia no plano perde
+//    31 dias de 364, e eles sao um bloco so (08/08 a 05/09/2025, antes de a estacao do M9
+//    reportar); as demais grandezas perdem 1 dia.
+//
+// ⚠️ POR CAMPO, nao por linha, porque a cobertura difere entre grandezas: a irradiancia no plano
+//    tem 333 dias completos e a difusa tem 363. Uma regra por linha descartaria a difusa nos dias
+//    em que faltou so a do plano — jogaria fora dado bom por causa do vizinho.
+//
+// ⚠️ CONTAGEM nao e media: `dias` vale o mesmo nas nove e a media de contagem daria fracao de dia.
+//    Vai o maximo.
+const COMPLEXO = 'Complexo';
+
+function agregaComplexo(linhas, chaves, opts) {
+  const o = opts || {};
+  const us = [...new Set((linhas || []).map(l => l.ufv))].filter(u => u !== COMPLEXO);
+  if (us.length < 2) return [];
+  const grupos = new Map();
+  for (const l of linhas) {
+    if (l.ufv === COMPLEXO) continue;
+    const k = chaves.map(c => l[c]).join('');
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(l);
+  }
+  const out = [];
+  for (const ls of grupos.values()) {
+    if (ls.length !== us.length) continue;                 // o grupo precisa das nove estacoes
+    const linha = { ufv: COMPLEXO };
+    for (const c of chaves) linha[c] = ls[0][c];
+    const campos = new Set();
+    for (const l of ls) for (const k of Object.keys(l)) campos.add(k);
+    for (const k of campos) {
+      if (k === 'ufv' || chaves.includes(k)) continue;
+      const nums = ls.map(l => l[k]).filter(v => typeof v === 'number' && isFinite(v));
+      if (nums.length === us.length) {
+        linha[k] = (o.contagens || []).includes(k)
+          ? Math.max(...nums)
+          : r2(nums.reduce((a, b) => a + b, 0) / nums.length);
+        continue;
+      }
+      // campo nao numerico igual nas nove viaja junto; qualquer outra coisa vira nulo declarado —
+      // a CHAVE tem de existir, senao o Infinity infere coluna a menos na linha do conjunto
+      const vals = new Set(ls.map(l => l[k]));
+      linha[k] = (nums.length === 0 && vals.size === 1) ? ls[0][k] : null;
+    }
+    // 🔴 TOTAL DO MES so existe se as nove somaram o MESMO numero de dias. Medido em 26/08/2026:
+    //    em set/2025 o M9 mediu 23 dias e as outras oito mediram 30, e a media dos nove totais deu
+    //    211,99 kWh/m2 contra 219,37 das oito completas — 3,4% ABAIXO, por cobertura e nao por sol.
+    //    O conjunto apareceria como o pior "mes" da pagina justamente onde nao houve nada de
+    //    errado com o ceu.
+    // ⚠️ A guarda vale so para os TOTAIS. Media de 23 dias com media de 30 continua sendo media, e
+    //    anular tambem as medias jogaria fora dado bom. Por isso a lista e explicita e diz de qual
+    //    campo diario cada total vem — nao ha como deduzir isso do nome.
+    for (const [campoMes, campoDia] of Object.entries(o.somas || {})) {
+      if (!(campoMes in linha) || linha[campoMes] == null) continue;
+      const cob = us.map(u => (o.diarias || [])
+        .filter(d => d.ufv === u && d[o.chaveMes] === linha[o.chaveMes] && d[campoDia] != null).length);
+      if (new Set(cob).size !== 1) linha[campoMes] = null;
+    }
+    out.push(linha);
+  }
+  return out;
+}
+
+// aplica nos tres produtos de uma vez; devolve o que acrescentou, para o log dizer.
+// ⚠️ IDEMPOTENTE: tira o que ja houver antes de recalcular. Sem isso, rodar sobre a propria saida
+//    (o modo semente le um arquivo que este gerador escreveu) duplicaria a linha do conjunto.
+function comComplexo(serieDia, serieMes, semihora) {
+  for (const l of [serieDia, serieMes, semihora]) {
+    for (let i = l.length - 1; i >= 0; i--) if (l[i].ufv === COMPLEXO) l.splice(i, 1);
+  }
+  const cd = agregaComplexo(serieDia, ['dia', 'mes', 'dia_num']);
+  const cm = agregaComplexo(serieMes, ['mes'], { contagens: ['dias'],
+    // de qual campo DIARIO cada total do mes vem — a lista e explicita porque o nome nao diz
+    somas: { gti_kwh: 'gti', dif_kwh: 'dif', dni_kwh: 'dni', chuva_mm: 'chuva' },
+    chaveMes: 'mes', diarias: serieDia });
+  const ch = agregaComplexo(semihora, ['dia', 't']);
+  if (cd.length) serieDia.push(...cd);
+  if (cm.length) serieMes.push(...cm);
+  if (ch.length) semihora.push(...ch);
+  return { dia: cd.length, mes: cm.length, semihora: ch.length };
+}
+
 async function fonteLinhas() {
   const local = process.env.IIRR_LOCAL;
   if (local) return readline.createInterface({ input: fs.createReadStream(local, 'utf8'), crlfDelay: Infinity });
@@ -317,14 +409,25 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
       + 'Definir IIRR_URL no workflow faz o gerador voltar a ler o CSV cru.';
     const seedH = 'data/irr_hora_seed.json.gz';
-    if (fs.existsSync(seedH)) {
-      const h = leSeed(seedH);
-      const linhas = h.serie_semihora || [];
+    const hSeed = fs.existsSync(seedH) ? leSeed(seedH) : null;
+    // 🔴 O CONJUNTO ENTRA AQUI, ANTES DE QUALQUER EMISSAO, e nos TRES produtos de uma vez. Sao 27
+    //    paineis que filtram por usina; calcular a media no JSONata de cada um garantiria que uma
+    //    copia envelhecesse diferente das outras. Como todos ja filtram `ufv in $us`, o conjunto
+    //    chega a eles sem que nenhum painel mude.
+    j.serie_dia = j.serie_dia || []; j.serie_mes = j.serie_mes || [];
+    const linhas = (hSeed && hSeed.serie_semihora) || [];
+    const nc = comComplexo(j.serie_dia, j.serie_mes, linhas);
+    j.agregados = [COMPLEXO];
+    console.log('conjunto (media das ' + (j.ufvs || []).length + ' estacoes) · '
+      + nc.dia + ' dias · ' + nc.mes + ' meses · ' + nc.semihora + ' instantes de 30 min');
+    if (hSeed) {
+      const h = hSeed;
       // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode
       // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
       j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
       const rh = await emiteNiveis({ gerado_em: h.gerado_em, fonte: h.fonte,
-        nota: h.nota, ufvs: h.ufvs, modo: 'seed' }, linhas, j.serie_dia || [], j.serie_mes || [],
+        nota: h.nota, ufvs: h.ufvs, agregados: [COMPLEXO], modo: 'seed' },
+      linhas, j.serie_dia, j.serie_mes,
       j.meses || [], (j.meses || []).concat('tudo').map(m => HORA_PRE + m + '.json'));
       console.log('niveis republicados do seed · ' + rh.arquivos + ' arquivos · '
         + Math.round(rh.bytes / 1024) + ' KB · ' + rh.dias + ' dias · ' + rh.linhas + ' linhas de 30 min');
@@ -635,6 +738,13 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
             : q.fora > 0 ? 'picos isolados' : 'ok' });
   }));
 
+  // 🔴 O conjunto entra ANTES de `out` e antes das emissoes, para alcancar os TRES produtos: o blob
+  //    principal, os arquivos por nivel de zoom e os por resolucao. Mesmo ponto unico do modo
+  //    semente — a regra da media nao pode existir em dois lugares.
+  const nc = comComplexo(serie_dia, serie_mes, serie_semihora);
+  console.log('conjunto (media das ' + ufvs.length + ' estacoes) · ' + nc.dia + ' dias · '
+    + nc.mes + ' meses · ' + nc.semihora + ' instantes de 30 min');
+
   const out = {
     gerado_em: new Date().toISOString(),
     fonte: 'SCADA · export IIRR (estações solarimétricas), 30 min. Energia = média da leitura × 0,5 h. '
@@ -642,7 +752,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       + 'A diferença entre as duas é indicador de sensor.',
     janela: { ini: tsIni, fim: tsFim }, resolucao_min: 30, linhas: nLinhas,
     mapeamento: EST_UFV, faixa_fisica: FAIXA,
-    ufvs, grandezas: grs, dias: dias.length, meses,
+    ufvs, agregados: [COMPLEXO], grandezas: grs, dias: dias.length, meses,
     serie_dia, serie_mes, qualidade,
   };
   // a horaria sai antes, em um arquivo por mes, so os ultimos HORA_DIAS dias
