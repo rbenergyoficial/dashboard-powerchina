@@ -11,8 +11,22 @@
  *        --[EneatRec do medidor]-->  ponto de faturamento
  *
  *   1. conversao       = (E_cc - E_ca) / E_cc          <- os DOIS lados medidos no MESMO inversor
- *   2. coletor         = (E_ca - E_medidor) / E_ca     <- inversores contra o medidor da usina
+ *   2. coletor         NAO E MENSURAVEL com estas fontes — ver abaixo
  *   3. consumo proprio = EneatDel / EneatRec           <- bruto contra liquido no mesmo medidor
+ *
+ * 🔴 A ETAPA 2 CAIU NA MEDICAO, e vale registrar porque a intuicao dizia o contrario. O medidor
+ *    esta DEPOIS dos inversores, entao ele deveria ler MENOS que eles — a diferenca seria a perda
+ *    do coletor de 34,5 kV, de 1% a 2%. Medido em 32 dias e nas sete usinas com export completo,
+ *    ele le de 100,4% a 103,3%: MAIS, nao menos.
+ *
+ *    Primeiro suspeitei da integracao por amostra e liguei o contador de energia do proprio
+ *    inversor, que e integrador de verdade. Nao mudou nada: contador e integracao concordam
+ *    dentro de 0,5%. O que resta e diferenca de INSTRUMENTO — medidor de faturamento e classe
+ *    0,2S/0,5S, medicao interna de inversor e classe 1 a 2 —, e ela tem a mesma ordem de grandeza
+ *    da perda que se queria medir, com o sinal trocado.
+ *
+ *    Por isso o blob publica a RAZAO entre os dois instrumentos, nunca uma perda. Um painel de
+ *    perdas com numero negativo faria o leitor concluir que o coletor gera energia.
  *
  * 🔴 NADA AQUI E ESTIMADO. A etapa 1 e a mais forte da cascata: e o mesmo equipamento, no mesmo
  *    instante, com as duas grandezas publicadas lado a lado pelo proprio inversor.
@@ -488,12 +502,21 @@ async function grava(nome, obj) {
       const m = (med.get(dia) || {})[ufv];
       if (m != null) {
         o[ufv + '_e_med'] = r2(m);
-        // 🔴 A PERDA DE COLETOR SAI DO CONTADOR, nao da integracao. Os dois lados da conversao sao
-        //    integrados da mesma forma e o erro se cancela na razao; aqui nao ha razao que cancele
-        //    nada — e uma diferenca entre dois numeros grandes, e o erro da integracao (~2 a 3%) e
-        //    MAIOR que a perda de coletor (1 a 2%) que se quer medir. Com o contador de energia do
-        //    proprio inversor, os dois lados passam a ser integradores de verdade.
-        if (x.e_conta > 1) o[ufv + '_perda_col_pct'] = r2(((x.e_conta - m) / x.e_conta) * 100);
+        // 🔴 NAO EXISTE "perda de coletor" AQUI, e a medicao e que diz isso. Eu supus que o erro
+        //    da integracao por amostra (~2 a 3%) estivesse mascarando uma perda de 1 a 2%, e liguei
+        //    o contador de energia do inversor para eliminar esse erro. Medido nas sete usinas com
+        //    export completo: contador e integracao concordam dentro de 0,5% — a integracao nunca
+        //    foi o problema.
+        //
+        //    O que sobra e que o medidor le 1 a 3% A MAIS que os inversores produzem, de forma
+        //    consistente. Isso NAO pode ser perda: perda faria o medidor ler MENOS. E diferenca de
+        //    INSTRUMENTO — medidor de faturamento e classe 0,2S/0,5S, medicao interna de inversor
+        //    e classe 1 a 2 —, e ela tem a mesma ordem de grandeza da perda que se queria medir.
+        //
+        //    Entao a etapa publica a RAZAO entre os dois instrumentos, e nao uma perda. Publicar
+        //    `perda_col_pct` poria um numero NEGATIVO num painel de perdas, e quem lesse concluiria
+        //    que o coletor gera energia.
+        if (x.e_conta > 1) o[ufv + '_razao_med_conta'] = r4(m / x.e_conta);
         smed += m; ok++;
       }
       scc += x.e_cc; sca += x.e_ca; scon += x.e_conta;
@@ -502,7 +525,7 @@ async function grava(nome, obj) {
       o.Complexo_e_cc = r2(scc); o.Complexo_e_ca = r2(sca);
       o.Complexo_e_conta = r2(scon); o.Complexo_e_med = r2(smed);
       o.Complexo_perda_conv_pct = r2(((scc - sca) / scc) * 100);
-      if (scon > 1) o.Complexo_perda_col_pct = r2(((scon - smed) / scon) * 100);
+      if (scon > 1) o.Complexo_razao_med_conta = r4(smed / scon);
     }
     return o;
   });
