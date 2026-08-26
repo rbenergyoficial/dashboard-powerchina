@@ -388,19 +388,25 @@ async function grava(nome, obj) {
   // 🔴 A falha tem de DIZER O QUE VIU. Uma guarda que so barra manda adivinhar entre mapa
   //    trocado, inversor faltando, dia deslocado e integracao errada — e sao quatro hipoteses
   //    diferentes, cada uma com uma correcao diferente.
-  console.log('  energia CA dos inversores contra o medidor, por usina (mediana dos dias):');
+  console.log('  medidor contra as DUAS medidas de energia CA do inversor:');
+  console.log('    (integrada = soma das amostras; contador = ENERGIA DIARIA GERADA do inversor)');
   for (const ufv of us) {
     const rs = [];
     for (const [dia, porU] of diario) {
       const o = porU[ufv], m = (med.get(dia) || {})[ufv];
-      if (o && m != null && o.e_ca > 1) rs.push({ dia, inv: o.e_ca, med: m, r: m / o.e_ca });
+      if (o && m != null && o.e_ca > 1) {
+        rs.push({ dia, inv: o.e_ca, con: o.e_conta, med: m, r: m / o.e_ca,
+          rc: o.e_conta > 1 ? m / o.e_conta : null });
+      }
     }
     if (!rs.length) { console.log('    ' + ufv + ': sem par'); continue; }
     rs.sort((a, b) => a.r - b.r);
     const q = rs[rs.length >> 1];
-    console.log('    ' + ufv.padEnd(4) + q.dia + '  inversores ' + q.inv.toFixed(1).padStart(8)
-      + ' MWh · medidor ' + q.med.toFixed(1).padStart(8) + ' MWh · ' + (q.r * 100).toFixed(1) + '%'
-      + '   (n=' + rs.length + ')');
+    console.log('    ' + ufv.padEnd(4) + q.dia + '  integrada ' + q.inv.toFixed(1).padStart(7)
+      + ' · contador ' + (q.con == null ? '   -   ' : q.con.toFixed(1).padStart(7))
+      + ' · medidor ' + q.med.toFixed(1).padStart(7) + ' MWh  ->  medidor/integrada '
+      + (q.r * 100).toFixed(1) + '%  medidor/contador '
+      + (q.rc == null ? '-' : (q.rc * 100).toFixed(1) + '%') + '  (n=' + rs.length + ')');
   }
   efs.sort((a, b) => a - b); razMed.sort((a, b) => a - b);
   const efMed = efs[efs.length >> 1], medMed = razMed[razMed.length >> 1];
@@ -469,26 +475,34 @@ async function grava(nome, obj) {
 
   const serieDiaria = [...diario.entries()].sort().map(([dia, porU]) => {
     const o = { dia, ms: Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3 };
-    let scc = 0, sca = 0, smed = 0, ok = 0;
+    let scc = 0, sca = 0, scon = 0, smed = 0, ok = 0;
     for (const ufv of us) {
       const x = porU[ufv]; if (!x) continue;
       o[ufv + '_e_cc'] = r2(x.e_cc);
       o[ufv + '_e_ca'] = r2(x.e_ca);
+      o[ufv + '_e_conta'] = r2(x.e_conta);
       o[ufv + '_n_inv'] = x.n_inv;
+      o[ufv + '_n_conta'] = x.n_conta;
       o[ufv + '_slots'] = x.slots;
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
       const m = (med.get(dia) || {})[ufv];
       if (m != null) {
         o[ufv + '_e_med'] = r2(m);
-        if (x.e_ca > 1) o[ufv + '_perda_col_pct'] = r2(((x.e_ca - m) / x.e_ca) * 100);
+        // 🔴 A PERDA DE COLETOR SAI DO CONTADOR, nao da integracao. Os dois lados da conversao sao
+        //    integrados da mesma forma e o erro se cancela na razao; aqui nao ha razao que cancele
+        //    nada — e uma diferenca entre dois numeros grandes, e o erro da integracao (~2 a 3%) e
+        //    MAIOR que a perda de coletor (1 a 2%) que se quer medir. Com o contador de energia do
+        //    proprio inversor, os dois lados passam a ser integradores de verdade.
+        if (x.e_conta > 1) o[ufv + '_perda_col_pct'] = r2(((x.e_conta - m) / x.e_conta) * 100);
         smed += m; ok++;
       }
-      scc += x.e_cc; sca += x.e_ca;
+      scc += x.e_cc; sca += x.e_ca; scon += x.e_conta;
     }
     if (ok === us.length) {          // tudo-ou-nada tambem no agregado
-      o.Complexo_e_cc = r2(scc); o.Complexo_e_ca = r2(sca); o.Complexo_e_med = r2(smed);
+      o.Complexo_e_cc = r2(scc); o.Complexo_e_ca = r2(sca);
+      o.Complexo_e_conta = r2(scon); o.Complexo_e_med = r2(smed);
       o.Complexo_perda_conv_pct = r2(((scc - sca) / scc) * 100);
-      o.Complexo_perda_col_pct = r2(((sca - smed) / sca) * 100);
+      if (scon > 1) o.Complexo_perda_col_pct = r2(((scon - smed) / scon) * 100);
     }
     return o;
   });
