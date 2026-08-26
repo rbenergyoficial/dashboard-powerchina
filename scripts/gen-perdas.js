@@ -361,6 +361,15 @@ async function grava(nome, obj) {
       };
       const dm = disp('mppt#'), ds = disp('str#');
       const t = (o.serie.temp || []).filter((x) => x != null);
+      // 🔴 A REFERENCIA DE DESPACHO SE MEDE DURANTE A GERACAO, nao no minimo do dia. O minimo do
+      //    dia e a NOITE: com o inversor desligado a referencia vai a zero, e o minimo diario passa
+      //    a ser zero quase todo dia. Publiquei assim na primeira versao e o painel saiu com M1 em
+      //    6.893% — dividir pelo tipico de um inversor cujo tipico e ~zero explode. A mediana
+      //    tomada apenas nos instantes em que o inversor de fato produz e a grandeza que existe.
+      const pico = Math.max(...bons.map((i) => ca[i] || 0));
+      const spGer = bons.filter((i) => (ca[i] || 0) > 0.05 * pico)
+        .map((i) => (o.serie.setpoint || [])[i]).filter((x) => x != null);
+      const spOrd = spGer.slice().sort((x, y) => x - y);
       const sp = (o.serie.setpoint || []).filter((x) => x != null);
       const nom = (o.serie.nominal || []).filter((x) => x != null);
       porInv.set(a.dia + '|' + a.ufv + '|' + o.ts + '|' + o.inv, { dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
@@ -369,6 +378,7 @@ async function grava(nome, obj) {
         p_ca_max: r2(Math.max(...bons.map((i) => ca[i] * f)) * 1000),   // kW
         temp_max: t.length ? r2(Math.max(...t)) : null,
         setpoint_min: sp.length ? r2(Math.min(...sp)) : null,
+        setpoint_ger: spOrd.length >= 3 ? r2(spOrd[spOrd.length >> 1]) : null,
         nominal: nom.length ? r2(nom[nom.length - 1]) : null,
         // no pico do proprio inversor: quanto a MENOR corrente vale em relacao a mediana das suas
         // irmas. 100% e equilibrio perfeito; string desconectada leva isso perto de zero.
@@ -532,22 +542,25 @@ async function grava(nome, obj) {
   const porInvUfv = new Map();
   for (const o of porInv.values()) {
     const k = o.ufv + '|' + o.ts + '|' + o.inv;
-    if (o.setpoint_min == null) continue;
+    if (o.setpoint_ger == null) continue;
     if (!porInvUfv.has(k)) porInvUfv.set(k, []);
-    porInvUfv.get(k).push(o.setpoint_min);
+    porInvUfv.get(k).push(o.setpoint_ger);
   }
   for (const [k, v] of porInvUfv) {
     const s = v.slice().sort((a, b) => a - b);
-    if (s.length >= 5 && s[s.length - 1] > 0) tipico.set(k, s[s.length >> 1]);
+    // 🔴 a MEDIANA tem de ser positiva, nao o maximo: um inversor cujo tipico e ~zero faz
+    //    qualquer dia normal virar milhares por cento, que foi exatamente o defeito publicado.
+    const md = s[s.length >> 1];
+    if (s.length >= 5 && md > 0) tipico.set(k, md);
   }
   const desp = new Map();                    // dia -> ufv -> { raz, limitados, n }
   for (const o of porInv.values()) {
     const t = tipico.get(o.ufv + '|' + o.ts + '|' + o.inv);
-    if (t == null || t <= 0 || o.setpoint_min == null) continue;
+    if (t == null || t <= 0 || o.setpoint_ger == null) continue;
     if (!desp.has(o.dia)) desp.set(o.dia, {});
     const d = desp.get(o.dia);
     if (!d[o.ufv]) d[o.ufv] = { rs: [], lim: 0 };
-    const r = o.setpoint_min / t;
+    const r = o.setpoint_ger / t;
     d[o.ufv].rs.push(r);
     if (r < 0.5) d[o.ufv].lim++;             // metade do proprio tipico: limitacao inequivoca
   }
