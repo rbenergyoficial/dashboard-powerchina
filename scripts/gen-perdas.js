@@ -55,7 +55,7 @@ const CARIMBO = /M(\d{2})_(\d{8})_\d{6}\.csv$/i;
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
 
 // 🔴 A capacidade CA de cada usina e o que permite DESCOBRIR a unidade da coluna de potencia sem
-//    supor. Ver `confereUnidade`.
+//    supor, e e tambem a referencia que revela usina rodando abaixo do que deveria. Ver decideUnidade.
 const CAP_CA_MW = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11,
   M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };
 
@@ -178,17 +178,32 @@ function leUsinaDia(buf) {
 //    e o modo de falhar mais caro desta familia. Aqui o pico da SOMA dos inversores da usina e
 //    comparado com a capacidade CA declarada dela: a razao so pode dar ~1 (MW), ~1000 (kW) ou
 //    ~1e6 (W). Qualquer outra coisa significa que a coluna nao e o que o nome diz, e o job para.
-function confereUnidade(ufv, picoSomaCA) {
-  const cap = CAP_CA_MW[ufv];
-  if (!cap) throw new Error('usina desconhecida: ' + ufv);
+// 🔴 A unidade e determinada UMA VEZ para o export inteiro, e nao por usina. Ela e propriedade da
+//    coluna — mesmo SCADA, mesmo nome —, entao decidi-la usina a usina faz uma usina que gera
+//    POUCO parecer erro de unidade. Foi o que aconteceu na primeira rodada: o M9 chegou a 49% da
+//    capacidade e o job abortou, quando 49% e um ACHADO sobre o M9, nao um problema de leitura.
+//    A regra passa a ser: a unidade sai da usina que casa MELHOR, e a razao de cada uma das outras
+//    vira informacao no log.
+let UNIDADE = null;
+function decideUnidade(picos) {
   const cand = [{ f: 1, u: 'MW' }, { f: 1e-3, u: 'kW' }, { f: 1e-6, u: 'W' }];
+  let melhor = null;
   for (const c of cand) {
-    const razao = (picoSomaCA * c.f) / cap;
-    if (razao > 0.55 && razao < 1.25) return { fator: c.f, unidade: c.u, razao };
+    for (const [ufv, pico] of Object.entries(picos)) {
+      const razao = (pico * c.f) / CAP_CA_MW[ufv];
+      const erro = Math.abs(Math.log(razao));            // simetrico: 2x e 0,5x pesam igual
+      if (razao > 0.6 && razao < 1.3 && (!melhor || erro < melhor.erro)) {
+        melhor = { fator: c.f, unidade: c.u, razao, erro, ufv };
+      }
+    }
   }
-  throw new Error(ufv + ': pico da soma CA = ' + picoSomaCA + ', e a capacidade e ' + cap
-    + ' MW. Nenhuma unidade (MW/kW/W) explica a razao — a coluna de potencia ativa mudou de '
-    + 'significado, e publicar assim poria a grandeza errada com o rotulo certo.');
+  if (!melhor) {
+    throw new Error('nenhuma usina casa MW, kW ou W contra a capacidade declarada. Picos: '
+      + Object.entries(picos).map(([u, p]) => u + '=' + Math.round(p)).join(' ')
+      + '. A coluna de potencia ativa mudou de significado — publicar assim poria a grandeza '
+      + 'errada com o rotulo certo.');
+  }
+  return melhor;
 }
 
 // ---------- saida -------------------------------------------------------------------------------
@@ -229,7 +244,7 @@ async function grava(nome, obj) {
   const diario = new Map();          // dia -> { ufv -> {...} }
   const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
   const porInv = [];                 // uma linha por (dia, ufv, ts, inv)
-  const unidades = {};
+  const picos = {}, nInv = {};       // pico CRU da soma CA e n de inversores, por usina
 
   for (const a of escolhidos) {
     let d;
@@ -249,9 +264,11 @@ async function grava(nome, obj) {
       }
     }
     const totalInv = d.inv.size;
-    const u = confereUnidade(a.ufv, Math.max(...somaCA));
-    unidades[a.ufv] = u.unidade;
-    const f = u.fator;                                  // leva a MW
+    // ⚠️ Guarda o valor CRU e escala DEPOIS: a unidade so pode ser decidida quando todas as usinas
+    //    tiverem sido vistas, senao a primeira usina do lote decide sozinha por todas.
+    const f = 1;
+    picos[a.ufv] = Math.max(picos[a.ufv] || 0, Math.max(...somaCA));
+    nInv[a.ufv] = totalInv;
 
     // ---- por instante, com TUDO-OU-NADA -------------------------------------------------------
     // 🔴 Somar 800 inversores de 1.104 e chamar de usina INVENTA perda: o que falta some do lado
@@ -300,13 +317,40 @@ async function grava(nome, obj) {
     }
     if (escolhidos.indexOf(a) % 40 === 0) {
       console.log('    ' + a.dia + ' ' + a.ufv + ': ' + totalInv + ' inversores · '
-        + completos.length + '/' + nLin + ' slots completos · unidade ' + u.unidade
-        + ' (razao ' + u.razao.toFixed(2) + ')');
+        + completos.length + '/' + nLin + ' slots completos');
     }
   }
 
   if (!diario.size) throw new Error('nenhum dia aproveitado');
   const us = [...new Set(Object.keys(CAP_CA_MW))];
+
+  // ---- a unidade, decidida UMA VEZ com todas as usinas a vista --------------------------------
+  const u = decideUnidade(picos);
+  UNIDADE = u.unidade;
+  console.log('  unidade da coluna de potencia: ' + u.unidade + ' (decidida pelo ' + u.ufv
+    + ', razao ' + u.razao.toFixed(3) + ')');
+  console.log('  pico da soma CA contra a capacidade declarada, por usina:');
+  for (const ufv of us) {
+    if (picos[ufv] == null) { console.log('    ' + ufv + ': sem dado'); continue; }
+    const r = (picos[ufv] * u.fator) / CAP_CA_MW[ufv];
+    console.log('    ' + ufv.padEnd(4) + String(nInv[ufv]).padStart(4) + ' inversores · pico '
+      + (picos[ufv] * u.fator).toFixed(2).padStart(7) + ' MW de ' + String(CAP_CA_MW[ufv]).padStart(7)
+      + ' MW = ' + (r * 100).toFixed(1) + '%' + (r < 0.6 ? '   <-- ACHADO: bem abaixo da capacidade' : ''));
+  }
+
+  // aplica o fator a tudo o que foi guardado cru
+  const F = u.fator;
+  for (const porU of diario.values()) {
+    for (const o of Object.values(porU)) { o.e_cc *= F; o.e_ca *= F; }
+  }
+  for (const porU of meia.values()) {
+    for (const o of Object.values(porU)) { o.cc *= F; o.ca *= F; }
+  }
+  for (const o of porInv) {
+    if (o.e_cc != null) o.e_cc = r4(o.e_cc * F);
+    if (o.e_ca != null) o.e_ca = r4(o.e_ca * F);
+    if (o.p_ca_max != null) o.p_ca_max = r2(o.p_ca_max * F);
+  }
 
   // ---- o medidor, do blob PUBLICO --------------------------------------------------------------
   const cmp = await puxa(CMP);
@@ -352,7 +396,7 @@ async function grava(nome, obj) {
   // ---- saida ------------------------------------------------------------------------------------
   const meta = {
     gerado_em: new Date().toISOString(),
-    usinas: us, unidades_de_origem: unidades,
+    usinas: us, unidade_de_origem: UNIDADE,
     unidade: 'energia em MWh; potencia em MW; eficiencia adimensional (0..1)',
     rotulo_de_tempo: 'amostra instantânea a cada 30 min (não é média de intervalo)',
     metodo: 'energia CC e CA integradas da MESMA forma (soma das amostras × 0,5 h), para que o '
