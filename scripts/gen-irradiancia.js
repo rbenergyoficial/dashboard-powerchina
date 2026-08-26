@@ -35,7 +35,9 @@ const fs = require('fs'), https = require('https'), readline = require('readline
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
 // SAIDA EM DOIS GRUPOS:
 //   irr_ufv.json          - o blob principal: serie diaria, mensal, qualidade e a lista dias_hora.
-//   irr_hora_<mes>-<dia>  - UM ARQUIVO POR NIVEL DE ZOOM do painel (ver emiteNiveis).
+//   irr_<familia>_<res>   - UM ARQUIVO POR FAMILIA DE GRANDEZA (ver emiteFamilias). Os
+//                           antigos por nivel de zoom (irr_hora_*) foram aposentados
+//                           em 26/08/2026 e hoje so carregam lapide.
 // O Infinity BAIXA a URL e SO DEPOIS aplica o JSONata, entao filtrar no root_selector nao economiza
 // um byte de rede: quem decide o peso e o recorte do ARQUIVO. Um blob unico com todo o semi-horario
 // daria 8 MB, e um por mes daria 1,7 MB por mes cheio - em toda renderizacao, inclusive nos niveis
@@ -407,6 +409,32 @@ async function emiteFamilias(meta, semihora, resFonte) {
   return { arquivos: n, bytes, detalhe };
 }
 
+// ---------------------------------------------------------------------------------------------
+// LAPIDE DOS ARQUIVOS POR NIVEL DE ZOOM
+//
+// Eles existiram para dar a pagina um recorte por MES e por DIA, e era isso que obrigava a
+// Solarimetria a ter os filtros Mes e Dia — eles nao filtravam, ESCOLHIAM O ARQUIVO. Desde
+// 26/08/2026 os paineis leem os arquivos por FAMILIA e recortam pelo seletor de tempo do Grafana.
+//
+// 🔴 Nao se apagam: eles ficariam no container com nome plausivel e dado congelado, esperando
+//    alguem apontar para eles. Recebem lapide — um objeto que DIZ o que aconteceu — pela mesma
+//    convencao que os `irr_hora_<mes>.json` do formato anterior ja receberam.
+async function lapideNiveis(meses, diasHora) {
+  const nomes = [HORA_PRE + 'tudo-tudo.json']
+    .concat((meses || []).map((m) => HORA_PRE + m + '-tudo.json'))
+    .concat((diasHora || []).map((d) => HORA_PRE + d.slice(0, 7) + '-' + d.slice(8, 10) + '.json'))
+    .concat((meses || []).concat('tudo').map((m) => HORA_PRE + m + '.json'));
+  let n = 0;
+  for (const nome of [...new Set(nomes)]) {
+    await writeOut({ obsoleto: 'Aposentado em 26/08/2026. A pagina deixou de ter os filtros Mes e '
+      + 'Dia: os paineis agora leem irr_<familia>_<resolucao>.json e recortam pelo seletor de tempo '
+      + 'do Grafana. As familias sao plano, comp, albedo, temp, tmod, umid, vento, chuva, sujeira e '
+      + 'bateria.' }, nome);
+    n++;
+  }
+  return n;
+}
+
 async function emiteResolucoes(meta, semihora, resFonte) {
   if (!semihora || !semihora.length) return { arquivos: 0, bytes: 0, pulados: RESOLUCOES.length };
   const ufvs = [...new Set(semihora.map(x => x.ufv))].sort();
@@ -472,30 +500,6 @@ async function emiteResolucoes(meta, semihora, resFonte) {
   return { arquivos: n, bytes, pulados, detalhe: linha };
 }
 
-async function emiteNiveis(meta, semihora, serieDia, serieMes, mesesTodos, antigos) {
-  const shDia = {}, diaMes = {};
-  semihora.forEach(l => (shDia[l.dia] = shDia[l.dia] || []).push(l));
-  (serieDia || []).forEach(l => (diaMes[l.mes] = diaMes[l.mes] || []).push(l));
-  let n = 0, bytes = 0;
-  const grava = async (nome, obj) => { bytes += await writeOut(Object.assign({}, meta, obj), nome); n++; };
-
-  await grava(HORA_PRE + 'tudo-tudo.json', { nivel: 'mes', serie_mes: serieMes || [] });
-  for (const m of [...new Set(mesesTodos || [])].sort()) {
-    await grava(HORA_PRE + m + '-tudo.json', { nivel: 'dia', mes: m, serie_dia: diaMes[m] || [] });
-  }
-  for (const d of Object.keys(shDia).sort()) {
-    // o `dia` sai das linhas: o arquivo INTEIRO e daquele dia, repetir a data 432 vezes e desperdicio
-    const rows = shDia[d].map(({ dia, ...r }) => r);
-    await grava(HORA_PRE + d.slice(0, 7) + '-' + d.slice(8, 10) + '.json',
-      { nivel: 'semihora', dia: d, resolucao_min: 30, serie_semihora: rows });
-  }
-  for (const nome of antigos || []) {
-    await grava(nome, { obsoleto: 'Formato antigo (um pacote por mes). O painel agora le um arquivo '
-      + 'por nivel de zoom: irr_hora_<mes>-tudo.json para os dias do mes e irr_hora_<mes>-<dd>.json '
-      + 'para o semi-horario do dia. Este arquivo nao e mais atualizado.' });
-  }
-  return { arquivos: n, bytes, dias: Object.keys(shDia).length, linhas: semihora.length };
-}
 
 // os seeds vao GZIPADOS no repo: o semi-horario cru da 6 MB, e cada regeracao gravaria 6 MB novos no
 // historico do git (blob binario nao se delta-comprime). Gzipado da ~600 KB, e ler custa uma linha.
@@ -528,12 +532,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode
       // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
       j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
-      const rh = await emiteNiveis({ gerado_em: h.gerado_em, fonte: h.fonte,
-        nota: h.nota, ufvs: h.ufvs, agregados: [COMPLEXO], modo: 'seed' },
-      linhas, j.serie_dia, j.serie_mes,
-      j.meses || [], (j.meses || []).concat('tudo').map(m => HORA_PRE + m + '.json'));
-      console.log('niveis republicados do seed · ' + rh.arquivos + ' arquivos · '
-        + Math.round(rh.bytes / 1024) + ' KB · ' + rh.dias + ' dias · ' + rh.linhas + ' linhas de 30 min');
+      const rl = await lapideNiveis(j.meses || [], j.dias_hora || []);
+      console.log('niveis por zoom: ' + rl + ' arquivo(s) com lapide (aposentados)');
       const rr = await emiteResolucoes({ gerado_em: h.gerado_em, fonte: h.fonte, modo: 'seed' },
         linhas, h.resolucao_min || 30);
       console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
@@ -887,16 +887,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode oferecer
   // dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
   out.dias_hora = [...new Set(hora.map(x => x.dia))].sort();
-  const rh = await emiteNiveis({
-    gerado_em: out.gerado_em, fonte: out.fonte,
-    nota: 'UM ARQUIVO POR NIVEL DE ZOOM do painel: tudo-tudo = serie mensal, <mes>-tudo = os dias do '
-      + 'mes, <mes>-<dd> = o semi-horario do dia (30 min, resolucao nativa do export e a mesma que o '
-      + 'ONS publica). Cada arquivo carrega so o nivel que o painel le naquele estado. '
-      + 'Irradiancia em W/m2 — potencia, como o sensor e o ONS reportam.',
-    janela: { ini: corte, fim: dias[dias.length - 1] }, ufvs,
-  }, hora, serie_dia, serie_mes, meses, meses.concat('tudo').map(m => HORA_PRE + m + '.json'));
-  console.log('niveis OK · ' + rh.arquivos + ' arquivos · ' + Math.round(rh.bytes / 1024) + ' KB · '
-    + rh.dias + ' dias de 30 min desde ' + corte);
+  const rlap = await lapideNiveis(meses, out.dias_hora || []);
+  console.log('niveis por zoom: ' + rlap + ' arquivo(s) com lapide (aposentados)');
 
   // ⚠️ Aqui vai a serie INTEIRA, nao a recortada em 120 dias que alimenta os niveis de zoom: o
   // arquivo de 60 min cobre um ano, e passar `hora` o deixaria com quatro meses sem nada avisar.
