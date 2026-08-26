@@ -16,6 +16,7 @@
  * Uso (variaveis de ambiente):
  *   ALVOS=IIRR_2026,Trafo_2026        pedacos de nome; a busca e por SUBSTRING, sem ancora
  *   MODO=vocab                        (padrao) vocabulario de colunas
+ *   MODO=inv   ALVOS=M01_2026        quais INV existem no cabecalho, por TS, e quais vem vazios
  *   MODO=par  PAR_A=IRR_20260807  PAR_B=IIRR_20260808  PAR_COL='IRRADIAÇÃO INCLINADA'
  */
 const { BlobServiceClient } = require('@azure/storage-blob');
@@ -224,9 +225,88 @@ async function stats(c, pedaco) {
   }
 }
 
+// ---------- MODO inv: quem EXISTE no cabecalho do export de inversores -------------------------
+//
+// A pergunta que este modo responde e uma so, e ela precede qualquer conclusao sobre falta de
+// inversor: o inversor que nao aparece no blob esta AUSENTE DO ARQUIVO, ou esta no arquivo com a
+// coluna VAZIA? Sao dois defeitos diferentes, com donos diferentes — escopo do export contra
+// comunicacao do equipamento — e a tela nao distingue os dois.
+//
+// 🔴 O PADRAO AQUI E DE PROPOSITO MAIS FROUXO QUE O DO GERADOR. Se ele fosse o mesmo, este
+//    auditor validaria a peneira do gerador contra a propria peneira, e um inversor que o
+//    gerador deixa cair por causa do padrao sairia daqui como "nao existe no arquivo". E o
+//    mesmo defeito de forma da guarda que compara o resultado com a premissa que o produziu.
+const INV_FROUXO = /^UFV_\w+_(TS\d+)_(INV\d+)_/;
+const INV_GERADOR = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_\1 \2 \3 (.+?)(_\d)?$/;
+
+let LISTA = null;                      // o container tem milhares de blobs; lista-se UMA vez
+async function lista(c) {
+  if (LISTA) return LISTA;
+  LISTA = [];
+  for await (const b of c.listBlobsFlat()) {
+    LISTA.push({ nome: b.name, bytes: b.properties.contentLength || 0 });
+  }
+  return LISTA;
+}
+
+async function inventario(c, pedaco) {
+  // o mais RECENTE, nao o maior: os diarios tem tamanho parecido e o nome carrega a data
+  const p = pedaco.toLowerCase();
+  const todos = await lista(c);
+  const hits = todos.filter((b) => b.nome.toLowerCase().includes(p));
+  if (!hits.length) throw new Error('nenhum blob contendo "' + pedaco + '" — 0 de ' + todos.length);
+  hits.sort((a, b) => (a.nome < b.nome ? 1 : -1));
+  const a = hits[0];
+  const { cab, linhas } = await le(c, a.nome);
+  const nLin = linhas.length - 1;
+
+  const porTs = new Map();               // TS -> Map(INV -> { cols, cheias, gerador })
+  cab.forEach((col, j) => {
+    const m = col.match(INV_FROUXO);
+    if (!m) return;
+    if (!porTs.has(m[1])) porTs.set(m[1], new Map());
+    const t = porTs.get(m[1]);
+    if (!t.has(m[2])) t.set(m[2], { cols: [], cheias: 0, gerador: 0 });
+    const o = t.get(m[2]);
+    o.cols.push(j);
+    if (INV_GERADOR.test(col)) o.gerador++;
+  });
+  // preenchimento: uma passada so pelo arquivo, contando por coluna
+  const cheias = new Array(cab.length).fill(0);
+  for (let i = 1; i < linhas.length; i++) {
+    const q = linhas[i].split(';');
+    for (let j = 1; j < cab.length; j++) if (num(q[j]) != null) cheias[j]++;
+  }
+  for (const t of porTs.values()) {
+    for (const o of t.values()) o.cheias = o.cols.reduce((s, j) => s + (cheias[j] || 0), 0);
+  }
+
+  console.log('\n==== ' + a.nome + '  ' + Math.round(a.bytes / 1024) + ' KB · '
+    + cab.length + ' colunas · ' + nLin + ' linhas · ' + hits.length + ' arquivo(s) casaram');
+  let nInv = 0, nVazios = 0, nSoFrouxo = 0;
+  for (const [ts, t] of [...porTs].sort()) {
+    const ivs = [...t].sort();
+    const vazios = ivs.filter(([, o]) => !o.cheias).map(([i]) => i);
+    const soFrouxo = ivs.filter(([, o]) => !o.gerador).map(([i]) => i);
+    nInv += ivs.length; nVazios += vazios.length; nSoFrouxo += soFrouxo.length;
+    console.log('  ' + ts.padEnd(5) + ' no cabecalho: ' + String(ivs.length).padStart(3)
+      + ' · com algum valor: ' + String(ivs.length - vazios.length).padStart(3)
+      + (vazios.length ? '   VAZIOS: ' + vazios.join(' ') : '')
+      + (soFrouxo.length ? '   SO NO PADRAO FROUXO: ' + soFrouxo.join(' ') : ''));
+  }
+  console.log('  TOTAL no cabecalho ' + nInv + ' · vazios ' + nVazios
+    + ' · com dado ' + (nInv - nVazios) + ' · rejeitados pelo padrao do gerador ' + nSoFrouxo);
+}
+
 (async () => {
   if (!process.env.DADOS_STORAGE) throw new Error('sem DADOS_STORAGE');
   const c = cli();
+  if (MODO === 'inv') {
+    for (const p of (process.env.ALVOS || '').split(',').map((x) => x.trim()).filter(Boolean)) {
+      await inventario(c, p);
+    }
+    return;
+  }
   if (MODO === 'par') { await par(c); return; }
   if (MODO === 'stats') {
     for (const p of (process.env.ALVOS || '').split(',').map((x) => x.trim()).filter(Boolean)) await stats(c, p);
