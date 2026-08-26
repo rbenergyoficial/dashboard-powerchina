@@ -87,6 +87,72 @@ const MODULOS = {
     usinas: ['M4', 'M5', 'M7', 'M8', 'M9'] },
 };
 
+// ---------- A PLACA DO PARQUE ------------------------------------------------------------------
+//
+// Lida da planilha de informacao do parque (uma tabela consolidada mais uma por usina, aberta por
+// eletrocentro). Mora aqui pela mesma razao que a placa do transformador mora no gen-trafo e a
+// interpretacao da NBR mora no gen-oleo: constante duplicada em N paineis envelhece diferente.
+//
+// 🔴 E ela que da a REFERENCIA que faltava. Ate hoje `completa` saia de um limiar sobre o proprio
+//    dado (razao do medidor abaixo de 1,08) — guarda que julga o resultado contra a premissa que
+//    o produziu, e por isso dizia `completa: true` nas seis usinas de 165 inversores das quais o
+//    export traz 160. Agora e uma COMPARACAO com um numero de fora.
+//
+// Cada linha fecha por tres caminhos independentes, e foi essa conferencia que autorizou gravar:
+//   1. modulos x Wp reproduz a potencia CC da propria planilha (60.988,16 kWp no M1, e nas nove);
+//   2. modulos / 29 da INTEIRO exato nas nove, e esse inteiro dividido pelo numero de inversores
+//      da 22,0 — exatamente o `str_n` dominante MEDIDO na telemetria. A string tem 29 modulos e o
+//      inversor tem 22 strings, e as duas rotas se confirmam sem terem sido combinadas;
+//   3. trackers x capacidade (Sti-H250 = 116 modulos, Trina Vanguard 1x87 = 87, 1x58 = 58)
+//      reproduz a contagem de modulos EXATA nas nove.
+//
+// ⚠️ A planilha tem UM erro, e ele se prova sozinho: em M05 as 11 e as 22 unidades estao TROCADAS
+//    entre TS7 e TS8. A linha do TS8 traz metade do kWp, metade do kW, metade dos modulos e
+//    metade dos trackers do TS7 — e mesmo assim 22 inversores contra 11. A telemetria concorda
+//    com a fisica (TS7 com 22, TS8 com 11). Fica registrado com o numero que sustenta a decisao,
+//    para que a proxima leitura da planilha encontre a conclusao em vez da duvida.
+const MODULOS_POR_STRING = 29;          // DERIVADO, nao declarado — ver o item 2 acima
+const PLACA = {
+  M1: { inversores: 165, modulos: 105212, cc_kwp: 60988.16, ca_kw: 51000,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 11, TS4: 22, TS5: 22, TS6: 22, TS7: 22, TS8: 22 } },
+  M2: { inversores: 88, modulos: 56144, cc_kwp: 32282.80, ca_kw: 27200,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22 } },
+  M3: { inversores: 165, modulos: 105328, cc_kwp: 61054.86, ca_kw: 51000,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 11, TS5: 22, TS6: 22, TS7: 22, TS8: 22 } },
+  M4: { inversores: 165, modulos: 105212, cc_kwp: 60988.16, ca_kw: 51000,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22, TS5: 22, TS6: 11, TS7: 22, TS8: 22 } },
+  M5: { inversores: 165, modulos: 105270, cc_kwp: 61021.36, ca_kw: 51000,
+    // TS7/TS8: a planilha inverte 11 e 22; vale a leitura que a propria linha dela sustenta
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22, TS5: 22, TS6: 22, TS7: 22, TS8: 11 } },
+  M6: { inversores: 165, modulos: 105270, cc_kwp: 60530.25, ca_kw: 51000,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22, TS5: 11, TS6: 22, TS7: 22, TS8: 22 } },
+  M7: { inversores: 44, modulos: 28130, cc_kwp: 16174.75, ca_kw: 13600,
+    inv_por_ts: { TS1: 22, TS2: 22 } },
+  M8: { inversores: 165, modulos: 105270, cc_kwp: 60530.25, ca_kw: 51000,
+    inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22, TS5: 22, TS6: 22, TS7: 11, TS8: 22 } },
+  M9: { inversores: 33, modulos: 21054, cc_kwp: 12106.05, ca_kw: 10200,
+    inv_por_ts: { TS1: 11, TS2: 22 } },
+};
+
+// 🔴 A placa se confere contra ELA MESMA na partida, nao na revisao de codigo. Se alguem corrigir
+//    um numero sem corrigir os outros, o job fica vermelho em vez de publicar uma placa incoerente.
+for (const [u, p] of Object.entries(PLACA)) {
+  const soma = Object.values(p.inv_por_ts).reduce((a, b) => a + b, 0);
+  if (soma !== p.inversores) {
+    throw new Error('PLACA ' + u + ': os eletrocentros somam ' + soma + ' inversores e o total diz '
+      + p.inversores);
+  }
+  if (p.modulos % MODULOS_POR_STRING) {
+    throw new Error('PLACA ' + u + ': ' + p.modulos + ' modulos nao e multiplo de '
+      + MODULOS_POR_STRING + ' — ou a contagem mudou, ou a string deixou de ter 29 modulos');
+  }
+  const strPorInv = (p.modulos / MODULOS_POR_STRING) / p.inversores;
+  if (Math.abs(strPorInv - 22) > 0.15) {
+    throw new Error('PLACA ' + u + ': ' + strPorInv.toFixed(2) + ' strings por inversor, e o '
+      + 'inversor tem 22 — modulos e inversores nao contam a mesma usina');
+  }
+}
+
 const GRANDEZAS = {
   p_cc: 'POTÊNCIA DC TOTAL',
   p_ca: 'POTÊNCIA ATIVA TOTAL',
@@ -509,7 +575,22 @@ async function grava(nome, obj) {
       + (medMed * 100).toFixed(1) + '%, fora de 90..110%. Isso nao e erro de integracao — e mapa '
       + 'de usina trocado ou grandeza errada.');
   }
-  // cobertura por usina: acima de 108% o arquivo nao tem todos os inversores daquela usina
+  // ---- cobertura por usina: quantos dos inversores DE PLACA chegaram ao arquivo ----------------
+  //
+  // 🔴 O criterio mudou de dono. Ele era `razao_medidor <= 1,08`, um limiar sobre o proprio dado —
+  //    e por isso dizia `completa: true` nas seis usinas de 165 inversores das quais o export traz
+  //    160: 3% de falta cabia folgado dentro dos 8% de tolerancia. Agora a completude e uma
+  //    CONTAGEM contra a placa, e o limiar sobre o medidor volta ao papel dele, que e outro:
+  //    denunciar o caso em que a falta e grande o bastante para aparecer na energia.
+  //
+  // A razao corrigida e o que torna a perda ate o medidor legivel de novo. Sem ela, o somatorio
+  // dos inversores esta sistematicamente subdimensionado e o medidor parece ler MAIS do que a
+  // usina gerou — foi o que refutou, erradamente, a perda de coletora.
+  //
+  // ⚠️ Ela e uma REGRA DE TRES, e a suposicao vai declarada: os inversores ausentes geram como os
+  //    presentes. Vale enquanto a falta for pequena e espalhada; e por isso que a perda ate o
+  //    medidor NAO e publicada como numero, so a razao de onde ela sai. Publicar "perda de X%"
+  //    apoiado numa extrapolacao de 3% da usina seria dar ao numero uma firmeza que ele nao tem.
   for (const ufv of us) {
     const rs = [];
     for (const [dia, porU] of diario) {
@@ -519,14 +600,32 @@ async function grava(nome, obj) {
     if (!rs.length) continue;
     rs.sort((a, b) => a - b);
     const r = rs[rs.length >> 1];
-    cobertura[ufv] = { razao_medidor: r4(r), n_inversores: nInv[ufv] || null,
+    const p = PLACA[ufv];
+    const n = nInv[ufv] || 0;
+    const fator = n ? p.inversores / n : null;             // o quanto o somatorio esta subdimensionado
+    cobertura[ufv] = {
+      razao_medidor: r4(r),
+      n_inversores: n || null,
+      inversores_de_placa: p.inversores,
+      inversores_ausentes: p.inversores - n,
+      cobertura_pct: n ? r2((n / p.inversores) * 100) : null,
+      razao_medidor_corrigida: fator ? r4(r / fator) : null,
       pico_pct_da_capacidade: r2(((picos[ufv] || 0) * u.fator / CAP_CA_MW[ufv]) * 100),
-      completa: r <= 1.08 };
-    if (r > 1.08) {
-      console.log('  ⚠️ ' + ufv + ': o medidor ve ' + (r * 100).toFixed(1) + '% da energia dos '
-        + (nInv[ufv] || 0) + ' inversores do arquivo — ha inversor desta usina FORA do export');
+      completa: n === p.inversores,
+    };
+    if (n !== p.inversores) {
+      console.log('  ⚠️ ' + ufv + ': ' + n + ' de ' + p.inversores + ' inversores de placa no '
+        + 'arquivo (' + ((n / p.inversores) * 100).toFixed(1) + '%) · medidor '
+        + (r * 100).toFixed(1) + '% da energia deles, ' + ((r / fator) * 100).toFixed(1)
+        + '% corrigido pela cobertura');
     }
   }
+  // 🔴 A soma nao pode ser um numero que ninguem confere: o total de placa e conhecido, entao o
+  //    total ausente vai para o log toda rodada. Uma falta que CRESCE e a informacao que interessa.
+  const totPlaca = us.reduce((a, x) => a + PLACA[x].inversores, 0);
+  const totArq = us.reduce((a, x) => a + (nInv[x] || 0), 0);
+  console.log('  cobertura do parque: ' + totArq + ' de ' + totPlaca + ' inversores ('
+    + ((totArq / totPlaca) * 100).toFixed(1) + '%) · ausentes ' + (totPlaca - totArq));
 
   // ---- limitacao de despacho, por usina e por dia ------------------------------------------------
   // 🔴 A REFERENCIA E O PROPRIO INVERSOR, nao a potencia nominal. Medido: `setpoint_min` dividido
@@ -587,6 +686,17 @@ async function grava(nome, obj) {
       + 'energia absoluta importa',
     tudo_ou_nada: 'instante só entra se TODOS os inversores da usina reportarem os dois lados',
     modulos: MODULOS,
+    // a placa vai INTEIRA no blob para que o painel leia dela em vez de repetir a contagem: o
+    // total do parque escrito num título envelhece na primeira usina que ganhar inversor
+    placa: PLACA,
+    placa_total: {
+      inversores: Object.values(PLACA).reduce((a, p) => a + p.inversores, 0),
+      modulos: Object.values(PLACA).reduce((a, p) => a + p.modulos, 0),
+      strings: Object.values(PLACA).reduce((a, p) => a + p.modulos, 0) / MODULOS_POR_STRING,
+      cc_mwp: r2(Object.values(PLACA).reduce((a, p) => a + p.cc_kwp, 0) / 1000),
+      ca_mw: r2(Object.values(PLACA).reduce((a, p) => a + p.ca_kw, 0) / 1000),
+    },
+    modulos_por_string: MODULOS_POR_STRING,
     capacidade_ca_mw: CAP_CA_MW,
     cobertura_por_usina: cobertura,
     fonte_medidor: 'medidor de faturamento, o mesmo número publicado na página de comparação de fontes',
