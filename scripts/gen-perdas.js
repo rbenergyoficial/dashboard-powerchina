@@ -518,6 +518,51 @@ async function grava(nome, obj) {
     }
   }
 
+  // ---- limitacao de despacho, por usina e por dia ------------------------------------------------
+  // 🔴 A REFERENCIA E O PROPRIO INVERSOR, nao a potencia nominal. Medido: `setpoint_min` dividido
+  //    por `POTENCIA ATIVA NOMINAL` da mediana 411 e p90 838 — as duas colunas nao estao na mesma
+  //    unidade, e eu nao sei qual e a de cada uma. Comparar o dia com o valor TIPICO daquele mesmo
+  //    inversor no periodo dispensa saber a unidade: a razao e adimensional por construcao.
+  //
+  //    Isto existe para separar DEFEITO de DESPACHO. Sem ele, o painel de perdas acusa o inversor
+  //    de um problema que e de operacao: medido no M1 em 09/08, a referencia caiu 94%, a usina
+  //    rodou a 2,5% da nominal o dia inteiro, e a eficiencia caiu POR ISSO — inversor longe do
+  //    ponto nominal converte pior por natureza, e nao ha o que consertar nele.
+  const tipico = new Map();                  // (ufv|ts|inv) -> mediana do setpoint_min no periodo
+  const porInvUfv = new Map();
+  for (const o of porInv.values()) {
+    const k = o.ufv + '|' + o.ts + '|' + o.inv;
+    if (o.setpoint_min == null) continue;
+    if (!porInvUfv.has(k)) porInvUfv.set(k, []);
+    porInvUfv.get(k).push(o.setpoint_min);
+  }
+  for (const [k, v] of porInvUfv) {
+    const s = v.slice().sort((a, b) => a - b);
+    if (s.length >= 5 && s[s.length - 1] > 0) tipico.set(k, s[s.length >> 1]);
+  }
+  const desp = new Map();                    // dia -> ufv -> { raz, limitados, n }
+  for (const o of porInv.values()) {
+    const t = tipico.get(o.ufv + '|' + o.ts + '|' + o.inv);
+    if (t == null || t <= 0 || o.setpoint_min == null) continue;
+    if (!desp.has(o.dia)) desp.set(o.dia, {});
+    const d = desp.get(o.dia);
+    if (!d[o.ufv]) d[o.ufv] = { rs: [], lim: 0 };
+    const r = o.setpoint_min / t;
+    d[o.ufv].rs.push(r);
+    if (r < 0.5) d[o.ufv].lim++;             // metade do proprio tipico: limitacao inequivoca
+  }
+  console.log('  dias-usina com a maioria dos inversores sob referencia reduzida:');
+  let nAviso = 0;
+  for (const [dia, porU] of [...desp.entries()].sort()) {
+    for (const [ufv, x] of Object.entries(porU)) {
+      if (x.lim > x.rs.length / 2 && nAviso < 12) {
+        console.log('    ' + dia + ' ' + ufv.padEnd(4) + x.lim + ' de ' + x.rs.length
+          + ' inversores abaixo de metade da propria referencia tipica');
+        nAviso++;
+      }
+    }
+  }
+
   // ---- saida ------------------------------------------------------------------------------------
   const meta = {
     gerado_em: new Date().toISOString(),
@@ -543,6 +588,12 @@ async function grava(nome, obj) {
       o[ufv + '_e_ca'] = r2(x.e_ca);
       o[ufv + '_e_conta'] = r2(x.e_conta);
       o[ufv + '_n_inv'] = x.n_inv;
+      const D = (desp.get(dia) || {})[ufv];
+      if (D && D.rs.length) {
+        const rs = D.rs.slice().sort((p, q) => p - q);
+        o[ufv + '_despacho_pct'] = r2(rs[rs.length >> 1] * 100);   // referencia do dia / tipica
+        o[ufv + '_n_limitados'] = D.lim;
+      }
       o[ufv + '_n_conta'] = x.n_conta;
       o[ufv + '_slots'] = x.slots;
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
