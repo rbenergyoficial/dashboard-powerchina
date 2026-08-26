@@ -225,32 +225,45 @@ async function grava(nome, obj) {
 (async () => {
   const arqs = await listaArquivos();
   // so a versao MAIS RECENTE de cada (usina, dia): o export pode ser repetido no mesmo dia
+  // 🔴 O DIA SAI DO DADO, nunca do nome do arquivo. O carimbo do nome e a data em que alguem
+  //    EXPORTOU, e o export cobre o dia ANTERIOR — medido no irmao dos transformadores, onde
+  //    `Trafo_20260822` traz 21/08. Usar o nome desloca a serie inteira em um dia e, pior, casa a
+  //    energia dos inversores de um dia com o medidor de outro.
   const porChave = new Map();
   for (const a of arqs) {
     const m = a.nome.split('/').pop().match(CARIMBO);
-    const dia = m[2].slice(0, 4) + '-' + m[2].slice(4, 6) + '-' + m[2].slice(6);
-    const k = parque(m[1]) + '|' + dia;
-    const ant = porChave.get(k);
-    if (!ant || a.nome > ant.nome) porChave.set(k, { ...a, ufv: parque(m[1]), dia });
+    porChave.set(a.nome, { ...a, ufv: parque(m[1]), carimbo: m[2] });
   }
-  const dias = [...new Set([...porChave.values()].map((x) => x.dia))].sort();
-  const corte = dias.slice(-DIAS)[0];
-  const escolhidos = [...porChave.values()].filter((x) => x.dia >= corte)
-    .sort((a, b) => (a.dia + a.ufv < b.dia + b.ufv ? -1 : 1));
-  console.log('  arquivos: ' + arqs.length + ' · ' + porChave.size + ' pares usina-dia · '
-    + dias.length + ' dias (' + dias[0] + ' a ' + dias[dias.length - 1] + ') · lendo '
-    + escolhidos.length + ' desde ' + corte);
+  // o carimbo do nome so serve para ESCOLHER quais ler (os mais recentes); o dia vem do conteudo
+  const carimbos = [...new Set([...porChave.values()].map((x) => x.carimbo))].sort();
+  const corteC = carimbos.slice(-(DIAS + 1))[0];
+  const escolhidos = [...porChave.values()].filter((x) => x.carimbo >= corteC)
+    .sort((a, b) => (a.carimbo + a.ufv < b.carimbo + b.ufv ? -1 : 1));
+  console.log('  arquivos: ' + arqs.length + ' · ' + carimbos.length + ' carimbos ('
+    + carimbos[0] + ' a ' + carimbos[carimbos.length - 1] + ') · lendo ' + escolhidos.length);
 
   const diario = new Map();          // dia -> { ufv -> {...} }
   const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
-  const porInv = [];                 // uma linha por (dia, ufv, ts, inv)
-  const picos = {}, nInv = {};       // pico CRU da soma CA e n de inversores, por usina
+  const porInv = new Map();          // (dia|ufv|ts|inv) -> linha; lendo em ordem, o ultimo vence
+  const picos = {}, nInv = {};
+  let avisouDia = false;       // pico CRU da soma CA e n de inversores, por usina
 
   for (const a of escolhidos) {
     let d;
     try { d = leUsinaDia(await a.ler()); }
     catch (e) { console.log('    ' + a.ufv + ' ' + a.dia + ': ' + e.message); continue; }
     if (!d) continue;
+    // o dia REAL: o primeiro carimbo de tempo do conteudo. Se um arquivo cobrir dois dias, o
+    // majoritario decide — e a divergencia contra o nome vai ao log uma vez.
+    const contagem = {};
+    for (const t of d.instantes) { const dd = String(t).slice(0, 10); contagem[dd] = (contagem[dd] || 0) + 1; }
+    a.dia = Object.entries(contagem).sort((x, y) => y[1] - x[1])[0][0];
+    if (!avisouDia) {
+      const doNome = a.carimbo.slice(0, 4) + '-' + a.carimbo.slice(4, 6) + '-' + a.carimbo.slice(6);
+      console.log('  dia do CONTEUDO ' + a.dia + ' · dia do NOME ' + doNome
+        + (a.dia === doNome ? '  (iguais)' : '  <- o nome e a data do EXPORT, nao do dado'));
+      avisouDia = true;
+    }
 
     // pico da soma CA, para descobrir a unidade
     const nLin = d.linhas.length;
@@ -306,7 +319,7 @@ async function grava(nome, obj) {
       const t = (o.serie.temp || []).filter((x) => x != null);
       const sp = (o.serie.setpoint || []).filter((x) => x != null);
       const nom = (o.serie.nominal || []).filter((x) => x != null);
-      porInv.push({ dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
+      porInv.set(a.dia + '|' + a.ufv + '|' + o.ts + '|' + o.inv, { dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
         e_cc: r4(eCC), e_ca: r4(eCA),
         ef: eCC > 0.001 ? r4(eCA / eCC) : null,
         p_ca_max: r2(Math.max(...bons.map((i) => ca[i] * f)) * 1000),   // kW
@@ -346,7 +359,7 @@ async function grava(nome, obj) {
   for (const porU of meia.values()) {
     for (const o of Object.values(porU)) { o.cc *= F; o.ca *= F; }
   }
-  for (const o of porInv) {
+  for (const o of porInv.values()) {
     if (o.e_cc != null) o.e_cc = r4(o.e_cc * F);
     if (o.e_ca != null) o.e_ca = r4(o.e_ca * F);
     if (o.p_ca_max != null) o.p_ca_max = r2(o.p_ca_max * F);
@@ -371,6 +384,23 @@ async function grava(nome, obj) {
       const m = (med.get(dia) || {})[ufv];
       if (m != null && o.e_ca > 1) razMed.push(m / o.e_ca);
     }
+  }
+  // 🔴 A falha tem de DIZER O QUE VIU. Uma guarda que so barra manda adivinhar entre mapa
+  //    trocado, inversor faltando, dia deslocado e integracao errada — e sao quatro hipoteses
+  //    diferentes, cada uma com uma correcao diferente.
+  console.log('  energia CA dos inversores contra o medidor, por usina (mediana dos dias):');
+  for (const ufv of us) {
+    const rs = [];
+    for (const [dia, porU] of diario) {
+      const o = porU[ufv], m = (med.get(dia) || {})[ufv];
+      if (o && m != null && o.e_ca > 1) rs.push({ dia, inv: o.e_ca, med: m, r: m / o.e_ca });
+    }
+    if (!rs.length) { console.log('    ' + ufv + ': sem par'); continue; }
+    rs.sort((a, b) => a.r - b.r);
+    const q = rs[rs.length >> 1];
+    console.log('    ' + ufv.padEnd(4) + q.dia + '  inversores ' + q.inv.toFixed(1).padStart(8)
+      + ' MWh · medidor ' + q.med.toFixed(1).padStart(8) + ' MWh · ' + (q.r * 100).toFixed(1) + '%'
+      + '   (n=' + rs.length + ')');
   }
   efs.sort((a, b) => a - b); razMed.sort((a, b) => a - b);
   const efMed = efs[efs.length >> 1], medMed = razMed[razMed.length >> 1];
@@ -449,7 +479,7 @@ async function grava(nome, obj) {
     + Math.round(await grava('perdas_diario.json', { ...meta, serie: serieDiaria }) / 1024) + ' KB');
   saidas.push('perdas_30min.json: ' + serie30.length + ' instantes · '
     + Math.round(await grava('perdas_30min.json', { ...meta, serie: serie30 }) / 1024) + ' KB');
-  saidas.push('perdas_inv.json: ' + porInv.length + ' linhas · '
-    + Math.round(await grava('perdas_inv.json', { ...meta, serie: porInv }) / 1024) + ' KB');
+  saidas.push('perdas_inv.json: ' + porInv.size + ' linhas · '
+    + Math.round(await grava('perdas_inv.json', { ...meta, serie: [...porInv.values()] }) / 1024) + ' KB');
   for (const s of saidas) console.log('  ' + s);
 })().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
