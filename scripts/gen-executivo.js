@@ -1398,10 +1398,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           cor: cur.pr_pct == null ? '#8B93A1' : (cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60')),
           spark: barras(S.map(x => x.pr_pct), '#D9A441'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
         { mes: mSel, ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
-          sub: compl ? 'só existe no complexo' : 'alvo 97%',
-          var: compl ? '· complexo' : '', var_cor: '#8B93A1',
-          cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
-          spark: barras(S.map(x => x.disp_pct), '#4E9A98'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+          // mesma razao do card de horas: a disponibilidade e publicada para o conjunto
+          sub: compl ? 'medida no conjunto · alvo 97%' : 'alvo 97%',
+          var: compl ? '· do conjunto' : '', var_cor: '#8B93A1',
+          cor: compl ? '#8B93A1' : (cur.disp_pct >= 97 ? '#43966B' : '#C08A45'),
+          spark: barras(S.map(x => x.disp_pct), compl ? '#6E7683' : '#4E9A98'),
+          spark_ini: S[0].lbl, spark_fim: cur.lbl },
         { mes: mSel, ufv: u, k: 'corte', label: 'Curtailment', v: fmt(cur.corte_pct), u: '%',
           sub: fmt(cur.cortado_gwh) + ' GWh jogados fora',
           var: vCorte == null ? '' : seta(vCorte) + ' pp', var_cor: corVar(vCorte == null ? null : vCorte <= 0, vCorte),
@@ -1413,9 +1415,14 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         { mes: mSel, ufv: u, k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
           // dias do ONS (`mes.dias_decorridos`), NAO do Way2 (`dCorr`): este valor vem do ONS, que
           // publica D+1/D+2. Usar dCorr faria o rotulo dizer "dia 25" com dado de 24 dias.
-          sub: compl ? 'só existe no complexo' : 'ONS · dia ' + mes.dias_decorridos + ' de ' + dTot + ' (D+1)',
-          var: compl ? '· complexo' : '', var_cor: '#8B93A1', cor: '#C08A45',
-          spark: barras(S.map(x => x.horas_restricao), '#C08A45'), spark_ini: S[0].lbl, spark_fim: cur.lbl });
+          sub: compl ? 'a limitação é registrada para o conjunto' : 'ONS · dia ' + mes.dias_decorridos + ' de ' + dTot + ' (D+1)',
+          // 🔴 COR DE REFERENCIA quando a selecao NAO e o conjunto. O ONS registra a limitacao
+          //    para o complexo inteiro — o numero e o mesmo em todas as entidades, e pintar de cor
+          //    viva um valor que nao responde ao filtro faz o leitor concluir que o card quebrou.
+          //    Cinza de referencia diz, sem texto, "este nao e da sua selecao".
+          var: compl ? '· do conjunto' : '', var_cor: '#8B93A1', cor: compl ? '#8B93A1' : '#C08A45',
+          spark: barras(S.map(x => x.horas_restricao), compl ? '#6E7683' : '#C08A45'),
+          spark_ini: S[0].lbl, spark_fim: cur.lbl });
 
       // ---- manchete ----
       // base = so os dias FECHADOS (tira a energia de hoje, que e de um dia pela metade).
