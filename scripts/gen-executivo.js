@@ -1253,6 +1253,38 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
         x.dias_corridos = parcial ? dias : null;
         x.dias_do_mes = parcial ? diasDoMes : null;
       });
+
+      // 🔴 O ATINGIMENTO DO MES ABERTO PASSA A USAR A META RATEADA.
+      //
+      // Ate 27/08/2026 `atingido_pct` dividia sempre pela meta do mes INTEIRO. Num mes em curso
+      // isso compara 26 dias de geracao com 31 dias de meta, e o campo dizia 98,66% para o
+      // Complexo em agosto enquanto TODOS os paineis mostravam 117,63% — eles ja rateavam por
+      // conta propria. Dois numeros discordantes para a mesma coisa, e quem le o blob (ou monta um
+      // painel novo a partir dele) obtinha o errado.
+      //
+      // ⚠️ O outro numero NAO se perde: `atingido_mes_cheio_pct` guarda "quanto da meta do mes
+      //    inteiro ja foi entregue", que e uma pergunta legitima e e a que o card executivo mostra
+      //    na coluna `% ja entregue`. Sao perguntas diferentes e agora tem nomes diferentes.
+      const rateia = (x, liq) => {
+        x.atingido_mes_cheio_pct = x.atingido_pct;
+        const mr = num(x.meta_rateada_gwh);
+        x.atingido_pct = (mr > 0 && liq != null) ? r2(100 * liq / mr) : x.atingido_pct;
+      };
+      out.serie_ufv.filter(x => x.parcial === 1)
+        .forEach(x => rateia(x, num(x.liquida_gwh)));
+
+      // o CONJUNTO tem a mesma conta, e ate agora nem publicava a meta rateada — os paineis a
+      // recalculavam. Publicando-a aqui, a regra passa a existir num lugar so.
+      out.serie.forEach(x => {
+        const parcial = x.mes === mesAtual && fator < 1;
+        x.parcial = parcial ? 1 : 0;
+        x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
+        if (!parcial) return;
+        rateia(x, num(x.way2_liq_gwh));
+        // ⚠️ `bateu` acompanha o numerador novo: num mes em curso ele passa a dizer "esta no
+        //    ritmo de bater", que e a leitura util. Quem conta meses fechados filtra por `fechado`.
+        x.bateu = x.atingido_pct == null ? null : (x.atingido_pct >= 100 ? 1 : 0);
+      });
     })();
 
     const SU = out.serie_ufv;
