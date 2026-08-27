@@ -14,19 +14,24 @@
  *   2. coletor         NAO E MENSURAVEL com estas fontes — ver abaixo
  *   3. consumo proprio = EneatDel / EneatRec           <- bruto contra liquido no mesmo medidor
  *
- * 🔴 A ETAPA 2 CAIU NA MEDICAO, e vale registrar porque a intuicao dizia o contrario. O medidor
- *    esta DEPOIS dos inversores, entao ele deveria ler MENOS que eles — a diferenca seria a perda
- *    do coletor de 34,5 kV, de 1% a 2%. Medido em 32 dias e nas sete usinas com export completo,
- *    ele le de 100,4% a 103,3%: MAIS, nao menos.
+ * 🔴 A ETAPA 2 FOI REFUTADA, E A REFUTACAO ESTAVA ERRADA — corrigido em 26/08/2026. O medidor
+ *    esta DEPOIS dos inversores, entao deveria ler MENOS que eles; media de 100,4% a 103,3%.
+ *    Eu atribui isso a diferenca de CLASSE DE INSTRUMENTO (0,2S contra classe 1-2), o que e
+ *    tecnicamente verdadeiro em si, encaixava no numero, e por isso encerrou a investigacao.
  *
- *    Primeiro suspeitei da integracao por amostra e liguei o contador de energia do proprio
- *    inversor, que e integrador de verdade. Nao mudou nada: contador e integracao concordam
- *    dentro de 0,5%. O que resta e diferenca de INSTRUMENTO — medidor de faturamento e classe
- *    0,2S/0,5S, medicao interna de inversor e classe 1 a 2 —, e ela tem a mesma ordem de grandeza
- *    da perda que se queria medir, com o sinal trocado.
+ *    A causa real e outra: 5 de cada 165 inversores NAO ESTAO no arquivo de origem — 51 de 1.155
+ *    no parque. Corrigindo cada usina pela cobertura (placa / arquivo), o medidor passa a ler de
+ *    1% a 2% MENOS, que e exatamente a perda que a fisica exige, e as oito usinas com export
+ *    quase completo caem numa faixa de 0,7% a 2,1%.
  *
- *    Por isso o blob publica a RAZAO entre os dois instrumentos, nunca uma perda. Um painel de
- *    perdas com numero negativo faria o leitor concluir que o coletor gera energia.
+ *    O que quebrou o impasse foi uma referencia EXTERNA ao dado: a contagem de placa do parque.
+ *    Enquanto a completude era julgada contra o proprio dado, 3% de falta cabia folgado na
+ *    tolerancia e o gerador dizia `completa: true`.
+ *
+ *    A perda CONTINUA fora do blob como numero, mas por outro motivo: a correcao e uma regra de
+ *    tres que supoe que o inversor ausente gera como o presente. O blob publica `cobertura_pct` e
+ *    `razao_medidor_corrigida`; a perda volta a ser publicavel no dia em que a medicao alcancar
+ *    os 1.155.
  *
  * 🔴 NADA AQUI E ESTIMADO. A etapa 1 e a mais forte da cascata: e o mesmo equipamento, no mesmo
  *    instante, com as duas grandezas publicadas lado a lado pelo proprio inversor.
