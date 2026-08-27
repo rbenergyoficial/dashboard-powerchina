@@ -303,6 +303,50 @@ function decideUnidade(picos) {
 }
 
 // ---------- saida -------------------------------------------------------------------------------
+// ---------- historico: o gerador passa a ACUMULAR -----------------------------------------------
+//
+// 🔴 A FONTE SO GUARDA 30 DIAS. Medido em 26/08/2026: o container tem 288 arquivos em 30 carimbos
+//    (24/07 a 25/08). Enquanto o gerador reescrevia o blob inteiro a cada rodada, o historico de
+//    PV ficava PRESO nesses 30 dias para sempre — nao por escolha, por construcao. Acumulando, ele
+//    cresce um dia por rodada a partir de hoje.
+//
+// Janelas: as de tempo saem do mesmo teto de ~8.700 linhas que dimensiona os blobs do MUST e da
+// solarimetria (48 leituras por dia em 30 min, 24 em 1 h). A de inversor sai do PESO: sao 1.104
+// linhas por dia e ~47 KB por dia gzipado, e essa e a maior coisa que a pagina de strings baixa.
+const JANELA = { diario: 730, min30: 180, min60: 365, inv: 60 };
+
+const diaDeMs = (ms) => new Date(ms - 3 * 3600e3).toISOString().slice(0, 10);
+
+// 🔴 SO O 404 DEVOLVE VAZIO. Qualquer outra falha — 500, gzip corrompido, JSON truncado — ESTOURA.
+//    A versao ingenua devolve vazio para tudo, o gerador trata como primeira execucao e regrava o
+//    blob so com os dias da rodada: uma falha de rede apagaria o historico inteiro, sem erro
+//    visivel. E a licao que o `leBlob` do MUST ja tinha pago.
+async function leAnterior(nome) {
+  try {
+    const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
+    return Array.isArray(j.serie) ? j.serie : [];
+  } catch (e) {
+    if (/HTTP 404/.test(e.message)) return [];
+    throw new Error('nao consegui ler o ' + nome + ' publicado (' + e.message + '). Abortando: '
+      + 'regravar sem o historico apagaria o que ja foi acumulado.');
+  }
+}
+
+// funde o que veio agora com o que ja estava publicado; a rodada nova sempre GANHA na colisao,
+// porque um dia pode voltar mais completo do que da primeira vez
+function acumula(antigas, novas, chave, dias, diaDe) {
+  const m = new Map();
+  for (const l of antigas) m.set(chave(l), l);
+  let n = 0;
+  for (const l of novas) { if (!m.has(chave(l))) n++; m.set(chave(l), l); }
+  let todas = [...m.values()];
+  const ds = [...new Set(todas.map(diaDe))].sort();
+  const corte = ds.slice(-dias)[0];
+  todas = todas.filter((l) => diaDe(l) >= corte);
+  todas.sort((a, b) => (chave(a) < chave(b) ? -1 : chave(a) > chave(b) ? 1 : 0));
+  return { serie: todas, novas: n, mantidas: todas.length - n };
+}
+
 async function grava(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) {
@@ -787,12 +831,43 @@ async function grava(nome, obj) {
     return o;
   });
 
+  // ---------- a serie de 1 HORA, agregada da de 30 min ------------------------------------------
+  // ⚠️ POTENCIA se promedia no balde; a eficiencia se REFAZ da soma dos dois lados, nunca se
+  //    promedia — media de razoes nao e a razao das medias, e o erro apareceria justamente nas
+  //    pontas do dia, onde a potencia e pequena.
+  const hora = new Map();
+  for (const [ms, porU] of meia) {
+    const k = Math.floor(ms / 3600e3) * 3600e3;
+    const a = hora.get(k) || hora.set(k, {}).get(k);
+    for (const ufv of us) {
+      const x = porU[ufv]; if (!x) continue;
+      const o = a[ufv] || (a[ufv] = { cc: 0, ca: 0, n: 0 });
+      o.cc += x.cc; o.ca += x.ca; o.n++;
+    }
+  }
+  const serie60 = [...hora.entries()].sort((a, b) => a[0] - b[0]).map(([ms, porU]) => {
+    const o = { ms, t: new Date(ms - 3 * 3600e3).toISOString().slice(0, 16).replace('T', ' ') };
+    for (const ufv of us) {
+      const x = porU[ufv]; if (!x || !x.n) continue;
+      o[ufv + '_p_cc'] = r2(x.cc / x.n); o[ufv + '_p_ca'] = r2(x.ca / x.n);
+      if (x.cc > 0.5) o[ufv + '_ef'] = r4(x.ca / x.cc);
+    }
+    return o;
+  });
+
   const saidas = [];
-  saidas.push('perdas_diario.json: ' + serieDiaria.length + ' dias · '
-    + Math.round(await grava('perdas_diario.json', { ...meta, serie: serieDiaria }) / 1024) + ' KB');
-  saidas.push('perdas_30min.json: ' + serie30.length + ' instantes · '
-    + Math.round(await grava('perdas_30min.json', { ...meta, serie: serie30 }) / 1024) + ' KB');
-  saidas.push('perdas_inv.json: ' + porInv.size + ' linhas · '
-    + Math.round(await grava('perdas_inv.json', { ...meta, serie: [...porInv.values()] }) / 1024) + ' KB');
+  for (const [nome, serie, chave, dias] of [
+    ['perdas_diario.json', serieDiaria, (l) => l.dia, JANELA.diario],
+    ['perdas_30min.json', serie30, (l) => l.ms, JANELA.min30],
+    ['perdas_60min.json', serie60, (l) => l.ms, JANELA.min60],
+    ['perdas_inv.json', [...porInv.values()],
+      (l) => l.dia + '|' + l.ufv + '|' + l.ts + '|' + l.inv, JANELA.inv],
+  ]) {
+    const { serie: sf, novas, mantidas } = acumula(
+      await leAnterior(nome), serie, chave, dias, (l) => l.dia || diaDeMs(l.ms));
+    saidas.push(nome + ': ' + sf.length + ' linhas (' + novas + ' novas, ' + mantidas
+      + ' do historico) · ' + Math.round(await grava(nome, { ...meta, janela_dias: dias,
+        serie: sf }) / 1024) + ' KB');
+  }
   for (const s of saidas) console.log('  ' + s);
 })().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
