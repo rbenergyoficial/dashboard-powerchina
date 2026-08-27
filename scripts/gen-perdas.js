@@ -865,8 +865,14 @@ async function grava(nome, obj) {
   ]) {
     const { serie: sf, novas, mantidas } = acumula(
       await leAnterior(nome), serie, chave, dias, (l) => l.dia || diaDeMs(l.ms));
+    // 🔴 A JANELA MEDIDA VAI AO LADO DA CONFIGURADA. `janela_dias` e o TETO; quem quiser dizer ao
+    //    leitor quanto o arquivo cobre HOJE tem de usar `dias_cobertos`. Publicar so o teto e o
+    //    que faz um seletor prometer "180 dias" num arquivo de 32 — numero declarado que nao
+    //    corresponde ao dado vira promessa quebrada na tela, e o leitor culpa o dado.
+    const cob = new Set(sf.map((l) => l.dia || diaDeMs(l.ms))).size;
     saidas.push(nome + ': ' + sf.length + ' linhas (' + novas + ' novas, ' + mantidas
-      + ' do historico) · ' + Math.round(await grava(nome, { ...meta, janela_dias: dias,
+      + ' do historico) · ' + cob + ' dias cobertos de ' + dias + ' · '
+      + Math.round(await grava(nome, { ...meta, janela_dias: dias, dias_cobertos: cob,
         serie: sf }) / 1024) + ' KB');
   }
   for (const s of saidas) console.log('  ' + s);
