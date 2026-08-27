@@ -252,14 +252,34 @@ async function fontesDoContainer(cont) {
       + (diarios.length ? ' · ' + diarios[0].k.slice(0, 8) + ' a '
         + diarios[diarios.length - 1].k.slice(0, 8) : ''));
 
+    // ---- o SENSOR AUXILIAR (grupo GER_IRR), que chega todo dia desde antes de 01/08
+    // 🔴 `_IRR_<data>` e exato por construcao: `_IIRR_` tem um I antes do IRR e nao casa `_IRR_`;
+    //    `_IRR_GERAL_` nao casa porque exige digito logo depois do `_IRR_`. Os tres nomes se
+    //    separam sem lista escrita a mao.
+    const carimboA = (x) => {
+      const m = x.split('/').pop().match(/_IRR_(\d{8}_\d{6})\.csv$/i); return m ? m[1] : null;
+    };
+    const aux = [];
+    for await (const b of c.listBlobsFlat()) {
+      const k = carimboA(b.name);
+      if (k) aux.push({ nome: b.name, k });
+    }
+    aux.sort((a, b) => (a.k < b.k ? -1 : 1));
+    console.log('  auxiliar: ' + aux.length + ' arquivo(s) IRR (grupo GER_IRR, OUTRO sensor)'
+      + (aux.length ? ' · ' + aux[0].k.slice(0, 8) + ' a ' + aux[aux.length - 1].k.slice(0, 8) : ''));
+
     const abre = (nome) => async () => {
       const dl = await c.getBlobClient(nome).download();
       return readline.createInterface({ input: dl.readableStreamBody, crlfDelay: Infinity });
     };
     // o historico primeiro: ele define a base, e o diario que repetir um instante ja lido e
     // descartado pelo dedup do laco — sao a mesma medicao, entao a ordem nao muda numero nenhum
-    return [{ nome: melhor.name, abre: abre(melhor.name) }]
-      .concat(diarios.map((d) => ({ nome: d.nome, abre: abre(d.nome) })));
+    // ⚠️ A ORDEM E A REGRA DE PRECEDENCIA. O dedup por instante descarta o que ja foi lido, entao
+    //    pondo o sensor auxiliar por ULTIMO ele so preenche instante que o sensor principal nunca
+    //    teve. Inverter a ordem trocaria o instrumento em dias que estao medidos.
+    return [{ nome: melhor.name, tipo: 'ws', abre: abre(melhor.name) }]
+      .concat(diarios.map((d) => ({ nome: d.nome, tipo: 'ws', abre: abre(d.nome) })))
+      .concat(aux.map((d) => ({ nome: d.nome, tipo: 'aux', abre: abre(d.nome) })));
   }
 }
 
@@ -268,9 +288,14 @@ async function fonteUnica() {
   // container. Sem isso o caminho de varios arquivos so seria exercitado em producao.
   const local = process.env.IIRR_LOCAL;
   if (local) {
-    return local.split(',').map((x) => x.trim()).filter(Boolean).map((cam) => ({
-      nome: cam, abre: async () => readline.createInterface({
-        input: fs.createReadStream(cam, 'utf8'), crlfDelay: Infinity }) }));
+    // prefixo `aux:` marca o arquivo como do sensor auxiliar — e o que permite exercitar o ramo
+    // do GER_IRR sem o container. Sem isso ele so seria exercitado em producao.
+    return local.split(',').map((x) => x.trim()).filter(Boolean).map((x) => {
+      const aux = /^aux:/i.test(x);
+      const cam = x.replace(/^aux:/i, '');
+      return { nome: cam, tipo: aux ? 'aux' : 'ws', abre: async () => readline.createInterface({
+        input: fs.createReadStream(cam, 'utf8'), crlfDelay: Infinity }) };
+    });
   }
   const url = process.env.IIRR_URL;
   if (!url) throw new Error('defina IIRR_CONTAINER, IIRR_URL ou IIRR_LOCAL');
@@ -374,7 +399,7 @@ const TETO_LINHAS = 8800;
 //    exatamente as grandezas de uma row. `plano` serve o painel do topo E a row do comparativo,
 //    e `temp` serve as duas rows de temperatura — por isso sao 9 familias para 11 rows.
 const FAMILIAS = {
-  plano: ['gti_w', 'ons_w'],
+  plano: ['gti_w', 'ons_w', 'gti_aux_w'],
   comp: ['dif_w', 'dni_w'],
   albedo: ['alb_cima_w', 'alb_baixo_w', 'albedo'],
   // as DUAS rows de temperatura sao familias separadas: juntas dariam 72 colunas e ~2,3 MB no
@@ -619,6 +644,15 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   const vistos = new Set();
   const ufvsVistas = new Set(), grsVistas = new Set();
   let repetidos = 0;
+  // 🔴 ACUMULADOR SEPARADO, e a separacao E o requisito. O sensor auxiliar (grupo GER_IRR) mede a
+  //    MESMA grandeza no MESMO instante que o principal e diverge 12,7 W/m2 sobre um nivel de 283
+  //    (~4,5%) — medido na auditoria dos despejos. Somar os dois no mesmo campo emendaria duas
+  //    series fingindo que sao uma; e o painel nao teria como dizer qual e qual.
+  //    Ele so preenche o que o principal nao mediu, e sai em CAMPO PROPRIO (`gti_aux`).
+  const accA = {};                 // dia -> ufv -> { s, n, max }
+  const accHA = {};                // dia|ufv|slot -> { s, n }
+  const diasAux = new Set();
+  let nAux = 0;
 
   for (const fonte of FONTES) {
   // ⚠️ CABECALHO POR ARQUIVO. Cada CSV traz o proprio, e a ORDEM das colunas nao e garantida entre
@@ -631,12 +665,23 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     const cols = linha.replace(/^﻿/, '').split(';');
     if (!cab) {
       cab = cols;
+      // ⚠️ O AUXILIAR USA OUTRO PADRAO de nome de coluna: `UFV_<est>_GER_IRR_<est> WS <grandeza>`
+      //    contra `UFV_<est>_WS_<est> WS <grandeza>` do principal. Um regex so nao serve para os
+      //    dois, e usar o do principal no arquivo do auxiliar daria ZERO colunas reconhecidas —
+      //    que a guarda logo abaixo transforma em job vermelho, e nao em silencio.
+      // Do auxiliar interessa a IRRADIACAO INCLINADA: e a espinha da pagina e a unica grandeza
+      // cuja ausencia deixa o grafico principal vazio. As outras oito ele tem e nao sao emitidas
+      // de proposito — cada campo paralelo custa uma coluna num arquivo que todo leitor baixa.
+      const RE = fonte.tipo === 'aux'
+        ? /^UFV_([^_]+)_GER_IRR_\S+\s+WS\s+(.+?)(_\d+)?$/
+        : /^UFV_([^_]+)_WS_(?:\S+)\s+WS\s+(.+?)(_\d+)?$/;
       cab.forEach((c, i) => {
-        const m = c.match(/^UFV_([^_]+)_WS_(\S+)\s+WS\s+(.+?)(_\d+)?$/);
-        if (!m || m[4]) return;                       // _2 = duplicata vazia do export
+        const m = c.match(RE);
+        if (!m || m[3]) return;                       // _2 = duplicata vazia do export
         const ufv = EST_UFV[m[1]];
-        if (!ufv || !FAIXA[m[3]]) return;             // estacao ou grandeza que nao conheco
-        mapa.push({ i, ufv, gr: m[3] });
+        if (!ufv || !FAIXA[m[2]]) return;             // estacao ou grandeza que nao conheco
+        if (fonte.tipo === 'aux' && m[2] !== 'IRRADIAÇÃO INCLINADA') return;
+        mapa.push({ i, ufv, gr: m[2] });
       });
       if (!mapa.length) {
         throw new Error('nenhuma coluna reconhecida em ' + fonte.nome + ' — o layout mudou?');
@@ -647,6 +692,25 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     const ts = cols[0];
     if (vistos.has(ts)) { repetidos++; continue; }
     vistos.add(ts);
+    if (fonte.tipo === 'aux') {
+      const d = ts.slice(0, 10);
+      const slot = +ts.slice(11, 13) * 2 + (+ts.slice(14, 16) >= 30 ? 1 : 0);
+      for (const m of mapa) {
+        const bruto = cols[m.i];
+        if (bruto === '' || bruto == null) continue;
+        const x = Number(String(bruto).replace(',', '.'));
+        if (!isFinite(x)) continue;
+        const f = FAIXA[m.gr];
+        if (f && (x < f[0] || x > f[1])) continue;
+        const o = ((accA[d] = accA[d] || {})[m.ufv] = accA[d][m.ufv] || { s: 0, n: 0, max: null });
+        o.s += x; o.n++; if (o.max == null || x > o.max) o.max = x;
+        const kh = d + '|' + m.ufv + '|' + String(slot).padStart(2, '0');
+        const oh = (accHA[kh] = accHA[kh] || { s: 0, n: 0 });
+        oh.s += x; oh.n++;
+        diasAux.add(d); nAux++;
+      }
+      continue;
+    }
     nLinhas++;
     if (!tsIni || ts < tsIni) tsIni = ts;
     if (!tsFim || ts > tsFim) tsFim = ts;
@@ -880,38 +944,52 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     serie_dia.push(l);
   }));
 
-  // ---------- os dias que SO o ONS tem ----------
-  // Mesma razao da uniao no intradiario: enquanto a linha do dia so nascia de um dia do SCADA, o
-  // valor do ONS para os dias seguintes era lido e jogado fora. Hoje o ONS chega a ser a fonte
-  // MAIS FRESCA de irradiancia, porque o despejo do SCADA e manual.
-  // ⚠️ A linha carrega SO os campos do ONS. Ela nao inventa cobertura nossa nem bandeira de
-  //    qualidade: o painel de falhas filtra `suspeito = 1` e os demais filtram por tipo numerico,
-  //    entao uma linha sem os nossos campos nao aparece neles — que e o certo, porque nao houve
-  //    medicao nossa para julgar.
-  // ⚠️ O M7 nao entra por nao ter tag propria no ONS, e o conjunto tambem nao: a agregacao exige
-  //    as nove estacoes no grupo e aqui ha oito.
+  // ---------- os dias que a estacao principal NAO mediu ----------
+  // Enquanto a linha do dia so nascia de um dia do sensor principal, o que as outras fontes tinham
+  // para aqueles dias era lido e jogado fora. Sao duas fontes distintas e cada uma entra em campo
+  // proprio: o valor verificado do operador nacional (`ons_*`) e o sensor auxiliar do parque
+  // (`gti_aux`, grupo GER_IRR).
+  // ⚠️ A linha NAO carrega os campos do sensor principal, nem cobertura, nem bandeira de qualidade:
+  //    o painel de falhas filtra `suspeito = 1` e os demais filtram por tipo numerico, entao uma
+  //    linha sem eles nao aparece la — que e o certo, porque nao houve medicao principal para julgar.
+  // 🔴 E o M7 so existe aqui pelo AUXILIAR: ele nao tem tag propria no operador nacional. Uma versao
+  //    que so olhasse o ONS deixaria justamente essa usina sem nenhum dado no periodo.
   {
     const jaTem = new Set(serie_dia.map(l => l.dia + '|' + l.ufv));
-    const diasOns = [...new Set(Object.keys(ons).map(k => k.slice(0, k.indexOf('|'))))].sort();
-    let soOns = 0;
-    diasOns.forEach(d => ufvs.forEach(u => {
+    const diasOutros = [...new Set([
+      ...Object.keys(ons).map(k => k.slice(0, k.indexOf('|'))),
+      ...diasAux,
+    ])].sort();
+    let soOns = 0, soAux = 0;
+    diasOutros.forEach(d => ufvs.forEach(u => {
       if (jaTem.has(d + '|' + u)) return;
+      const l = { dia: d, mes: d.slice(0, 7), dia_num: +d.slice(8, 10), ufv: u, suspeito: 0 };
+      let tem = false;
+
       const v = [];
       for (let k = 0; k < SLOTS; k++) { const x = ons[d + '|' + u + '|' + k]; if (x != null) v.push(x); }
-      if (!v.length) return;
-      const sol = v.filter(x => x > SOL_MIN);
-      serie_dia.push({ dia: d, mes: d.slice(0, 7), dia_num: +d.slice(8, 10), ufv: u,
-        ons_leituras: v.length,
-        ons_cob_pct: r2(100 * v.length / SLOTS),
-        ons_gti: r3(v.reduce((a2, b2) => a2 + b2, 0) * H_SLOT / 1000),
-        ons_sol_w: sol.length ? r2(sol.reduce((a2, b2) => a2 + b2, 0) / sol.length) : null,
-        so_ons: 1, suspeito: 0 });
-      soOns++;
+      if (v.length) {
+        const sol = v.filter(x => x > SOL_MIN);
+        l.ons_leituras = v.length;
+        l.ons_cob_pct = r2(100 * v.length / SLOTS);
+        l.ons_gti = r3(v.reduce((a2, b2) => a2 + b2, 0) * H_SLOT / 1000);
+        l.ons_sol_w = sol.length ? r2(sol.reduce((a2, b2) => a2 + b2, 0) / sol.length) : null;
+        l.so_ons = 1; soOns++; tem = true;
+      }
+
+      const a = (accA[d] || {})[u];
+      if (a && a.n) {
+        l.gti_aux = r3(a.s * H_SLOT / 1000);          // W/m2 medio x meia hora -> kWh/m2
+        l.gti_aux_leituras = a.n;
+        l.gti_aux_pico_w = r2(a.max);
+        l.sensor_aux = 1; soAux++; tem = true;
+      }
+      if (tem) serie_dia.push(l);
     }));
     // a serie tem de continuar em ordem: painel de dia usa `dia` como eixo e recusa x que desce
     serie_dia.sort((a, b) => (a.dia + a.ufv < b.dia + b.ufv ? -1 : 1));
-    console.log('dias so do ONS: ' + soOns + ' linhas dia-usina'
-      + (soOns ? ' (' + diasOns[diasOns.length - 1] + ' e o ultimo do ONS)' : ''));
+    console.log('dias sem a estacao principal: ' + soOns + ' linha(s) com o operador nacional · '
+      + soAux + ' com o sensor auxiliar (' + diasAux.size + ' dia(s), ' + nAux + ' leituras)');
   }
 
   // ---------- serie mensal ----------
@@ -962,7 +1040,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   //    e a do ONS continua, que e a leitura honesta.
   // ⚠️ As duas chaves usam formatos DIFERENTES de slot (`|09` no nosso, `|9` no do ONS). Unir sem
   //    normalizar duplicaria as nove primeiras meias-horas de cada dia.
-  const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(ons).map((k) => {
+  const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(accHA), ...Object.keys(ons).map((k) => {
     const p = k.split('|'); return p[0] + '|' + p[1] + '|' + String(+p[2]).padStart(2, '0');
   })])].sort();
   const serie_semihora = [];
@@ -974,12 +1052,17 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     // em vez de um cruzamento de dois blobs no navegador
     const xo = ons[d + '|' + u + '|' + (+slot)];
     if (xo != null) l.ons_w = r2(xo);
+    // 🔴 CAMPO PROPRIO, nunca o mesmo `gti_w`. Sao dois instrumentos: emendar as duas leituras num
+    //    campo so faria a curva atravessar a fronteira sem degrau visivel e sem nada dizer que o
+    //    sensor mudou — que e exatamente a mentira que este campo existe para evitar.
+    const xa = accHA[k];
+    if (xa && xa.n) l.gti_aux_w = r2(xa.s / xa.n);
     let algum = false;
     Object.entries(CAMPO_H).forEach(([gr, campo]) => {
       const o = g[gr];
       if (o && o.n) { l[campo] = r2(o.s / o.n); algum = true; }
     });
-    if (algum || l.ons_w != null) serie_semihora.push(l);
+    if (algum || l.ons_w != null || l.gti_aux_w != null) serie_semihora.push(l);
   });
 
   // ---------- tabela de QUALIDADE: e o entregavel principal ----------
@@ -1018,6 +1101,12 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     janela: { ini: tsIni, fim: tsFim }, resolucao_min: 30, linhas: nLinhas,
     mapeamento: EST_UFV, faixa_fisica: FAIXA,
     ufvs, agregados: [COMPLEXO], grandezas: grs, dias: dias.length, meses,
+    // 🔴 A LISTA DOS DIAS DE SENSOR AUXILIAR VAI DECLARADA. Sem ela, um painel que some `gti` com
+    //    `gti_aux` — ou um leitor que compare os dois periodos — nao teria como saber que o
+    //    instrumento mudou. Os dois medem a mesma grandeza no mesmo instante e divergem ~4,5%.
+    dias_sensor_auxiliar: [...diasAux].sort(),
+    sensor_auxiliar: 'Grupo GER_IRR da mesma estação, sensor distinto do principal. Publicado em '
+      + 'campo próprio (gti_aux / gti_aux_w) e só nos dias em que o principal não mediu.',
     serie_dia, serie_mes, qualidade,
   };
   // a horaria sai antes, em um arquivo por mes, so os ultimos HORA_DIAS dias
