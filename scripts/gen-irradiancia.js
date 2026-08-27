@@ -673,7 +673,21 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     }).on('error', rej);
   });
   const ons = {};                 // 'dia|ufv|slot' -> W/m2 verificado
-  const onsMes = [...new Set(dias.map(d => d.slice(0, 7)))].sort();
+  // 🔴 OS MESES DO ONS NAO SAEM DOS DIAS DO SCADA. O despejo do SCADA e manual e pode envelhecer
+  //    (medido em 27/08/2026: ele parou em 06/08 e o ONS ja estava em 25/08). Derivando a lista da
+  //    NOSSA janela, o gerador deixaria de ler justamente o periodo em que o ONS e a UNICA fonte de
+  //    irradiancia. Vai do primeiro dia nosso ate o mes corrente.
+  const onsMes = (() => {
+    const s = new Set(dias.map(d => d.slice(0, 7)));
+    const hoje = new Date();
+    let a = +dias[0].slice(0, 4), m = +dias[0].slice(5, 7);
+    const aF = hoje.getUTCFullYear(), mF = hoje.getUTCMonth() + 1;
+    while (a < aF || (a === aF && m <= mF)) {
+      s.add(a + '-' + String(m).padStart(2, '0'));
+      m++; if (m > 12) { m = 1; a++; }
+    }
+    return [...s].sort();
+  })();
   let onsOk = 0, onsFalta = [];
   for (const m of onsMes) {
     try {
@@ -755,6 +769,12 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       const v = [];
       for (let k = 0; k < SLOTS; k++) { const x = ons[d + '|' + u + '|' + k]; if (x != null) v.push(x); }
       l.ons_leituras = v.length;
+      // 🔴 A INTEGRAL DIARIA DO ONS SOMA O QUE HOUVER. Medido em 27/08/2026: em 28/05 o ONS trouxe
+      //    ~25 das 48 meias-horas nas nove usinas e o dia saiu em ~1,4 kWh/m2 contra 6,5 a 7,2
+      //    medidos pela estacao — meio dia faltando aparecendo na tela como erro de medicao de 80%.
+      //    A cobertura vai ao lado para o painel poder excluir o dia pela metade; o teto de 48 e o
+      //    numero de meias-horas do dia, e a mediana normal e 40 (as de noite entram invalidas).
+      l.ons_cob_pct = r2(100 * v.length / SLOTS);
       l.ons_gti = v.length ? r3(v.reduce((a2, b2) => a2 + b2, 0) * H_SLOT / 1000) : null;
       const sol = v.filter(x => x > SOL_MIN);
       l.ons_sol_w = sol.length ? r2(sol.reduce((a2, b2) => a2 + b2, 0) / sol.length) : null;
@@ -783,6 +803,40 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     l.suspeito = (l.cobertura_pct < 95 || l.fora_faixa > 0 || (inc.zd || 0) > 2 || impossivel) ? 1 : 0;
     serie_dia.push(l);
   }));
+
+  // ---------- os dias que SO o ONS tem ----------
+  // Mesma razao da uniao no intradiario: enquanto a linha do dia so nascia de um dia do SCADA, o
+  // valor do ONS para os dias seguintes era lido e jogado fora. Hoje o ONS chega a ser a fonte
+  // MAIS FRESCA de irradiancia, porque o despejo do SCADA e manual.
+  // ⚠️ A linha carrega SO os campos do ONS. Ela nao inventa cobertura nossa nem bandeira de
+  //    qualidade: o painel de falhas filtra `suspeito = 1` e os demais filtram por tipo numerico,
+  //    entao uma linha sem os nossos campos nao aparece neles — que e o certo, porque nao houve
+  //    medicao nossa para julgar.
+  // ⚠️ O M7 nao entra por nao ter tag propria no ONS, e o conjunto tambem nao: a agregacao exige
+  //    as nove estacoes no grupo e aqui ha oito.
+  {
+    const jaTem = new Set(serie_dia.map(l => l.dia + '|' + l.ufv));
+    const diasOns = [...new Set(Object.keys(ons).map(k => k.slice(0, k.indexOf('|'))))].sort();
+    let soOns = 0;
+    diasOns.forEach(d => ufvs.forEach(u => {
+      if (jaTem.has(d + '|' + u)) return;
+      const v = [];
+      for (let k = 0; k < SLOTS; k++) { const x = ons[d + '|' + u + '|' + k]; if (x != null) v.push(x); }
+      if (!v.length) return;
+      const sol = v.filter(x => x > SOL_MIN);
+      serie_dia.push({ dia: d, mes: d.slice(0, 7), dia_num: +d.slice(8, 10), ufv: u,
+        ons_leituras: v.length,
+        ons_cob_pct: r2(100 * v.length / SLOTS),
+        ons_gti: r3(v.reduce((a2, b2) => a2 + b2, 0) * H_SLOT / 1000),
+        ons_sol_w: sol.length ? r2(sol.reduce((a2, b2) => a2 + b2, 0) / sol.length) : null,
+        so_ons: 1, suspeito: 0 });
+      soOns++;
+    }));
+    // a serie tem de continuar em ordem: painel de dia usa `dia` como eixo e recusa x que desce
+    serie_dia.sort((a, b) => (a.dia + a.ufv < b.dia + b.ufv ? -1 : 1));
+    console.log('dias so do ONS: ' + soOns + ' linhas dia-usina'
+      + (soOns ? ' (' + diasOns[diasOns.length - 1] + ' e o ultimo do ONS)' : ''));
+  }
 
   // ---------- serie mensal ----------
   const meses = [...new Set(dias.map(d => d.slice(0, 7)))].sort();
@@ -826,10 +880,19 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // `t` = hora decimal (0, 0.5, 1 ... 23.5). E o x do painel: numero que sobe, sem depender de
   // mapeamento, e que no eixo se le como hora. `mes` NAO vai na linha — o arquivo ja e de um mes so,
   // e repeti-lo 12.960 vezes custava 230 KB por mes de nada.
+  // 🔴 A CHAVE E A UNIAO, nao so o nosso acumulador. O ONS alcanca dias que o despejo do SCADA
+  //    ainda nao trouxe, e ate 27/08/2026 esses instantes eram lidos, convertidos e DESCARTADOS
+  //    aqui — a pagina ficava cega com a informacao dentro de casa. Agora a curva do SCADA termina
+  //    e a do ONS continua, que e a leitura honesta.
+  // ⚠️ As duas chaves usam formatos DIFERENTES de slot (`|09` no nosso, `|9` no do ONS). Unir sem
+  //    normalizar duplicaria as nove primeiras meias-horas de cada dia.
+  const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(ons).map((k) => {
+    const p = k.split('|'); return p[0] + '|' + p[1] + '|' + String(+p[2]).padStart(2, '0');
+  })])].sort();
   const serie_semihora = [];
-  Object.keys(accH).sort().forEach(k => {
+  chavesH.forEach(k => {
     const [d, u, slot] = k.split('|');
-    const g = accH[k];
+    const g = accH[k] || {};
     const l = { dia: d, ufv: u, t: +slot / 2 };
     // o ONS no MESMO slot, ao lado do nosso: e o que faz o comparativo ser um painel de duas linhas
     // em vez de um cruzamento de dois blobs no navegador
@@ -840,7 +903,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       const o = g[gr];
       if (o && o.n) { l[campo] = r2(o.s / o.n); algum = true; }
     });
-    if (algum) serie_semihora.push(l);
+    if (algum || l.ons_w != null) serie_semihora.push(l);
   });
 
   // ---------- tabela de QUALIDADE: e o entregavel principal ----------
