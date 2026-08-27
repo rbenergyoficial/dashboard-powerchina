@@ -186,14 +186,30 @@ function comComplexo(serieDia, serieMes, semihora) {
 }
 
 async function fonteLinhas() {
-  const local = process.env.IIRR_LOCAL;
-  if (local) return readline.createInterface({ input: fs.createReadStream(local, 'utf8'), crlfDelay: Infinity });
-
   // 🔴 NOME DATADO NAO VIRA URL FIXA. O export chega como IIRR_<AAAAMMDD>_<HHMMSS>.csv, e apontar
   // IIRR_URL para um nome congela o gerador naquele arquivo. Listar o container e escolher o mais
   // recente e o que faz a ponte funcionar sem ninguem editar o workflow a cada export.
   const cont = process.env.IIRR_CONTAINER;
   if (cont) {
+    return await fontesDoContainer(cont);
+  }
+  return await fonteUnica();
+}
+
+/* 🔴 O DIARIO CHEGA COM OUTRO NOME, e por UMA LETRA. O despejo historico e `IIRR_<data>.csv`; o
+ * export DIARIO da mesma estacao chega como `IRR_GERAL_<data>.csv`, todo dia de madrugada. Ate
+ * 27/08/2026 este gerador so casava `IIRR_`, entao lia UM arquivo congelado em 08/08 e ignorava,
+ * em silencio, os diarios que continuavam chegando — a pagina ficou 19 dias parada com o dado
+ * dentro do container. Medido: `IRR_GERAL_20260825` tem as MESMAS 10 estacoes e as MESMAS 44
+ * colunas por estacao do despejo, com 48 linhas de 30 min.
+ *
+ * ⚠️ Nao confundir com `IRR_<data>.csv`, que tambem chega todo dia: aquele e o grupo `GER_IRR`,
+ *    91 colunas, OUTRO sensor. Sao tres nomes parecidos e so um deles e o continuacao do historico.
+ *
+ * A leitura passa a ser a MESMA do gen-trafo: le TODOS e mescla. Escolher "o mais recente" traria
+ * um dia so; escolher "o maior" traria o despejo congelado. */
+async function fontesDoContainer(cont) {
+  {
     const { BlobServiceClient } = require('@azure/storage-blob');
     const conn = process.env.DADOS_STORAGE;
     if (!conn) throw new Error('IIRR_CONTAINER exige DADOS_STORAGE');
@@ -219,19 +235,52 @@ async function fonteLinhas() {
     if (!melhor) throw new Error('nenhum *IIRR_<data>_<hora>.csv em "' + cont + '" — '
       + vistos + ' casaram de ' + totalBlobs + ' blob(s) no container');
     const mb = Math.round((melhor.properties.contentLength || 0) / 1048576);
-    console.log('  fonte: ' + cont + '/' + melhor.name + '  (' + mb + ' MB · '
-      + String(melhor.properties.lastModified).slice(0, 24) + ' · ' + vistos + ' export(s) no container)');
-    const dl = await c.getBlobClient(melhor.name).download();
-    return readline.createInterface({ input: dl.readableStreamBody, crlfDelay: Infinity });
-  }
+    console.log('  historico: ' + melhor.name + '  (' + mb + ' MB · '
+      + String(melhor.properties.lastModified).slice(0, 24) + ' · ' + vistos + ' despejo(s))');
 
+    // ---- os DIARIOS, que continuam chegando depois que o despejo congelou
+    const carimboD = (x) => {
+      const m = x.split('/').pop().match(/IRR_GERAL_(\d{8}_\d{6})\.csv$/i); return m ? m[1] : null;
+    };
+    const diarios = [];
+    for await (const b of c.listBlobsFlat()) {
+      const k = carimboD(b.name);
+      if (k) diarios.push({ nome: b.name, k });
+    }
+    diarios.sort((a, b) => (a.k < b.k ? -1 : 1));
+    console.log('  diarios: ' + diarios.length + ' arquivo(s) IRR_GERAL'
+      + (diarios.length ? ' · ' + diarios[0].k.slice(0, 8) + ' a '
+        + diarios[diarios.length - 1].k.slice(0, 8) : ''));
+
+    const abre = (nome) => async () => {
+      const dl = await c.getBlobClient(nome).download();
+      return readline.createInterface({ input: dl.readableStreamBody, crlfDelay: Infinity });
+    };
+    // o historico primeiro: ele define a base, e o diario que repetir um instante ja lido e
+    // descartado pelo dedup do laco — sao a mesma medicao, entao a ordem nao muda numero nenhum
+    return [{ nome: melhor.name, abre: abre(melhor.name) }]
+      .concat(diarios.map((d) => ({ nome: d.nome, abre: abre(d.nome) })));
+  }
+}
+
+async function fonteUnica() {
+  // IIRR_LOCAL aceita LISTA separada por virgula — e o que permite ensaiar a mescla sem o
+  // container. Sem isso o caminho de varios arquivos so seria exercitado em producao.
+  const local = process.env.IIRR_LOCAL;
+  if (local) {
+    return local.split(',').map((x) => x.trim()).filter(Boolean).map((cam) => ({
+      nome: cam, abre: async () => readline.createInterface({
+        input: fs.createReadStream(cam, 'utf8'), crlfDelay: Infinity }) }));
+  }
   const url = process.env.IIRR_URL;
   if (!url) throw new Error('defina IIRR_CONTAINER, IIRR_URL ou IIRR_LOCAL');
-  const { PassThrough } = require('stream');
-  const pt = new PassThrough();
-  https.get(url, r => { if (r.statusCode >= 300) pt.destroy(new Error('HTTP ' + r.statusCode)); else r.pipe(pt); })
-    .on('error', e => pt.destroy(e));
-  return readline.createInterface({ input: pt, crlfDelay: Infinity });
+  return [{ nome: url, abre: async () => {
+    const { PassThrough } = require('stream');
+    const pt = new PassThrough();
+    https.get(url, r => { if (r.statusCode >= 300) pt.destroy(new Error('HTTP ' + r.statusCode)); else r.pipe(pt); })
+      .on('error', e => pt.destroy(e));
+    return readline.createInterface({ input: pt, crlfDelay: Infinity });
+  } }];
 }
 
 // 🔴 O AZURE NAO COMPRIME SOZINHO: ele serve exatamente os bytes gravados. Com o terceiro
@@ -550,9 +599,9 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       + ' dias com hora · janela ' + j.janela.ini + ' a ' + j.janela.fim);
     return;
   }
-  const rl = await fonteLinhas();
+  const FONTES = await fonteLinhas();
   let cab = null;
-  const mapa = [];                 // { i, ufv, gr }
+  let mapa = [];                   // { i, ufv, gr }
   const acc = {};                  // dia -> ufv -> gr -> {sB,nB,sL,nL,minL,maxL,fora,zd,nd}
   // acumulador HORARIO: o painel precisa descer ao dia e mostrar as 24 horas. Guardo so as
   // grandezas que se leem numa curva de dia — nao as 22, senao o blob passa de 20 MB.
@@ -563,7 +612,20 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   const accH = {};                 // dia|ufv|hora -> gr -> {s,n}
   const qual = {};                 // ufv -> gr -> {n,vazio,fora,zd,nd,min,max}
   let nLinhas = 0, tsIni = null, tsFim = null;
+  // 🔴 DEDUP POR INSTANTE, e ele e obrigatorio: os acumuladores SOMAM, entao um instante presente
+  //    no despejo historico E num diario entraria duas vezes e a media do dia sairia certa por
+  //    acidente (soma e contagem dobram juntas) mas o TOTAL do mes sairia dobrado. O historico e
+  //    lido primeiro; o diario que repetir um instante ja lido e descartado.
+  const vistos = new Set();
+  const ufvsVistas = new Set(), grsVistas = new Set();
+  let repetidos = 0;
 
+  for (const fonte of FONTES) {
+  // ⚠️ CABECALHO POR ARQUIVO. Cada CSV traz o proprio, e a ORDEM das colunas nao e garantida entre
+  //    exports — remapear por arquivo e o que impede ler a coluna de uma estacao como se fosse de
+  //    outra. Reaproveitar o mapa do arquivo anterior seria o modo silencioso de errar.
+  cab = null; mapa = [];
+  const rl = await fonte.abre();
   for await (const linha of rl) {
     if (!linha.trim()) continue;
     const cols = linha.replace(/^﻿/, '').split(';');
@@ -576,11 +638,18 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
         if (!ufv || !FAIXA[m[3]]) return;             // estacao ou grandeza que nao conheco
         mapa.push({ i, ufv, gr: m[3] });
       });
-      if (!mapa.length) throw new Error('nenhuma coluna reconhecida — o layout do export mudou?');
+      if (!mapa.length) {
+        throw new Error('nenhuma coluna reconhecida em ' + fonte.nome + ' — o layout mudou?');
+      }
+      for (const m of mapa) { ufvsVistas.add(m.ufv); grsVistas.add(m.gr); }
       continue;
     }
+    const ts = cols[0];
+    if (vistos.has(ts)) { repetidos++; continue; }
+    vistos.add(ts);
     nLinhas++;
-    const ts = cols[0]; if (!tsIni) tsIni = ts; tsFim = ts;
+    if (!tsIni || ts < tsIni) tsIni = ts;
+    if (!tsFim || ts > tsFim) tsFim = ts;
     const d = ts.slice(0, 10), hh = +ts.slice(11, 13);
     const diurno = hh >= DIURNO[0] && hh <= DIURNO[1];
     for (const m of mapa) {
@@ -633,9 +702,16 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
       if (q.max == null || x > q.max) q.max = x;
     }
   }
+  }   // fim do laco por FONTE
 
-  const ufvs = [...new Set(mapa.map(m => m.ufv))].sort();
-  const grs = [...new Set(mapa.map(m => m.gr))].sort();
+  console.log('  lidos ' + FONTES.length + ' arquivo(s) · ' + nLinhas + ' instantes distintos'
+    + (repetidos ? ' · ' + repetidos + ' repetido(s) descartado(s)' : ''));
+
+  // 🔴 O UNIVERSO DE ESTACOES E GRANDEZAS E A UNIAO, nao o do ULTIMO arquivo lido. Com `mapa`
+  //    reiniciado a cada CSV, tirar `ufvs` dele depois do laco daria o mapa do ultimo diario — e
+  //    uma estacao que so aparecesse no historico sumiria da pagina inteira sem erro nenhum.
+  const ufvs = [...ufvsVistas].sort();
+  const grs = [...grsVistas].sort();
   const dias = Object.keys(acc).sort();
   const SLOTS = 48;
 
