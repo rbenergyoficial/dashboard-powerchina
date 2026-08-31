@@ -255,12 +255,30 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // a cada ~5 min — da p/ montar a barra de hoje com o MESMO rollup do arquivador.
   // A linha vai marcada com `parcial`: ela e curta por definicao (metade do dia = metade da
   // barra) e sem a marca alguem le queda de geracao onde so ha meio-dia decorrido.
-  try {
-    const hojeBRT = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+  // 🔴 E NAO E SO HOJE: entre a meia-noite e o arquivador, o dia que ACABOU de terminar nao
+  // esta em lugar nenhum — saiu de "hoje" e ainda nao entrou no way2_daily. Medido em
+  // 31/08/2026 as 00:42: o arquivador nao rodava desde 30/08 06:22 BRT, o way2_daily parava
+  // em 29/08, e a rodada seguinte do executivo APAGARIA o dia 30 (o mes do Complexo caia de
+  // 60,77 para 59,31 GWh). O snapshot de 5 min de cada dia continua publicado, entao a lacuna
+  // se fecha lendo os ultimos dias que faltarem, nao so o corrente.
+  const DIAS_SNAP = 4;
+  for (let k = 0; k < DIAS_SNAP; k++) try {
+    const hojeBRT = new Date(Date.now() - 3 * 3600 * 1000 - k * 86400000).toISOString().slice(0, 10);
     if (!daily.dias.some(d => d.dia === hojeBRT)) {
       const snap = await getJSON(BASE + 'hist/way2_' + hojeBRT + '.json');
       const linha = rollupDia(snap, hojeBRT);
       if (linha.slots > 0) {
+        // dia PASSADO so entra como fechado se o snapshot esta completo (288 slots de 5 min);
+        // snapshot truncado publicado como dia inteiro subdeclara a geracao em silencio.
+        if (k > 0) {
+          const cheio = linha.slots >= 286;
+          linha.parcial = cheio ? 0 : 1;
+          if (!cheio) linha.ate = null;
+          daily.dias.push(linha);
+          console.log('dia ' + hojeBRT + ' recuperado do snapshot (' + linha.slots + ' slots, '
+            + linha.ene_liq_mwh + ' MWh' + (cheio ? ', completo' : ', PARCIAL — snapshot truncado') + ')');
+          continue;
+        }
         linha.parcial = 1;
         // DIA ENCERRADO PARA GERAÇÃO: depois do pôr do sol o dia nao rende mais nada — o que vem
         // ate a meia-noite e so consumo do trafo (~0,5 MW). Enquanto o dia era tratado como
@@ -280,7 +298,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           + (linha.encerrado ? ' · GERACAO ENCERRADA: conta como dia decorrido' : '') + ')');
       }
     }
-  } catch (e) { console.log('dia corrente indisponivel (' + e.message + ') — serie fica ate ontem'); }
+  } catch (e) { console.log('dia -' + k + ' indisponivel (' + e.message + ')'); }
 
   // ---------- ENERGIA LIQUIDA OFICIAL: ler, nao calcular ----------
   // O rollup do way2_daily INTEGRA POTENCIA (Demat, 5 min) — e uma aproximacao. A Way2 publica a
@@ -294,27 +312,84 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   // historica continuam com o rollup, ~0,7% acima — pendente estender a busca da EneatLiquida.
   const PT_ENE = { 6368: 'M1', 6369: 'M2', 6373: 'M3', 6374: 'M4', 6375: 'M5',
                    6376: 'M6', 6215: 'M7', 6378: 'M8', 6219: 'M9' };
+  const med = (a) => { const s = a.slice().sort((p, q) => p - q); if (!s.length) return null;
+    return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
   try {
     const em = await getJSON(BASE + 'way2_energia_mes.json');
-    const L = {};                                  // dia -> { UFV: MWh }
+    const L = {};                                  // dia -> { UFV: MWh }  (liquidada)
     (em.dados || []).forEach(d => { const u = PT_ENE[d.pontoId]; if (!u) return;
       (d.valores || []).forEach(v => { if (v.valor == null) return;
         (L[String(v.data).slice(0, 10)] = L[String(v.data).slice(0, 10)] || {})[u] = v.valor / 1000; }); });
-    let n = 0, ig = [];
+
+    // ---- EneatRec: a SEGUNDA ROTA que julga se a liquidada do dia esta COMPLETA ----
+    // A guarda antiga era `tot > 0`, e isso e meia guarda: em 30/08/2026 a liquidada do dia
+    // veio -1,92 MWh (so o consumo noturno, liquidacao ainda nao rodada) e foi recusada apenas
+    // por CALHAR de ser negativa. Um dia 60% liquidado, com +900 MWh, passava e substituia
+    // 2.400 por 900 em SILENCIO. O EneatRec e um contador de energia publicado em ~tempo real
+    // no mesmo ponto: a razao liquidada/EneatRec e a perda, e ela e estreita e estavel.
+    const R = {};                                  // dia -> { UFV: MWh }  (bruta, contador)
+    try {
+      const ed = await getJSON(BASE + 'way2_eneat_diario.json');
+      (ed.dados || []).forEach(d => { const u = PT_ENE[d.pontoId]; if (!u) return;
+        (d.valores || []).forEach(v => { if (v.valor == null) return;
+          (R[String(v.data).slice(0, 10)] = R[String(v.data).slice(0, 10)] || {})[u] = v.valor / 1000; }); });
+    } catch (e) { console.log('way2_eneat_diario.json indisponivel — guarda da liquidada volta a olhar so o sinal'); }
+    const somaU = (o) => o ? Object.values(o).reduce((a, b) => a + num(b), 0) : 0;
+
+    // A GRANDEZA QUE SEPARA E O RESIDUO EM MWh, nao a razao. A razao liquidada/EneatRec cai
+    // com a geracao do dia (o consumo auxiliar e quase fixo), entao dia de pouco sol tem
+    // razao naturalmente menor — 95,97% em 16/08, contra 99,35% no dia de mais sol. Um corte
+    // por razao teria de ficar frouxo para nao recusar dia bom, e frouxo demais deixa passar
+    // dia meio liquidado: com corte em 50%, um dia liquidado a 60% PASSAVA (pego pelo ensaio).
+    // Ja o residual `EneatRec - liquidada` e o proprio consumo auxiliar, e ele quase nao varia:
+    // medido em ago/26, 11,0 a 22,4 MWh em dias de 347 a 2.916 MWh de geracao. Liquidacao
+    // parcial sai em centenas ou milhares de MWh — duas familias com um fator de 50 entre elas.
+    // O teto sai dos proprios dias aceitos (3x o maior residuo ja visto), nao de numero a mao.
+    const pares = daily.dias.filter(x => !x.parcial && Object.keys(L[x.dia] || {}).length >= 9
+        && Object.keys(R[x.dia] || {}).length >= 9 && somaU(R[x.dia]) > 100)
+      .map(x => ({ rec: somaU(R[x.dia]), res: somaU(R[x.dia]) - somaU(L[x.dia]) }));
+    const bons = pares.filter(q => q.res > 0 && q.res < q.rec * 0.5).map(q => q.res);
+    const TETO_RES = bons.length >= 5 ? 3 * Math.max.apply(null, bons) : null;
+
+    let n = 0; const ig = [];
     daily.dias.forEach(x => {
       const l = L[x.dia]; if (!l) return;
       if (x.parcial) { ig.push(x.dia + ' (dia em curso)'); return; }
-      // exige as 9 usinas e total positivo: dia meio-liquidado daria numero menor que o real
       const us = Object.keys(l);
+      if (us.length < 9) { ig.push(x.dia + ' (nao liquidado)'); return; }
       const tot = us.reduce((a, u) => a + l[u], 0);
-      if (us.length < 9 || tot <= 0) { ig.push(x.dia + ' (nao liquidado)'); return; }
+      const rec = somaU(R[x.dia]);
+      if (TETO_RES != null && rec > 100) {
+        const res = rec - tot;
+        if (!(res > -1 && res <= TETO_RES)) {
+          ig.push(x.dia + ' (liquidacao incompleta: faltam ' + res.toFixed(0) + ' MWh de ' + rec.toFixed(0) + ')');
+          return;
+        }
+      } else if (tot <= 0) { ig.push(x.dia + ' (nao liquidado)'); return; }
       x.ufv_liq_mwh = Object.fromEntries(us.map(u => [u, r2(l[u])]));
       x.ene_liq_mwh = r2(tot);
       x.liq_fonte = 'EneatLiquida';
       n++;
     });
     console.log('energia liquida OFICIAL (EneatLiquida) em ' + n + ' dias'
+      + (TETO_RES != null ? ' · guarda: falta acima de ' + TETO_RES.toFixed(0)
+         + ' MWh contra o EneatRec e dia incompleto' : ' · sem EneatRec, guarda so no sinal')
       + (ig.length ? ' · fora: ' + ig.join(', ') : ''));
+
+    // ---- O DIA EM CURSO NA MESMA ESCALA DOS DIAS FECHADOS ----
+    // O rollup integra a potencia do medidor do complexo e fica ~0,44% ACIMA da liquidada:
+    // ele desconta o consumo do proprio ponto de conexao, e nao a perda ate os medidores de
+    // faturamento das usinas. Medido em ago/26, a perda total (1 - liquidada/EneatRec) tem
+    // mediana de 0,83% no conjunto e varia POR USINA (0,51% no M8 a 1,85% no M9) — um fator
+    // unico para as nove erraria o rateio. O fator sai da mediana dos dias ja liquidados,
+    // por usina, entao ele acompanha a planta sem numero escrito a mao.
+    // ⚠️ NAO ha correcao de perda a aplicar no dia em curso, e isso foi MEDIDO antes de
+    // escrever qualquer ajuste: o rollup por usina bate com a liquidada oficial em 0,013%
+    // (29 dias de ago/26, inclinacao 1,0000 nas nove). O ajuste afim que eu tinha montado
+    // aqui foi recusado pelo proprio crivo dele (`b <= 1 && a <= 0`) em 7 das 9 usinas —
+    // nao havia perda para descontar. Os 0,44% que eu media vinham de eu integrar o medidor
+    // do complexo (6233) em vez dos dois transformadores da SE, que e o que o rollup usa.
+    // Fica registrado para ninguem reabrir isso: a diferenca era da MINHA medicao.
   } catch (e) { console.log('way2_energia_mes.json indisponivel (' + e.message + ') — segue com o rollup'); }
 
   // ---------- 1) complexo por mês, a partir do ons_restricao_all ----------
