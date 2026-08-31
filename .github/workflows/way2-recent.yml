@@ -20,6 +20,15 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-way2-recent.js
+      # O executivo declara 15 execucoes/dia no cron e o agendador do GitHub entrega 5,6
+      # (medido em 45 execucoes: mediana de 91 min entre elas, p90 de 615). Este passo custa
+      # uma leitura e uma escrita e mantem SO a linha do dia em curso fresca, na cadencia de
+      # 5 min deste job. Grava com If-Match: se o executivo reescrever o blob no meio, ele
+      # desiste e a proxima rodada refaz sobre o estado novo.
+      - name: Dia em curso no executivo.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-dia-corrente.js
       # 🔴 A REGRA DE COR DO SELO ESTA DUPLICADA no ensaio, porque o gerador nao a exporta. Divida
       # assumida — e esta e a guarda contra ela apodrecer: o ensaio confere os sete casos sinteticos
       # (incluindo o de 23/08, dois medidores de 230 kV fora) e depois compara o proprio resultado
