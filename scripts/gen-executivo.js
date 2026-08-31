@@ -299,6 +299,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       }
     }
   } catch (e) { console.log('dia -' + k + ' indisponivel (' + e.message + ')'); }
+  daily.dias.sort((a, b) => a.dia < b.dia ? -1 : a.dia > b.dia ? 1 : 0);
 
   // ---------- ENERGIA LIQUIDA OFICIAL: ler, nao calcular ----------
   // O rollup do way2_daily INTEGRA POTENCIA (Demat, 5 min) — e uma aproximacao. A Way2 publica a
