@@ -29,6 +29,20 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-dia-corrente.js
+      # As perdas de PV alimentam o card de cobertura da medicao, e o `perdas.yml` declara
+      # uma execucao por dia no cron — que o agendador do GitHub as vezes simplesmente nao
+      # entrega (nao rodou em 31/08). Aqui ele e coberto pelo job que roda de verdade, mas
+      # SO quando o resultado ja esta velho: o passo custa ~3 min e nao pode sair a cada
+      # cinco minutos. A guarda trata 404 e erro como velho — nao gerar custa um dia de
+      # pagina parada, gerar a toa custa tres minutos.
+      - name: O blob de perdas está velho?
+        id: idade_perdas
+        run: node scripts/idade-blob.js perdas_diario.json 3 5
+      - name: Perdas de PV (cobre o agendador)
+        if: steps.idade_perdas.outputs.velho == 'true'
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-perdas.js
       # 🔴 A REGRA DE COR DO SELO ESTA DUPLICADA no ensaio, porque o gerador nao a exporta. Divida
       # assumida — e esta e a guarda contra ela apodrecer: o ensaio confere os sete casos sinteticos
       # (incluindo o de 23/08, dois medidores de 230 kV fora) e depois compara o proprio resultado
