@@ -980,13 +980,21 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           const pr = geP > 0 ? r2(100 * gvP / geP) : null;
           const cob = parN ? r2(100 * parOk / parN) : 0;
           const prOk = !S.ramp_up && cob >= 70 && pr != null && pr >= 50 && pr <= 95;
+          // 🔴 mes sem publicacao do operador: TUDO que vem dele sai NULO, nunca zero. Sem
+          //    isto o painel de energia perdida afirma que nao houve corte, quando o que nao
+          //    houve foi medicao — e `IRR[m]` ausente cai no default {ge:0,gv:0}, que produz
+          //    corte = max(0, 0-0) = 0 com cara de apuracao.
+          // ⚠️ `liquida_gwh`, a meta e o atingido FICAM: eles saem do nosso medidor e da
+          //    planilha do PPA, nao dependem do operador, e sao o que a pagina mostra no mes.
+          const oN = (v) => (S.sem_ons ? null : v);
           return { ufv, mes: m, mes_ts: S.mes_ts, lbl: S.lbl,
             liquida_gwh: r2(liq / 1000), meta_gwh: meta == null ? null : r2(meta / 1000),
             atingido_pct: meta > 0 ? r2(100 * liq / meta) : null,
-            potencial_gwh: r2(ge / 1000), entregue_gwh: r2(gv / 1000), cortado_gwh: r2(corte / 1000),
-            corte_pct: ge > 0 ? r2(100 * corte / ge) : null,
-            outras_gwh: r2(Math.max(0, (ge - gv) - corte) / 1000),
-            pr_pct: prOk ? pr : null, pr_cobertura_pct: cob,
+            potencial_gwh: oN(r2(ge / 1000)), entregue_gwh: oN(r2(gv / 1000)),
+            cortado_gwh: oN(r2(corte / 1000)),
+            corte_pct: oN(ge > 0 ? r2(100 * corte / ge) : null),
+            outras_gwh: oN(r2(Math.max(0, (ge - gv) - corte) / 1000)),
+            pr_pct: oN(prOk ? pr : null), pr_cobertura_pct: oN(cob),
             disp_pct: S.disp_pct, horas_restricao: S.horas_restricao, escopo_complexo: 1,
             nota: prOk ? null : S.nota };
         };
