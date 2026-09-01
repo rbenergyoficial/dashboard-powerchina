@@ -2516,6 +2516,46 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const m = dem[s.pontoId] = dem[s.pontoId] || {};
       (s.valores || []).forEach(v => { if (v.valor != null) m[String(v.data).slice(0, 13)] = v.valor; });
     });
+    // 🔴 O AGREGADO DE 1 H CHEGA COM HORAS DE ATRASO (o agendador entrega ~5,6 execucoes/dia
+    //    de 24 declaradas). Medido em 01/09/2026: ele parava em 11:00 com o snapshot de 5 min
+    //    ja em 14:10, e a curva da hora congelava com o dado fresco no arquivo. O snapshot e
+    //    disparado por FORA do agendador, entao ele completa o que falta.
+    // ⚠️ HORA INCOMPLETA NAO ENTRA: a hora em curso tem so parte das amostras e sairia baixa,
+    //    desenhando uma queda que nao aconteceu. Precisa de >= 11 amostras (a hora 0 comeca em
+    //    00:05 e tem 11 por construcao) E de existir amostra de uma hora POSTERIOR.
+    for (let k = 0; k < 3; k++) {
+      const dSnap = new Date(Date.now() - 3 * 3600 * 1000 - k * 86400000).toISOString().slice(0, 10);
+      let snap = null;
+      try { snap = await getJSON(BASE + 'hist/way2_' + dSnap + '.json'); }
+      catch (e) { continue; }
+      const porPonto = {};                       // pontoId -> { hora -> [kW] }
+      let maiorHora = -1;
+      (snap.dados || []).forEach(s => {
+        if (s.nomeGrandeza !== 'Demat') return;
+        const m = porPonto[s.pontoId] = porPonto[s.pontoId] || {};
+        (s.valores || []).forEach(v => {
+          if (v.valor == null) return;
+          const hh = +String(v.data).slice(11, 13);
+          (m[hh] = m[hh] || []).push(v.valor);
+          if (hh > maiorHora) maiorHora = hh;
+        });
+      });
+      let posto = 0;
+      Object.entries(porPonto).forEach(([pid, m]) => {
+        Object.entries(m).forEach(([hh, vs]) => {
+          const h = +hh;
+          if (vs.length < 11 || h >= maiorHora) return;   // hora incompleta ou em curso
+          const chave = dSnap + 'T' + String(h).padStart(2, '0');
+          const alvo = dem[pid] = dem[pid] || {};
+          if (alvo[chave] != null) return;                // o agregado manda onde ele tem
+          alvo[chave] = vs.reduce((a, b) => a + b, 0) / vs.length;
+          posto += 1;
+        });
+      });
+      if (posto) console.log('camada horaria de ' + dSnap + ': ' + posto
+        + ' pares ponto-hora completados do snapshot de 5 min (o agregado parava antes)');
+    }
+
     const chaves = new Set();
     Object.values(dem).forEach(m => Object.keys(m).forEach(k => chaves.add(k)));
     // null se NENHUM circuito reportou: assim a hora sem dado nao vira zero (que o grafico
