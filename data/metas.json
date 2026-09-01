@@ -267,7 +267,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa diaria — e CONFERIDO contra a planilha em 01/09/2026, que passou a trazer set/26: as 9 usinas, o total do PPA e o total do complexo batem ao centavo (99 comparacoes)."
   },
   "2026-10": {
    "garantido_total": 50592,
