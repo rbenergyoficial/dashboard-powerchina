@@ -1,0 +1,22 @@
+name: Relogio · a agenda ainda bate com os workflows?
+
+# O relogio toca no horario que a tabela dele diz. Se alguem mudar um cron num workflow e esquecer
+# a tabela, ele continua tocando no horario ANTIGO — e nada quebra, nada fica vazio, o job so passa
+# a rodar na hora errada. Esta conferencia existe para isso ficar vermelho em vez de silencioso.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/*.yml'
+      - 'relogio/agenda.json'
+      - 'relogio/gerar-agenda.js'
+  workflow_dispatch:
+
+jobs:
+  conferir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: node relogio/gerar-agenda.js --conferir

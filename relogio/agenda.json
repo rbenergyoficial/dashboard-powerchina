@@ -1,0 +1,48 @@
+{
+ "comparativo.yml": [
+  "0 40 13,23 * * *"
+ ],
+ "eneat-intradia-way2.yml": [
+  "0 0 */6 * * *"
+ ],
+ "executivo.yml": [
+  "0 13 4,9-22 * * *"
+ ],
+ "inv-scada.yml": [
+  "0 47 12 * * *"
+ ],
+ "inversores.yml": [
+  "0 22 12,18 * * *"
+ ],
+ "irradiancia-ons.yml": [
+  "0 30 6,15,17,19,22 * * *"
+ ],
+ "must-intra.yml": [
+  "0 */15 * * * *"
+ ],
+ "must.yml": [
+  "0 45 3 * * *"
+ ],
+ "ons-consolidado.yml": [
+  "0 17 18 * * *"
+ ],
+ "perdas.yml": [
+  "0 12 14 * * *"
+ ],
+ "scada.yml": [
+  "0 30 11 * * *",
+  "0 0 17,21 * * *"
+ ],
+ "trafo.yml": [
+  "0 38 10 * * *"
+ ],
+ "way2-agg.yml": [
+  "0 5 * * * *"
+ ],
+ "way2-hist.yml": [
+  "0 30 3 * * *"
+ ],
+ "way2-recent.yml": [
+  "0 */5 * * * *"
+ ]
+}

@@ -1,0 +1,57 @@
+name: Relogio · publicar no Azure
+
+# Publica o Function App que dispara os workflows. O relogio NAO coleta e NAO gera nada: toda a
+# logica continua nos geradores do repo, com as guardas que eles ja tem.
+#
+# Exige dois segredos, criados quando o recurso existir no Azure:
+#   AZURE_FUNCTIONAPP_PUBLISH_PROFILE   perfil de publicacao do Function App
+#   (no proprio Azure) GH_TOKEN         PAT com `actions: write` neste repo, em Configuracoes
+#                                       do aplicativo — NUNCA no repo.
+
+on:
+  push:
+    branches: [main]
+    paths: ['relogio/**']
+  workflow_dispatch:
+
+env:
+  APP: ${{ vars.RELOGIO_APP_NAME }}
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sem o recurso criado no Azure nao ha o que publicar. Sair limpo com um aviso e melhor do
+      # que ficar vermelho em todo push ate alguem criar o recurso — alarme que acende sempre
+      # ensina a ignorar o alarme.
+      - name: O destino existe?
+        id: pronto
+        run: |
+          if [ -z "${{ env.APP }}" ] || [ -z "${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" ]; then
+            echo "ok=false" >> $GITHUB_OUTPUT
+            echo "::notice::Relogio ainda nao tem destino no Azure — falta a variavel RELOGIO_APP_NAME e/ou o segredo do perfil de publicacao. Nada publicado."
+          else
+            echo "ok=true" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.pronto.outputs.ok == 'true'
+        with: { node-version: '20' }
+
+      - name: A agenda bate com os workflows?
+        if: steps.pronto.outputs.ok == 'true'
+        run: node relogio/gerar-agenda.js --conferir
+
+      - name: Instalar dependencias
+        if: steps.pronto.outputs.ok == 'true'
+        run: npm install --omit=dev
+        working-directory: relogio
+
+      - uses: Azure/functions-action@v1
+        if: steps.pronto.outputs.ok == 'true'
+        with:
+          app-name: ${{ env.APP }}
+          package: relogio
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
