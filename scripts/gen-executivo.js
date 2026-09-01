@@ -2516,19 +2516,31 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const m = dem[s.pontoId] = dem[s.pontoId] || {};
       (s.valores || []).forEach(v => { if (v.valor != null) m[String(v.data).slice(0, 13)] = v.valor; });
     });
-    // 🔴 O AGREGADO DE 1 H CHEGA COM HORAS DE ATRASO (o agendador entrega ~5,6 execucoes/dia
-    //    de 24 declaradas). Medido em 01/09/2026: ele parava em 11:00 com o snapshot de 5 min
-    //    ja em 14:10, e a curva da hora congelava com o dado fresco no arquivo. O snapshot e
-    //    disparado por FORA do agendador, entao ele completa o que falta.
-    // ⚠️ HORA INCOMPLETA NAO ENTRA: a hora em curso tem so parte das amostras e sairia baixa,
-    //    desenhando uma queda que nao aconteceu. Precisa de >= 11 amostras (a hora 0 comeca em
-    //    00:05 e tem 11 por construcao) E de existir amostra de uma hora POSTERIOR.
+    // 🔴 O AGREGADO DE 1 H CHEGA COM HORAS DE ATRASO e guarda o que apurou. O agendador do
+    //    GitHub entrega ~5,6 execucoes/dia de 24 declaradas, entao ele fica horas para tras; e
+    //    quando apura durante uma queda de telemetria, guarda o valor ruim para sempre. O
+    //    snapshot de 5 min e disparado por FORA do agendador e RELIDO a cada rodada, entao ele
+    //    completa o que falta E corrige o que a fonte repos.
+    //
+    //    Medido em 01/09/2026: o agregado parava em 11:00 com o snapshot ja em 14:10; e as 16:55
+    //    ele ainda trazia 79,8 MW na hora 15 do medidor do complexo contra 220,5 do snapshot ja
+    //    corrigido. Custo de dar precedencia ao snapshot nos dias assentados: ZERO — 1.181 pares
+    //    em 30 e 31/08, divergencia maxima de 0,00 MW. Sao a mesma medicao; muda quem se corrige.
+    //
+    // ⚠️ HORA CHEIA, e o criterio saiu da DISTRIBUICAO: nos 3 dias com snapshot, fora a hora em
+    //    curso, sao 1.482 pares ponto-hora com 12 amostras, 124 com 11 e 19 com menos. Os 124 sao
+    //    inteiros — as horas 0 e 23, em TODOS os 25 pontos, porque o balde comeca em :05. Um piso
+    //    fixo de 11 deixaria passar a hora 16 de 01/09, que tinha 11 amostras em 18 pontos e 12
+    //    nos outros: na rampa do fim de tarde a amostra que falta desloca a media, e PPA + ML
+    //    davam 133,0 MWh contra 124,9 do Complexo. A contagem do ponto tem de ser a MELHOR
+    //    daquela hora — assim a hora cheia se define do proprio dado, e nao de um numero escolhido.
     for (let k = 0; k < 3; k++) {
       const dSnap = new Date(Date.now() - 3 * 3600 * 1000 - k * 86400000).toISOString().slice(0, 10);
       let snap = null;
       try { snap = await getJSON(BASE + 'hist/way2_' + dSnap + '.json'); }
       catch (e) { continue; }
       const porPonto = {};                       // pontoId -> { hora -> [kW] }
+      const melhor = {};                         // hora -> maior numero de amostras entre os pontos
       let maiorHora = -1;
       (snap.dados || []).forEach(s => {
         if (s.nomeGrandeza !== 'Demat') return;
@@ -2540,57 +2552,79 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           if (hh > maiorHora) maiorHora = hh;
         });
       });
-      let posto = 0;
+      Object.values(porPonto).forEach(m => Object.entries(m).forEach(([hh, vs]) => {
+        if (!(melhor[hh] >= vs.length)) melhor[hh] = vs.length;
+      }));
+      // hora CHEIA para aquele ponto: nem em curso, nem com slot faltando em relacao aos outros
+      const cheia = (h, n) => h < maiorHora && n >= 11 && n === melhor[h];
+
+      let posto = 0, corrigido = 0;
       Object.entries(porPonto).forEach(([pid, m]) => {
         Object.entries(m).forEach(([hh, vs]) => {
-          const h = +hh;
-          if (vs.length < 11 || h >= maiorHora) return;   // hora incompleta ou em curso
-          const chave = dSnap + 'T' + String(h).padStart(2, '0');
+          if (!cheia(+hh, vs.length)) return;
+          const chave = dSnap + 'T' + String(+hh).padStart(2, '0');
           const alvo = dem[pid] = dem[pid] || {};
-          if (alvo[chave] != null) return;                // o agregado manda onde ele tem
-          alvo[chave] = vs.reduce((a, b) => a + b, 0) / vs.length;
-          posto += 1;
+          const media = vs.reduce((a, b) => a + b, 0) / vs.length;
+          // ⚠️ 0,5 kW de tolerancia, nao igualdade exata: o agregado arredonda, e comparar com
+          //    1e-9 contava 575 "correcoes" por rodada que eram ruido de ponto flutuante.
+          if (alvo[chave] != null && Math.abs(alvo[chave] - media) < 0.5) return;
+          if (alvo[chave] != null) corrigido += 1; else posto += 1;
+          alvo[chave] = media;
         });
       });
-      // 🔴 A GUARDA VALE PARA AS DUAS FONTES. O agregado de 1 h publica a hora EM CURSO:
-      //    medido em 01/09/2026 as 15:38 ele trazia 15:00 = 79,8 MW com UMA de 12 amostras no
-      //    snapshot, e a curva do Sumario desenhava uma queda de 206 para 80 que nao aconteceu.
-      //    Guarda que governa uma fonte so nao e guarda: sem isto a PONTA da curva de hoje
-      //    mente todo dia, e mente para BAIXO — o modo de errar que parece usina parando.
-      // ⚠️ So para HOJE: em dia passado o agregado e autoritativo e a hora 23 e legitima.
+
+      // 🔴 A GUARDA VALE PARA AS DUAS FONTES. Ela estava so no ramo que ACRESCENTA, e o agregado
+      //    passava por baixo: as 15:38 ele publicava 15:00 = 79,8 MW com UMA de 12 amostras, e a
+      //    curva do Sumario desenhava uma queda de 206 para 80 que nao aconteceu. Guarda que
+      //    governa uma fonte so nao e guarda — e o modo de errar e o pior: a PONTA da curva mente
+      //    todo dia, e mente para BAIXO, que e o que parece usina parando.
+      // ⚠️ So para HOJE: em dia passado o agregado ja se assentou e a hora 23 e legitima.
       if (k === 0) {
-        // ⚠️ A cobertura de cada hora e o MAXIMO entre os pontos, nunca a de um ponto so:
-        //    medidor que atrasa nao pode condenar a hora dos outros, senao o agregado passa
-        //    a somar menos pontos e subdeclara em silencio.
-        const cob = {};
-        Object.values(porPonto).forEach((m) => Object.entries(m).forEach(([hh, vs]) => {
-          if (!(cob[hh] >= vs.length)) cob[hh] = vs.length;
-        }));
-        const emCurso = Object.keys(cob).map(Number)
-          .filter((h) => cob[h] < 11 || h >= maiorHora);
-        let tirou = 0;
-        emCurso.forEach((h) => {
-          const chave = dSnap + 'T' + String(h).padStart(2, '0');
-          Object.values(dem).forEach((alvo) => {
-            if (alvo[chave] == null) return;
-            delete alvo[chave];
-            tirou += 1;
+        const chaveDe = (h) => dSnap + 'T' + String(h).padStart(2, '0');
+        let porRelogio = 0, porCobertura = 0;
+        // a hora EM CURSO e propriedade do RELOGIO: sai para TODOS os pontos, senao um medidor
+        // adiantado sustenta uma hora que os outros ainda nao terminaram
+        const cCurso = chaveDe(maiorHora);
+        Object.values(dem).forEach((alvo) => {
+          if (alvo[cCurso] == null) return;
+          delete alvo[cCurso];
+          porRelogio += 1;
+        });
+        // a cobertura PARCIAL e propriedade do PONTO: sai so para ele, porque e a media DELE que
+        // fica enviesada quando o medidor perde slot no meio da rampa
+        Object.entries(porPonto).forEach(([pid, m]) => {
+          const alvo = dem[pid];
+          if (!alvo) return;
+          Object.entries(m).forEach(([hh, vs]) => {
+            const h = +hh;
+            if (h >= maiorHora || cheia(h, vs.length)) return;
+            const c = chaveDe(h);
+            if (alvo[c] == null) return;
+            delete alvo[c];
+            porCobertura += 1;
           });
         });
-        if (tirou) console.log('hora em curso descartada: ' + tirou
-          + ' pares ponto-hora incompletos que o agregado havia publicado');
+        if (porRelogio + porCobertura) console.log('hora descartada: ' + porRelogio
+          + ' pela hora em curso, ' + porCobertura + ' por cobertura do medidor');
       }
-      if (posto) console.log('camada horaria de ' + dSnap + ': ' + posto
-        + ' pares ponto-hora completados do snapshot de 5 min (o agregado parava antes)');
+      if (posto || corrigido) console.log('camada horaria de ' + dSnap + ': ' + posto
+        + ' pares ponto-hora completados do snapshot de 5 min, ' + corrigido
+        + ' corrigidos (o agregado guardava valor apurado durante falha de coleta)');
     }
+
 
     const chaves = new Set();
     Object.values(dem).forEach(m => Object.keys(m).forEach(k => chaves.add(k)));
     // null se NENHUM circuito reportou: assim a hora sem dado nao vira zero (que o grafico
     // desenharia como usina parada).
-    const soma = (pts, k) => { let t = null;
-      pts.forEach(p => { const v = (dem[p] || {})[k]; if (v != null) t = (t || 0) + v; });
-      return t; };
+    // 🔴 TUDO-OU-NADA. Se QUALQUER circuito da entidade faltar naquela hora, a entidade nao tem
+    //    hora — somar o que existir subdeclara em SILENCIO. Medido em 01/09/2026, com a coleta
+    //    caindo no meio da hora 14: PPA + ML davam 288,42 MWh contra 206,20 do Complexo, 82 MWh
+    //    de divergencia na mesma tela, que o leitor le como dado errado. Custo medido no
+    //    historico: 15 de 19.354 horas-usina (0,078%), em 3 dias — exatamente as subdeclaradas.
+    const soma = (pts, k) => { let t = 0;
+      for (const p of pts) { const v = (dem[p] || {})[k]; if (v == null) return null; t += v; }
+      return pts.length ? t : null; };
     const horas = [];
     [...chaves].sort().forEach(k => {
       const dia = k.slice(0, 10), h = +k.slice(11, 13);
