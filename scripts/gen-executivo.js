@@ -2534,6 +2534,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     //    nos outros: na rampa do fim de tarde a amostra que falta desloca a media, e PPA + ML
     //    davam 133,0 MWh contra 124,9 do Complexo. A contagem do ponto tem de ser a MELHOR
     //    daquela hora — assim a hora cheia se define do proprio dado, e nao de um numero escolhido.
+    let parcialChave = null, parcialMin = 0;
     for (let k = 0; k < 3; k++) {
       const dSnap = new Date(Date.now() - 3 * 3600 * 1000 - k * 86400000).toISOString().slice(0, 10);
       let snap = null;
@@ -2581,11 +2582,25 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // ⚠️ So para HOJE: em dia passado o agregado ja se assentou e a hora 23 e legitima.
       if (k === 0) {
         const chaveDe = (h) => dSnap + 'T' + String(h).padStart(2, '0');
-        let porRelogio = 0, porCobertura = 0;
-        // a hora EM CURSO e propriedade do RELOGIO: sai para TODOS os pontos, senao um medidor
-        // adiantado sustenta uma hora que os outros ainda nao terminaram
+        let porRelogio = 0, porCobertura = 0, emCurso = 0;
+        // 🔴 A HORA EM CURSO leva a ENERGIA ACUMULADA nela, nao a media das amostras. A media
+        //    finge hora inteira: com UMA de 12 amostras ela dizia 79,8 MW como se fosse a hora
+        //    toda, e a curva desenhava uma queda de 206 para 80 que nao aconteceu.
+        //    A formula GENERALIZA a da hora cheia — soma(kW) x 5/60 == media x 1 h com 12
+        //    amostras —, entao hora cheia sai identica e so a hora em curso passa a existir.
+        // ⚠️ So os pontos com a MELHOR contagem daquela hora entram: se um medidor esta
+        //    atrasado ele perde a hora, o tudo-ou-nada zera a entidade, e nenhum agregado soma
+        //    minutos diferentes de cada circuito.
         const cCurso = chaveDe(maiorHora);
-        Object.values(dem).forEach((alvo) => {
+        const nCurso = melhor[maiorHora] || 0;
+        Object.entries(dem).forEach(([pid, alvo]) => {
+          const vs = (porPonto[pid] || {})[maiorHora];
+          if (vs && vs.length === nCurso && nCurso > 0) {
+            // kW-equivalente: dividido por 1000 mais adiante, da MWh acumulados na hora
+            alvo[cCurso] = vs.reduce((a, b) => a + b, 0) * 5 / 60;
+            emCurso += 1;
+            return;
+          }
           if (alvo[cCurso] == null) return;
           delete alvo[cCurso];
           porRelogio += 1;
@@ -2604,6 +2619,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
             porCobertura += 1;
           });
         });
+        if (emCurso) { parcialChave = cCurso; parcialMin = nCurso * 5;
+          console.log('hora em curso ' + maiorHora + 'h publicada como energia acumulada em '
+            + emCurso + ' pontos (' + parcialMin + ' min de cobertura)'); }
         if (porRelogio + porCobertura) console.log('hora descartada: ' + porRelogio
           + ' pela hora em curso, ' + porCobertura + ' por cobertura do medidor');
       }
@@ -2613,6 +2631,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     }
 
 
+    // a hora em curso e marcada para o painel poder distingui-la sem adivinhar pelo relogio
     const chaves = new Set();
     Object.values(dem).forEach(m => Object.keys(m).forEach(k => chaves.add(k)));
     // null se NENHUM circuito reportou: assim a hora sem dado nao vira zero (que o grafico
@@ -2628,7 +2647,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     const horas = [];
     [...chaves].sort().forEach(k => {
       const dia = k.slice(0, 10), h = +k.slice(11, 13);
-      const poe = (u, kw) => { if (kw == null) return; horas.push({ dia, h, ufv: u, mwh: r2(kw / 1000) }); };
+      const ehParcial = (k === parcialChave);
+      const poe = (u, kw) => { if (kw == null) return;
+        const l = { dia, h, ufv: u, mwh: r2(kw / 1000) };
+        // ⚠️ o painel NAO deduz "em curso" do relogio: quem sabe a cobertura e quem a mediu.
+        if (ehParcial) { l.parcial = 1; l.min = parcialMin; }
+        horas.push(l); };
       Object.entries(CIRC).forEach(([u, ps]) => poe(u, soma(ps, k)));
       poe('PPA', soma(PPA.flatMap(u => CIRC[u]), k));
       poe('ML', soma(ML.flatMap(u => CIRC[u]), k));
