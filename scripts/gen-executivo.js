@@ -2552,6 +2552,34 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
           posto += 1;
         });
       });
+      // 🔴 A GUARDA VALE PARA AS DUAS FONTES. O agregado de 1 h publica a hora EM CURSO:
+      //    medido em 01/09/2026 as 15:38 ele trazia 15:00 = 79,8 MW com UMA de 12 amostras no
+      //    snapshot, e a curva do Sumario desenhava uma queda de 206 para 80 que nao aconteceu.
+      //    Guarda que governa uma fonte so nao e guarda: sem isto a PONTA da curva de hoje
+      //    mente todo dia, e mente para BAIXO — o modo de errar que parece usina parando.
+      // ⚠️ So para HOJE: em dia passado o agregado e autoritativo e a hora 23 e legitima.
+      if (k === 0) {
+        // ⚠️ A cobertura de cada hora e o MAXIMO entre os pontos, nunca a de um ponto so:
+        //    medidor que atrasa nao pode condenar a hora dos outros, senao o agregado passa
+        //    a somar menos pontos e subdeclara em silencio.
+        const cob = {};
+        Object.values(porPonto).forEach((m) => Object.entries(m).forEach(([hh, vs]) => {
+          if (!(cob[hh] >= vs.length)) cob[hh] = vs.length;
+        }));
+        const emCurso = Object.keys(cob).map(Number)
+          .filter((h) => cob[h] < 11 || h >= maiorHora);
+        let tirou = 0;
+        emCurso.forEach((h) => {
+          const chave = dSnap + 'T' + String(h).padStart(2, '0');
+          Object.values(dem).forEach((alvo) => {
+            if (alvo[chave] == null) return;
+            delete alvo[chave];
+            tirou += 1;
+          });
+        });
+        if (tirou) console.log('hora em curso descartada: ' + tirou
+          + ' pares ponto-hora incompletos que o agregado havia publicado');
+      }
       if (posto) console.log('camada horaria de ' + dSnap + ': ' + posto
         + ' pares ponto-hora completados do snapshot de 5 min (o agregado parava antes)');
     }
