@@ -158,7 +158,7 @@ async function baixarParquet(mo) {
 const USA_CSV = /^csv$/i.test(process.env.FONTE || '');
 const baixarEConverter = (mo) => (USA_CSV ? baixarCSV(mo) : baixarParquet(mo));
 
-function montaSaida(mo, cons) {
+function montaSaida(mo, cons, nota) {
   cons.sort((a, b) => (a.ts === b.ts ? (a.u < b.u ? -1 : 1) : (a.ts < b.ts ? -1 : 1)));
   return {
     fonte: 'ONS RESTRICAO_COFF_FOTOVOLTAICA_DETAIL',
@@ -177,6 +177,10 @@ function montaSaida(mo, cons) {
       ge: 'val_geracaoestimada - Geracao estimada, em MWmed',
       gv: 'val_geracaoverificada - Geracao verificada, em MWmed',
     },
+    // ⚠️ presente SO no arquivo publicado vazio: diz que a ausencia e da FONTE, nao nossa.
+    //    Quem consumir consegue distinguir "o operador nao publicou" de "nao ha o que ler".
+    aguardando_fonte: nota ? 1 : 0,
+    nota: nota || undefined,
     consolidado: cons,
   };
 }
@@ -194,33 +198,54 @@ if (require.main !== module) return;
     const { BlobServiceClient } = require('@azure/storage-blob');
     container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
   }
+  const nomeDe = (mo) => 'ons_irradiancia_' + mo + '.json';
+  const jaExiste = async (mo) => {
+    if (local) return require('fs').existsSync(require('path').join(local, nomeDe(mo)));
+    return container.getBlockBlobClient(nomeDe(mo)).exists();
+  };
+  const grava = async (mo, body) => {
+    if (local) { require('fs').writeFileSync(require('path').join(local, nomeDe(mo)), body); return 0; }
+    const gz = require('zlib').gzipSync(Buffer.from(body, 'utf8'), { level: 9 });
+    await container.getBlockBlobClient(nomeDe(mo)).upload(gz, gz.length, {
+      blobHTTPHeaders: {
+        blobContentType: 'application/json',
+        blobContentEncoding: 'gzip',
+        blobCacheControl: 'public, max-age=1800',
+      },
+    });
+    return gz.length;
+  };
   console.log('=== irradiancia ONS · fonte: ' + (USA_CSV ? 'CSV (caminho antigo)' : 'PARQUET') + ' ===');
   let erros = 0;
   for (const mo of mesesAlvo()) {
     try {
       const t0 = Date.now();
       const cons = await baixarEConverter(mo);
-      if (cons === null) { console.log('[' + mo + '] arquivo ainda nao publicado — pulando'); continue; }
-      if (!cons.length) { console.log('[' + mo + '] sem linhas de Mauriti — pulando'); continue; }
-      const body = JSON.stringify(montaSaida(mo, cons));
-      if (local) {
-        require('fs').writeFileSync(require('path').join(local, 'ons_irradiancia_' + mo + '.json'), body);
-        console.log('[' + mo + '] OK — ' + cons.length + ' registros, gravado local em '
-          + (Date.now() - t0) + ' ms');
+      // 🔴 mes sem publicacao NAO e pulado: o blob nasce VAZIO, senao o painel pede um arquivo
+      //    que nao existe e abre com o triangulo vermelho. Medido: os paineis toleram
+      //    `consolidado: []` — devolvem 9 e 1 linhas, sem erro.
+      // ⚠️ mas NUNCA por cima de um arquivo que ja existe: uma falha de download devolve `null`
+      //    igual a "ainda nao publicado", e o vazio APAGARIA o mes inteiro.
+      if (cons === null || !cons.length) {
+        const motivo = cons === null ? 'o operador ainda nao publicou este mes'
+          : 'o operador publicou o mes sem nenhuma linha das usinas do conjunto';
+        if (await jaExiste(mo)) {
+          console.log('[' + mo + '] ' + motivo + ' — o arquivo ja existe e foi MANTIDO');
+          continue;
+        }
+        await grava(mo, JSON.stringify(montaSaida(mo, [], motivo)));
+        console.log('[' + mo + '] ' + motivo + ' — publicado VAZIO (o painel deixa de bater em 404)');
         continue;
       }
-      const gz = require('zlib').gzipSync(Buffer.from(body, 'utf8'), { level: 9 });
-      await container.getBlockBlobClient('ons_irradiancia_' + mo + '.json').upload(gz, gz.length, {
-        blobHTTPHeaders: {
-          blobContentType: 'application/json',
-          blobContentEncoding: 'gzip',
-          blobCacheControl: 'public, max-age=1800',
-        },
-      });
+      const body = JSON.stringify(montaSaida(mo, cons));
+      // ⚠️ um caminho so: `grava` decide entre arquivo local e blob, e devolve o tamanho
+      //    comprimido para o log — antes o mesmo JSON era gzipado DUAS vezes por mes.
+      const nGz = await grava(mo, body);
       console.log('[' + mo + '] OK — ' + cons.length + ' registros · '
-        + Math.round(body.length / 1024) + ' KB -> ' + Math.round(gz.length / 1024)
-        + ' KB comprimido (' + Math.round((1 - gz.length / body.length) * 100) + '% menos) · '
-        + (Date.now() - t0) + ' ms');
+        + Math.round(body.length / 1024) + ' KB'
+        + (nGz ? ' -> ' + Math.round(nGz / 1024) + ' KB comprimido ('
+          + Math.round((1 - nGz / body.length) * 100) + '% menos)' : ' gravado local')
+        + ' · ' + (Date.now() - t0) + ' ms');
     } catch (e) {
       erros++;
       console.error('[' + mo + '] falhou: ' + e.message);
