@@ -618,8 +618,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const serie = meses.map(mes => { const m = M[mes]; const i = IRR[mes] || { ge: 0, gv: 0, irr_media: 0 };
     // campo derivado do ONS num mes que o ONS ainda nao publicou sai NULO, nunca zero
     const semONS = !!m.semONS; const oN = v => (semONS ? null : v);
+    // exposto na serie: o painel precisa distinguir "sem publicacao" de "valor ruim"
     const w2 = daily.dias.filter(x => String(x.dia).slice(0, 7) === mes);
-    return { mes, lbl: lbl(mes), dias: semONS ? null : m.dias.size,
+    return { mes, lbl: lbl(mes), sem_ons: semONS ? 1 : 0, dias: semONS ? null : m.dias.size,
       // dias do WAY2 no mes — e o divisor honesto para ratear a meta do mes corrente, porque e
       // exatamente o conjunto de dias que alimenta `way2_liq_gwh` e `ppa_liq_gwh`. Usar outra
       // contagem (a serie diaria, por exemplo, que ia so ate o dia 10 enquanto o Way2 tinha 11)
@@ -673,7 +674,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
       disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
-      irr_media: r2(i.irr_media), ge_reconstruido_pct: i.rec_pct,
+      // ⚠️ num mes que o operador ainda nao publicou, o fallback `IRR[mes] || {irr_media: 0}`
+      // viraria "irradiancia media 0 W/m2" — noite permanente. Ausencia sai nula.
+      irr_media: oN(r2(i.irr_media)), ge_reconstruido_pct: oN(i.rec_pct),
       // META do mês na série (planilha, jan/26→). set/25–dez/25 ficam null: o usuário não tem PPA de 2025.
       meta_gwh: (METAS.meses[mes] || {}).garantido_total != null ? r2(METAS.meses[mes].garantido_total / 1000) : null,
       meta_ppa_gwh: (METAS.meses[mes] || {}).garantido_ppa != null ? r2(METAS.meses[mes].garantido_ppa / 1000) : null,
@@ -710,7 +713,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
     // volta a ter PR, com a cobertura declarada no card p/ o leitor pesar o numero.
     s.pr_confiavel = !s.ramp_up && s.pr_cobertura_pct >= 70 && s.pr_pct != null && s.pr_pct >= 50 && s.pr_pct <= 95;
       if (!s.pr_confiavel) { s.pr_pct = null; s.potencial_irr_gwh = null; }   // não publica o indefensável
-      s.nota = s.ramp_up ? 'Planta em ramp-up (comissionamento) — potencial e PR nao sao comparaveis'
+      // 🔴 mes que o operador ainda NAO PUBLICOU nao e mes com dado incoerente: a nota antiga
+      // acusava a fonte de um erro que ela nao cometeu, e quem le vai procurar defeito onde
+      // so ha atraso de publicacao.
+      s.nota = s.sem_ons ? 'O operador nacional ainda nao publicou este mes. Os indicadores que dependem da referencia dele (corte, disponibilidade e desempenho) entram quando a publicacao sair, com cerca de um dia de atraso.'
+        : s.ramp_up ? 'Planta em ramp-up (comissionamento) — potencial e PR nao sao comparaveis'
         : (!s.pr_confiavel ? 'A geracao estimada do ONS e inconsistente neste mes: mesmo somando SO os intervalos em que ela foi publicada, o PR sai fisicamente impossivel (out/25 216% · nov/25 133% · dez/25 188% · jan/26 180% · fev/26 98%). Nao e apenas dado faltando — o valor publicado esta errado. So a partir de mar/26 o PR fica coerente (76%).' : null);
     }); }
 
