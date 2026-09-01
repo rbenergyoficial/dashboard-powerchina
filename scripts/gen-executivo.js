@@ -445,6 +445,29 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   try { BENCH = await getJSON(BASE + 'benchmark_ne.json'); }
   catch (e) { console.log('benchmark_ne.json indisponivel (' + e.message + ') — os comparativos regionais saem nulos'); }
 
+  // 🔴 O EIXO DO TEMPO NAO PODE SAIR DE UMA FONTE DE TERCEIRO. `meses` vinha so do arquivo de
+  // restricao do ONS, que publica com ~1 dia de atraso. Todo dia 1o o mes corrente nao existia em
+  // raiz NENHUMA — nem no filtro de Periodo, nem na serie diaria — mesmo com a nossa medicao do
+  // dia inteiro ja no arquivo. Medido em 01/09/2026 as 11h: o ONS parava em 30/08 23:30, o nosso
+  // snapshot de 5 min do dia 01/09 tinha 136 slots, e o Sumario nao oferecia setembro.
+  //
+  // ⚠️ O mes que so a NOSSA medicao conhece entra marcado com `semONS`, e todo campo derivado do
+  // ONS sai NULO — nunca zero. Zero e uma medicao; ausencia nao e. Um mes com ger=0 e ref=0
+  // produziria percentuais falsos na banda do topo.
+  {
+    // 🔴 SO PARA FRENTE. O `way2_daily` guarda 781 dias e comeca em 2024-07 — a uniao ingenua
+    // ressuscitou 15 meses PRE-COD (a usina entrou em operacao a partir de 04/09/2025) e a serie
+    // do painel saltou de 12 para 27 meses. Medido no ensaio, antes de qualquer publicacao.
+    // ⚠️ E buraco NO MEIO nao se preenche: um mes que o ONS deveria ter e nao tem e falha DELE, e
+    // tapar em silencio esconderia exatamente o que precisa aparecer.
+    const ultimoONS = Object.keys(M).sort().pop() || '';
+    const doW2 = [...new Set(daily.dias.map(d => String(d.dia).slice(0, 7)))]
+      .filter(m => /^[0-9]{4}-[0-9]{2}$/.test(m) && !M[m] && m > ultimoONS);
+    doW2.forEach(m => { M[m] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0,
+      raz: {}, ori: {}, dias: new Set(), int_restr: 0, semONS: true }; });
+    if (doW2.length) console.log('meses so da NOSSA medicao (o ONS ainda nao publicou): '
+      + doW2.join(', ') + ' — os campos do ONS saem nulos');
+  }
   const meses = Object.keys(M).sort();
   const BANDAS = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 3000];
   const banda = i => { for (let b = BANDAS.length - 2; b >= 0; b--) if (i >= BANDAS[b]) return b; return 0; };
@@ -593,8 +616,10 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
 
   // ---------- 3) série mensal consolidada ----------
   const serie = meses.map(mes => { const m = M[mes]; const i = IRR[mes] || { ge: 0, gv: 0, irr_media: 0 };
+    // campo derivado do ONS num mes que o ONS ainda nao publicou sai NULO, nunca zero
+    const semONS = !!m.semONS; const oN = v => (semONS ? null : v);
     const w2 = daily.dias.filter(x => String(x.dia).slice(0, 7) === mes);
-    return { mes, lbl: lbl(mes), dias: m.dias.size,
+    return { mes, lbl: lbl(mes), dias: semONS ? null : m.dias.size,
       // dias do WAY2 no mes — e o divisor honesto para ratear a meta do mes corrente, porque e
       // exatamente o conjunto de dias que alimenta `way2_liq_gwh` e `ppa_liq_gwh`. Usar outra
       // contagem (a serie diaria, por exemplo, que ia so ate o dia 10 enquanto o Way2 tinha 11)
@@ -603,12 +628,12 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       w2_dias_completos: w2.filter(x => !x.parcial && x.completo !== false).length,
       // mes_ts: o Grafana só desenha eixo de tempo / sparkline sobre timestamp — "2026-07" sozinho ele lê como texto
       mes_ts: mes + '-01T00:00:00Z',
-      realizado_gwh: r2(m.ger / 1000), referencia_gwh: r2(m.ref / 1000), frustrada_gwh: r2(m.fru / 1000),
+      realizado_gwh: oN(r2(m.ger / 1000)), referencia_gwh: oN(r2(m.ref / 1000)), frustrada_gwh: oN(r2(m.fru / 1000)),
       // gerado na MESMA janela de dias em que o corte foi apurado (sem 03/03 e 11/03). E o denominador
       // honesto do percentual: com o gerado cheio, numerador filtrado e denominador inteiro diriam
       // coisas diferentes e o percentual sairia menor do que e.
-      gerado_janela_gwh: r2(m.gerX / 1000),
-      frustrada_pct: (m.gerX + m.fru) > 0 ? r2(100 * m.fru / (m.gerX + m.fru)) : 0,
+      gerado_janela_gwh: oN(r2(m.gerX / 1000)),
+      frustrada_pct: semONS ? null : ((m.gerX + m.fru) > 0 ? r2(100 * m.fru / (m.gerX + m.fru)) : 0),
       // BENCHMARK REGIONAL, mes a mes: o corte do subsistema Nordeste INTEIRO na mesma janela e pelo
       // mesmo criterio (campo de limitacao preenchido, inclusive zero). Vem junto na linha do mes
       // para o grafico sair de UMA query — duas series em frames separados exigiriam um join, e o
@@ -656,9 +681,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       way2_liq_gwh: r2(w2.reduce((a, x) => a + num(x.ene_liq_mwh), 0) / 1000),
       way2_gwh_dia: w2.length ? r2(w2.reduce((a, x) => a + num(x.ene_ger_mwh), 0) / w2.length / 1000) : null,
       pico_mw: w2.length ? Math.round(Math.max(...w2.map(x => num(x.pico_mw)))) : null,
-      horas_restricao: r2(m.int_restr * H), intervalos_restricao: m.int_restr,
-      razoes: Object.fromEntries(Object.entries(m.raz).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])),
-      origens: Object.fromEntries(Object.entries(m.ori).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])) };
+      horas_restricao: oN(r2(m.int_restr * H)), intervalos_restricao: oN(m.int_restr),
+      razoes: semONS ? null : Object.fromEntries(Object.entries(m.raz).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])),
+      origens: semONS ? null : Object.fromEntries(Object.entries(m.ori).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])) };
   });
 
   // ---------- 3b) CLASSIFICA a confiabilidade de cada mês — o painel só mostra o que dá p/ DEFENDER ----------
@@ -693,7 +718,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const mesAtual = meses[meses.length - 1];
   const cur = serie.find(s => s.mes === mesAtual);
   const diasTotal = new Date(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0).getDate();
-  const fator = cur.dias > 0 ? diasTotal / cur.dias : 1;
+  // ⚠️ `cur.dias` conta os dias que o ONS publicou. Num mes que so a nossa medicao conhece ele e
+  // nulo, e um `fator` de 1 faria a projecao do mes inteiro valer o que ja foi entregue. O ritmo
+  // sai dos dias que a NOSSA medicao tem — que e o mesmo divisor que a manchete ja usa.
+  const baseDias = cur.dias > 0 ? cur.dias : (cur.w2_dias > 0 ? cur.w2_dias : 0);
+  const fator = baseDias > 0 ? diasTotal / baseDias : 1;
   const iCur = IRR[mesAtual] || { porUfv: {} };
 
   // ---- M7: geração realizada vem do WAY2, não do ONS ----
@@ -709,33 +738,42 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
   const VIA_WAY2 = ['M7'];   // sai daqui quando o dado ONS pós-16/07 for validado
   const realizado = u => VIA_WAY2.includes(u) && W2_UFV[u] > 0 ? W2_UFV[u] : ((iCur.porUfv[u] || {}).gv || 0);
 
+  // ⚠️ num mes que o ONS ainda nao publicou, `iCur.porUfv` e vazio e a soma dava ZERO — o painel
+  // da estrategia lia 'corte PPA 0% x ML 0%', que afirma que nao houve corte. Ausencia sai nula.
   const grupo = g => { const us = g === 'ppa' ? PPA : ML;
+    if (cur && cur.dias == null) return { potencial_gwh: null, realizado_gwh: null, corte_gwh: null, corte_pct: null };
     const ge = us.reduce((a, u) => a + ((iCur.porUfv[u] || {}).ge || 0), 0);
     const gv = us.reduce((a, u) => a + realizado(u), 0);
     return { potencial_gwh: r2(ge / 1000), realizado_gwh: r2(gv / 1000), corte_gwh: r2(Math.max(0, ge - gv) / 1000),
-      corte_pct: ge > 0 ? r2(100 * Math.max(0, ge - gv) / ge) : 0 }; };
+      corte_pct: ge > 0 ? r2(100 * Math.max(0, ge - gv) / ge) : null }; };
 
   const potencial = cur.potencial_irr_gwh, entregue = cur.realizado_gwh, cortado = cur.frustrada_gwh;
-  const outras = r2(Math.max(0, potencial - entregue - cortado));
-  const mes = { mes: mesAtual, lbl: cur.lbl, dias_decorridos: cur.dias, dias_total: diasTotal,
+  // percentual do potencial: sem potencial nao ha percentual — nulo, nunca zero
+  const pctPot = v => (potencial > 0 && v != null ? r2(100 * v / potencial) : null);
+  // 🔴 `null - null` e ZERO em JS (nao NaN): sem a guarda o residuo saia 0 GWh num mes sem
+  // fonte, afirmando "nao houve outras perdas" onde nao se sabe nada.
+  const outras = [potencial, entregue, cortado].some(v => v == null) ? null : r2(Math.max(0, potencial - entregue - cortado));
+  const mes = { mes: mesAtual, lbl: cur.lbl, dias_decorridos: cur.dias != null ? cur.dias : cur.w2_dias, dias_total: diasTotal,
     realizado_gwh: entregue, potencial_gwh: potencial, frustrada_gwh: cortado, frustrada_pct: cur.frustrada_pct,
     pr_pct: cur.pr_pct, disp_pct: cur.disp_pct, disp_cobertura_pct: cur.disp_cobertura_pct,
     irr_media: cur.irr_media, ge_reconstruido_pct: cur.ge_reconstruido_pct,
     horas_restricao: cur.horas_restricao, razoes: cur.razoes, origens: cur.origens,
     // PROJEÇÃO: ritmo médio diário × dias restantes. NÃO é previsão do ONS (não existe pública além de D+1).
-    projecao: { realizado_gwh: r2(entregue * fator), frustrada_gwh: r2(cortado * fator),
+    // ⚠️ `null * fator` e 0 em JS: sem guarda a projecao afirmava 0 GWh onde o dado nao existe
+    projecao: { realizado_gwh: entregue == null ? null : r2(entregue * fator),
+      frustrada_gwh: cortado == null ? null : r2(cortado * fator),
       metodo: 'ritmo médio diário do mês corrente × dias restantes (projeção estatística simples)',
-      base_dias: cur.dias, dias_total: diasTotal },
+      base_dias: baseDias, dias_total: diasTotal },
     cascata: [
-      { etapa: 'Entregue', gwh: entregue, pct: potencial > 0 ? r2(100 * entregue / potencial) : 0 },
-      { etapa: 'Cortado pelo ONS', gwh: cortado, pct: potencial > 0 ? r2(100 * cortado / potencial) : 0 },
-      { etapa: 'Outras perdas', gwh: outras, pct: potencial > 0 ? r2(100 * outras / potencial) : 0 },
+      { etapa: 'Entregue', gwh: entregue, pct: pctPot(entregue) },
+      { etapa: 'Cortado pelo ONS', gwh: cortado, pct: pctPot(cortado) },
+      { etapa: 'Outras perdas', gwh: outras, pct: pctPot(outras) },
     ],
     // planos p/ o Grafana: o Infinity não resolve seletor com índice (cascata[0].pct) nem inventa
     // rótulo onde o objeto só tem número — o dado tem que nascer pronto aqui.
-    pct_entregue: potencial > 0 ? r2(100 * entregue / potencial) : 0,
-    pct_cortado: potencial > 0 ? r2(100 * cortado / potencial) : 0,
-    pct_outras: potencial > 0 ? r2(100 * outras / potencial) : 0,
+    pct_entregue: pctPot(entregue),
+    pct_cortado: pctPot(cortado),
+    pct_outras: pctPot(outras),
     outras_gwh: outras,
     pico_mw: cur.pico_mw,
     ppa: grupo('ppa'), ml: grupo('ml'),
@@ -1440,7 +1478,11 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // "aberto" = ainda pode gerar hoje. Depois do pôr do sol o dia entra na conta: a geração dele
       // já aconteceu e deixá-lo fora fazia a projeção anunciar "dia 24 de 31" às 18h.
       const parc = diasMes.filter(x => x.parcial && !x.encerrado);
-      const dCorr = diasMes.filter(x => !x.parcial || x.encerrado).length || dTot;
+      // 🔴 O `|| dTot` era um fallback para mes SEM linha diaria nenhuma — e virava "mes
+      // inteiro decorrido" quando TODOS os dias eram parciais, que e exatamente o dia 1o de um
+      // mes em curso: dCorr ia a 30, `fechado` a 1, e o mes recem-nascido entrava nos agregados
+      // como fechado com um dia de energia. So cai no fallback quando nao ha dia nenhum.
+      const dCorr = diasMes.length ? diasMes.filter(x => !x.parcial || x.encerrado).length : dTot;
       const fatorD = dCorr > 0 ? dTot / dCorr : 1;
       const fechado = dCorr >= dTot ? 1 : 0;
       // energia de hoje, ainda incompleta — some no "ja realizado", nao na base da projecao
@@ -1465,7 +1507,7 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
       const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;
       const compl = u !== 'Complexo';                        // disp/horas são do complexo nas usinas
-      const projCorte = r2(cur.cortado_gwh * fatorD);
+      const projCorte = dCorr > 0 ? r2(cur.cortado_gwh * fatorD) : null;
       const antCorte = ant ? ant.cortado_gwh : null;
 
       out.cards_ufv.push(
@@ -1503,7 +1545,9 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       // ---- manchete ----
       // base = so os dias FECHADOS (tira a energia de hoje, que e de um dia pela metade).
       // O "ja realizado" logo abaixo continua incluindo hoje — aquilo e energia entregue de fato.
-      const proj = r2((cur.liquida_gwh - hojeCru) * fatorD);
+      // ⚠️ SEM DIA FECHADO nao ha ritmo de onde projetar: a subtracao da zero e a tela
+      // afirmaria "o mes vai fechar em 0 GWh". Nulo — o template ja mostra travessao.
+      const proj = dCorr > 0 ? r2((cur.liquida_gwh - hojeCru) * fatorD) : null;
       const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
       const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
       const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
