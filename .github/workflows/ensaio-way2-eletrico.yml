@@ -1,0 +1,55 @@
+name: Ensaio · Way2 Eletrico (compara o gerador com o fluxo, sem publicar)
+
+# Este ensaio NAO grava nada. Ele busca da API da Way2 pelo gerador novo, baixa o blob que o fluxo
+# do Power Automate escreveu, e compara. E o crivo que autoriza aposentar o fluxo — sem ele,
+# "parece igual" nao e igual, e a coleta do ao-vivo e o unico dado que nao tem de onde ser refeito.
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'comparar (nao grava) | local (grava em arquivo e sobe como artefato)'
+        type: choice
+        options: [comparar, local]
+        default: comparar
+
+concurrency:
+  group: ensaio-way2-eletrico
+  cancel-in-progress: false
+
+jobs:
+  ensaio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      - name: Comparar gerador x fluxo
+        if: ${{ inputs.modo == 'comparar' }}
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          COMPARAR: '1'
+        run: node scripts/gen-way2-eletrico.js
+
+      - name: Gerar em arquivo (sem tocar em producao)
+        if: ${{ inputs.modo == 'local' }}
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          LOCAL_OUT: way2_eletrico.ensaio.json
+        run: |
+          node scripts/gen-way2-eletrico.js
+          ls -lh way2_eletrico.ensaio.json
+
+      - name: Guardar a saida do ensaio
+        if: ${{ inputs.modo == 'local' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: way2-eletrico-ensaio
+          path: way2_eletrico.ensaio.json
+          retention-days: 3
