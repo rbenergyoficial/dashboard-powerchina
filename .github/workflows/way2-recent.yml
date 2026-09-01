@@ -16,6 +16,22 @@ jobs:
         with:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
+      # 🔴 A COLETA. Ate aqui `way2_eletrico.json` era o unico blob que nascia FORA do GitHub:
+      # quem o escrevia era o fluxo do Power Automate "Way2 Eletrico 5min", e todo o ao-vivo
+      # deriva dele. Isso prendia a entrada de dado a uma licenca Premium com prazo. O repo ja
+      # tinha o segredo e o gen-must ja falava com a mesma API — faltava a coleta de 5 min.
+      #
+      # ⚠️ `continue-on-error` e TEMPORARIO e proposital: enquanto o fluxo continuar rodando,
+      # ele e a rede de seguranca — uma falha aqui deixa o blob dele no ar e o resto do job
+      # segue. No dia em que o fluxo for desligado, isto vira erro duro, senao a coleta passa
+      # a poder falhar em silencio, que e o modo de errar mais caro desta casa.
+      - name: Coletar da Way2 (way2_eletrico.json)
+        continue-on-error: true
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+        run: node scripts/gen-way2-eletrico.js
+
       - name: Snapshot hoje + way2_recent.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
