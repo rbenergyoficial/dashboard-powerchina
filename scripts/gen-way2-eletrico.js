@@ -171,22 +171,28 @@ async function grava(json) {
     const vivo = await leBlob(OUT_BLOB);
     if (!vivo) { console.error('o blob do fluxo nao existe — nada a comparar'); process.exit(1); }
     const cv = cobertura(vivo);
+    // 🔴 O crivo NAO e igualdade, e a DIRECAO da diferenca. As duas leituras acontecem em
+    // instantes distintos, e um ponto que estava atrasado quando o fluxo escreveu aparece com
+    // MAIS amostras quando o gerador le depois — o gerador a frente e o lado seguro. O que
+    // reprova e ele ficar ATRAS: ai perderia dado que o fluxo ja tinha, e a troca custaria
+    // medicao.
     const linhas = [];
-    let piorAtraso = 0;
+    let piorAtraso = 0, piorAvanco = 0;
     for (const p of IDS) {
       const a = cv.get(p) ?? -1, b = cob.get(p) ?? -1;
-      if (a !== b) linhas.push(`  ponto ${p}: fluxo ${a} · gerador ${b}`);
-      piorAtraso = Math.max(piorAtraso, Math.abs(a - b));
+      if (a !== b) linhas.push(`  ponto ${p}: fluxo ${a} · gerador ${b}` + (b > a ? '  (a frente)' : '  <- ATRAS'));
+      piorAtraso = Math.max(piorAtraso, a - b);
+      piorAvanco = Math.max(piorAvanco, b - a);
     }
     const mesmaForma = JSON.stringify(Object.keys(vivo).sort()) === JSON.stringify(Object.keys(resp).sort());
     console.log('\n=== COMPARACAO com o blob do fluxo ===');
     console.log('envelope com as mesmas chaves:', mesmaForma ? 'sim' : 'NAO');
     console.log('series: fluxo %d · gerador %d', (vivo.dados || []).length, resp.dados.length);
     console.log('intervalo: fluxo %s · gerador %s', vivo.intervalo, resp.intervalo);
-    console.log('pontos com cobertura diferente: %d (maior diferenca %d amostras)', linhas.length, piorAtraso);
+    console.log('pontos com cobertura diferente: %d', linhas.length);
+    console.log('  gerador a frente em ate %d amostras · atras em ate %d', Math.max(0, piorAvanco), Math.max(0, piorAtraso));
     if (linhas.length) console.log(linhas.slice(0, 8).join('\n'));
-    // ⚠️ Diferenca de ATE 1 amostra e esperada: as duas leituras acontecem em instantes diferentes,
-    // e um balde de 5 min pode ter fechado no meio. Acima disso, alguem esta perdendo dado.
+    // ⚠️ 1 amostra de atraso e tolerada: um balde de 5 min pode fechar entre as duas leituras.
     const ok = mesmaForma && (vivo.dados || []).length === resp.dados.length && piorAtraso <= 1;
     console.log('\nVEREDITO:', ok ? 'o gerador REPRODUZ o fluxo' : 'DIVERGENTE — nao trocar ainda');
     process.exit(ok ? 0 : 1);
