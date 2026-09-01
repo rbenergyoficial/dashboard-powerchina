@@ -9,3 +9,10 @@ CLAUDE.md
 package.json
 package-lock.json
 node_modules/
+
+# ⚠️ A regra acima vale para a RAIZ, e casa em qualquer nivel. O relogio e um app proprio: o
+# package.json dele e o manifesto do Function App e TEM de subir, senao o deploy instala nada e
+# falha com ENOENT. O lockfile fica junto para o que sobe ser o que foi testado. Nada disto
+# alcanca os workflows do repo, que continuam instalando por nome e versao.
+!relogio/package.json
+!relogio/package-lock.json

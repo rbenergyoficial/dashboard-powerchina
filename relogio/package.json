@@ -1,0 +1,13 @@
+{
+  "name": "relogio-mauriti",
+  "version": "1.0.0",
+  "description": "Dispara os workflows do repo na cadencia que eles declaram — o agendador do GitHub entrega uma fracao dela.",
+  "main": "src/index.js",
+  "scripts": {
+    "agenda": "node gerar-agenda.js",
+    "conferir": "node gerar-agenda.js --conferir"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0"
+  }
+}
