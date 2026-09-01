@@ -24,11 +24,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+        with: { node-version: '20' }
 
-      - name: Instalar dependencias
-        run: npm ci --omit=dev || npm install --omit=dev
+      # Mesma instalacao dos demais workflows do repo: nao ha package.json aqui, entao
+      # a dependencia e nomeada e fixada na versao. Copiado do must.yml, nao inventado.
+      - run: npm i @azure/storage-blob@12
 
       - name: Comparar gerador x fluxo
         if: ${{ inputs.modo == 'comparar' }}
