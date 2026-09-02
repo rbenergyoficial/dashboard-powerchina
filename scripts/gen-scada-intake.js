@@ -116,15 +116,116 @@ async function daPasta() {
   });
 }
 
-// 🔴 RAMO NAO EXERCITADO — sem credencial ele nem e chamado. Fica isolado para que, no dia em que
-//    a credencial existir, o que precise de prova seja SO ele: nome, dedup e guarda ja estarao
-//    provados pelo modo `pasta`.
+// ── o SharePoint de verdade, LIDO do fluxo em 02/09/2026 ────────────────────────────────────
+// O stub anterior se recusava a escrever este ramo "para nao supor caminho". O caminho deixou de
+// ser suposicao: foi lido do gatilho do fluxo "SCADA SharePoint para Blob", que e quem alimenta o
+// container hoje.
+//
+//   site       https://powerchinabr.sharepoint.com/sites/POWERCHINA
+//   biblioteca Documentos
+//   pasta      /Documentos Compartilhados/1.OPERACAO E MANUTENCAO - O&M - .../11 - Dados_Scada_PWC
+//   conexao    francisco.barros@powerchina.com.br
+//
+// 🔴 O TENANT E O DA POWERCHINA (`powerchinabr`), NAO O NOSSO — e isso decide tudo: o registro de
+//    aplicativo tem de existir LA, e a permissao exige consentimento de administrador do tenant
+//    deles. Nao se resolve do nosso lado. Ver `SCADA_INTAKE.md`.
+//
+// ⚠️ RAMO AINDA NAO EXERCITADO: sem credencial ele nem e chamado. Nome, dedup e guarda ja estao
+//    provados pelo modo `pasta`, entao o que precisa de prova no dia da credencial e SO a leitura.
+const GRAPH_HOST = 'graph.microsoft.com';
+const SP_SITE_PADRAO = 'powerchinabr.sharepoint.com:/sites/POWERCHINA';
+const SP_PASTA_PADRAO = '/Documentos Compartilhados/1.OPERAÇÃO E MANUTENÇÃO - O&M - 運作與維護'
+  + '/01 - OPERAÇÃO - 运行记录/11 - Dados_Scada_PWC';
+
+function graphGet(caminho, token, bruto) {
+  const https = require('https');
+  return new Promise((ok, ko) => {
+    const req = https.get({ host: GRAPH_HOST, path: '/v1.0' + caminho, family: 4,
+      headers: { Authorization: 'Bearer ' + token }, timeout: 120000 }, (res) => {
+      const ch = [];
+      res.on('data', (c) => ch.push(c));
+      res.on('end', () => {
+        const buf = Buffer.concat(ch);
+        if (res.statusCode >= 300) {
+          return ko(new Error('Graph HTTP ' + res.statusCode + ' em ' + caminho + ' · '
+            + buf.toString('utf8').slice(0, 240)));
+        }
+        ok(bruto ? buf : JSON.parse(buf.toString('utf8')));
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout no Graph em ' + caminho)));
+    req.on('error', ko);
+  });
+}
+
+function tokenGraph() {
+  const https = require('https');
+  const corpo = new URLSearchParams({
+    client_id: process.env.GRAPH_CLIENT_ID,
+    client_secret: process.env.GRAPH_CLIENT_SECRET,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+  }).toString();
+  return new Promise((ok, ko) => {
+    const r = https.request({ host: 'login.microsoftonline.com', family: 4,
+      path: '/' + process.env.GRAPH_TENANT + '/oauth2/v2.0/token', method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(corpo) } }, (res) => {
+      const ch = [];
+      res.on('data', (c) => ch.push(c));
+      res.on('end', () => {
+        const t = Buffer.concat(ch).toString('utf8');
+        if (res.statusCode !== 200) {
+          return ko(new Error('token HTTP ' + res.statusCode + ' · ' + t.slice(0, 240)));
+        }
+        ok(JSON.parse(t).access_token);
+      });
+    });
+    r.on('error', ko);
+    r.write(corpo);
+    r.end();
+  });
+}
+
 async function doGraph() {
-  const falta = ['GRAPH_TENANT', 'GRAPH_CLIENT_ID', 'GRAPH_CLIENT_SECRET', 'SP_SITE', 'SP_PASTA']
+  const falta = ['GRAPH_TENANT', 'GRAPH_CLIENT_ID', 'GRAPH_CLIENT_SECRET']
     .filter((k) => !process.env[k]);
   if (falta.length) throw new Error('FONTE=graph exige: ' + falta.join(', '));
-  throw new Error('o ramo Graph ainda nao foi escrito contra a estrutura real do SharePoint — '
-    + 'mapear a biblioteca antes, para nao supor caminho');
+
+  const site = process.env.SP_SITE || SP_SITE_PADRAO;
+  const pasta = process.env.SP_PASTA || SP_PASTA_PADRAO;
+
+  const token = await tokenGraph();
+  const s = await graphGet('/sites/' + site, token);
+  console.log('  site: ' + (s.displayName || s.name));
+
+  // 🔴 Cada segmento vai por `encodeURIComponent`. A pasta tem acento E ideograma; montar a URL
+  //    por concatenacao crua devolve 400, e a mensagem do Graph parece dizer que a pasta nao
+  //    existe — que e o diagnostico errado.
+  const rel = pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+
+  const itens = [];
+  let url = '/sites/' + s.id + '/drive/root:/' + rel + ':/children?$top=200';
+  while (url) {
+    const p = await graphGet(url, token);
+    for (const it of p.value || []) if (it.file) itens.push(it);
+    // ⚠️ Paginacao obrigatoria: a pasta acumula um arquivo por dia por parque. Sem seguir o
+    //    `@odata.nextLink` a coleta para na primeira pagina — em silencio, com cara de sucesso.
+    url = p['@odata.nextLink'] ? p['@odata.nextLink'].replace(/^https:\/\/[^/]+\/v1\.0/, '') : null;
+  }
+  console.log('  ' + itens.length + ' arquivo(s) na pasta');
+  if (!itens.length) {
+    throw new Error('a pasta respondeu VAZIA. Ou o caminho mudou, ou a permissao alcanca o site e '
+      + 'nao a pasta — nos dois casos, publicar nada seria pior que falhar aqui');
+  }
+
+  return itens.map((it) => ({
+    original: it.name,
+    dt: it.lastModifiedDateTime,
+    // Leitura preguicosa: quem decide o que baixar e a deduplicacao, depois de comparar com o que
+    // ja esta no container. Baixar tudo a cada rodada traria a biblioteca inteira.
+    leia: () => graphGet('/sites/' + s.id + '/drive/items/' + it.id + '/content', token, true),
+  }));
 }
 
 // ── principal ────────────────────────────────────────────────────────────────────────────────

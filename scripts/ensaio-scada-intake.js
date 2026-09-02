@@ -82,6 +82,29 @@ try { execFileSync(process.execPath, [path.join(__dirname, 'gen-scada-intake.js'
 catch (e) { recusou = true; }
 ok(recusou, 'arquivo que nenhum consumidor le e RECUSADO, e o script sai com erro');
 
+console.log('\n6 · o caminho do SharePoint, codificado');
+// 🔴 E a UNICA parte do ramo Graph que se prova sem credencial — e e a que erraria calada. A pasta
+//    real tem ACENTO e IDEOGRAMA; montar a URL do Graph por concatenacao crua devolve 400, e a
+//    mensagem do Graph parece dizer que a pasta nao existe. Diagnostico errado, horas perdidas.
+{
+  const fonte = fs.readFileSync(path.join(__dirname, 'gen-scada-intake.js'), 'utf8');
+  const m = /const SP_PASTA_PADRAO = ([\s\S]*?);\n/.exec(fonte);
+  ok(!!m, 'SP_PASTA_PADRAO existe no fonte');
+  const pasta = new Function('return ' + m[1] + ';')();
+  const rel = pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+
+  ok(!/[À-ÿ]/.test(rel), 'nenhum acento cru sobrou na URL');
+  ok(!/[　-鿿]/.test(rel), 'nenhum ideograma cru sobrou na URL');
+  ok(!/ /.test(rel), 'nenhum espaco cru sobrou na URL');
+  ok(rel.split('/').map(decodeURIComponent).join('/') === pasta.split('/').filter(Boolean).join('/'),
+    'decodificar devolve exatamente a pasta original');
+  ok(!rel.startsWith('/') && !rel.endsWith('/'), 'sem barra sobrando nas pontas');
+  ok(rel.split('/').length === 4, 'quatro segmentos, como no fluxo (' + rel.split('/').length + ')');
+  // ⚠️ `encodeURIComponent` NAO escapa `&`, e o nome da pasta tem "O&M". Em query string isso
+  //    partiria o parametro; aqui esta no CAMINHO, onde `&` e legal — por isso passa.
+  ok(/O&M|O%26M/.test(rel), 'o "O&M" do nome sobreviveu');
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'a intake respeita o contrato de nome dos quatro consumidores'));
 process.exit(mau ? 1 : 0);
