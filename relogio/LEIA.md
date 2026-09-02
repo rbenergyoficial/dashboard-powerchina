@@ -90,3 +90,57 @@ próprio, no dia em que houver um.
 2. Tirar o `continue-on-error` do passo de coleta no `way2-recent.yml` — enquanto o fluxo é a rede
    de segurança ele faz sentido; sem o fluxo, ele deixaria a coleta falhar em silêncio.
 3. Só então avaliar cancelar a licença.
+
+## 🔴 Uma run PRESA desligou um workflow por 26 dias (02/09/2026)
+
+O `way2-agg.yml` tinha uma run criada em **07/08** parada em `queued`: zero jobs, `updated_at`
+igual ao `created_at`, e o próprio GitHub recusando cancelar (HTTP 409). Registro morto.
+
+A `jaRodando` lia `total_count > 0`, concluía "já está rodando" e **pulava o disparo. Toda hora.**
+
+O efeito é o modo de falhar mais caro: nada quebra, nada fica vermelho, e o workflow cai do
+relógio para o agendador do GitHub — que entregou **mediana de 146 min** contra os 60 declarados,
+p90 de 451 e máximo de **796 min**. A correlação fecha: dos 16 workflows da agenda, o único que o
+relógio nunca disparava era o único com run presa.
+
+⚠️ **O teto não é escolhido, sai da plataforma**: um job do GitHub morre em 6 h, então run mais
+velha que isso não pode estar viva. O maior `timeout-minutes` do repo é 120 — 3× de folga.
+
+✅ Provado no ar: primeiro `workflow_dispatch` do `way2-agg` em **02/09 20:05:01Z**, no segundo
+exato do gatilho. `ensaio-guarda.js` cobre as duas direções e as bordas do teto.
+
+## 🔴 O CI NUNCA publicou o relógio — e dizia `success`
+
+`RELOGIO_APP_NAME` nunca foi definida, então o passo "O destino existe?" saía com `ok=false` e
+os quatro passos seguintes eram **pulados**. Job verde a cada push. O que estava no ar era o
+pacote de 01/09, publicado à mão; duas correções posteriores nunca chegaram nele.
+
+⚠️ E o motivo de o segredo nunca ter sido criado: **o app está em Flex Consumption, que não emite
+perfil de publicação**. O workflow foi escrito para um plano que o app não usa. Hoje ele **falha**
+com a lista do que falta.
+
+## Como publicar à mão (enquanto o CI não publica)
+
+```
+node gerar-agenda.js --conferir
+npm install --omit=dev
+```
+
+🔴 **O zip TEM de carregar permissão Unix.** `Compress-Archive` do Windows não grava esse campo; o
+Flex monta o pacote como sistema de arquivos Linux, o host não consegue **ler** os arquivos, e o
+resultado é **zero funções e zero erros** — `/admin/host/status` responde `Running` com
+`errors: 0`, e `/admin/functions` devolve lista vazia. Foi assim que o relógio ficou fora do ar
+por ~20 min em 02/09.
+
+O zip se monta com `zipfile` do Python, `zi.create_system = 3` e `zi.external_attr = 0o644 << 16`.
+E o envio é o OneDeploy (`config-zip` e `az functionapp deploy` não servem no Flex — o segundo
+responde 415):
+
+```
+POST https://<app>.scm.azurewebsites.net/api/publish?RemoteBuild=false
+     Authorization: Bearer <az account get-access-token --resource https://management.core.windows.net/>
+     Content-Type: application/zip
+```
+
+**A conferência é `/admin/functions`, não o status do deploy**: o pipeline do Kudu reporta
+`status 4` (sucesso) mesmo quando o host não consegue montar o pacote.
