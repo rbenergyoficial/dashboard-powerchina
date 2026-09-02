@@ -4,21 +4,29 @@ name: Relogio · publicar no Azure
 # logica continua nos geradores do repo, com as guardas que eles ja tem.
 #
 # 🔴 ESTE WORKFLOW NUNCA PUBLICOU NADA — e reportava `success` a cada push (02/09/2026).
-# A variavel `RELOGIO_APP_NAME` nunca foi definida, entao o passo "O destino existe?" saia com
-# `ok=false` e TODOS os passos seguintes eram pulados. O job ficava verde. O relogio no ar era o
-# de 01/09, publicado a mao pelo `az`, e duas correcoes posteriores nunca chegaram nele.
+# A variavel `RELOGIO_APP_NAME` nunca foi definida, entao o gate saia com `ok=false` e TODOS os
+# passos seguintes eram pulados. O job ficava verde. O que rodava no ar era o pacote de 01/09,
+# publicado a mao pelo `az`, e duas correcoes posteriores nunca chegaram nele.
 #
-# ⚠️ E o `publish-profile` abaixo NAO FUNCIONA neste app: ele esta em **Flex Consumption**, que
-# nao emite perfil de publicacao (`az functionapp deployment list-publishing-credentials`
-# responde "not currently supported for Azure Functions on the Flex Consumption plan"). Ou seja,
-# o workflow foi escrito para um plano que o app nao usa — por isso o segredo nunca foi criado.
+# ⚠️ E o motivo de o segredo nunca ter sido criado: o `publish-profile` NAO EXISTE neste app. Ele
+# esta em **Flex Consumption**, que nao emite perfil de publicacao — `az functionapp deployment
+# list-publishing-credentials` responde "not currently supported for Azure Functions on the Flex
+# Consumption plan". O workflow foi escrito para um plano que o app nao usa.
 #
-# PARA O CI VOLTAR A PUBLICAR sao precisas duas coisas, e as duas dependem de acao humana:
-#   1. um service principal com acesso ao `rg-dashboard`, guardado como o segredo
-#      `AZURE_CREDENTIALS`, e um passo `azure/login@v2` antes do `functions-action`;
-#   2. a variavel `RELOGIO_APP_NAME = relogio-mauriti`.
-# Enquanto elas nao existirem, este workflow FALHA — de proposito. Deploy que nao publica e nao
-# avisa e pior do que deploy nenhum: ele faz o repo acreditar que o que esta la e o que esta no ar.
+# 🔴 A AUTENTICACAO AGORA E OIDC, E NAO HA SEGREDO NENHUM NESTE CAMINHO.
+# Em vez de guardar uma senha de service principal, o GitHub troca um token de identidade proprio
+# por um token do Azure. A confianca e amarrada no Entra a UM assunto exato:
+#
+#     repo:rbenergyoficial/dashboard-powerchina:ref:refs/heads/main
+#
+# Nenhum outro repo, branch, tag ou pull request consegue usa-la. Como nao existe senha, nao ha o
+# que vazar, girar ou expirar — que e o ponto, num repo PUBLICO.
+#
+# As quatro variaveis abaixo sao IDENTIFICADORES, nao credenciais: sozinhas nao dao acesso a nada,
+# porque o acesso depende da credencial federada acima. Por isso vao em `vars`, e nao em `secrets`.
+#
+# O papel do principal e **Website Contributor no Function App do relogio, e so nele** — ele nao
+# alcanca o resto do `rg-dashboard` nem a conta de armazenamento com os dados.
 #
 #   (no proprio Azure) GH_TOKEN   PAT com `actions: write` neste repo, em Configuracoes
 #                                 do aplicativo — NUNCA no repo.
@@ -35,23 +43,29 @@ env:
 jobs:
   publicar:
     runs-on: ubuntu-latest
+    # `id-token: write` e o que permite ao job pedir o token de identidade do GitHub. Sem ele o
+    # `azure/login` falha — e e a unica permissao a mais que o OIDC exige.
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
       # 🔴 ANTES ISTO SAIA LIMPO COM UM AVISO, e o raciocinio era "alarme que acende sempre ensina
       # a ignorar o alarme" — verdadeiro enquanto o recurso nao existia. O recurso existe desde
-      # 01/09, e a partir dai o silencio virou mentira: o job dizia `success` sem publicar, e duas
-      # correcoes do relogio nunca chegaram ao ar. Agora FALHA.
+      # 01/09, e a partir dai o silencio virou mentira: o job dizia `success` sem publicar. Agora
+      # FALHA, e nomeia exatamente o que falta.
       - name: O destino existe?
         run: |
           falta=""
-          [ -z "${{ env.APP }}" ] && falta="$falta RELOGIO_APP_NAME(variavel)"
-          [ -z "${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" ] && falta="$falta AZURE_FUNCTIONAPP_PUBLISH_PROFILE(segredo)"
+          [ -z "${{ env.APP }}" ] && falta="$falta RELOGIO_APP_NAME"
+          [ -z "${{ vars.AZURE_CLIENT_ID }}" ] && falta="$falta AZURE_CLIENT_ID"
+          [ -z "${{ vars.AZURE_TENANT_ID }}" ] && falta="$falta AZURE_TENANT_ID"
+          [ -z "${{ vars.AZURE_SUBSCRIPTION_ID }}" ] && falta="$falta AZURE_SUBSCRIPTION_ID"
           if [ -n "$falta" ]; then
-            echo "::error::O relogio NAO foi publicado. Falta:$falta"
-            echo "O app 'relogio-mauriti' esta em Flex Consumption, que nao emite perfil de"
-            echo "publicacao — o caminho e um service principal + azure/login. Ver o cabecalho"
-            echo "deste arquivo. Ate la, publique a mao e saiba que o CI nao publica."
+            echo "::error::O relogio NAO foi publicado. Faltam estas VARIAVEIS do repo:$falta"
+            echo "Elas sao identificadores, nao credenciais — o acesso vem da credencial federada"
+            echo "no Entra, amarrada a refs/heads/main deste repo. Ver o cabecalho deste arquivo."
             exit 1
           fi
 
@@ -65,8 +79,27 @@ jobs:
         run: npm install --omit=dev
         working-directory: relogio
 
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - uses: Azure/functions-action@v1
         with:
           app-name: ${{ env.APP }}
           package: relogio
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      # 🔴 A CONFERENCIA E O ARTEFATO NO DESTINO, NUNCA O STATUS DO DEPLOY.
+      # Em 02/09 um pacote zipado no Windows subiu com "Deployment was successful", o host
+      # respondeu `Running` com `errors: 0`, e havia ZERO funcoes: sem permissao Unix nos
+      # arquivos, o Flex monta o pacote e o host nao consegue le-lo. O unico sinal honesto e
+      # perguntar ao host quantas funcoes ele enxerga.
+      - name: O host enxerga as funcoes?
+        run: |
+          n=$(az functionapp function list -g rg-dashboard -n "${{ env.APP }}" --query "length(@)" -o tsv)
+          echo "funcoes registradas: $n"
+          if [ "${n:-0}" -lt 1 ]; then
+            echo "::error::O deploy respondeu sucesso e o host nao registrou funcao nenhuma."
+            exit 1
+          fi
