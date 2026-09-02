@@ -235,7 +235,10 @@ function getJSON(url) {
     }).on('error', rej);
   });
 }
-async function writeOut(obj, nome) { const json = JSON.stringify(obj);
+async function writeOut(obj, nome) {
+  // 🔴 o rótulo de MÊS sai nas três línguas — varredura, não caça a cada ponto de emissão
+  rot.localizaTudo(obj, ['lbl']);
+  const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
     const f = nome ? process.env.LOCAL_OUT.replace(/\.json$/, '') + '.' + nome : process.env.LOCAL_OUT;

@@ -22,6 +22,7 @@
  * Env: DADOS_STORAGE (RW no container dados) · LOCAL_OUT p/ teste · OUT_BLOB · SEM_PORTAO=1 para
  * inspecionar uma rodada reprovada sem gravar.
  */
+const rot = require('./lib-rotulos.js');
 const https = require('https');
 
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -81,6 +82,7 @@ function getJSON(url) {
 }
 
 async function grava(obj) {
+  rot.localizaTudo(obj, ['lbl']);
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
   const { BlobServiceClient } = require('@azure/storage-blob');

@@ -94,7 +94,15 @@ const FORMAS = [
   // grupo de tensão: a vírgula decimal é convenção pt-BR
   { re: /^34,5 kV$/, en: () => '34.5 kV', zh: () => '34.5 kV' },
   { re: /^230 kV$/, en: () => '230 kV', zh: () => '230 kV' },
+  // rótulo de MÊS (`set/25`) — é o eixo de todo gráfico mês a mês. Vai por FORMA, não por
+  // tabela: uma tabela de meses precisaria de linha nova a cada ano.
+  { re: /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/(\d{2})$/,
+    en: (m) => ({ jan: 'Jan', fev: 'Feb', mar: 'Mar', abr: 'Apr', mai: 'May', jun: 'Jun',
+      jul: 'Jul', ago: 'Aug', set: 'Sep', out: 'Oct', nov: 'Nov', dez: 'Dec' }[m[1]] + '/' + m[2]),
+    zh: (m) => (({ jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9,
+      out: 10, nov: 11, dez: 12 }[m[1]]) + '月/' + m[2]) },
 ];
+
 
 IDENT.forEach((u) => { if (!DIC[u]) DIC[u] = { en: u, zh: u }; });
 
@@ -140,4 +148,28 @@ function relatorio(quem) {
   return FALTA.size;
 }
 
-module.exports = { loc, localiza, localizaCauda, relatorio, DIC };
+// 🔴 VARREDURA PROFUNDA, para o rótulo que é emitido em muitos lugares do mesmo gerador.
+//    Caçar cada ponto de emissão à mão é como manter uma lista escrita à mão: a primeira
+//    emissão nova fica de fora e ninguém percebe. A varredura roda uma vez, antes do upload,
+//    e alcança todos.
+//
+// ⚠️ Ela só toca o campo quando o valor tem TRADUÇÃO CONHECIDA — sem isso, um campo de texto
+//    livre ganharia `_en` idêntico ao português e o blob cresceria à toa.
+function localizaTudo(raiz, campos) {
+  let n = 0;
+  (function anda(o) {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(anda); return; }
+    campos.forEach((c) => {
+      const v = o[c];
+      if (typeof v !== 'string' || !v || o[c + '_en'] !== undefined) return;
+      const en = loc(v, 'en'), zh = loc(v, 'zh');
+      if (en === v && zh === v) return;      // sem tradução conhecida: não engorda o blob
+      o[c + '_en'] = en; o[c + '_zh'] = zh; n += 1;
+    });
+    Object.values(o).forEach(anda);
+  })(raiz);
+  return n;
+}
+
+module.exports = { loc, localiza, localizaCauda, localizaTudo, relatorio, DIC };
