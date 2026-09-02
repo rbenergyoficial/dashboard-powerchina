@@ -2555,11 +2555,13 @@ async function writeOut(obj, nome) {
     //    davam 133,0 MWh contra 124,9 do Complexo. A contagem do ponto tem de ser a MELHOR
     //    daquela hora — assim a hora cheia se define do proprio dado, e nao de um numero escolhido.
     let parcialChave = null, parcialMin = 0;
+    let snapHoje = null, diaHoje = null;
     for (let k = 0; k < 3; k++) {
       const dSnap = new Date(Date.now() - 3 * 3600 * 1000 - k * 86400000).toISOString().slice(0, 10);
       let snap = null;
       try { snap = await getJSON(BASE + 'hist/way2_' + dSnap + '.json'); }
       catch (e) { continue; }
+      if (k === 0) { snapHoje = snap; diaHoje = dSnap; }
       const porPonto = {};                       // pontoId -> { hora -> [kW] }
       const melhor = {};                         // hora -> maior numero de amostras entre os pontos
       let maiorHora = -1;
@@ -2678,6 +2680,21 @@ async function writeOut(obj, nome) {
       poe('ML', soma(ML.flatMap(u => CIRC[u]), k));
       poe('Complexo', soma([6233], k));
     });
+    // 🔴 AS LINHAS DE HOJE SAEM DA FUNCAO CANONICA (`lib-horas.js`), a mesma que o remendo
+    //    de 5 minutos usa. Sem isto a regra da hora existiria em dois lugares e as duas copias
+    //    envelheceriam diferente — e a do remendo e a que o leitor ve na maior parte do tempo,
+    //    porque o agendador do GitHub entrega este job umas 5 vezes por dia.
+    // ⚠️ A troca e um no-op hoje, e isso foi MEDIDO antes de ligar: 828 pares ponto-hora em
+    //    tres dias, zero divergencias, |Δ| maximo 0,0000 MWh. A hora 23 de dia PASSADO fica de
+    //    fora da comparacao porque ali ela vem do agregado, e o remendo so escreve hoje.
+    if (snapHoje && diaHoje) {
+      const canon = require('./lib-horas.js').horasDoDia(snapHoje, diaHoje).horas;
+      if (canon.length) {
+        for (let i = horas.length - 1; i >= 0; i--) if (horas[i].dia === diaHoje) horas.splice(i, 1);
+        canon.forEach((l) => horas.push(l));
+        horas.sort((a, b) => (a.dia === b.dia ? a.h - b.h : (a.dia < b.dia ? -1 : 1)));
+      }
+    }
     const diasH = [...new Set(horas.map(x => x.dia))].sort();
     const tamH = await writeOut({
       gerado_em: new Date().toISOString(),

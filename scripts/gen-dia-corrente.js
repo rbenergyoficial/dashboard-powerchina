@@ -20,9 +20,11 @@ const https = require('https');
 const zlib = require('zlib');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
+const { horasDoDia } = require('./lib-horas.js');
 
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const BLOB = process.env.OUT_BLOB || 'executivo.json';
+const BLOB_H = process.env.OUT_BLOB_HORA || 'hora_ufv.json';
 const BASE = process.env.BASE || 'https://rbenergydata.blob.core.windows.net/dados/';
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
@@ -73,7 +75,14 @@ function baixa(url) {
   if (process.env.LOCAL_OUT) {
     console.log('[ensaio] ' + hoje + ' ate ' + linha.ate + ' · ' + linha.slots + ' slots');
     Object.entries(val).forEach(([u, v]) => console.log('   ' + u.padEnd(9) + r2(v) + ' MWh'));
-    require('fs').writeFileSync(process.env.LOCAL_OUT, JSON.stringify({ dia: hoje, ate: linha.ate, val }, null, 1));
+    // ⚠️ a camada horaria entra no ensaio TAMBEM: bloco so visto em producao nao esta testado
+    const hs = horasDoDia(snap, hoje).horas;
+    const ult = hs.length ? Math.max.apply(null, hs.map((x) => x.h)) : -1;
+    const pc = hs.find((x) => x.h === ult && x.ufv === 'Complexo') || {};
+    console.log('   camada horaria: ' + hs.length + ' linhas, ate ' + ult + 'h'
+      + (pc.parcial ? ' (em curso, ' + pc.min + ' min)' : '') + ' · Complexo ' + pc.mwh + ' MWh');
+    require('fs').writeFileSync(process.env.LOCAL_OUT,
+      JSON.stringify({ dia: hoje, ate: linha.ate, val, horas: hs }, null, 1));
     return;
   }
 
@@ -126,4 +135,68 @@ function baixa(url) {
   }
   console.log('dia ' + hoje + ' ate ' + linha.ate + ' · Complexo ' + (antes == null ? '—' : antes)
     + ' -> ' + novo + ' MWh (' + linha.slots + ' slots)');
+
+  // ---- a CAMADA HORARIA do mesmo dia ---------------------------------------
+  //
+  // 🔴 Sem isto os dois paineis da secao 1 mostram horarios diferentes na mesma tela.
+  //    Medido em 02/09/2026 as 13:02: o de atingimento trazia dado ate 12:50 (esta linha, ja
+  //    remendada a cada 5 min) e o de entrega por hora parava em 11h, porque `hora_ufv.json` so
+  //    e escrito pela execucao completa do executivo — 14 execucoes em 14 h, vaos de ate 47 min.
+  //    Dois horarios na mesma pagina o leitor le como DADO errado, nao como cadencia.
+  //
+  // ⚠️ A regra da hora nao e reescrita aqui: ela mora em `lib-horas.js` e o executivo chama a
+  //    MESMA funcao para as linhas de hoje.
+  try {
+    const bh = cont.getBlockBlobClient(BLOB_H);
+    const ph = await bh.getProperties();
+    const bufH = await bh.downloadToBuffer();
+    let by = bufH;
+    if (by[0] === 0x1f && by[1] === 0x8b) by = zlib.gunzipSync(by);
+    const jh = JSON.parse(by.toString('utf8').replace(/^﻿/, ''));
+
+    const novas = horasDoDia(snap, hoje).horas;
+    if (!novas.length) { console.log('sem hora util no snapshot — camada horaria intacta'); return; }
+
+    const antesH = (jh.horas || []).filter((x) => x.dia === hoje);
+    const ultAntes = antesH.length ? Math.max.apply(null, antesH.map((x) => x.h)) : -1;
+    const ultNovo = Math.max.apply(null, novas.map((x) => x.h));
+    // guarda: a camada horaria do dia em curso so cresce. Recuar e sinal de leitura torta, e
+    // publicar seria trocar dado bom por dado pior.
+    if (ultNovo < ultAntes) {
+      console.log('camada horaria RECUOU (' + ultAntes + 'h -> ' + ultNovo + 'h) — abortando');
+      return;
+    }
+    // o Complexo tem de existir na ultima hora, senao a curva termina sem a serie principal
+    if (!novas.some((x) => x.h === ultNovo && x.ufv === 'Complexo')) {
+      console.log('ultima hora sem o Complexo — abortando');
+      return;
+    }
+
+    // ⚠️ nada mudou, nada se publica: o arquivo tem 1,28 MB e 25 mil linhas, e uma versao a
+    //    toa a cada 5 minutos e ruido que esconde a gravacao que importa. Acontece de verdade
+    //    quando a fonte nao avancou entre duas rodadas (a Way2 chega com ~10 a 16 min de atraso).
+    const ord = (L) => JSON.stringify(L.slice().sort((a, b) => (a.h - b.h) || (a.ufv < b.ufv ? -1 : 1)));
+    if (ord(antesH) === ord(novas)) { console.log('camada horaria sem novidade — nada a gravar'); return; }
+
+    jh.horas = (jh.horas || []).filter((x) => x.dia !== hoje).concat(novas);
+    jh.dias = [...new Set(jh.horas.map((x) => x.dia))].sort();
+    jh.inicio = jh.dias[0] || null;
+    jh.fim = jh.dias[jh.dias.length - 1] || null;
+    jh.gerado_em = new Date().toISOString();
+
+    const saiH = zlib.gzipSync(Buffer.from(JSON.stringify(jh), 'utf8'));
+    await bh.upload(saiH, saiH.length, {
+      conditions: { ifMatch: ph.etag },
+      blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip',
+        blobCacheControl: 'public, max-age=60' },
+    });
+    const p = novas.find((x) => x.h === ultNovo && x.ufv === 'Complexo') || {};
+    console.log('camada horaria de ' + hoje + ': ' + novas.length + ' linhas, ate ' + ultNovo + 'h'
+      + (p.parcial ? ' (em curso, ' + p.min + ' min)' : '') + ' · Complexo ' + p.mwh + ' MWh');
+  } catch (e) {
+    if (e.statusCode === 412) { console.log('hora_ufv.json foi reescrito no meio — a proxima rodada refaz'); return; }
+    // ⚠️ a camada horaria NAO derruba o job: a linha do dia ja foi gravada acima, e perde-la
+    //    por causa das horas seria trocar um defeito por outro maior.
+    console.log('camada horaria falhou (' + e.message + ') — a linha do dia ja esta gravada');
+  }
 })().catch((e) => { console.error('ERRO ' + e.message); process.exit(1); });
