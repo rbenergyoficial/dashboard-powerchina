@@ -235,6 +235,41 @@ function getJSON(url) {
     }).on('error', rej);
   });
 }
+// 🔴 CAMPO QUE VIRA TEXTO PUBLICO. Alguns campos do blob sao interpolados direto em
+//    `description` de painel — que qualquer pessoa com acesso de leitura le. O portao do lado do
+//    dashboard NAO alcanca isso: ele audita a description, e ali so existe a variavel; e quando a
+//    variavel e de QUERY, o texto so aparece depois de resolver contra este arquivo.
+//
+// ⚠️ Medido em 02/09/2026: `corte_fonte` nomeava o gerador e um campo interno do arquivo de
+//    origem, e estava em quatro descriptions do Curtailment, em producao. O portao dizia PASS.
+//    Por isso a guarda mora AQUI, onde o texto nasce, e falha fechada.
+const PUBLICO = ['corte_fonte'];
+const PROIBIDO_PUBLICO = [
+  [/gen-[a-z0-9-]+\.js/i, 'nome de gerador'],
+  [/\.json\b/i, 'nome de arquivo'],
+  [/\b(val_[a-z_]+|root_selector|JSONata|Infinity|blob)\b/i, 'campo interno ou ferramenta'],
+];
+function guardaTextoPublico(obj) {
+  const ach = [];
+  (function anda(o) {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) return o.forEach(anda);
+    PUBLICO.forEach((c) => {
+      if (typeof o[c] !== 'string') return;
+      PROIBIDO_PUBLICO.forEach(([rx, q]) => {
+        const m = o[c].match(rx);
+        if (m) ach.push(c + ': ' + q + ' (' + m[0] + ')');
+      });
+    });
+    Object.values(o).forEach(anda);
+  })(obj);
+  if (ach.length) {
+    console.error('ERRO: texto destinado a description PUBLICA contem termo interno:');
+    [...new Set(ach)].forEach((a) => console.error('   ' + a));
+    process.exit(1);
+  }
+}
+
 async function writeOut(obj, nome) {
   // 🔴 o rótulo de MÊS sai nas três línguas — varredura, não caça a cada ponto de emissão
   // ⚠️ `label` e `sub` sao o TITULO e a linha de apoio dos cartoes da banda de KPI. Eles
@@ -243,6 +278,7 @@ async function writeOut(obj, nome) {
   //    saia em portugues na pagina em ingles sem ninguem ser avisado.
   // ⚠️ `u` e a UNIDADE, igual nas tres linguas — mas a irma precisa existir mesmo assim,
   //    senao a paridade recusa a troca e a coluna fica em portugues junto com as vizinhas.
+  guardaTextoPublico(obj);
   rot.localizaTudo(obj, ['lbl', 'label', 'sub', 'u']);
   const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
