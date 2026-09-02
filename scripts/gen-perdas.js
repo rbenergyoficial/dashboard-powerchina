@@ -118,6 +118,25 @@ const MODULOS = {
 //    com a fisica (TS7 com 22, TS8 com 11). Fica registrado com o numero que sustenta a decisao,
 //    para que a proxima leitura da planilha encontre a conclusao em vez da duvida.
 const MODULOS_POR_STRING = 29;          // DERIVADO, nao declarado — ver o item 2 acima
+
+// Rastreadores por usina. 🔴 A contagem NAO existe em fonte nenhuma — nem na planilha de placa,
+// nem na folha de dados: ela e DERIVADA da contagem de modulos e da capacidade de cada modelo.
+// Ate aqui vivia so num comentario, o que a deixava fora do alcance de qualquer consumidor e
+// livre para divergir da placa em silencio. Publicada, ela passa a ser conferivel — e a guarda
+// abaixo recusa a rodada se a conta parar de fechar.
+//   Sti-H250 (M1-M4) leva 116 modulos; Trina Vanguard leva 87 (1x87) ou 58 (1x58).
+const TRACKERS = {
+  M1: { 'Sti-H250': { cap: 116, n: 907 } },
+  M2: { 'Sti-H250': { cap: 116, n: 484 } },
+  M3: { 'Sti-H250': { cap: 116, n: 908 } },
+  M4: { 'Sti-H250': { cap: 116, n: 907 } },
+  M5: { 'Trina Vanguard 1x87': { cap: 87, n: 1210 } },
+  M6: { 'Trina Vanguard 1x87': { cap: 87, n: 1210 } },
+  M7: { 'Trina Vanguard 1x87': { cap: 87, n: 322 }, 'Trina Vanguard 1x58': { cap: 58, n: 2 } },
+  M8: { 'Trina Vanguard 1x87': { cap: 87, n: 1206 }, 'Trina Vanguard 1x58': { cap: 58, n: 6 } },
+  M9: { 'Trina Vanguard 1x87': { cap: 87, n: 242 } },
+};
+
 const PLACA = {
   M1: { inversores: 165, modulos: 105212, cc_kwp: 60988.16, ca_kw: 51000,
     inv_por_ts: { TS1: 22, TS2: 22, TS3: 11, TS4: 22, TS5: 22, TS6: 22, TS7: 22, TS8: 22 } },
@@ -139,6 +158,18 @@ const PLACA = {
   M9: { inversores: 33, modulos: 21054, cc_kwp: 12106.05, ca_kw: 10200,
     inv_por_ts: { TS1: 11, TS2: 22 } },
 };
+
+// 🔴 Os trackers fecham contra a placa: trackers x capacidade tem de reproduzir a contagem de
+//    modulos de CADA usina. E o que sustenta os 7.404 — sem esta guarda ele seria so um numero
+//    bonito no meio do arquivo, porque nenhuma fonte o declara. Corrigir a placa sem corrigir os
+//    trackers deixa o job vermelho, em vez de publicar uma contagem que ninguem consegue conferir.
+for (const [u, p] of Object.entries(PLACA)) {
+  const mods = Object.values(TRACKERS[u] || {}).reduce((s, v) => s + v.cap * v.n, 0);
+  if (mods !== p.modulos) {
+    throw new Error('TRACKERS ' + u + ': trackers x capacidade dao ' + mods
+      + ' modulos e a placa diz ' + p.modulos);
+  }
+}
 
 // 🔴 A placa se confere contra ELA MESMA na partida, nao na revisao de codigo. Se alguem corrigir
 //    um numero sem corrigir os outros, o job fica vermelho em vez de publicar uma placa incoerente.
@@ -739,6 +770,11 @@ async function grava(nome, obj) {
     // a placa vai INTEIRA no blob para que o painel leia dela em vez de repetir a contagem: o
     // total do parque escrito num título envelhece na primeira usina que ganhar inversor
     placa: PLACA,
+    trackers: TRACKERS,
+    trackers_total: Object.values(TRACKERS).reduce((t, m) =>
+      t + Object.values(m).reduce((x, v) => x + v.n, 0), 0),
+    trackers_nota: 'Contagem DERIVADA: trackers x capacidade reproduz a contagem de modulos exata '
+      + 'nas nove usinas. Nao ha fonte que a declare — nem a planilha de placa, nem a folha de dados.',
     placa_total: {
       inversores: Object.values(PLACA).reduce((a, p) => a + p.inversores, 0),
       modulos: Object.values(PLACA).reduce((a, p) => a + p.modulos, 0),
