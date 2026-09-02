@@ -192,6 +192,9 @@ function gerarSaude(dados, agoraMs) {
   //    era ela que mantinha `Medidores` em português no cabeçalho das versões EN e 中文. O campo
   //    original não muda — a mudança é ADITIVA, e nada que já lê o blob quebra.
   badges.forEach((b) => rot.localiza(b, ['l', 'u']));
+  // e o nome/grupo de cada medidor — a tabela de saúde os exibe
+  medidores.forEach((m) => rot.localiza(m, ['nome', 'grupo']));
+  rot.relatorio('way2_saude.json');
 
   return {
     atualizado: new Date(agoraMs - 3 * 3600 * 1000).toISOString().slice(0, 19),

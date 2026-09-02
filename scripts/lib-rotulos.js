@@ -88,6 +88,12 @@ const DIC = {
 //    forma, não o valor, senão a cada grau novo faltaria uma entrada.
 const FORMAS = [
   { re: /^Sensação (.+)$/, en: (m) => 'Feels like ' + m[1], zh: (m) => '体感 ' + m[1] },
+  // nome do medidor: `SE · TR1` tem a sigla da subestação em português; `M1 · C1` é código
+  { re: /^SE · (TR\d)$/, en: (m) => 'Substation · ' + m[1], zh: (m) => '升压站 · ' + m[1] },
+  { re: /^(M\d · C\d)$/, en: (m) => m[1], zh: (m) => m[1] },
+  // grupo de tensão: a vírgula decimal é convenção pt-BR
+  { re: /^34,5 kV$/, en: () => '34.5 kV', zh: () => '34.5 kV' },
+  { re: /^230 kV$/, en: () => '230 kV', zh: () => '230 kV' },
 ];
 
 IDENT.forEach((u) => { if (!DIC[u]) DIC[u] = { en: u, zh: u }; });
