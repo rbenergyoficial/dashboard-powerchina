@@ -237,7 +237,11 @@ function getJSON(url) {
 }
 async function writeOut(obj, nome) {
   // 🔴 o rótulo de MÊS sai nas três línguas — varredura, não caça a cada ponto de emissão
-  rot.localizaTudo(obj, ['lbl']);
+  // ⚠️ `label` e `sub` sao o TITULO e a linha de apoio dos cartoes da banda de KPI. Eles
+  //    ficaram de fora ate 02/09/2026 porque `label` nao estava na lista de campos de rotulo
+  //    do construtor de traducao — lista escrita a mao esquece, e a banda inteira do executivo
+  //    saia em portugues na pagina em ingles sem ninguem ser avisado.
+  rot.localizaTudo(obj, ['lbl', 'label', 'sub']);
   const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>

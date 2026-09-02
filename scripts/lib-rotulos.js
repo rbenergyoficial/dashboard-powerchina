@@ -82,7 +82,28 @@ const DIC = {
   'Pancadas de chuva': { en: 'Rain showers', zh: '阵雨' },
   'Tempestade': { en: 'Thunderstorm', zh: '雷暴' },
   'Indefinido': { en: 'Undefined', zh: '未知' },
+
+  // --- banda de KPI do executivo (executivo.json · cards_ufv) --------------
+  // ⚠️ `Performance Ratio` e `Curtailment` ja sao termos ingleses usados em portugues no
+  //    setor — em EN ficam como estao, e so o 中文 muda.
+  'Performance Ratio': { en: 'Performance Ratio', zh: '性能比' },
+  'Disponibilidade': { en: 'Availability', zh: '可用率' },
+  'Curtailment': { en: 'Curtailment', zh: '限电' },
+  'Projeção de corte': { en: 'Curtailment projection', zh: '限电预测' },
+  'Horas em restrição': { en: 'Hours under restriction', zh: '受限小时数' },
+  'a limitação é registrada para o conjunto': {
+    en: 'the limitation is recorded for the complex', zh: '限电按电站群整体记录' },
+  'no fechamento do mês': { en: 'at month close', zh: '月末结算时' },
+  'no fechamento do mes': { en: 'at month close', zh: '月末结算时' },
+  // linha de MÉDIA da tabela por usina — rótulo, não entidade
+  'MÉDIA': { en: 'AVERAGE', zh: '平均' },
 };
+
+// mapa de mes, usado por mais de uma forma — declarado uma vez
+const MES_EN = { jan: 'Jan', fev: 'Feb', mar: 'Mar', abr: 'Apr', mai: 'May', jun: 'Jun',
+  jul: 'Jul', ago: 'Aug', set: 'Sep', out: 'Oct', nov: 'Nov', dez: 'Dec' };
+const MES_N = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9,
+  out: 10, nov: 11, dez: 12 };
 
 // ⚠️ Prefixo variável + cauda fixa: `Sensação 32°` só tem tradução na cauda. A lista guarda a
 //    forma, não o valor, senão a cada grau novo faltaria uma entrada.
@@ -97,10 +118,31 @@ const FORMAS = [
   // rótulo de MÊS (`set/25`) — é o eixo de todo gráfico mês a mês. Vai por FORMA, não por
   // tabela: uma tabela de meses precisaria de linha nova a cada ano.
   { re: /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/(\d{2})$/,
-    en: (m) => ({ jan: 'Jan', fev: 'Feb', mar: 'Mar', abr: 'Apr', mai: 'May', jun: 'Jun',
-      jul: 'Jul', ago: 'Aug', set: 'Sep', out: 'Oct', nov: 'Nov', dez: 'Dec' }[m[1]] + '/' + m[2]),
-    zh: (m) => (({ jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, set: 9,
-      out: 10, nov: 11, dez: 12 }[m[1]]) + '月/' + m[2]) },
+    en: (m) => MES_EN[m[1]] + '/' + m[2],
+    zh: (m) => MES_N[m[1]] + '月/' + m[2] },
+
+  // --- linha de apoio dos cartoes do executivo (cards_ufv.sub) -------------
+  // 🔴 O NUMERO fica de fora da traducao, sempre: ele vem do dado e so a moldura muda. Uma
+  //    tabela aqui precisaria de linha nova a cada mes e a cada valor — 208 valores distintos
+  //    para 9 formas.
+  { re: /^medida no conjunto · alvo (.+)$/,
+    en: (m) => 'measured for the complex · target ' + m[1],
+    zh: (m) => '按电站群计量 · 目标 ' + m[1] },
+  { re: /^alvo (.+)$/, en: (m) => 'target ' + m[1], zh: (m) => '目标 ' + m[1] },
+  { re: /^(.+) GWh jogados fora$/,
+    en: (m) => m[1] + ' GWh thrown away', zh: (m) => m[1] + ' GWh 被弃' },
+  { re: /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/(\d{2}) fechou em (.+) GWh$/,
+    en: (m) => MES_EN[m[1]] + '/' + m[2] + ' closed at ' + m[3] + ' GWh',
+    zh: (m) => MES_N[m[1]] + '月/' + m[2] + ' 结算于 ' + m[3] + ' GWh' },
+  // ⚠️ o `(.+)` do dia aceita `null`: hoje o gerador emite `dia null de 30` quando a
+  //    contagem de dias nao vem. Traduzir o molde nao conserta o dado — o defeito esta
+  //    declarado, e o rotulo em ingles carrega o mesmo `null` que o portugues carrega.
+  { re: /^mês parcial · dia (.+) de (.+)$/,
+    en: (m) => 'partial month · day ' + m[1] + ' of ' + m[2],
+    zh: (m) => '部分月份 · 第 ' + m[1] + ' 天 / 共 ' + m[2] + ' 天' },
+  { re: /^ONS · dia (\d+) de (\d+) \(D\+1\)$/,
+    en: (m) => 'ONS · day ' + m[1] + ' of ' + m[2] + ' (D+1)',
+    zh: (m) => 'ONS · 第 ' + m[1] + ' 天 / 共 ' + m[2] + ' 天（D+1）' },
 ];
 
 
@@ -153,8 +195,15 @@ function relatorio(quem) {
 //    emissão nova fica de fora e ninguém percebe. A varredura roda uma vez, antes do upload,
 //    e alcança todos.
 //
-// ⚠️ Ela só toca o campo quando o valor tem TRADUÇÃO CONHECIDA — sem isso, um campo de texto
-//    livre ganharia `_en` idêntico ao português e o blob cresceria à toa.
+// 🔴 A IRMÃ TEM DE EXISTIR EM TODA LINHA, e isto já foi o contrário: a versão anterior só
+//    escrevia quando havia tradução conhecida, para não engordar o blob. O efeito era um campo
+//    com irmã em ALGUMAS linhas — e do outro lado o construtor troca a coluna inteira por
+//    `<campo>_en`, então as linhas sem irmã voltariam VAZIAS. Coluna vazia é pior que português:
+//    o valor some da tela e nada acusa. Hoje o campo nomeado ganha irmã SEMPRE, caindo no
+//    português quando não há tradução — e o relatório diz quais caíram.
+//
+// ⚠️ Por isso `campos` é uma lista NOMEADA, nunca uma varredura de todo campo de texto: a
+//    duplicata custa bytes, e só vale nos campos que a página traduzida de fato lê.
 function localizaTudo(raiz, campos) {
   let n = 0;
   (function anda(o) {
@@ -163,9 +212,7 @@ function localizaTudo(raiz, campos) {
     campos.forEach((c) => {
       const v = o[c];
       if (typeof v !== 'string' || !v || o[c + '_en'] !== undefined) return;
-      const en = loc(v, 'en'), zh = loc(v, 'zh');
-      if (en === v && zh === v) return;      // sem tradução conhecida: não engorda o blob
-      o[c + '_en'] = en; o[c + '_zh'] = zh; n += 1;
+      o[c + '_en'] = loc(v, 'en'); o[c + '_zh'] = loc(v, 'zh'); n += 1;
     });
     Object.values(o).forEach(anda);
   })(raiz);
