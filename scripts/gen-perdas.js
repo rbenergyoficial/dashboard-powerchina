@@ -119,23 +119,50 @@ const MODULOS = {
 //    para que a proxima leitura da planilha encontre a conclusao em vez da duvida.
 const MODULOS_POR_STRING = 29;          // DERIVADO, nao declarado — ver o item 2 acima
 
-// Rastreadores por usina. 🔴 A contagem NAO existe em fonte nenhuma — nem na planilha de placa,
-// nem na folha de dados: ela e DERIVADA da contagem de modulos e da capacidade de cada modelo.
-// Ate aqui vivia so num comentario, o que a deixava fora do alcance de qualquer consumidor e
-// livre para divergir da placa em silencio. Publicada, ela passa a ser conferivel — e a guarda
-// abaixo recusa a rodada se a conta parar de fechar.
+// Rastreadores por usina.
+//
+// 🔴 ATE 02/09/2026 a contagem era DERIVADA: nao existia em fonte nenhuma e saia de dividir os
+//    modulos pela capacidade do modelo. A «Apresentacao do Parque Fotovoltaico e Sistemas
+//    Associados» a declara por usina E por eletrocentro, e ela deixou de ser derivada.
+//
+// 🔴 E corrigiu o M5: sao 1.221 rastreadores, nao os 1.210 que a divisao dava. O erro nasceu de
+//    supor UM modelo por usina — 105.270 / 87 = 1.210, e os 33 rastreadores de meia capacidade
+//    desapareciam na conta. A apresentacao mostra o TS4 do M5 com 172 rastreadores contra os 161
+//    dos irmaos: e la que eles estao.
+//
+// ⚠️ A apresentacao NAO serve para os MODULOS, e a guarda de strings por inversor diz por que.
+//    Ela multiplica 87 por todo rastreador e chega a 106.227 no M5 — 957 modulos a mais, que sao
+//    33 strings. Com eles a usina teria 22,20 strings por inversor, e o inversor tem 22; a
+//    estrutura eletrica (165 x 22 x 29 = 105.270) nao os comporta. A apresentacao conta
+//    ESTRUTURAS e assume capacidade cheia em todas; a placa conta MODULOS. Onde divergem, vale a
+//    que a guarda sustenta: a apresentacao nos rastreadores, a placa nos modulos.
 //   Sti-H250 (M1-M4) leva 116 modulos; Trina Vanguard leva 87 (1x87) ou 58 (1x58).
 const TRACKERS = {
   M1: { 'Sti-H250': { cap: 116, n: 907 } },
   M2: { 'Sti-H250': { cap: 116, n: 484 } },
   M3: { 'Sti-H250': { cap: 116, n: 908 } },
   M4: { 'Sti-H250': { cap: 116, n: 907 } },
-  M5: { 'Trina Vanguard 1x87': { cap: 87, n: 1210 } },
+  M5: { 'Trina Vanguard 1x87': { cap: 87, n: 1188 }, 'Trina Vanguard 1x58': { cap: 58, n: 33 } },
   M6: { 'Trina Vanguard 1x87': { cap: 87, n: 1210 } },
   M7: { 'Trina Vanguard 1x87': { cap: 87, n: 322 }, 'Trina Vanguard 1x58': { cap: 58, n: 2 } },
   M8: { 'Trina Vanguard 1x87': { cap: 87, n: 1206 }, 'Trina Vanguard 1x58': { cap: 58, n: 6 } },
   M9: { 'Trina Vanguard 1x87': { cap: 87, n: 242 } },
 };
+
+// 🔴 A contagem TOTAL por usina, como a documentacao do parque a declara. Ela e a SEGUNDA rota:
+//    `TRACKERS` decompoe por modelo e tem de somar isto. Sem esta guarda a decomposicao pode
+//    fechar nos modulos e errar no numero de estruturas — que foi exatamente o que aconteceu no
+//    M5, e ficou dois meses sem ninguem ver porque a unica conta conferida era a dos modulos.
+const TRACKERS_TOTAL = { M1: 907, M2: 484, M3: 908, M4: 907, M5: 1221,
+                         M6: 1210, M7: 324, M8: 1212, M9: 242 };
+
+for (const [u, tot] of Object.entries(TRACKERS_TOTAL)) {
+  const soma = Object.values(TRACKERS[u]).reduce((a, v) => a + v.n, 0);
+  if (soma !== tot) {
+    throw new Error('TRACKERS ' + u + ': a decomposicao por modelo soma ' + soma
+      + ' rastreadores e a documentacao do parque declara ' + tot);
+  }
+}
 
 const PLACA = {
   M1: { inversores: 165, modulos: 105212, cc_kwp: 60988.16, ca_kw: 51000,
@@ -155,8 +182,12 @@ const PLACA = {
     inv_por_ts: { TS1: 22, TS2: 22 } },
   M8: { inversores: 165, modulos: 105270, cc_kwp: 60530.25, ca_kw: 51000,
     inv_por_ts: { TS1: 22, TS2: 22, TS3: 22, TS4: 22, TS5: 22, TS6: 22, TS7: 11, TS8: 22 } },
+  // ⚠️ M9: o TS1 tem 22 inversores e o TS2 tem 11 — confirmado pela equipe em 02/09/2026, e e o
+  //    inverso do que esta constante trazia. A leitura se sustenta no padrao das tags ausentes:
+  //    as mesmas cinco (INV04, 05, 06, 08 e 10) faltam sempre num eletrocentro de 22, e no M9 elas
+  //    faltam no TS1.
   M9: { inversores: 33, modulos: 21054, cc_kwp: 12106.05, ca_kw: 10200,
-    inv_por_ts: { TS1: 11, TS2: 22 } },
+    inv_por_ts: { TS1: 22, TS2: 11 } },
 };
 
 // 🔴 Os trackers fecham contra a placa: trackers x capacidade tem de reproduzir a contagem de
@@ -773,8 +804,12 @@ async function grava(nome, obj) {
     trackers: TRACKERS,
     trackers_total: Object.values(TRACKERS).reduce((t, m) =>
       t + Object.values(m).reduce((x, v) => x + v.n, 0), 0),
-    trackers_nota: 'Contagem DERIVADA: trackers x capacidade reproduz a contagem de modulos exata '
-      + 'nas nove usinas. Nao ha fonte que a declare — nem a planilha de placa, nem a folha de dados.',
+    // ⚠️ A nota dizia 'Contagem DERIVADA... nao ha fonte que a declare'. Deixou de ser verdade em
+    //    02/09/2026, e nota que afirma ausencia de fonte quando a fonte existe manda o proximo
+    //    leitor derivar de novo o que ja esta declarado — foi assim que o M5 ficou com 1.210.
+    trackers_nota: 'Contagem LIDA da Apresentacao do Parque Fotovoltaico e Sistemas Associados, '
+      + 'por usina e por eletrocentro. Confere por duas rotas: a decomposicao por modelo soma o '
+      + 'total declarado, e trackers x capacidade reproduz a contagem de modulos da placa nas nove.',
     placa_total: {
       inversores: Object.values(PLACA).reduce((a, p) => a + p.inversores, 0),
       modulos: Object.values(PLACA).reduce((a, p) => a + p.modulos, 0),
