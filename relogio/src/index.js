@@ -46,15 +46,41 @@ async function gh(caminho, init = {}) {
 // mais, disparar em cima gera fila. Foi assim que o fluxo do Power Automate foi throttled em
 // 09/07/2026 — com runs zumbis marcadas como canceladas segurando o slot por 10h+. Os workflows
 // tem `concurrency` propria; isto e o cinto por cima do suspensorio, do lado de quem chama.
-async function jaRodando(wf) {
-  const r = await gh('/workflows/' + wf + '/runs?per_page=5&status=in_progress')
-    .catch(() => null);
-  const q = await gh('/workflows/' + wf + '/runs?per_page=5&status=queued').catch(() => null);
-  return ((r && r.total_count) || 0) + ((q && q.total_count) || 0) > 0;
+//
+// 🔴 E FOI ELA QUE DESLIGOU UM WORKFLOW POR 26 DIAS (medido em 02/09/2026).
+// O `way2-agg.yml` tinha uma run criada em 07/08 presa em `queued`: zero jobs, `updated_at`
+// igual ao `created_at`, e o GitHub recusando cancelar (HTTP 409). Um registro morto — que
+// nunca ia executar. A guarda lia `total_count > 0`, concluia "ja esta rodando" e PULAVA o
+// disparo. Toda hora. Por 26 dias.
+//
+// O efeito e o modo de falhar mais caro desta casa: nada quebra, nada fica vermelho, o
+// workflow simplesmente cai do relogio para o agendador do GitHub — que entrega mediana de
+// 146 min contra os 60 declarados, p90 de 451 e maximo de 796. Ninguem ve.
+//
+// ⚠️ O TETO NAO E ESCOLHIDO, sai da plataforma: um JOB do GitHub morre em 6 h. Uma run mais
+// velha que isso nao pode estar viva, entao ignora-la nunca descarta uma execucao de verdade.
+// Nos workflows deste repo o maior `timeout-minutes` declarado e 120 — o teto tem 3x de folga
+// para cima e pega o zumbi de 26 dias por fator 100.
+const TETO_VIVO_MS = 6 * 60 * 60 * 1000;
+
+async function jaRodando(wf, log) {
+  const busca = (st) => gh('/workflows/' + wf + '/runs?per_page=20&status=' + st).catch(() => null);
+  const [r, q] = await Promise.all([busca('in_progress'), busca('queued')]);
+  const corte = Date.now() - TETO_VIVO_MS;
+  const todas = [...((r && r.workflow_runs) || []), ...((q && q.workflow_runs) || [])];
+  const vivas = todas.filter((x) => Date.parse(x.created_at) >= corte);
+  const zumbis = todas.length - vivas.length;
+  // 🔴 O zumbi passa a ser DITO. Antes ele agia em silencio; um registro que desabilita um
+  // workflow tem de aparecer no log de quem o pula.
+  if (zumbis && log) {
+    log.warn(`${wf}: ${zumbis} run(s) presa(s) ha mais de 6 h — ignorada(s). `
+      + `Registro morto no GitHub; se persistir, apague-a nas Actions.`);
+  }
+  return vivas.length > 0;
 }
 
 async function dispara(wf, log) {
-  if (await jaRodando(wf)) { log.warn(`${wf}: ja ha execucao em andamento — pulando`); return 'pulado'; }
+  if (await jaRodando(wf, log)) { log.warn(`${wf}: ja ha execucao em andamento — pulando`); return 'pulado'; }
   await gh('/workflows/' + wf + '/dispatches', {
     method: 'POST',
     body: JSON.stringify({ ref: REF }),
