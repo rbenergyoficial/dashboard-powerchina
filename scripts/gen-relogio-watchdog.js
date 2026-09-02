@@ -22,6 +22,9 @@
 'use strict';
 const https = require('https');
 const path = require('path');
+// 🔴 o alerta sai pela lib compartilhada: ela manda para o webhook do Power Automate E abre uma
+//    ISSUE no repositorio. O webhook cai com a licenca; a issue nao depende de nada externo.
+const { alerta } = require('./lib-alerta.js');
 
 const AGENDA = require(path.join(__dirname, '..', 'relogio', 'agenda.json'));
 const REPO = process.env.GH_REPO || 'rbenergyoficial/dashboard-powerchina';
@@ -29,7 +32,6 @@ const TOKEN = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const ESTADO = 'relogio_watchdog.json';
 const SAUDE = 'relogio_saude.json';
-const WEBHOOK = (process.env.PA_ALERT_WEBHOOK || '').trim();
 const TOLERANCIA = Number(process.env.TOLERANCIA || 2.5);
 const MARGEM_MIN = Number(process.env.MARGEM_MIN || 20);
 
@@ -89,16 +91,6 @@ function gh(caminho) {
   });
 }
 
-function postJson(url, obj) {
-  return new Promise((ok, ko) => {
-    const u = new URL(url); const body = JSON.stringify(obj);
-    const r = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      timeout: 30000 }, (res) => { res.resume();
-      res.on('end', () => (res.statusCode < 300 ? ok(res.statusCode) : ko(new Error('webhook HTTP ' + res.statusCode)))); });
-    r.on('error', ko); r.write(body); r.end();
-  });
-}
 
 (async () => {
   if (!TOKEN) { console.error('RECUSADO: sem GH_TOKEN/GITHUB_TOKEN — nao da para ler as execucoes'); process.exit(1); }
@@ -150,15 +142,37 @@ function postJson(url, obj) {
   //    ensina a ignorar o alerta — que e o oposto do que ele existe para fazer.
   const novos = atrasados.filter((a) => !estado[a.wf]);
   const voltaram = Object.keys(estado).filter((w) => !atrasados.some((a) => a.wf === w));
-  if (novos.length && WEBHOOK) {
-    const acao = { tipo: 'relogio_atrasado',
-      assunto: 'Mauriti · ' + novos.length + ' workflow(s) fora da cadencia',
-      corpo: novos.map((a) => a.wf + ': ' + a.idade + ' min sem rodar (cadencia ' + a.cadencia
-        + ' min, limite ' + a.limite + ')').join('\n') };
-    try { console.log('ALERTA enviado (HTTP ' + (await postJson(WEBHOOK, acao)) + '): ' + acao.assunto); }
-    catch (e) { console.error('FALHA ao enviar alerta: ' + e.message); }
-  } else if (novos.length) {
-    console.log('ALERTA (sem PA_ALERT_WEBHOOK — so log): ' + novos.map((a) => a.wf).join(', '));
+
+  // 🔴 UM ALERTA POR WORKFLOW, com chave estavel. A chave e o que faz o dedup do canal
+  //    funcionar: o mesmo workflow atrasado sempre gera o MESMO titulo de issue, entao a
+  //    segunda rodada COMENTA em vez de abrir outra. Chave que carregasse a idade abriria uma
+  //    issue a cada 5 min — e issue a cada 5 min ensina a ignorar a issue.
+  for (const a of novos) {
+    await alerta({
+      tipo: 'relogio_atrasado',
+      chave: 'cadencia:' + a.wf,
+      titulo: a.wf + ' fora da cadencia',
+      assunto: '🟠 Mauriti · ' + a.wf + ' nao roda ha ' + a.idade + ' min',
+      corpo: '<b>' + a.wf + ' esta fora da cadencia que declara.</b><br><br>'
+        + 'Sem rodar ha <b>' + a.idade + ' min</b>. A cadencia do cron dele e de ' + a.cadencia
+        + ' min, e o limite (com tolerancia) e ' + a.limite + ' min.<br><br>'
+        + 'Quem dispara os workflows e o relogio. Se varios aparecerem juntos, o suspeito e ele: '
+        + 'PAT expirado, Function App fora, ou a agenda divergente dos crons.',
+      workflow: a.wf, idade_min: a.idade, limite_min: a.limite, cadencia_min: a.cadencia,
+    });
+  }
+
+  // ⚠️ NORMALIZAR TAMBEM E NOTICIA. Antes isso so ia para o log da execucao; agora fecha a
+  //    issue do evento, e o estado fica legivel sem ninguem abrir log nenhum.
+  for (const w of voltaram) {
+    await alerta({
+      tipo: 'relogio_normalizado', resolve: true,
+      chave: 'cadencia:' + w,
+      titulo: w + ' fora da cadencia',
+      assunto: '✅ Mauriti · ' + w + ' voltou a cadencia',
+      corpo: '<b>' + w + ' voltou a rodar dentro da cadencia que declara.</b>',
+      workflow: w,
+    });
   }
 
   if (cont) {
@@ -168,7 +182,6 @@ function postJson(url, obj) {
     await cont.getBlockBlobClient(ESTADO).upload(b, Buffer.byteLength(b),
       { blobHTTPHeaders: { blobContentType: 'application/json' } });
   }
-  if (voltaram.length) console.log('  normalizaram: ' + voltaram.join(', '));
 
   console.log('\n  ' + linhas.length + ' workflows julgados · '
     + (atrasados.length ? '🔴 ' + atrasados.length + ' fora da cadencia' : 'todos dentro da cadencia'));

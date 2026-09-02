@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
   actions: read
+  # ⚠️ o canal de alerta novo abre ISSUE no proprio repositorio — sem isto ele falha com 403,
+  #    e canal de alerta que falha e o pior lugar para uma permissao faltando.
+  issues: write
 concurrency:
   group: way2-recent
   cancel-in-progress: true
