@@ -151,6 +151,34 @@ function variaveis(dash) {
   return { par, fora };
 }
 
+const kb = (lista) => (lista.reduce((s, p) => s + p.bytes, 0) / 1024).toFixed(0);
+
+// 🔴 Os quatro tipos lidos pelo Infinity IGNORAM o seletor de tempo — o recorte deles esta no
+// JSONata da consulta. Medido nesta rodada: o barchart [90] recebeu `now/M` (o mes corrente, dois
+// dias) e desenhou ONZE meses; o histograma [93] recebeu o mesmo e contou as 68 observacoes da
+// serie inteira.
+//
+// Entao publicar `now/M → now` ao lado deles faria a pagina reivindicar uma janela que a imagem
+// nao tem — o mesmo defeito que a janela declarada acabou de corrigir, so que pelo outro lado.
+const IGNORA_SELETOR = new Set(['barchart', 'histogram', 'xychart', 'heatmap']);
+const UNIDADE = {
+  m: ['minuto', 'minutos'], h: ['hora', 'horas'], d: ['dia', 'dias'],
+  w: ['semana', 'semanas'], M: ['mes', 'meses'], y: ['ano', 'anos'],
+};
+
+// O rotulo e o que a PAGINA mostra ao lado da imagem, entao ele fala portugues e nao sintaxe do
+// Grafana. A janela crua continua no manifesto, para quem for depurar.
+function rotuloJanela(tipo, j) {
+  if (IGNORA_SELETOR.has(tipo)) return 'recorte da propria consulta';
+  const m = /^now-(\d+)([mhdwMy])$/.exec(j.from);
+  if (j.to === 'now' && m) {
+    const n = Number(m[1]);
+    return 'ultim' + (n === 1 ? 'o ' : 'os ') + n + ' ' + UNIDADE[m[2]][n === 1 ? 0 : 1];
+  }
+  if (j.from === 'now/M' && j.to === 'now') return 'o mes corrente';
+  return j.from + ' ate ' + j.to;
+}
+
 function confereImagem(buf) {
   if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e) return 'nao e PNG';
   if (buf.length < PISO_BYTES) {
@@ -241,7 +269,8 @@ function confereImagem(buf) {
   // ontem, sem nada dizendo qual e qual — o defeito de duas janelas na mesma tela. Ou os nove
   // sobem, ou nenhum sobe, e o conjunto antigo continua no ar com o carimbo dele.
   if (falhas.length) {
-    console.error('\nRECUSADO — %d de %d falharam, nada foi publicado:', falhas.length, ALVOS.length);
+    console.error('\nRECUSADO — ' + falhas.length + ' de ' + ALVOS.length
+      + ' falharam, nada foi publicado:');
     falhas.forEach(f => console.error('  ' + f));
     process.exit(1);
   }
@@ -257,6 +286,7 @@ function confereImagem(buf) {
       // A janela da IMAGEM e a que a pagina tem de dizer ao lado dela. `janela_dashboard` vai
       // junto para o leitor que abrir o painel ao vivo nao estranhar ver outro periodo.
       janela: p.janela.from + ' → ' + p.janela.to,
+      janela_rotulo: rotuloJanela(p.tipo, p.janela),
       janela_origem: p.janela.origem,
       janela_razao: p.janela.razao || null,
       janela_dashboard: p.janelaDash,
@@ -272,8 +302,8 @@ function confereImagem(buf) {
     feitos.forEach(p => fs.writeFileSync(path.join(process.env.LOCAL_OUT, p.arq), p.buf));
     fs.writeFileSync(path.join(process.env.LOCAL_OUT, 'manifesto.json'),
       JSON.stringify(manifesto, null, 1));
-    console.log('\ngravado em %s · %d paineis · %.0f KB',
-      process.env.LOCAL_OUT, feitos.length, feitos.reduce((s, p) => s + p.bytes, 0) / 1024);
+    console.log('\ngravado em ' + process.env.LOCAL_OUT + ' · ' + feitos.length
+      + ' paineis · ' + kb(feitos) + ' KB');
     return;
   }
 
@@ -293,6 +323,5 @@ function confereImagem(buf) {
       blobCacheControl: 'public, max-age=300',
     },
   });
-  console.log('\npublicados %d paineis · %.0f KB no total',
-    feitos.length, feitos.reduce((s, p) => s + p.bytes, 0) / 1024);
+  console.log('\npublicados ' + feitos.length + ' paineis · ' + kb(feitos) + ' KB no total');
 })().catch(e => { console.error('FALHOU:', e.message); process.exit(1); });
