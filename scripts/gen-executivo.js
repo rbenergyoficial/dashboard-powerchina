@@ -1812,9 +1812,15 @@ async function writeOut(obj, nome) {
               corte_outras_razao_pct: RAZAO.outras, corte_outras_origem_pct: ORIGEM.outras,
               corte_vantagem_pp: r2(NORDESTE - MAURITI),
               corte_janela: JANELA,
-              corte_fonte: 'ONS · Restrição de Geração — nível conjunto, subsistema NE; calculado a cada '
-                + 'rodada pelo gen-benchmark-ons.js, convenção val_geracaolimitada > 0, meses completos, '
-                + 'menos 03/03 e 11/03 (nesses dois o ONS publica mais geração do que o medidor Way2)',
+              // 🔴 TEXTO PUBLICO: este campo e interpolado em quatro `description` do painel de
+              //    Curtailment, e description e lida por qualquer pessoa com acesso de leitura. A
+              //    versao anterior nomeava o gerador e um campo interno do arquivo de origem — o
+              //    portao G14 nao a via, porque ele audita a description, e ali so existe a
+              //    variavel. Portao nao enxerga atraves de interpolacao.
+              corte_fonte: 'Apuração de restrição do operador nacional · nível conjunto, subsistema '
+                + 'Nordeste. Contam os intervalos com limitação registrada, apenas meses completos. '
+                + 'Ficam de fora 03/03 e 11/03, em que a geração publicada pelo operador excede a '
+                + 'medição do medidor de faturamento.',
             };
           })()),
           nota: 'Acumulado de ' + ano + ' — SOMENTE MESES FECHADOS. O mes corrente (' + cur.lbl + ', dia ' + dCorr + ' de ' + dTot + ') fica de fora: compara-lo pela metade contra a meta do mes inteiro derrubaria o acumulado artificialmente.' }); } }
