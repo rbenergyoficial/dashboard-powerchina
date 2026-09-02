@@ -11,11 +11,40 @@
  *
  * Estado em dados/way2_watchdog.json (dedup + marca início da queda p/ calcular a duração).
  *
- * Env: DADOS_STORAGE (obrig.), WAY2_TOKEN (p/ a confirmação direta), PA_ALERT_WEBHOOK (URL do
- *   gatilho HTTP do fluxo PA de alertas; se vazio, só loga), LIMIAR_MIN (default 30).
+ * Env: DADOS_STORAGE (obrig.), WAY2_TOKEN (p/ a confirmação direta), LIMIAR_MIN (default 30).
+ *   Os destinos do alerta vêm do `lib-alerta` (PA_ALERT_WEBHOOK e/ou GITHUB_TOKEN + GH_REPO).
+ *
+ * 🔴 POR QUE ESTE VIGIA PASSOU A USAR O `lib-alerta` (02/09/2026)
+ * Ele falava DIRETO no `PA_ALERT_WEBHOOK` — o gatilho HTTP de um fluxo do Power Automate. Ou
+ * seja: o vigia que existe para avisar quando a telemetria congela tinha um canal só, e esse
+ * canal morre com a licença.
+ *
+ * ⚠️ E ele vigia a ÚNICA entrada de dado do ao-vivo: `way2_eletrico.json` é a raiz de
+ * `way2_saude` (32 dashboards), `way2_latest` (9), `kpis_dia` (3) e do portal. Ficar sem voz
+ * aqui significa a suíte inteira congelar sem ninguém saber — some o alerta E some a notícia
+ * de que ele sumiu.
+ *
+ * O `lib-alerta` ACRESCENTA a issue no próprio repositório, que não depende de licença nenhuma
+ * (o `GITHUB_TOKEN` do Actions basta) e avisa por e-mail quem acompanha o repo. O webhook
+ * continua ligado enquanto existir — o segundo destino soma, não substitui.
  */
 const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
+const { alerta } = require('./lib-alerta');
+
+// 🔴 O EVENTO tem chave e título FIXOS; quem carrega a duração é o assunto. O `tituloDe` do
+// `lib-alerta` monta o título da issue de `chave` + `titulo`, então qualquer um dos dois
+// carregando os minutos abriria uma issue NOVA a cada lembrete — e issue a cada lembrete ensina
+// a ignorar a issue. Com a chave fixa, o lembrete COMENTA na aberta e a normalização a FECHA.
+const EV_TELEMETRIA = { chave: 'way2:telemetria', titulo: 'Telemetria Way2 sem atualizar' };
+const EV_MEDIDOR = { chave: 'way2:medidores', titulo: 'Medidores Way2 sem comunicacao' };
+
+// Entregue = QUALQUER canal aceitou. Antes isto era "o webhook respondeu"; com dois destinos,
+// bastar um é justamente o motivo de existir o segundo. '-' = canal não configurado.
+const entregou = (r) => ['webhook', 'issue'].some((k) => {
+  const v = String(r[k]);
+  return v !== '-' && !v.startsWith('FALHOU') && !v.startsWith('nada aberto');
+});
 
 const CONTAINER = 'dados';
 // 🔴 REGISTRAR E NOTIFICAR SAO COISAS DIFERENTES, e misturar as duas e o que enche a caixa de
@@ -31,7 +60,8 @@ const CONTAINER = 'dados';
 // interromper alguem quando ha o que fazer.
 const LIMIAR = Math.max(10, (parseInt(process.env.LIMIAR_MIN || '30', 10) || 30));
 const LIMIAR_EMAIL = Math.max(LIMIAR, (parseInt(process.env.LIMIAR_EMAIL_MIN || '60', 10) || 60));
-const WEBHOOK = (process.env.PA_ALERT_WEBHOOK || '').trim();
+// ⚠️ O webhook NAO e mais lido aqui: quem conhece os destinos e o `lib-alerta`. Duas leituras da
+// mesma variavel em dois lugares e a receita para uma delas envelhecer sozinha.
 // 🔴 UM ALERTA SO NAO BASTA NUMA PARADA LONGA. Ate 23/08/2026 o watchdog avisava 1x por evento:
 // a telemetria caiu as 02:10, o e-mail saiu as 02:41, e as seis horas seguintes correram em
 // silencio. Quem abriu a caixa de manha tinha um unico aviso, com um numero de 31 minutos.
@@ -65,14 +95,6 @@ function apiGet(query, token, timeout = 45000) {
       let buf = ''; res.on('data', c => buf += c); res.on('end', () => { try { resolve(JSON.parse(buf.replace(/^﻿/, ''))); } catch (e) { reject(e); } });
     });
     req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', reject);
-  });
-}
-function postJson(url, obj) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url); const body = JSON.stringify(obj);
-    const req = https.request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 30000 },
-      (res) => { res.resume(); res.on('end', () => (res.statusCode < 300 ? resolve(res.statusCode) : reject(new Error('webhook HTTP ' + res.statusCode)))); });
-    req.on('timeout', () => req.destroy(new Error('timeout'))); req.on('error', reject); req.write(body); req.end();
   });
 }
 
@@ -147,7 +169,8 @@ function postJson(url, obj) {
       const haX = st.idadeTxt != null ? fmtDur(st.idadeTxt) + ' no momento deste alerta'
         : 'sem leitura hoje ainda';
       acao = {
-        tipo: 'falha', origem, idade_min: st.idadeTxt, sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
+        tipo: 'falha', ...EV_TELEMETRIA,
+        origem, idade_min: st.idadeTxt, sem_dados_desde: st.desde, verificado_em: nowBRT(), contato_suporte: fonte ? SUPORTE : '',
         lembrete,
         assunto: (fonte ? '🔴' : '🟠') + ' ' + (lembrete ? 'AINDA sem dados' : 'Falha de comunicação')
           + ' Way2 · Mauriti · desde ' + desdeFmt
@@ -171,7 +194,10 @@ function postJson(url, obj) {
     // avisar do fim de algo que ninguem soube que comecou — e e-mail sem par e ruido puro.
     const houveAviso = (st.avisos || 0) > 0;
     acao = houveAviso ? {
-      tipo: 'normalizado', duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: ate,
+      // `resolve: true` FECHA a issue do evento — normalizar tambem e noticia, e o estado fica
+      // legivel sem ninguem abrir log nenhum.
+      tipo: 'normalizado', ...EV_TELEMETRIA, resolve: true,
+      duracao_min: Math.round(dur), ficou_fora_desde: st.desde, ate: ate,
       origem: st.origem || '—', avisos: st.avisos || 0,
       assunto: '✅ Way2 NORMALIZADA · Mauriti · ficou fora ' + fmtDur(dur),
       corpo: '<b>A telemetria do Complexo Mauriti VOLTOU a atualizar.</b><br><br>'
@@ -191,9 +217,9 @@ function postJson(url, obj) {
 
   // 5) dispara + salva estado
   if (acao) {
-    let entregue = false;
-    if (WEBHOOK) { try { const code = await postJson(WEBHOOK, acao); entregue = true; console.log('ALERTA enviado (HTTP ' + code + '):', acao.tipo, '·', acao.assunto); } catch (e) { console.error('FALHA ao enviar alerta:', e.message); } }
-    else console.log('ALERTA (sem PA_ALERT_WEBHOOK — só log):', JSON.stringify(acao));
+    const r = await alerta(acao);
+    const entregue = entregou(r);
+    console.log('ALERTA ' + acao.tipo + ' · ' + acao.assunto + (entregue ? '' : '  <- NENHUM CANAL ACEITOU'));
     // `alertado_em` passa a ser a hora do ULTIMO envio, nao a do primeiro: e dela que o
     // proximo lembrete conta
     if (acao.tipo === 'falha' && entregue && st.estado === 'falha') {
@@ -239,7 +265,8 @@ function postJson(url, obj) {
         }).join('');
         const n = pendentes.length;
         const acaoMed = {
-          tipo: 'medidor_fora', qtd: n, verificado_em: nowBRT(), contato_suporte: SUPORTE,
+          tipo: 'medidor_fora', ...EV_MEDIDOR,
+          qtd: n, verificado_em: nowBRT(), contato_suporte: SUPORTE,
           assunto: '🟠 ' + (n === 1 ? 'Medidor Way2 sem comunicação' : n + ' medidores Way2 sem comunicação') + ' · Mauriti',
           corpo: '<b>' + (n === 1 ? 'Um medidor parou' : n + ' medidores pararam') + ' de enviar dados para a Way2.</b><br><br>'
             + '<ul>' + lista + '</ul>'
@@ -248,9 +275,8 @@ function postJson(url, obj) {
             + '➡ <b>AÇÃO: verificar o medidor em campo</b> e, se necessário, acionar o suporte Way2 — ' + SUPORTE
             + '<br><br><i>(Alerta automático · watchdog Mauriti · limiar ' + LIM_MED + ' min)</i>',
         };
-        let ok = false;
-        if (WEBHOOK) { try { const c = await postJson(WEBHOOK, acaoMed); ok = true; console.log('ALERTA medidor enviado (HTTP ' + c + '): ' + acaoMed.assunto); } catch (e) { console.error('FALHA alerta medidor:', e.message); } }
-        else console.log('ALERTA medidor (sem webhook — só log):', acaoMed.assunto);
+        const ok = entregou(await alerta(acaoMed));
+        console.log('ALERTA medidor · ' + acaoMed.assunto + (ok ? '' : '  <- NENHUM CANAL ACEITOU'));
         if (ok) for (const [pid] of pendentes) st.medidores[pid].alertado_em = nowBRT();
       }
 
@@ -262,14 +288,14 @@ function postJson(url, obj) {
           return '<li><b>' + o.nome + '</b> (ponto ' + pid + ') — ficou fora <b>' + fmtDur(dur) + '</b>, desde ' + fmtTs(o.desde) + '</li>';
         }).join('');
         const acaoOk = {
-          tipo: 'medidor_normalizado', qtd: voltaram.length, verificado_em: nowBRT(),
+          tipo: 'medidor_normalizado', ...EV_MEDIDOR, resolve: true,
+          qtd: voltaram.length, verificado_em: nowBRT(),
           assunto: '✅ ' + (voltaram.length === 1 ? 'Medidor Way2 NORMALIZADO' : voltaram.length + ' medidores Way2 NORMALIZADOS') + ' · Mauriti',
           corpo: '<b>' + (voltaram.length === 1 ? 'O medidor voltou' : 'Os medidores voltaram') + ' a enviar dados.</b><br><br><ul>' + lista + '</ul>'
             + '<i>(Alerta automático · watchdog Mauriti)</i>',
         };
-        let ok = false;
-        if (WEBHOOK) { try { const c = await postJson(WEBHOOK, acaoOk); ok = true; console.log('ALERTA medidor normalizado (HTTP ' + c + '): ' + acaoOk.assunto); } catch (e) { console.error('FALHA alerta normalizado:', e.message); } }
-        else console.log('ALERTA medidor normalizado (sem webhook — só log):', acaoOk.assunto);
+        const ok = entregou(await alerta(acaoOk));
+        console.log('ALERTA medidor normalizado · ' + acaoOk.assunto + (ok ? '' : '  <- NENHUM CANAL ACEITOU'));
         if (ok) for (const [pid] of voltaram) delete st.medidores[pid];
       }
       // medidor que voltou mas nunca chegou a ser avisado: limpa sem e-mail

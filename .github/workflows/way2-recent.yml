@@ -87,11 +87,17 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
         run: node scripts/gen-relogio-watchdog.js
+      # 🔴 SEGUNDO DESTINO. Este vigia falava so pelo webhook do Power Automate — ou seja, o vigia
+      # da UNICA entrada de dado do ao-vivo tinha um canal so, e esse canal morre com a licenca.
+      # `GITHUB_TOKEN` + `GH_REPO` ligam a issue no proprio repositorio, que nao depende de licenca
+      # nenhuma. O webhook continua enquanto existir: o segundo destino SOMA, nao substitui.
       - name: Watchdog frescor Way2 (alerta)
         if: always()
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           LIMIAR_MIN: '30'
         run: node scripts/gen-way2-watchdog.js
