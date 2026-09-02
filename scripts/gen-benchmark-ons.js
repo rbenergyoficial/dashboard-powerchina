@@ -33,6 +33,7 @@
  *
  * Env: DADOS_STORAGE (RW no container dados) · LOCAL_OUT p/ teste · MESES p/ limitar a janela.
  */
+const rot = require('./lib-rotulos.js');
 const https = require('https'), readline = require('readline'), zlib = require('zlib');
 const ONS = 'https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/';
 const FONTES = [
@@ -184,6 +185,7 @@ async function leMes(f, mo, acc) {
 }
 
 async function grava(obj) {
+  rot.localizaTudo(obj, ['lbl']);
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
   const { BlobServiceClient } = require('@azure/storage-blob');
