@@ -179,6 +179,19 @@ function rotuloJanela(tipo, j) {
   return j.from + ' ate ' + j.to;
 }
 
+// 🔴 A DIMENSAO E MEDIDA DO PNG, NUNCA A QUE FOI PEDIDA.
+// Medido em 02/09/2026: pedindo `height=430` o renderer devolveu 500 em todas as nove — o piso
+// dele vale para a ALTURA tambem, nao so para a largura. A pagina levava `height="430"` no
+// atributo, que e a dica de proporcao que o navegador usa para reservar a caixa: proporcao errada
+// e salto de layout quando a imagem chega.
+//
+// A largura ele respeita (1100 e 1500 voltaram inteiras), entao o pedido nao e inutil — mas o que
+// vai para a pagina e o que voltou. Cabecalho IHDR: 4 bytes de largura e 4 de altura, a partir do
+// byte 16.
+function tamanhoPng(buf) {
+  return { larg: buf.readUInt32BE(16), alt: buf.readUInt32BE(20) };
+}
+
 function confereImagem(buf) {
   if (buf.length < 8 || buf[0] !== 0x89 || buf[1] !== 0x50 || buf[2] !== 0x4e) return 'nao e PNG';
   if (buf.length < PISO_BYTES) {
@@ -242,9 +255,14 @@ function confereImagem(buf) {
       const erro = confereImagem(buf);
       if (erro) throw new Error(erro);
 
-      feitos.push({ ...a, buf, bytes: buf.length, ms,
+      const px = tamanhoPng(buf);
+      feitos.push({ ...a, buf, bytes: buf.length, ms, px,
         titulo: p.title || '', tipo: p.type, janela: j, vars: v.par,
         janelaDash: (dash.time || {}).from + ' → ' + (dash.time || {}).to });
+      if (px.larg !== a.larg || px.alt !== a.alt) {
+        console.log('       ⚠️ pedi ' + a.larg + 'x' + a.alt + ' e vieram ' + px.larg + 'x' + px.alt
+          + ' — o renderer tem piso proprio; a pagina usa o que VEIO');
+      }
 
       // ⚠️ `console.log` do Node entende %s e %d, mas NAO entende largura nem precisao ao estilo
       // do printf: `%-24s` e `%5.0f` saem literais na tela e os valores vao empilhados no fim.
@@ -291,6 +309,9 @@ function confereImagem(buf) {
       janela_razao: p.janela.razao || null,
       janela_dashboard: p.janelaDash,
       link: BASE + '/d/' + p.uid + '?viewPanel=' + p.painel,
+      // Medida do proprio PNG. E a proporcao que a pagina declara no atributo para reservar a
+      // caixa; a pedida nao serve, porque o renderer a clampa sem avisar.
+      larg: p.px.larg, alt: p.px.alt,
       kb: Math.round(p.bytes / 1024),
     })),
   };
