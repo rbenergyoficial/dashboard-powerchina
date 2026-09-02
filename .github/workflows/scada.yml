@@ -9,9 +9,18 @@ on:
       diag_cols:
         description: 'Listar colunas (diagnostico reativa)'
         default: '0'
+      vigia_modo:
+        description: 'vigia da intake: vigiar (padrao) ou medir (so imprime a distribuicao)'
+        default: 'vigiar'
 concurrency:
   group: gen-scada
   cancel-in-progress: true
+# ⚠️ `issues: write` e o que o canal de alerta por issue exige. Sem ela ele falha com 403 —
+#    e canal de alerta que falha calado e pior que canal nenhum.
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   gen:
     runs-on: ubuntu-latest
@@ -29,3 +38,15 @@ jobs:
           OUT_BLOB: scada_comparativo.json
           DIAG_COLS: ${{ github.event.inputs.diag_cols }}
         run: node scripts/gen-scada.js
+
+      # 🔴 `always()`: a hora em que o vigia mais importa e quando o passo acima falhou.
+      #    E ele NAO derruba o job — o alerta e a saida dele, nao o codigo de retorno.
+      - name: Vigia da intake do SCADA
+        if: always()
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: scada-raw
+          MODO: ${{ github.event.inputs.vigia_modo || 'vigiar' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+        run: node scripts/gen-scada-intake-watchdog.js
