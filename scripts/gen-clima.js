@@ -12,6 +12,7 @@
  */
 const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
+const rot = require('./lib-rotulos.js');
 
 const CONTAINER = 'dados';
 const LAT = -7.38, LON = -38.77;
@@ -64,6 +65,10 @@ async function gerarClima(conn) {
     { chave: 'vento', rotulo: 'Vento', valor: +(+c.wind_speed_10m).toFixed(1), unidade: 'm/s', icon: 'wind', cor: '#9AA4B2' },
     { chave: 'condicao', rotulo: 'Condição', texto: w.txt, icon: w.icon, cor: w.cor },
   ];
+  // 🔴 Rótulo nas TRÊS línguas. `texto` é a condição do tempo, e o domínio dela é FECHADO —
+  //    os doze retornos do mapa de código WMO acima —, então traduz-se por tabela sem risco de
+  //    valor novo aparecer sem par. `sub` é `Sensação <n>°`: cauda fixa com número variável.
+  metricas.forEach((m) => rot.localiza(m, ['rotulo', 'texto', 'sub']));
 
   const out = {
     atualizado: nowBRT,

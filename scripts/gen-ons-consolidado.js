@@ -9,6 +9,7 @@
  * Uso no GitHub Actions: env DADOS_STORAGE (connection string) grava no blob.
  * Teste local: env LOCAL_OUT_DIR=<pasta> grava os arquivos localmente em vez do blob.
  */
+const rot = require('./lib-rotulos.js');
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const START_Y = 2025, START_M = 9; // Set/2025 = entrada em operação
@@ -242,6 +243,12 @@ async function gerarKpis(rows) {
     // Um cabeçalho sem o item do pré-COD é melhor que um cabeçalho quebrado.
     console.log('  pré-COD: tile OMITIDO — ' + e.message);
   }
+
+  // 🔴 O rótulo de cada bloco vai nas TRÊS línguas — é esta banda que o Curtailment mostra no
+  //    topo, e era ela que dizia `OUTORGA · GERADO · FRUSTRADO` na página em inglês. Aditivo:
+  //    `l`, `u` e `t` originais não mudam.
+  (kpis.tiles || []).forEach((tl) => rot.localiza(tl, ['l', 'u', 't']));
+  rot.relatorio('ons_kpis.json');
 
   const json = JSON.stringify(kpis, null, 1);
   await upload('ons_kpis.json', json);

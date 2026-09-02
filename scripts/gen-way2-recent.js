@@ -9,6 +9,7 @@
 // Só usa a connection string (DADOS_STORAGE) — nenhum token Way2. Independente do fluxo PA.
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { gerarClima } = require('./gen-clima');
+const rot = require('./lib-rotulos.js');
 
 const CONTAINER = 'dados';
 const LIVE_BLOB = 'way2_eletrico.json';
@@ -66,14 +67,16 @@ function kpisDia(eletJson) {
   const horas = vals.length * 5 / 60;
   const fc = horas > 0 ? energia / (343.77 * horas) * 100 : 0;      // %
   const media = horas > 0 ? energia / horas : 0;                    // MW
+  const kpis = [
+    { rotulo: 'Energia hoje', valor: +energia.toFixed(1), unidade: 'MWh', emoji: '⚡', cor: '#FFB020', destaque: 1 },
+    { rotulo: 'Fator de capacidade', valor: +fc.toFixed(1), unidade: '%', emoji: '🎯', cor: '#8B93A1', destaque: 0 },
+    { rotulo: 'Pico de potência', valor: +pico.toFixed(1), unidade: 'MW', emoji: '📈', cor: '#8B93A1', destaque: 0 },
+    { rotulo: 'Potência média', valor: +media.toFixed(1), unidade: 'MW', emoji: '📊', cor: '#8B93A1', destaque: 0 },
+  ];
+  kpis.forEach((k) => rot.localiza(k, ['rotulo']));
   return {
     atualizado: new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 19),
-    kpis: [
-      { rotulo: 'Energia hoje', valor: +energia.toFixed(1), unidade: 'MWh', emoji: '⚡', cor: '#FFB020', destaque: 1 },
-      { rotulo: 'Fator de capacidade', valor: +fc.toFixed(1), unidade: '%', emoji: '🎯', cor: '#8B93A1', destaque: 0 },
-      { rotulo: 'Pico de potência', valor: +pico.toFixed(1), unidade: 'MW', emoji: '📈', cor: '#8B93A1', destaque: 0 },
-      { rotulo: 'Potência média', valor: +media.toFixed(1), unidade: 'MW', emoji: '📊', cor: '#8B93A1', destaque: 0 },
-    ],
+    kpis,
   };
 }
 
@@ -185,6 +188,10 @@ function gerarSaude(dados, agoraMs) {
     { ic: '⏱', l: 'Way2', v: String(idadeAncora), u: 'min', c: corIdade },
     { ic: '📡', l: 'Medidores', v: medSaudaveis + '/' + resumo.total, u: sufMed, c: corMed },
   ];
+  // 🔴 O rótulo do selo vai nas TRÊS línguas. Esta barra está no topo de 13 páginas traduzidas, e
+  //    era ela que mantinha `Medidores` em português no cabeçalho das versões EN e 中文. O campo
+  //    original não muda — a mudança é ADITIVA, e nada que já lê o blob quebra.
+  badges.forEach((b) => rot.localiza(b, ['l', 'u']));
 
   return {
     atualizado: new Date(agoraMs - 3 * 3600 * 1000).toISOString().slice(0, 19),
