@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
 concurrency:
   group: way2-recent
   cancel-in-progress: true
@@ -21,12 +24,12 @@ jobs:
       # deriva dele. Isso prendia a entrada de dado a uma licenca Premium com prazo. O repo ja
       # tinha o segredo e o gen-must ja falava com a mesma API — faltava a coleta de 5 min.
       #
-      # ⚠️ `continue-on-error` e TEMPORARIO e proposital: enquanto o fluxo continuar rodando,
-      # ele e a rede de seguranca — uma falha aqui deixa o blob dele no ar e o resto do job
-      # segue. No dia em que o fluxo for desligado, isto vira erro duro, senao a coleta passa
-      # a poder falhar em silencio, que e o modo de errar mais caro desta casa.
+      # 🔴 SEM `continue-on-error`: a falha tem de ser RUIDOSA. Com ele, um passo que falha
+      # aparece como `success` na API do GitHub, e o verde do workflow nao provava que a coleta
+      # funcionava — quem provava era o blob. Ele existia enquanto o fluxo do Power Automate
+      # fosse a rede de seguranca; a partir do desligamento do fluxo, esta e a UNICA entrada de
+      # dado do ao-vivo, e ela nao pode parar em silencio.
       - name: Coletar da Way2 (way2_eletrico.json)
-        continue-on-error: true
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
@@ -68,6 +71,19 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-selo-medidores.js --real
+      # 🔴 O RELOGIO PARANDO NAO FAZ BARULHO. Ele dispara os workflows na cadencia dos crons
+      # porque o agendador do GitHub entrega ~1/3 do declarado; se o PAT expirar ou o Function
+      # App cair, nada fica vermelho — a suite so fica velha. Este vigia compara a idade da
+      # ultima execucao de cada workflow com o MAIOR intervalo que o proprio cron dele produz.
+      # E cobre tambem o caso que o job nao cobre sozinho: o job nao RODAR.
+      - name: Vigia de cadencia (o relogio esta tocando?)
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+        run: node scripts/gen-relogio-watchdog.js
       - name: Watchdog frescor Way2 (alerta)
         if: always()
         env:
