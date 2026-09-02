@@ -312,6 +312,25 @@ function gerarSaude(dados, agoraMs) {
     console.log(`way2_saude.json OK · âncora ${saude.ancora} (há ${saude.idade_min} min) · `
       + `${saude.resumo.ok}/${saude.resumo.total} medidores (${saude.resumo.atraso} atraso, ${saude.resumo.falha} falha) · `
       + `${saude.eventos.length} eventos · ${(sb.length / 1024).toFixed(0)} KB`);
+    // 4) portal_vivo.json — o blob LEVE da tela "Ao vivo" do portal. Nenhum blob leve tinha a
+    // curva do DIA: a unica fonte era o way2_recent, de 7,6 MB. Os blobs ricos existem para o
+    // Grafana, que os le pelo servidor; uma pagina que baixa 7,6 MB por abertura nao e ao vivo,
+    // e lenta. Este carrega so o que a tela desenha — medido: 11 KB crus, 2,8 KB comprimidos.
+    // ⚠️ Gravado em GZIP: o navegador descomprime sozinho, e sao 2,8 KB em vez de 11.
+    if (eletJson && Array.isArray(eletJson.dados)) {
+      const pv = require('./lib/portal-vivo.js').monta(eletJson, saude);
+      if (pv) {
+        const gz = require('zlib').gzipSync(Buffer.from(JSON.stringify(pv), 'utf8'));
+        await container.getBlockBlobClient('portal_vivo.json').upload(gz, gz.length, {
+          blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=60' } });
+        console.log(`portal_vivo.json OK · ${pv.n} leituras ate ${pv.hora} · pico ${pv.pico_mw} MW · `
+          + `rendimento ${pv.rendimento ? pv.rendimento.length + ' usinas' : 'AUSENTE (mapa nao lido)'} · `
+          + `${(gz.length / 1024).toFixed(1)} KB`);
+      } else {
+        console.log('portal_vivo.json NAO gerado — sem leitura do complexo no dia');
+      }
+    }
+
     const ruins = saude.medidores.filter(m => m.estado !== 'ok');
     if (ruins.length) console.log('  medidores fora do normal: ' + ruins.map(m => `${m.nome}=${m.idade_min}min(${m.estado})`).join(', '));
   } else {
