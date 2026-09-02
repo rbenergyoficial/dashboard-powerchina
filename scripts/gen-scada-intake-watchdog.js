@@ -111,6 +111,24 @@ function pct(v, p) {
   return s[Math.min(s.length - 1, Math.floor((s.length - 1) * p))];
 }
 
+// ── lotes ────────────────────────────────────────────────────────────────────────────────────
+// 🔴 O DEPOSITO E EM LOTE, e medir arquivo a arquivo mede a coisa errada. As cinco familias
+//    chegam juntas (medido: todas param no mesmo minuto), entao a distribuicao arquivo-a-arquivo
+//    mistura o vao DENTRO do lote (~0 h, dezenas deles) com o vao ENTRE lotes (~24 h). O p99
+//    dessa mistura nao descreve cadencia nenhuma — foi o que a primeira medicao mostrou, com
+//    mediana 0,0 h e maximo 219,8 h na mesma familia.
+const LOTE_H = 2;   // arquivos a menos de 2 h uns dos outros sao o mesmo deposito
+
+function lotes(v) {
+  const out = [];
+  for (const b of v) {
+    const ult = out[out.length - 1];
+    if (ult && (b.ms - ult.fim) / 3600000 <= LOTE_H) { ult.fim = b.ms; ult.n++; }
+    else out.push({ ini: b.ms, fim: b.ms, n: 1 });
+  }
+  return out;
+}
+
 // ── MODO=medir ───────────────────────────────────────────────────────────────────────────────
 function medir(m) {
   const agora = Date.now();
@@ -124,23 +142,26 @@ function medir(m) {
     console.log(f.nome.padEnd(38) + v.length + ' arquivos');
     console.log('   ultimo    ' + new Date(v[v.length - 1].ms).toISOString()
       + '  (ha ' + idade.toFixed(1) + ' h)   ' + v[v.length - 1].nome.split('/').pop());
-    if (gaps.length) {
-      console.log('   intervalo entre chegadas (h):  mediana ' + pct(gaps, 0.5).toFixed(1)
-        + ' · p90 ' + pct(gaps, 0.9).toFixed(1)
-        + ' · p99 ' + pct(gaps, 0.99).toFixed(1)
-        + ' · maximo ' + Math.max(...gaps).toFixed(1));
-      // a distribuicao inteira, para separar familia de gaps como o caso do spanNulls
-      const fx = [6, 12, 24, 36, 48, 72, 168, 1e9];
-      const cont = fx.map((t, i) => gaps.filter(
-        (g) => g <= t && g > (i ? fx[i - 1] : 0)).length);
-      console.log('   ate 6h ' + cont[0] + ' · 12h ' + cont[1] + ' · 24h ' + cont[2]
-        + ' · 36h ' + cont[3] + ' · 48h ' + cont[4] + ' · 72h ' + cont[5]
-        + ' · 7d ' + cont[6] + ' · alem ' + cont[7]);
-      // 🔴 a SUGESTAO nao vira limiar sozinha: ela e o que o humano confere antes de gravar.
-      console.log('   sugestao: alerta ' + Math.ceil(pct(gaps, 0.99) * 1.5)
-        + ' h · critico ' + Math.ceil(pct(gaps, 0.99) * 3) + ' h'
-        + '   (1,5x e 3x o p99)');
+    const L = lotes(v);
+    console.log('   ' + L.length + ' lotes (arquivos a menos de ' + LOTE_H
+      + ' h sao o mesmo deposito)');
+    if (L.length > 1) {
+      const g = [];
+      for (let i = 1; i < L.length; i++) g.push((L[i].ini - L[i - 1].fim) / 3600000);
+      console.log('   entre LOTES (h):  mediana ' + pct(g, 0.5).toFixed(1)
+        + ' · p75 ' + pct(g, 0.75).toFixed(1)
+        + ' · p90 ' + pct(g, 0.9).toFixed(1)
+        + ' · maximo ' + Math.max(...g).toFixed(1));
+      const fx = [26, 32, 50, 74, 170, 1e9];
+      const rot = ['<=26h (diario)', '26-32h', '32-50h (1 dia perdido)',
+        '50-74h (2 dias)', '74-170h', 'alem de 7d'];
+      console.log('   ' + fx.map((t, i) => rot[i] + ' ' + g.filter(
+        (x) => x <= t && x > (i ? fx[i - 1] : 0)).length).join(' · '));
     }
+    // os ultimos lotes, para o humano ver o padrao em vez de confiar no percentil
+    console.log('   ultimos lotes: ' + L.slice(-8).map((x) =>
+      new Date(x.ini).toISOString().slice(0, 16).replace('T', ' ') + ' (' + x.n + ')')
+      .join('  '));
     console.log('');
   }
 }
