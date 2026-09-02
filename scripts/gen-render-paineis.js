@@ -35,19 +35,51 @@ const PREFIXO = 'paineis/';
 // sai como uma imagem que parece certa e nao e a que se pediu.
 const PISO_LARGURA = 1000;
 
+// 🔴 IMAGEM NAO TEM ZOOM, E ISSO MUDA QUAL JANELA SERVE
+// No Grafana o leitor arrasta e abre o trecho que interessa. Numa imagem, a janela que foi
+// renderizada e a unica que existe — entao ela deixa de ser so o padrao do dashboard e passa a ser
+// decisao de composicao, como a altura do painel.
+//
+// Medido em 02/09/2026 no [227] (irradiancia, duas fontes, passo de 1 h) a 1100 px:
+//
+//   30 dias  ·  ~35 px por ciclo diario  ·  ✅ le-se cada dia, e a falta do sensor entre 07 e
+//                                             23/08 aparece como a linha do SCADA sumindo
+//   90 dias  ·  ~12 px por ciclo         ·  ⚠️ os dias viram espigoes e as duas fontes comecam a
+//                                             se sobrepintar
+//   365 dias ·   ~3 px por ciclo         ·  🔴 parede magenta: a comparacao que o painel existe
+//                                             para fazer desaparece
+//
+// ⚠️ A METRICA OBVIA — pontos por pixel — NAO SEPARA OS CASOS, e por isso nao virou regra
+// automatica. O [511] do perdas1r roda a 1,78 pontos por pixel e le-se muito bem; o [227] ja
+// degrada a 2,06. O que difere e o CICLO: irradiancia oscila de 0 a 1000 todo dia, entao o que
+// governa e quantos pixels cabem num ciclo — e "este sinal tem ciclo diario" nao se deduz do JSON
+// do dashboard. Uma formula aqui seria uma formula que eu nao consigo defender.
+//
+// Entao a janela vai DECLARADA, com a razao medida ao lado, e o manifesto publica as duas (a do
+// dashboard e a da imagem) para a pagina poder dizer qual esta na tela. Janela declarada que
+// aparece na pagina nao apodrece em silencio; e por isso que este numero pode ser escrito e um
+// numero de KPI nao pode.
+//
 // `arq` e o nome no blob e e o que a pagina referencia — ele NAO muda quando o titulo do painel
 // muda. `larg`/`alt` seguem o lugar na grade: um painel de largura inteira e oito de meia coluna.
 const ALVOS = [
   { arq: 'pr-livre-mes.png',       uid: 'perfmt1',  painel: 90,  larg: 1500, alt: 430 },
   { arq: 'mapa-pr-livre.png',      uid: 'perfmt1',  painel: 92,  larg: 1100, alt: 430 },
   { arq: 'corte-esconde.png',      uid: 'perfmt1',  painel: 91,  larg: 1100, alt: 430 },
-  { arq: 'irradiancia-plano.png',  uid: 'a88bwp',   painel: 201, larg: 1100, alt: 430 },
-  { arq: 'irradiancia-fontes.png', uid: 'a88bwp',   painel: 227, larg: 1100, alt: 430 },
+  { arq: 'irradiancia-plano.png',  uid: 'a88bwp',   painel: 201, larg: 1100, alt: 430,
+    janela: { from: 'now-30d', to: 'now', razao: 'ciclo diario: a 1 ano cada dia ocupa 3 px' } },
+  { arq: 'irradiancia-fontes.png', uid: 'a88bwp',   painel: 227, larg: 1100, alt: 430,
+    janela: { from: 'now-30d', to: 'now', razao: 'ciclo diario: a 1 ano as duas fontes viram uma mancha' } },
   { arq: 'cascata-energia.png',    uid: 'perdas1r', painel: 510, larg: 1100, alt: 430 },
   { arq: 'perda-conversao.png',    uid: 'perdas1r', painel: 511, larg: 1100, alt: 430 },
   { arq: 'distribuicao-pr.png',    uid: 'perfmt1',  painel: 93,  larg: 1100, alt: 430 },
   { arq: 'mapa-divergencia.png',   uid: 'cmpfont1', painel: 40,  larg: 1100, alt: 430 },
 ];
+
+// ⚠️ Estopim, nao formula. Ele nao decide a janela — ele obriga quem acrescentar um alvo de serie
+// temporal com janela longa a OLHAR o render e declarar o que viu, em vez de herdar o padrao do
+// dashboard e descobrir a parede depois de publicada. Hoje ele nao acende em nenhum dos nove.
+const DIAS_SEM_OLHAR = 60;
 
 // Um PNG de erro do renderer sai pequeno; um painel de verdade nao. O piso nao e chutado — o menor
 // dos nove medido nestas larguras passa de 25 KB, e metade disso ainda deixa folga larga.
@@ -82,12 +114,23 @@ function achata(ps, saida) {
   return saida;
 }
 
-// A janela sai do PAINEL quando ele fixa a dele (`timeFrom`), e do dashboard quando nao fixa.
-// Escrever a janela aqui faria a legenda do portal prometer um periodo e a imagem mostrar outro.
-function janela(p, dash) {
+// A janela sai, nesta ordem: do ALVO quando ele declara a dele (e ai a razao esta escrita ao lado),
+// do PAINEL quando ele fixa a sua (`timeFrom`), e do dashboard no resto.
+function janela(a, p, dash) {
+  if (a.janela) return { ...a.janela, origem: 'alvo' };
   if (p.timeFrom) return { from: 'now-' + p.timeFrom, to: 'now', origem: 'painel' };
   const t = dash.time || {};
   return { from: t.from || 'now-6h', to: t.to || 'now', origem: 'dashboard' };
+}
+
+// Converte `now-90d`, `now-13M`, `now-1y` em dias. Devolve null para o que nao souber ler —
+// `now/M` (arredondado ao inicio do periodo) e carimbo absoluto caem aqui, e o estopim declara
+// que nao julgou em vez de fingir que aprovou.
+const EM_DIAS = { s: 1 / 86400, m: 1 / 1440, h: 1 / 24, d: 1, w: 7, M: 30, y: 365 };
+function vaoEmDias(from, to) {
+  if (to !== 'now') return null;
+  const m = /^now-(\d+)([smhdwMy])$/.exec(from);
+  return m ? Number(m[1]) * EM_DIAS[m[2]] : null;
 }
 
 // 🔴 So variavel CUSTOM entra na URL. O `current` de uma variavel de QUERY e o valor que estava
@@ -144,7 +187,22 @@ function confereImagem(buf) {
       const p = achata(dash.panels, []).find(x => x.id === a.painel);
       if (!p) throw new Error('painel ' + a.painel + ' nao existe em ' + a.uid);
 
-      const j = janela(p, dash);
+      const j = janela(a, p, dash);
+
+      // ⚠️ O estopim so acende quando a janela foi HERDADA do dashboard: alvo que declara a
+      // propria ja passou pelo olho de alguem, e painel que fixa a sua sabe por que a fixou.
+      if (p.type === 'timeseries' && j.origem === 'dashboard') {
+        const dias = vaoEmDias(j.from, j.to);
+        if (dias === null) {
+          console.log('       janela ' + j.from + '→' + j.to + ' nao pode ser medida em dias; '
+            + 'o estopim nao a julgou');
+        } else if (dias > DIAS_SEM_OLHAR) {
+          throw new Error('serie temporal herdando janela de ' + Math.round(dias) + ' dias do '
+            + 'dashboard. Imagem nao tem zoom: renderize e OLHE antes de aceitar, e declare a '
+            + 'janela no alvo com a razao do que voce viu');
+        }
+      }
+
       const v = variaveis(dash);
       const q = ['panelId=' + a.painel, 'width=' + a.larg, 'height=' + a.alt,
         'from=' + encodeURIComponent(j.from), 'to=' + encodeURIComponent(j.to),
@@ -157,9 +215,20 @@ function confereImagem(buf) {
       if (erro) throw new Error(erro);
 
       feitos.push({ ...a, buf, bytes: buf.length, ms,
-        titulo: p.title || '', tipo: p.type, janela: j, vars: v.par });
-      console.log('  %-24s %s[%d] %-14s %5.0f KB %6d ms  janela %s→%s (%s)',
-        a.arq, a.uid, a.painel, p.type, buf.length / 1024, ms, j.from, j.to, j.origem);
+        titulo: p.title || '', tipo: p.type, janela: j, vars: v.par,
+        janelaDash: (dash.time || {}).from + ' → ' + (dash.time || {}).to });
+
+      // ⚠️ `console.log` do Node entende %s e %d, mas NAO entende largura nem precisao ao estilo
+      // do printf: `%-24s` e `%5.0f` saem literais na tela e os valores vao empilhados no fim.
+      // Foi o que aconteceu na primeira execucao — o log era o instrumento, e o instrumento
+      // imprimiu a propria mascara. Alinhamento aqui e por padEnd/toFixed.
+      console.log('  ' + a.arq.padEnd(24)
+        + (a.uid + '[' + a.painel + ']').padEnd(16)
+        + p.type.padEnd(15)
+        + (buf.length / 1024).toFixed(0).padStart(4) + ' KB'
+        + String(ms).padStart(7) + ' ms   '
+        + (j.from + '→' + j.to).padEnd(16) + '(' + j.origem + ')');
+      if (j.razao) console.log('       janela declarada · ' + j.razao);
       if (v.fora.length) {
         console.log('       variaveis deixadas para o Grafana resolver: ' + v.fora.join(' '));
       }
@@ -184,7 +253,13 @@ function confereImagem(buf) {
         + 'de origem e nao obedece a nenhum seletor do portal.',
     paineis: feitos.map(p => ({
       arq: PREFIXO + p.arq, uid: p.uid, painel: p.painel, tipo: p.tipo,
-      titulo: p.titulo, janela: p.janela.from + ' → ' + p.janela.to,
+      titulo: p.titulo,
+      // A janela da IMAGEM e a que a pagina tem de dizer ao lado dela. `janela_dashboard` vai
+      // junto para o leitor que abrir o painel ao vivo nao estranhar ver outro periodo.
+      janela: p.janela.from + ' → ' + p.janela.to,
+      janela_origem: p.janela.origem,
+      janela_razao: p.janela.razao || null,
+      janela_dashboard: p.janelaDash,
       link: BASE + '/d/' + p.uid + '?viewPanel=' + p.painel,
       kb: Math.round(p.bytes / 1024),
     })),
