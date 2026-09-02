@@ -31,7 +31,40 @@ async function loadRawBuffers() {
 async function writeOut(obj) { const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
   const svc = await getBlobClient(); const cont = svc.getContainerClient(OUT_CONTAINER); await cont.createIfNotExists();
-  await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } }); return json.length;
+  await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
+  await escrevePortal(cont, obj);
+  return json.length;
+}
+
+// portal_ativos.json — o mesmo conteudo SEM os fatos brutos, para o portal Aurora.
+//
+// 🔴 `inversores.json` sai com 1.306 KB NA REDE, sem compressao, e tres telas do portal o leem.
+// O peso esta quase todo em tres listas de eventos linha a linha (`p2/fatos` com 7.943, `p1/fatos`
+// com 172, `fatos_codigo` com 168) e no dicionario de codigos — nada disso e desenhado: as telas
+// mostram os AGREGADOS que este mesmo arquivo ja traz prontos.
+//
+// Medido: 1.434 KB crus caem para 11 KB, e 3 KB gravado em gzip. O navegador descomprime sozinho.
+//
+// ⚠️ Ele nao recalcula nada. Se um numero do portal divergir do painel do Grafana, o defeito esta
+// na PODA — nunca na conta, porque conta aqui nao ha.
+async function escrevePortal(cont, obj) {
+  const PODAR = { p1: ['fatos', 'fatos_codigo'], p2: ['fatos'] };
+  const leve = JSON.parse(JSON.stringify(obj));
+  delete leve.dicionario;
+  for (const [ramo, chaves] of Object.entries(PODAR)) {
+    if (!leve[ramo]) continue;
+    for (const k of chaves) delete leve[ramo][k];
+  }
+  // A guarda que impede a poda de virar perda: os agregados que as telas leem tem de sobreviver.
+  const exigidos = [['p1', 'total'], ['p1', 'por_modo'], ['p1', 'por_parque'], ['p1', 'por_mes'],
+    ['p2', 'eventos'], ['p2', 'por_classe'], ['p2', 'bad_actors'], ['p2', 'por_parque'],
+    ['escopo', 'inversores_por_parque']];
+  const faltam = exigidos.filter(([a, b]) => leve[a] == null || leve[a][b] == null);
+  if (faltam.length) { console.log('portal_ativos.json NAO gerado — a poda levou ' + faltam.map(x => x.join('.')).join(', ')); return; }
+  const gz = require('zlib').gzipSync(Buffer.from(JSON.stringify(leve), 'utf8'));
+  await cont.getBlockBlobClient('portal_ativos.json').upload(gz, gz.length, {
+    blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
+  console.log(`portal_ativos.json OK · ${(gz.length / 1024).toFixed(1)} KB (de ${(JSON.stringify(obj).length / 1024).toFixed(0)} KB crus)`);
 }
 
 // ---------- utils ----------
