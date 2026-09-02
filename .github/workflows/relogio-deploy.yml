@@ -3,10 +3,25 @@ name: Relogio · publicar no Azure
 # Publica o Function App que dispara os workflows. O relogio NAO coleta e NAO gera nada: toda a
 # logica continua nos geradores do repo, com as guardas que eles ja tem.
 #
-# Exige dois segredos, criados quando o recurso existir no Azure:
-#   AZURE_FUNCTIONAPP_PUBLISH_PROFILE   perfil de publicacao do Function App
-#   (no proprio Azure) GH_TOKEN         PAT com `actions: write` neste repo, em Configuracoes
-#                                       do aplicativo — NUNCA no repo.
+# 🔴 ESTE WORKFLOW NUNCA PUBLICOU NADA — e reportava `success` a cada push (02/09/2026).
+# A variavel `RELOGIO_APP_NAME` nunca foi definida, entao o passo "O destino existe?" saia com
+# `ok=false` e TODOS os passos seguintes eram pulados. O job ficava verde. O relogio no ar era o
+# de 01/09, publicado a mao pelo `az`, e duas correcoes posteriores nunca chegaram nele.
+#
+# ⚠️ E o `publish-profile` abaixo NAO FUNCIONA neste app: ele esta em **Flex Consumption**, que
+# nao emite perfil de publicacao (`az functionapp deployment list-publishing-credentials`
+# responde "not currently supported for Azure Functions on the Flex Consumption plan"). Ou seja,
+# o workflow foi escrito para um plano que o app nao usa — por isso o segredo nunca foi criado.
+#
+# PARA O CI VOLTAR A PUBLICAR sao precisas duas coisas, e as duas dependem de acao humana:
+#   1. um service principal com acesso ao `rg-dashboard`, guardado como o segredo
+#      `AZURE_CREDENTIALS`, e um passo `azure/login@v2` antes do `functions-action`;
+#   2. a variavel `RELOGIO_APP_NAME = relogio-mauriti`.
+# Enquanto elas nao existirem, este workflow FALHA — de proposito. Deploy que nao publica e nao
+# avisa e pior do que deploy nenhum: ele faz o repo acreditar que o que esta la e o que esta no ar.
+#
+#   (no proprio Azure) GH_TOKEN   PAT com `actions: write` neste repo, em Configuracoes
+#                                 do aplicativo — NUNCA no repo.
 
 on:
   push:
@@ -23,34 +38,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Sem o recurso criado no Azure nao ha o que publicar. Sair limpo com um aviso e melhor do
-      # que ficar vermelho em todo push ate alguem criar o recurso — alarme que acende sempre
-      # ensina a ignorar o alarme.
+      # 🔴 ANTES ISTO SAIA LIMPO COM UM AVISO, e o raciocinio era "alarme que acende sempre ensina
+      # a ignorar o alarme" — verdadeiro enquanto o recurso nao existia. O recurso existe desde
+      # 01/09, e a partir dai o silencio virou mentira: o job dizia `success` sem publicar, e duas
+      # correcoes do relogio nunca chegaram ao ar. Agora FALHA.
       - name: O destino existe?
-        id: pronto
         run: |
-          if [ -z "${{ env.APP }}" ] || [ -z "${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" ]; then
-            echo "ok=false" >> $GITHUB_OUTPUT
-            echo "::notice::Relogio ainda nao tem destino no Azure — falta a variavel RELOGIO_APP_NAME e/ou o segredo do perfil de publicacao. Nada publicado."
-          else
-            echo "ok=true" >> $GITHUB_OUTPUT
+          falta=""
+          [ -z "${{ env.APP }}" ] && falta="$falta RELOGIO_APP_NAME(variavel)"
+          [ -z "${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}" ] && falta="$falta AZURE_FUNCTIONAPP_PUBLISH_PROFILE(segredo)"
+          if [ -n "$falta" ]; then
+            echo "::error::O relogio NAO foi publicado. Falta:$falta"
+            echo "O app 'relogio-mauriti' esta em Flex Consumption, que nao emite perfil de"
+            echo "publicacao — o caminho e um service principal + azure/login. Ver o cabecalho"
+            echo "deste arquivo. Ate la, publique a mao e saiba que o CI nao publica."
+            exit 1
           fi
 
       - uses: actions/setup-node@v4
-        if: steps.pronto.outputs.ok == 'true'
         with: { node-version: '20' }
 
       - name: A agenda bate com os workflows?
-        if: steps.pronto.outputs.ok == 'true'
         run: node relogio/gerar-agenda.js --conferir
 
       - name: Instalar dependencias
-        if: steps.pronto.outputs.ok == 'true'
         run: npm install --omit=dev
         working-directory: relogio
 
       - uses: Azure/functions-action@v1
-        if: steps.pronto.outputs.ok == 'true'
         with:
           app-name: ${{ env.APP }}
           package: relogio
