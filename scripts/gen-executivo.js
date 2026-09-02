@@ -19,6 +19,7 @@
  * do mês já foi atingida, para de limitar o ML. Por isso o corte é MUITO maior no ML — é ESCOLHA, não azar.
  * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
+const rot = require('./lib-rotulos.js');
 const https = require('https');
 const zlib = require('zlib');
 // rateio MUST reaproveitado do arquivador — ver nota em gen-way2-hist.js
@@ -2229,6 +2230,8 @@ async function writeOut(obj, nome) { const json = JSON.stringify(obj);
       })),
       fonte: PRECOD._fonte,
     };
+    // 🔴 o rótulo do bloco de pré-COD vai nas TRÊS línguas (o código ENE/CNF/REL não muda)
+    out.pre_cod_razoes.tiles.forEach((z) => rot.localiza(z, ['nome', 'classe_lbl', 'u']));
     console.log('pré-COD por razão (' + PRECOD._revisao + '): ' + P.total_gwh + ' GWh · '
       + P.por_razao.map(z => z.codigo + ' ' + z.gwh).join(' · ')
       + '  [janela art.3º = ' + PRECOD.janela_art3.total_gwh + ' GWh, fora da tela]');

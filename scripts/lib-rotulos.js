@@ -46,6 +46,15 @@ const DIC = {
   'Intervalos de 30 min com limite ativo': { en: '30-minute intervals with an active limit', zh: '存在有效限值的 30 分钟时段' },
   'Horas totais sob restrição': { en: 'Total hours under restriction', zh: '限电小时数合计' },
 
+  // --- razões do pré-COD (executivo.json · pre_cod_razoes.tiles) -----------
+  'Razão energética': { en: 'Energy reason', zh: '能量原因' },
+  'Confiabilidade elétrica': { en: 'Electrical reliability', zh: '电气可靠性' },
+  'Indisponibilidade externa': { en: 'External unavailability', zh: '外部不可用' },
+  'Sem motivo registrado': { en: 'No reason recorded', zh: '无记录原因' },
+  'Compensável': { en: 'Compensable', zh: '可补偿' },
+  'Não compensável': { en: 'Not compensable', zh: '不可补偿' },
+  'A classificar': { en: 'To be classified', zh: '待分类' },
+
   // --- cartões do dia (kpis_dia.json) · Monitor ----------------------------
   'Energia hoje': { en: 'Energy today', zh: '今日电量' },
   'Fator de capacidade': { en: 'Capacity factor', zh: '容量系数' },
