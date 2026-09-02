@@ -28,7 +28,7 @@
 //                tres vezes nesta casa.
 //   MODO=vigiar  (padrao) julga contra os limiares e alerta.
 //
-// Ambiente: DADOS_STORAGE, RAW_CONTAINER=scada-raw, e (para alertar) GITHUB_TOKEN / GH_REPO.
+// Ambiente: DADOS_STORAGE, RAW_CONTAINER=scada-raw, e (para alertar) GITHUB_TOKEN / GH_REPO.'
 'use strict';
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { alerta } = require('./lib-alerta');
@@ -48,37 +48,75 @@ const SECO = /^(1|true|sim)$/i.test(process.env.SECO || '');
 // O que mora AQUI e so o que o coletor nao tem: o rotulo legivel e os dois limiares.
 // `alerta_h`/`critico_h` NULOS ate a medicao — publicar limiar antes de medir e o defeito que
 // este cabecalho existe para evitar. Rode MODO=medir e preencha com o numero MEDIDO.
-const PERFIL = {
-  // chave: a fonte da expressao `quando` do coletor — e o que os liga sem ambiguidade
-  '/\\.xlsx$/i': { nome: 'M<parque>.xlsx (SCADA por usina)', alerta_h: null, critico_h: null },
-  '/_?IRR_GERAL_\\d{8}_\\d{6}\\.csv$/i': { nome: 'IRR_GERAL (estacao)', alerta_h: null, critico_h: null },
-  '/(^|_)IRR_\\d{8}_\\d{6}\\.csv$/i': { nome: 'IRR (sensor GER_IRR)', alerta_h: null, critico_h: null },
-  '/Trafo_\\d{8}_\\d{6}\\.csv$/i': { nome: 'Trafo (SE)', alerta_h: null, critico_h: null },
-  '/M\\d{2}_\\d{8}_\\d{6}\\.csv$/i': { nome: 'M<NN> csv (inversores/perdas)', alerta_h: null, critico_h: null },
+// 🔴 A CHAVE E UMA MARCA SEM BARRA INVERTIDA, e isso e deliberado. A primeira versao usava a
+//    FONTE da expressao como chave — e ela nao sobrevive a uma camada de escape: `'/\.xlsx$/i'`
+//    escrito com uma barra so vira `/.xlsx$/i` em JS (escape desconhecido perde a barra), a
+//    chave deixa de casar, e o vigia morre com "familia sem perfil". Foi o ensaio que pegou.
+//    Marca sem barra invertida nao tem como ser comida por camada nenhuma.
+//
+// ⚠️ Cada marca tem de ser SUBSTRING de exatamente UMA expressao do coletor — a guarda abaixo
+//    exige isso, senao duas familias trocariam de rotulo em silencio.
+const PERFIL = [
+  { marca: 'xlsx',      nome: 'M<parque>.xlsx (SCADA por usina)' },
+  { marca: 'IRR_GERAL', nome: 'IRR_GERAL (estacao)' },
+  { marca: '(^|_)IRR_', nome: 'IRR (sensor GER_IRR)' },
+  { marca: 'Trafo',     nome: 'Trafo (SE)' },
+  { marca: '{2}_',      nome: 'M<NN> csv (inversores/perdas)' },
 
   // ⚠️ `IIRR_` fica de fora do JULGAMENTO de proposito (`vigia: false`): sao despejos manuais de
   //    365 dias, exportados de vez em quando. Vigiar cadencia de algo que nao tem cadencia
   //    produz alarme que acende sempre — e alarme que acende sempre ensina a ignorar a
   //    ferramenta. Ele continua sendo CONTADO, para aparecer na medicao.
-  '/_?IIRR_\\d{8}_\\d{6}\\.csv$/i': { nome: 'IIRR (despejo manual)', vigia: false },
-};
+  { marca: 'IIRR',      nome: 'IIRR (despejo manual)', vigia: false },
+];
+
+// ── O LIMIAR, e ele e do CONTAINER, nao da familia ───────────────────────────────────────────
+// 🔴 MEDIDO em 02/09/2026, 38 lotes de `M<parque>.xlsx` (a familia presente em quase todo
+//    deposito), colapsando arquivos a menos de 2 h:
+//
+//      mediana 23,6 h · p75 28,9 h · p90 49,9 h · maximo 219,8 h
+//      <=26h 26 · 26-32h 2 · 32-50h 5 · 50-74h 1 · 74-170h 2 · >7d 1
+//
+// ⚠️ NAO ha separacao limpa em duas familias como no caso do `spanNulls`: a cauda e continua,
+//    porque o deposito e feito por gente e SE RECUPERA — os lotes de 18, 27 e 45 arquivos sao
+//    2, 3 e 5 dias depositados de uma vez. Entao o limiar nao "separa": ele escolhe onde doi
+//    menos errar, e isso fica declarado em vez de disfarcado de aritmetica.
+//
+// 🔴 E O GATILHO E DO CONTAINER porque as familias CHEGAM JUNTAS — medido: os lotes de
+//    29/08 22:21, 30/08 18:56, 31/08 20:18 e 01/09 11:48 aparecem identicos em quatro delas. O
+//    que difere entre as distribuicoes por familia nao e cadencia: e que nem todo deposito traz
+//    todas as familias. Limiar por familia alarmaria nas que legitimamente pulam um deposito.
+const ALERTA_H = 50;    // o p90 — um dia de deposito inteiramente perdido
+const CRITICO_H = 74;   // acima daqui so vivem as quedas conhecidas (3 dos 37 vaos medidos)
 
 const INTAKE = require('./gen-scada-intake.js');
 
 // ⚠️ A ORDEM e a do coletor, e ela importa: `IIRR_` e `IRR_GERAL_` tem de ser testados ANTES de
 //    `IRR_`, senao o terceiro padrao os captura. Preservar a ordem e o motivo de percorrer
-//    CONSUMIDORES em vez de iterar o objeto PERFIL.
+//    CONSUMIDORES em vez de iterar PERFIL.
 const FAMILIAS = INTAKE.CONSUMIDORES.map((c) => {
-  const p = PERFIL[String(c.quando)];
-  if (!p) {
-    // 🔴 Falha ALTA: familia nova no coletor e desconhecida aqui significa entrada que ninguem
-    //    vigia. Silenciar isso seria o defeito original com outra roupa.
-    throw new Error('familia sem perfil no vigia: ' + c.quem + ' ' + c.quando
-      + ' — acrescente em PERFIL (e meca o limiar antes)');
+  const fonte = String(c.quando);
+  const casam = PERFIL.filter((p) => fonte.includes(p.marca));
+  if (casam.length !== 1) {
+    // 🔴 Falha ALTA nos DOIS sentidos. Zero: familia nova no coletor que ninguem vigia —
+    //    silenciar seria o defeito original com outra roupa. Mais de uma: marca ambigua, e ai
+    //    duas familias trocariam de rotulo em silencio, que e pior que nao ter rotulo.
+    throw new Error('perfil ' + (casam.length ? 'AMBIGUO' : 'AUSENTE') + ' para '
+      + c.quem + ' ' + fonte + (casam.length
+        ? ' — marcas que casam: ' + casam.map((p) => p.marca).join(', ')
+        : ' — acrescente em PERFIL'));
   }
-  return { nome: p.nome, quem: c.quem, casa: c.quando,
-    vigia: p.vigia !== false, alerta_h: p.alerta_h, critico_h: p.critico_h };
+  return { nome: casam[0].nome, quem: c.quem, casa: c.quando,
+    vigia: casam[0].vigia !== false };
 });
+
+// ⚠️ e nenhuma marca pode sobrar sem dono: marca escrita e nunca casada e perfil que o humano
+//    acha que esta valendo e nao esta.
+{
+  const usadas = new Set(FAMILIAS.map((f) => f.nome));
+  const orfas = PERFIL.filter((p) => !usadas.has(p.nome)).map((p) => p.marca);
+  if (orfas.length) throw new Error('marca sem familia no coletor: ' + orfas.join(', '));
+}
 
 function familiaDe(nome) {
   for (const f of FAMILIAS) if (f.casa.test(nome)) return f;
@@ -170,70 +208,88 @@ function medir(m) {
 async function vigiar(m) {
   const agora = Date.now();
   const julgadas = FAMILIAS.filter((f) => f.vigia);
-  const semLimiar = julgadas.filter((f) => f.alerta_h == null);
-  if (semLimiar.length === julgadas.length) {
-    // 🔴 Falha ALTA. Um vigia sem limiar passaria sempre, e um vigia que sempre passa e
-    //    indistinguivel de vigia nenhum — com o agravante de dar a impressao de cobertura.
-    throw new Error('nenhuma familia tem limiar: rode MODO=medir e preencha FAMILIAS');
-  }
-  const achados = [];
+
+  // a idade do DEPOSITO: o arquivo mais recente entre todas as familias vigiadas
+  let maisNovo = 0;
   const linhas = [];
   for (const f of julgadas) {
     const v = m.get(f.nome);
-    const idade = v.length ? (agora - v[v.length - 1].ms) / 3600000 : Infinity;
-    const est = f.alerta_h == null ? 'sem limiar'
-      : idade >= f.critico_h ? 'CRITICO' : idade >= f.alerta_h ? 'ALERTA' : 'ok';
+    const ms = v.length ? v[v.length - 1].ms : 0;
+    if (ms > maisNovo) maisNovo = ms;
     linhas.push('  ' + f.nome.padEnd(38)
-      + (v.length ? idade.toFixed(1) + ' h' : 'VAZIA').padStart(9)
-      + '   limiar ' + (f.alerta_h == null ? '—' : f.alerta_h + '/' + f.critico_h + ' h')
-      + '   ' + est);
-    if (est === 'ALERTA' || est === 'CRITICO') {
-      achados.push({ f, idade, est, ultimo: v.length ? v[v.length - 1] : null });
-    }
+      + (v.length ? ((agora - ms) / 3600000).toFixed(1) + ' h' : 'VAZIA').padStart(9)
+      + (v.length ? '   ' + v[v.length - 1].nome.split('/').pop() : ''));
   }
-  console.log('container `' + RAW + '` · ' + new Date(agora).toISOString());
-  console.log(linhas.join('\n'));
-  if (semLimiar.length) {
-    console.log('\n⚠️  ' + semLimiar.length + ' familia(s) SEM limiar — nao sao julgadas: '
-      + semLimiar.map((f) => f.nome).join(', '));
+  if (!maisNovo) {
+    // 🔴 Falha ALTA: container sem arquivo nenhum nao e "esta em dia", e tratar como tal
+    //    seria o defeito silencioso outra vez, agora dentro do proprio vigia.
+    throw new Error('nenhuma familia vigiada tem arquivo — container vazio ou contrato de '
+      + 'nome mudou');
   }
 
+  const idade = (agora - maisNovo) / 3600000;
+  const est = idade >= CRITICO_H ? 'CRITICO' : idade >= ALERTA_H ? 'ALERTA' : 'ok';
+  console.log('container `' + RAW + '` · ' + new Date(agora).toISOString());
+  console.log('deposito mais recente: ' + new Date(maisNovo).toISOString()
+    + '  (ha ' + idade.toFixed(1) + ' h)   limiar ' + ALERTA_H + '/' + CRITICO_H + ' h   ' + est);
+  console.log(linhas.join('\n'));
+
+  // ⚠️ Familia que ficou MUITO mais atras que o deposito e sinal proprio: significa que o
+  //    deposito chega mas SEM aquele arquivo. Nao dispara alerta sozinha (nem todo deposito
+  //    traz todas), mas vai no corpo — foi assim que a estacao ficou 17 dias sem o sensor
+  //    principal sem ninguem notar.
+  const atras = julgadas.map((f) => {
+    const v = m.get(f.nome);
+    return { f, h: v.length ? (maisNovo - v[v.length - 1].ms) / 3600000 : Infinity };
+  }).filter((x) => x.h > CRITICO_H);
+
   const chave = 'scada-intake-parada';
-  if (!achados.length) {
+  if (est === 'ok') {
     console.log('\nintake em dia.');
-    if (!SECO) await alerta({ tipo: 'scada-intake', chave, resolve: true,
-      assunto: 'SCADA · intake normalizada',
-      corpo: 'A entrada do container `' + RAW + '` voltou a receber arquivo em todas as '
-        + 'familias vigiadas.\n\n' + linhas.join('\n') });
+    if (!SECO) {
+      await alerta({ tipo: 'scada-intake', chave, resolve: true,
+        assunto: 'SCADA · intake normalizada',
+        corpo: 'O container `' + RAW + '` voltou a receber deposito.\n\n'
+          + 'ultimo ha ' + idade.toFixed(1) + ' h (limiar ' + ALERTA_H + ' h)\n\n'
+          + linhas.join('\n') });
+    }
     return 0;
   }
 
-  const critico = achados.some((a) => a.est === 'CRITICO');
   const corpo = [
-    'A entrada do container `' + RAW + '` parou de receber arquivo.',
+    'O container `' + RAW + '` nao recebe deposito ha **' + idade.toFixed(1) + ' h** '
+      + '(limiar ' + ALERTA_H + ' h; critico ' + CRITICO_H + ' h).',
     '',
-    'Os geradores que a consomem NAO falham por isso: eles republicam o que ja tinham, e a',
+    'Os geradores que o consomem NAO falham por isso: eles republicam o que ja tinham, e a',
     'pagina passa a mostrar dado velho com cara de dado de hoje. Por isso o alerta.',
-    '', linhas.join('\n'), '',
-    'Familias afetadas:',
-    ...achados.map((a) => '  · ' + a.f.nome + ' — consumida por ' + a.f.quem
-      + ' — ultimo arquivo ha ' + a.idade.toFixed(1) + ' h'
-      + (a.ultimo ? ' (' + a.ultimo.nome.split('/').pop() + ')' : ' — familia VAZIA')),
+    '',
+    'Ultimo arquivo de cada familia:', linhas.join('\n'), '',
+    'Paginas afetadas: SCADA/Solarimetria, Comparativo de fontes, Transformadores e Perdas de PV.',
     '',
     'Onde olhar: o fluxo "SCADA SharePoint para Blob" no Power Automate, e o deposito no',
     'SharePoint. Em 28/08/2026 a ponte falhou 10x numa semana sem nada acusar.',
-  ].join('\n');
-  console.log('\n' + (critico ? 'CRITICO' : 'ALERTA') + ': '
-    + achados.length + ' familia(s) atrasada(s)');
+  ];
+  if (atras.length) {
+    corpo.push('', '⚠️ Familias que ficaram para tras do PROPRIO deposito (o lote chega sem '
+      + 'elas):', ...atras.map((x) => '  · ' + x.f.nome + ' — ' + x.h.toFixed(1)
+      + ' h atras do deposito mais recente'));
+  }
+  console.log('\n' + est + ': deposito ha ' + idade.toFixed(1) + ' h');
   if (!SECO) {
     await alerta({ tipo: 'scada-intake', chave,
-      assunto: (critico ? '[CRITICO] ' : '[ALERTA] ') + 'SCADA · intake parada ('
-        + achados.map((a) => a.f.quem).join(', ') + ')',
-      corpo });
+      assunto: '[' + est + '] SCADA · intake parada ha ' + Math.round(idade) + ' h',
+      corpo: corpo.join('\n') });
   }
-  // 🔴 NAO derruba o job: ele roda junto de outra coisa e o alerta ja e a saida.
+  // 🔴 NAO derruba o job: ele roda junto de outra coisa e o alerta e a saida, nao o retorno.
   return 0;
 }
+
+// ⚠️ so roda quando chamado DIRETO: o ensaio importa este arquivo para exercitar o julgamento
+//    contra idades fabricadas, e sem isto o `require` dispararia a leitura do Azure — e, pior, o
+//    `process.exit(1)` do tratamento de erro mataria o ensaio no meio, transformando um caso que
+//    passa num caso que nunca chega a ser julgado.
+module.exports = { vigiar, medir, porFamilia, lotes, FAMILIAS, ALERTA_H, CRITICO_H };
+if (require.main !== module) return;
 
 (async () => {
   const blobs = await lista();
