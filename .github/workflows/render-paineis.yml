@@ -1,0 +1,40 @@
+name: Render dos paineis -> paineis/*.png (tela de Paineis do portal)
+
+# Renderiza os nove paineis que a tela de Paineis do portal mostra e os grava no blob.
+# Antes disto eles eram PNG colado no HTML como base64 — 1.383 KB, 79% do peso do portal, sem
+# carimbo nenhum e so atualizados quando alguem regerava a pagina a mao.
+#
+# Os horarios seguem as FONTES dos paineis, nao um numero escolhido: 00:10 UTC vem depois do
+# comparativo das 23:40 e 15:10 vem depois do perdas das 14:12. Renderizar antes da fonte
+# produziria uma imagem nova com o dado velho, que e pior que uma imagem velha — ela carrega um
+# carimbo fresco.
+on:
+  schedule:
+    - cron: '10 0,15 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: render-paineis
+  # Mesma regra do gen-must: o agendamento CHEGA e espera, o dispatch chega e limpa a fila.
+  # Assim um disparo manual nunca e morto pelo cron seguinte.
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    # Nove renderizacoes, cada uma com teto proprio de 3 min no gerador. O teto do job existe para
+    # o caso de o renderer ficar mudo, e nao para a soma dos casos normais (~90 s no total).
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Renderizar e publicar
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          # Conta de servico VIEWER, criada so para isto. Ela nao consome assento do plano —
+          # medido: a organizacao continua reportando um usuario depois de cria-la.
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          OUT_CONTAINER: dados
+        run: node scripts/gen-render-paineis.js
