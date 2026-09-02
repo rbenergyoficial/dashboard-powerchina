@@ -342,6 +342,37 @@ async function gravaUm(cont, nome, obj, segundos) {
   return { cru: Buffer.byteLength(json), gz: gz.length };
 }
 
+// portal_scada.json — o resumo LEVE da tela de SCADA do portal Aurora.
+//
+// 🔴 `scada_comparativo.json` sai com 1.201 KB, e a tela do portal so mostra COBERTURA e ATRASO:
+// quantos dias cada usina tem, ate quando, e quanto a planilha esta atras de hoje. Baixar 1,2 MB
+// para contar chaves e desperdicio — e sao justamente os numeros que envelhecem todo dia (a tela
+// dizia "606 dias" e "29/08" com o arquivo ja em 608 e 31/08).
+//
+// ⚠️ A RAZAO contra o medidor NAO entra aqui, e a ausencia e deliberada. Ela e uma caracteristica
+// medida sobre 291 dias, nao um numero diario, e calcula-la exigiria este gerador ler tambem o
+// dado do medidor. Ela continua na tela como achado datado, com a janela declarada.
+function resumoPortal(obj) {
+  const por = {};
+  let ultimo = '', total = 0;
+  for (const [ufv, dias] of Object.entries(obj.diario || {})) {
+    const ds = Object.keys(dias).sort();
+    if (!ds.length) continue;
+    por[ufv] = { dias: ds.length, primeiro: ds[0], ultimo: ds[ds.length - 1] };
+    if (ds[ds.length - 1] > ultimo) ultimo = ds[ds.length - 1];
+    total = Math.max(total, ds.length);
+  }
+  const n = Object.keys(por).length;
+  if (!n) return null;
+  // O atraso e contado em dias de calendario ate HOJE em BRT — o runner corre em UTC.
+  const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+  const atraso = Math.round((new Date(hoje + 'T12:00:00Z') - new Date(ultimo + 'T12:00:00Z')) / 86400000);
+  // A usina com MENOS dias e o que limita a comparacao — e o numero que a tela precisa dizer.
+  const menor = Object.entries(por).sort((a, b) => a[1].dias - b[1].dias)[0];
+  return { gerado: new Date().toISOString(), estacoes: n, dias_max: total, ultimo_dia: ultimo,
+    atraso_dias: atraso, menor_cobertura: { ufv: menor[0], dias: menor[1].dias }, por_ufv: por };
+}
+
 // Separa o detalhe de 5 min do resto e poda a janela dele. A poda e por data e nao por contagem:
 // a contagem nao muda quando um dia e reprocessado, e a janela ficaria crescendo calada.
 function separa5min(obj) {
@@ -378,6 +409,14 @@ async function writeOut(obj) {
   await cont.createIfNotExists();
   const a = await gravaUm(cont, OUT_BLOB, resto, 3600);
   const b = await gravaUm(cont, BLOB_5MIN, meta5, 3600);
+  const rp = resumoPortal(resto);
+  if (rp) {
+    const c = await gravaUm(cont, 'portal_scada.json', rp, 3600);
+    console.log(`portal_scada.json OK · ${rp.estacoes} estacoes · ate ${rp.ultimo_dia} `
+      + `(${rp.atraso_dias} dias atras) · ${(c.gz / 1024).toFixed(1)} KB`);
+  } else {
+    console.log('portal_scada.json NAO gerado — nenhuma usina com dia no diario');
+  }
   console.log('Gravado ' + OUT_BLOB + ': ' + Math.round(a.cru / 1024) + ' KB -> '
     + Math.round(a.gz / 1024) + ' KB comprimido ('
     + Math.round((1 - a.gz / a.cru) * 100) + '% menos na rede).');
