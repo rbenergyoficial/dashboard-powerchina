@@ -12,6 +12,12 @@ on:
       vigia_modo:
         description: 'vigia da intake: vigiar (padrao) ou medir (so imprime a distribuicao)'
         default: 'vigiar'
+      # 🔴 So serve para MEDIR outro container. O vigia RECUSA `vigiar` onde o limiar nao foi
+      #    medido, entao apontar isto para `inversores-raw` no modo padrao falha alto — que e o
+      #    comportamento certo, e nao um acidente.
+      vigia_container:
+        description: 'container a inspecionar: scada-raw (padrao) ou inversores-raw (so com medir)'
+        default: 'scada-raw'
 concurrency:
   group: gen-scada
   cancel-in-progress: true
@@ -49,7 +55,7 @@ jobs:
         if: always()
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          RAW_CONTAINER: scada-raw
+          RAW_CONTAINER: ${{ github.event.inputs.vigia_container || 'scada-raw' }}
           MODO: ${{ github.event.inputs.vigia_modo || 'vigiar' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
