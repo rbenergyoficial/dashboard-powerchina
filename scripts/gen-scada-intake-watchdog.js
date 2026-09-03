@@ -118,6 +118,24 @@ const LIMIAR = {
   'inversores-raw': { alerta: 170, critico: 336 },
 };
 
+// ⚠️ O TEXTO do alerta tambem e do container. Com um so, o vigia dos inversores mandaria um
+//    assunto dizendo "SCADA" e listaria paginas que nao tem nada a ver — e quem recebe iria
+//    procurar o defeito no lugar errado.
+const IDENTIDADE = {
+  'scada-raw': {
+    rotulo: 'SCADA',
+    paginas: 'SCADA/Solarimetria, Comparativo de fontes, Transformadores e Perdas de PV',
+    fluxo: 'SCADA SharePoint para Blob',
+  },
+  'inversores-raw': {
+    rotulo: 'Inversores',
+    paginas: 'Inversores',
+    fluxo: 'Inversores PWC -> Blob -> Grafana',
+  },
+};
+const ID = IDENTIDADE[RAW] || { rotulo: RAW, paginas: '(nao declaradas)', fluxo: '(nao declarado)' };
+const ROTULO = ID.rotulo, PAGINAS = ID.paginas, FLUXO = ID.fluxo;
+
 // ⚠️ E o que este vigia NAO faz, dito antes que alguem conte com ele: com 7 dias de alerta, ele
 //    nao pega uma queda em 15/09 a tempo. A cadencia deste container e humana e irregular, e nao
 //    da para apertar o corte sem alarme falso — quem avisa depressa e o fluxo falhando, nao a
@@ -305,12 +323,15 @@ async function vigiar(m) {
     return { f, h: v.length ? (maisNovo - v[v.length - 1].ms) / 3600000 : Infinity };
   }).filter((x) => x.h > CRITICO_H);
 
-  const chave = 'scada-intake-parada';
+  // 🔴 A CHAVE LEVA O CONTAINER. Com os dois vigias dividindo `scada-intake-parada`, o segundo
+  //    a cair deduplicaria no evento do primeiro — e a recuperacao de UM fecharia o alerta do
+  //    OUTRO, que continuaria parado sem ninguem saber. Dois vigias, duas chaves.
+  const chave = 'intake-parada:' + RAW;
   if (est === 'ok') {
     console.log('\nintake em dia.');
     if (!SECO) {
       await alerta({ tipo: 'scada-intake', chave, resolve: true,
-        assunto: 'SCADA · intake normalizada',
+        assunto: ROTULO + ' · intake normalizada',
         corpo: 'O container `' + RAW + '` voltou a receber deposito.\n\n'
           + 'ultimo ha ' + idade.toFixed(1) + ' h (limiar ' + ALERTA_H + ' h)\n\n'
           + linhas.join('\n') });
@@ -326,10 +347,10 @@ async function vigiar(m) {
     'pagina passa a mostrar dado velho com cara de dado de hoje. Por isso o alerta.',
     '',
     'Ultimo arquivo de cada familia:', linhas.join('\n'), '',
-    'Paginas afetadas: SCADA/Solarimetria, Comparativo de fontes, Transformadores e Perdas de PV.',
+    'Paginas afetadas: ' + PAGINAS + '.',
     '',
-    'Onde olhar: o fluxo "SCADA SharePoint para Blob" no Power Automate, e o deposito no',
-    'SharePoint. Em 28/08/2026 a ponte falhou 10x numa semana sem nada acusar.',
+    'Onde olhar: o fluxo "' + FLUXO + '" no Power Automate, e o deposito no SharePoint.',
+    'Em 28/08/2026 a ponte do SCADA falhou 10x numa semana sem nada acusar.',
   ];
   if (atras.length) {
     corpo.push('', '⚠️ Familias que ficaram para tras do PROPRIO deposito (o lote chega sem '
@@ -339,7 +360,7 @@ async function vigiar(m) {
   console.log('\n' + est + ': deposito ha ' + idade.toFixed(1) + ' h');
   if (!SECO) {
     await alerta({ tipo: 'scada-intake', chave,
-      assunto: '[' + est + '] SCADA · intake parada ha ' + Math.round(idade) + ' h',
+        assunto: '[' + est + '] ' + ROTULO + ' · intake parada ha ' + Math.round(idade) + ' h',
       corpo: corpo.join('\n') });
   }
   // 🔴 NAO derruba o job: ele roda junto de outra coisa e o alerta e a saida, nao o retorno.

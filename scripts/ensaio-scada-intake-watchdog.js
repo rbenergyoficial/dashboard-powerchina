@@ -145,6 +145,45 @@ async function caso(rot, idades, espera) {
     if (!bom) falhas++;
   }
 
+  // ── a CHAVE e o TEXTO sao do container ──────────────────────────────────────────────────────
+  // 🔴 Com os dois vigias dividindo uma chave, o segundo a cair deduplicaria no evento do
+  //    primeiro, e a recuperacao de UM fecharia o alerta do OUTRO — que seguiria parado sem
+  //    ninguem saber. E o assunto diria "SCADA" num alerta de Inversores, mandando quem le
+  //    procurar o defeito no lugar errado.
+  {
+    const colhe = async (cont) => {
+      const antes = process.env.RAW_CONTAINER;
+      process.env.RAW_CONTAINER = cont;
+      delete require.cache[require.resolve('./gen-scada-intake-watchdog.js')];
+      const W = require('./gen-scada-intake-watchdog.js');
+      const m = new Map(W.FAMILIAS.map((f) => [f.nome, []]));
+      for (const f of W.FAMILIAS.filter((x) => x.vigia)) {
+        m.get(f.nome).push({ nome: 'x', ms: Date.now() - (W.CRITICO_H + 10) * H });
+      }
+      ULTIMO = null;
+      const a = console.log; console.log = () => {};
+      try { await W.vigiar(m); } finally { console.log = a; }
+      if (antes === undefined) delete process.env.RAW_CONTAINER;
+      else process.env.RAW_CONTAINER = antes;
+      delete require.cache[require.resolve('./gen-scada-intake-watchdog.js')];
+      return ULTIMO;
+    };
+    const s = await colhe('scada-raw'), i = await colhe('inversores-raw');
+    const par = [
+      [s && i && s.chave !== i.chave, 'a chave difere entre os containers: '
+        + (s && s.chave) + ' != ' + (i && i.chave)],
+      [i && /Inversores/.test(i.assunto) && !/SCADA/.test(i.assunto),
+        'o assunto dos inversores NAO diz SCADA: ' + (i && i.assunto)],
+      [i && !/Transformadores/.test(i.corpo),
+        'o corpo dos inversores nao lista pagina de outro container'],
+      [s && /SCADA/.test(s.assunto), 'o do SCADA continua dizendo SCADA'],
+    ];
+    for (const [bom, msg] of par) {
+      console.log((bom ? '  ok     ' : '  FALHOU ') + msg);
+      if (!bom) falhas++;
+    }
+  }
+
   console.log('\n' + (falhas ? falhas + ' FALHA(S)' : 'todos os casos passaram'));
   process.exit(falhas ? 1 : 0);
 })();
