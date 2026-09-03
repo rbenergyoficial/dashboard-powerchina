@@ -5,9 +5,13 @@ on:
   workflow_dispatch:
     inputs:
       dias:
-        description: 'Janela em dias (padrao 60)'
+        description: 'Quanto do BRUTO reprocessar (padrao 60)'
         required: false
         default: '60'
+      janela:
+        description: 'Quanto o HISTORICO guarda, em dias (padrao 365)'
+        required: false
+        default: '365'
       listar:
         description: 'so inventariar o container (1 = sim, nao grava nada)'
         required: false
@@ -24,6 +28,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      - name: Ensaio da acumulacao (CSV sintetico, sem rede)
+        run: node scripts/ensaio-inv-scada-acumula.js
       - name: Gerar inv_scada.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -31,5 +37,7 @@ jobs:
           OUT_CONTAINER: dados
           OUT_BLOB: inv_scada.json
           DIAS: ${{ github.event.inputs.dias || '60' }}
+          JANELA: ${{ github.event.inputs.janela || '365' }}
+          HIST_BLOB: inv_scada_hist.json
           LISTAR: ${{ github.event.inputs.listar }}
         run: node scripts/gen-inv-scada.js

@@ -39,7 +39,18 @@
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'inv_scada.json';
-const DIAS = Number(process.env.DIAS || 60);
+const DIAS = Number(process.env.DIAS || 60);          // quanto do BRUTO reprocessar a cada rodada
+// 🔴 A FONTE SO GUARDA ~38 DIAS. Enquanto o gerador reescrevia o blob inteiro a cada rodada, o
+//    historico ficava PRESO nesse tanto para sempre — nao por escolha, por construcao. Acumulando,
+//    ele cresce um dia por rodada a partir de agora. Mesmo padrao do gerador de perdas.
+const JANELA = Number(process.env.JANELA || 365);     // quanto o HISTORICO guarda
+const HIST_BLOB = process.env.HIST_BLOB || 'inv_scada_hist.json';
+// 🔴 O HISTORICO NAO VAI NO BLOB QUE O PAINEL LE. Medido em 03/09/2026: a serie custa 8 KB por dia
+//    na rede, entao um ano seriam 2,9 MB e 403 mil linhas — e o Infinity baixa a URL INTEIRA antes
+//    de aplicar o JSONata. O painel passa a ler agregados que o gerador ja calculou, e o bruto fica
+//    num blob separado que so este gerador le.
+const TOP_SERIE = 20;                                 // de quantos piores a serie diaria e publicada
+const MIN_DIAS = 10;                                  // abaixo disso a mediana do inversor nao decide
 const MIN_PARES = 5;                       // abaixo disso a mediana do TS nao separa defeito de acaso
 const GRANDEZA = 'ENERGIA DIÁRIA GERADA';
 // grandezas de SAUDE que acompanham o inversor no ranking. Nao entram na razao — servem para quem
@@ -78,14 +89,69 @@ async function listaArquivos() {
   return out;
 }
 
-async function escreve(obj) {
+function puxa(url) {
+  const https = require('https');
+  return new Promise((ok, ko) => {
+    const u = new URL(url);
+    https.get({ host: u.host, path: u.pathname, family: 4, headers: { 'accept-encoding': 'gzip' } }, (r) => {
+      if (r.statusCode !== 200) { ko(new Error(url + ' -> HTTP ' + r.statusCode)); return; }
+      const c = []; r.on('data', (d) => c.push(d));
+      r.on('end', () => { let b = Buffer.concat(c);
+        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+        try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); } });
+    }).on('error', ko);
+  });
+}
+
+// 🔴 SO O 404 DEVOLVE VAZIO. Qualquer outra falha — 500, gzip corrompido, JSON truncado — ESTOURA.
+//    A versao ingenua devolve vazio para tudo, o gerador trata como primeira execucao e regrava o
+//    blob so com os dias desta rodada: uma falha de rede apagaria o historico inteiro, sem erro
+//    visivel. E a licao que o `leBlob` do MUST ja pagou.
+async function leHistorico() {
+  if (process.env.LOCAL_OUT_DIR) {
+    const fs = require('fs'), path = require('path');
+    const f = path.join(process.env.LOCAL_OUT_DIR, HIST_BLOB);
+    if (!fs.existsSync(f)) return [];
+    let b = fs.readFileSync(f); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    const j = JSON.parse(b.toString('utf8'));
+    return Array.isArray(j.serie) ? j.serie : [];
+  }
+  try {
+    const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + HIST_BLOB);
+    return Array.isArray(j.serie) ? j.serie : [];
+  } catch (e) {
+    if (/HTTP 404/.test(e.message)) return [];
+    throw new Error('nao consegui ler o ' + HIST_BLOB + ' publicado (' + e.message
+      + '). Abortando: regravar sem o historico apagaria o que ja foi acumulado.');
+  }
+}
+
+// funde o que veio agora com o que ja estava publicado. A rodada NOVA ganha na colisao, porque um
+// dia pode voltar mais completo do que da primeira vez.
+function acumula(antigas, novas, chave, dias) {
+  const m = new Map();
+  for (const l of antigas) m.set(chave(l), l);
+  let n = 0;
+  for (const l of novas) { if (!m.has(chave(l))) n++; m.set(chave(l), l); }
+  let todas = [...m.values()];
+  const ds = [...new Set(todas.map((l) => l.dia))].sort();
+  const corte = ds.slice(-dias)[0];
+  todas = todas.filter((l) => l.dia >= corte);
+  todas.sort((a, b) => (chave(a) < chave(b) ? -1 : chave(a) > chave(b) ? 1 : 0));
+  return { serie: todas, novas: n, mantidas: todas.length - n };
+}
+
+async function escreve(obj, nome) {
   const json = JSON.stringify(obj);
   const gz = zlib.gzipSync(Buffer.from(json));
-  if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, gz); return gz.length; }
+  const alvo = nome || OUT_BLOB;
+  if (process.env.LOCAL_OUT_DIR) {
+    require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, alvo), gz); return gz.length; }
+  if (process.env.LOCAL_OUT && alvo === OUT_BLOB) { require('fs').writeFileSync(process.env.LOCAL_OUT, gz); return gz.length; }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
   await cont.createIfNotExists();
-  await cont.getBlockBlobClient(OUT_BLOB).upload(gz, gz.length, { blobHTTPHeaders: {
+  await cont.getBlockBlobClient(alvo).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;
 }
@@ -212,39 +278,96 @@ function comparaComPares(reg) {
   }
   if (!serie.length) throw new Error('nenhum inversor com energia em ' + alvo.length + ' arquivo(s) — o layout do export mudou?');
 
-  // ---- ranking: a MEDIANA da razao de cada inversor na janela ------------------------------
-  const porInv = new Map();
-  for (const s of serie) {
-    const k = s.ufv + '|' + s.ts + '|' + s.inv;
-    const o = porInv.get(k) || porInv.set(k, { ufv: s.ufv, ts: s.ts, inv: s.inv, r: [], kwh: 0, dias: 0 }).get(k);
-    if (s.razao != null) o.r.push(s.razao);
-    o.kwh += s.kwh || 0; o.dias++;
+  // ---- acumula com o historico publicado ---------------------------------------------------
+  const historico = await leHistorico();
+  const { serie: full, novas, mantidas } = acumula(historico, serie,
+    (l) => l.dia + '|' + l.ufv + '|' + l.ts + '|' + l.inv, JANELA);
+  const diasFull = [...new Set(full.map((l) => l.dia))].sort();
+  // 🔴 GUARDA: nenhum dia que o historico tinha pode sumir, a nao ser por PODA da janela. Sem ela,
+  //    uma leitura parcial da fonte encolheria a serie em silencio — e o painel mostraria menos
+  //    historico sem nada acusar.
+  {
+    const antes = new Set(historico.map((l) => l.dia));
+    const depois = new Set(diasFull);
+    const corte = diasFull[0];
+    const sumiram = [...antes].filter((d) => d >= corte && !depois.has(d));
+    if (sumiram.length) throw new Error('dia(s) do historico sumiram sem ser por poda: ' + sumiram.join(' '));
   }
+
+  // ---- agregados por inversor, sobre a janela INTEIRA ---------------------------------------
   // ⚠️ MEDIANA, nao media: um dia de manutencao com energia zero puxaria a media para baixo e
   // colocaria um inversor sadio no topo do ranking de problema.
-  const ranking = [...porInv.values()]
-    .filter((o) => o.r.length >= Math.min(5, DIAS))
-    .map((o) => ({ ufv: o.ufv, ts: o.ts, inv: o.inv, dias: o.dias,
-      razao_mediana: r2(mediana(o.r)), razao_min: r2(Math.min(...o.r)), kwh_janela: r2(o.kwh) }))
-    .sort((a, b) => a.razao_mediana - b.razao_mediana);
+  const porInv = new Map();
+  for (const s of full) {
+    const k = s.ufv + '|' + s.ts + '|' + s.inv;
+    const o = porInv.get(k) || porInv.set(k, { ufv: s.ufv, ts: s.ts, inv: s.inv, r: [], kwh: 0, dias: 0,
+      de: s.dia, ate: s.dia }).get(k);
+    if (s.razao != null) o.r.push(s.razao);
+    o.kwh += s.kwh || 0; o.dias++;
+    if (s.dia < o.de) o.de = s.dia;
+    if (s.dia > o.ate) o.ate = s.dia;
+  }
+  const inversores = [...porInv.values()]
+    .filter((o) => o.r.length >= Math.min(MIN_DIAS, diasFull.length))
+    .map((o) => ({ ufv: o.ufv, ts: o.ts, inv: o.inv,
+      chave: o.ufv + '/' + o.ts + '/' + o.inv, dias: o.dias,
+      razao_mediana: r2(mediana(o.r)), razao_min: r2(Math.min(...o.r)),
+      kwh_janela: r2(o.kwh), de: o.de, ate: o.ate }));
 
+  // 🔴 O LIMIAR SAI DA DISPERSAO DA PROPRIA FROTA, medida a cada rodada, nunca de um numero
+  //    escolhido: desvio robusto = 1,4826 x a mediana dos afastamentos. Medido em 03/09/2026 ele
+  //    vale 1,48 ponto, entao um inversor a 93% esta a cinco desvios — nao e ruido, e achado. E a
+  //    conta mora AQUI e nao no painel, pela mesma razao de sempre: uma copia por painel envelhece
+  //    diferente das outras.
+  const meds = inversores.map((x) => x.razao_mediana).filter((x) => x != null);
+  const refM = mediana(meds);
+  const desv = meds.map((x) => Math.abs(x - refM));
+  // ⚠️ A MEDIANA DOS AFASTAMENTOS COLAPSA quando mais da metade da frota esta exatamente na
+  //    mediana — o que e estado LEGITIMO, e ate desejavel: significa parque uniforme. Abortar ali
+  //    seria reprovar o melhor caso possivel. Quando ela da zero, a escala passa a ser a MEDIA dos
+  //    afastamentos, que so e zero quando TODOS sao iguais — e af nao ha desvio a medir mesmo.
+  const mad = mediana(desv);
+  const escala = mad > 0 ? mad : desv.reduce((a, b) => a + b, 0) / (desv.length || 1);
+  const refS = 1.4826 * escala;
+  const refTipo = mad > 0 ? 'mediana dos afastamentos' : (refS > 0 ? 'média dos afastamentos (a frota está uniforme demais para a mediana)' : 'frota idêntica — não há desvio a medir');
+  inversores.forEach((x) => { x.desvios = refS > 0 ? r2((x.razao_mediana - refM) / refS) : null; });
+  inversores.sort((a, b) => a.razao_mediana - b.razao_mediana);
+
+  // ---- a serie diaria dos piores, para o grafico -------------------------------------------
+  // 🔴 SO OS PIORES: a serie inteira sao 8 KB por dia na rede, entao um ano seriam 2,9 MB que o
+  //    painel baixaria por completo antes de filtrar. O grafico desenha meia duzia de linhas.
+  const top = new Set(inversores.slice(0, TOP_SERIE).map((x) => x.ufv + '|' + x.ts + '|' + x.inv));
+  const serie_top = full.filter((l) => top.has(l.ufv + '|' + l.ts + '|' + l.inv));
+
+  const escopo = {
+    pergunta: 'Qual inversor rende abaixo dos pares do mesmo transformador, antes de falhar.',
+    grandeza: GRANDEZA + ' (contador diario, kWh) — a energia do dia e o maior valor do dia',
+    par: 'mediana dos inversores do mesmo TS no mesmo dia; TS com menos de ' + MIN_PARES
+      + ' reportando cai para a mediana da usina',
+    janela_dias: JANELA, dias_cobertos: diasFull.length,
+    de: diasFull[0], ate: diasFull[diasFull.length - 1],
+    fonte_dias: dias.length, fonte_de: dias[0], fonte_ate: dias[dias.length - 1],
+    arquivos_lidos: lidos, arquivos_com_problema: falhos,
+    inversores: inversores.length, linhas_historico: full.length,
+    referencia: { mediana: r2(refM), desvio_robusto: r2(refS), escala: refTipo, fora_3_desvios: inversores.filter((x) => x.desvios != null && x.desvios < -3).length },
+    serie_top_de: TOP_SERIE,
+  };
   const out = {
     atualizado: new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10),
-    escopo: {
-      pergunta: 'Qual inversor rende abaixo dos pares do mesmo transformador, antes de falhar.',
-      grandeza: GRANDEZA + ' (contador diario, kWh) — a energia do dia e o maior valor do dia',
-      par: 'mediana dos inversores do mesmo TS no mesmo dia; TS com menos de ' + MIN_PARES
-        + ' reportando cai para a mediana da usina',
-      janela_dias: dias.filter((d) => d >= corte).length,
-      de: corte, ate: dias[dias.length - 1],
-      arquivos_lidos: lidos, arquivos_com_problema: falhos,
-      inversores: porInv.size, linhas: serie.length,
-    },
-    ranking: ranking.slice(0, 60),
-    serie,
+    escopo,
+    ranking: inversores.slice(0, 60),
+    inversores,
+    serie_top,
   };
-  const kb = Math.round((await escreve(out)) / 1024);
-  console.log('  ' + OUT_BLOB + ' OK · ' + kb + ' KB comprimido · ' + porInv.size + ' inversores · '
-    + serie.length + ' linhas · janela ' + out.escopo.janela_dias + ' dias');
-  console.log('  piores 5: ' + ranking.slice(0, 5).map((x) => x.ufv + '/' + x.ts + '/' + x.inv + '=' + x.razao_mediana).join(' · '));
+  const kb = Math.round((await escreve(out, OUT_BLOB)) / 1024);
+  const kbh = Math.round((await escreve({ atualizado: out.atualizado,
+    nota: 'historico bruto por inversor e por dia. Existe para o proprio gerador acumular; os paineis leem os agregados do outro arquivo.',
+    janela_dias: JANELA, dias_cobertos: diasFull.length, de: escopo.de, ate: escopo.ate, serie: full }, HIST_BLOB)) / 1024);
+  console.log('  ' + OUT_BLOB + ' OK · ' + kb + ' KB · ' + inversores.length + ' inversores · '
+    + serie_top.length + ' linhas de serie dos ' + TOP_SERIE + ' piores');
+  console.log('  ' + HIST_BLOB + ' OK · ' + kbh + ' KB · ' + full.length + ' linhas ('
+    + novas + ' novas, ' + mantidas + ' do historico) · ' + diasFull.length + ' dias cobertos de ' + JANELA);
+  console.log('  frota: mediana ' + r2(refM * 100) + '% · desvio robusto ' + r2(refS * 100)
+    + ' ponto(s) · ' + escopo.referencia.fora_3_desvios + ' inversor(es) abaixo de 3 desvios');
+  console.log('  piores 5: ' + inversores.slice(0, 5).map((x) => x.chave + '=' + x.razao_mediana + ' (' + x.desvios + 'σ)').join(' · '));
 })().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
