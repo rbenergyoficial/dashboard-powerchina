@@ -88,20 +88,29 @@ rascunho passar por versão boa, e o painel mostraria dado provisório sem nada 
 ## Enquanto isso
 
 Os fluxos continuam **ligados**. O vigia `scripts/gen-scada-intake-watchdog.js` roda no `scada.yml`
-e avisa se o `scada-raw` parar de receber arquivo — então uma parada em 15/09 não passa
-despercebida.
+e avisa se o container parar de receber arquivo. **Os dois são vigiados**, cada um com o limiar
+medido no próprio container:
 
-O limiar dele (**50 h para alerta, 74 h para crítico**) saiu de medição, não de escolha: 38
-depósitos colapsados em lote deram mediana 23,6 h e p90 49,9 h. `MODO=medir` reimprime a
-distribuição a qualquer momento.
+| container | alerta | crítico | de onde saiu |
+|---|---|---|---|
+| `scada-raw` | 50 h | 74 h | 38 lotes · mediana 23,6 h · p90 49,9 h |
+| `inversores-raw` | 170 h | 336 h | 13 lotes · mediana 76,7 h · máximo 320,3 h |
 
-⚠️ **O `inversores-raw` ainda não tem vigia, e isso é deliberado.** O limiar é por container, e o
-dele não foi medido — lá a equipe salva a planilha algumas vezes por **mês**, então herdar as 50 h
-do SCADA acenderia um alarme por dia, e alarme que acende sempre ensina a ignorar a ferramenta. O
-vigia **recusa carregar** para um container sem limiar medido, em vez de inventar o número.
+⚠️ **O p90 não serve de alerta no `inversores-raw`, ao contrário do SCADA.** Metade dos vãos cai
+na faixa de 74 a 170 h, então um corte no p90 (133 h) ficaria **dentro da banda normal** e
+acenderia no caso comum. O corte tem de ficar acima dela.
 
-⚠️ A recusa vale só para `MODO=vigiar`. `MODO=medir` roda em qualquer container — é ele que
-produz a distribuição de onde o limiar sai, e bloqueá-lo tornaria o caminho impossível de
-percorrer: para medir seria preciso já ter o número.
+⚠️ **E a estimativa que eu tinha escrito estava errada**: não é "algumas vezes por mês" — são
+~2 depósitos por semana. Nos 8 lotes de 09/08 a 02/09 os vãos vão de 29,6 a 137,7 h.
+
+🔴 **O que o vigia dos inversores NÃO faz**, dito antes que alguém conte com ele: com 7 dias de
+alerta, ele não pega uma queda em 15/09 a tempo. A cadência daquele container é humana e
+irregular, e não dá para apertar o corte sem alarme falso — quem avisa depressa é o fluxo
+falhando, não a idade do arquivo. Ali ele serve para parada **prolongada**, e só.
+
+⚠️ Container **sem limiar medido** é recusado no modo `vigiar`, em vez de herdar o número de
+outro. A recusa vale só para `vigiar`: `MODO=medir` roda em qualquer container — é ele que produz
+a distribuição de onde o limiar sai, e bloqueá-lo tornaria o caminho impossível de percorrer. Por
+despacho, a entrada `vigia_container` do `scada.yml` aponta a medição para outro container.
 
 **Não desligue estes fluxos** antes de o ramo Graph rodar e reproduzir o que eles fazem.

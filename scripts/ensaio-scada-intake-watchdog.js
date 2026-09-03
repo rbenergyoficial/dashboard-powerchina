@@ -112,18 +112,18 @@ async function caso(rot, idades, espera) {
     + 'esperado sim      obtido ' + (cita ? 'sim' : 'nao'));
   if (!cita) falhas++;
 
-  // ── o limiar e POR CONTAINER, e sem medicao o vigia RECUSA ─────────────────────────────────
-  // 🔴 So o lado negativo prova isto: se o modulo aceitasse `inversores-raw` herdando 50/74 h,
-  //    ele carregaria limpo e alarmaria todo dia — a planilha dos inversores e salva algumas
-  //    vezes por MES. Guarda vista so passando nao esta testada.
-  // ⚠️ e a recusa e SO do `vigiar`: `MODO=medir` tem de passar num container sem limiar, senao o
-  //    caminho documentado fica impossivel — para medir seria preciso ja ter o numero. Foi assim
-  //    que a primeira versao desta guarda saiu, e so este caso a pega.
-  for (const [cont, modo, deveCarregar] of [
-    ['scada-raw', 'vigiar', true],
-    ['inversores-raw', 'vigiar', false],
-    ['inversores-raw', 'medir', true],
-    ['container-que-ninguem-mediu', 'vigiar', false],
+  // ── cada container carrega com o SEU limiar, e o desconhecido e recusado ────────────────────
+  // 🔴 O que se julga aqui nao e so carregar ou nao: e recusar pelo MOTIVO certo. Um container
+  //    desconhecido tem duas razoes possiveis para cair — nao ter consumidor e nao ter limiar —
+  //    e elas pedem acoes diferentes de quem le a mensagem.
+  // ⚠️ Em `MODO=medir` a checagem de limiar e PULADA de proposito: e ela que produz o numero, e
+  //    exigi-lo antes tornaria o caminho documentado impossivel de percorrer. O caso abaixo
+  //    prova isso pelo motivo da recusa — em medir ela nao pode ser "limiar NAO MEDIDO".
+  for (const [cont, modo, deveCarregar, motivo] of [
+    ['scada-raw', 'vigiar', true, null],
+    ['inversores-raw', 'vigiar', true, null],   // medido em 02/09/2026: 170/336 h
+    ['container-que-ninguem-mediu', 'vigiar', false, /limiar NAO MEDIDO/],
+    ['container-que-ninguem-mediu', 'medir', false, /nenhum consumidor declarado/],
   ]) {
     const antes = process.env.RAW_CONTAINER, antesModo = process.env.MODO;
     process.env.RAW_CONTAINER = cont;
@@ -138,12 +138,10 @@ async function caso(rot, idades, espera) {
     else process.env.MODO = antesModo;
     delete require.cache[require.resolve('./gen-scada-intake-watchdog.js')];
 
-    // ⚠️ recusar nao basta: tem de recusar pelo motivo CERTO. Uma marca orfa tambem derruba o
-    //    carregamento, e passaria por "limiar ausente" se o ensaio so olhasse o sucesso.
-    const bom = carregou === deveCarregar && (carregou || /limiar NAO MEDIDO/.test(msg));
-    console.log((bom ? '  ok     ' : '  FALHOU ') + (cont + ' MODO=' + modo).padEnd(50)
-      + 'esperado ' + (deveCarregar ? 'carrega' : 'RECUSA ')
-      + '  obtido ' + (carregou ? 'carrega' : 'RECUSA'));
+    const bom = carregou === deveCarregar && (carregou || motivo.test(msg));
+    console.log((bom ? '  ok     ' : '  FALHOU ') + (cont + ' MODO=' + modo).padEnd(46)
+      + (deveCarregar ? 'carrega' : 'RECUSA por ' + String(motivo).slice(1, -1)).padEnd(34)
+      + (carregou ? 'carrega' : 'RECUSA: ' + msg.slice(0, 34)));
     if (!bom) falhas++;
   }
 

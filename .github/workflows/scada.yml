@@ -64,3 +64,24 @@ jobs:
           MAIL_DE: ${{ vars.MAIL_DE }}
           MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/gen-scada-intake-watchdog.js
+
+      # 🔴 O `inversores-raw` e a intake da pagina de Inversores, e ate 02/09/2026 ninguem o
+      #    vigiava — a mesma cegueira que deixou a solarimetria tres dias atras sem nada ficar
+      #    vermelho. Limiar proprio (170/336 h), MEDIDO no proprio container: la o deposito e
+      #    humano, ~2 por semana, e as 50 h do SCADA acenderiam quase sempre.
+      #
+      # ⚠️ So no agendamento das 11:30, e a condicao diz isso literalmente. O container recebe ~2
+      #    arquivos por semana; tres verificacoes por dia sobre um limiar de 7 dias nao
+      #    acrescentam nada. Por despacho, use a entrada `vigia_container`.
+      - name: Vigia da intake dos Inversores
+        if: always() && github.event.schedule == '30 11 * * *'
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: inversores-raw
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/gen-scada-intake-watchdog.js

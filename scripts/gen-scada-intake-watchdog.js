@@ -99,15 +99,29 @@ const PERFIL_DESTE = PERFIL.filter((p) => !p.onde || p.onde === RAW);
 //    que difere entre as distribuicoes por familia nao e cadencia: e que nem todo deposito traz
 //    todas as familias. Limiar por familia alarmaria nas que legitimamente pulam um deposito.
 //
-// 🔴 E ELE E POR CONTAINER, sem default. Herdar 50/74 h no `inversores-raw` seria copiar um
-//    numero medido noutra cadencia: la a equipe salva a planilha algumas vezes por MES (quatro
-//    versoes de P1 desde 15/07), entao um limiar de dois dias acenderia todo dia — e alarme que
-//    acende sempre ensina a ignorar a ferramenta, que e o oposto do que este modulo existe para
-//    fazer. Sem medicao, o vigia RECUSA vigiar em vez de inventar o numero.
+// 🔴 E ELE E POR CONTAINER, sem default. Herdar 50/74 h no `inversores-raw` acenderia quase
+//    sempre: MEDIDO em 02/09/2026, 14 blobs / 13 lotes,
+//
+//      mediana 76,7 h · p75 99,6 · p90 133,1 · maximo 320,3
+//      <=26h 1 · 26-32h 1 · 32-50h 2 · 50-74h 1 · 74-170h 6 · >7d 1
+//
+// ⚠️ E O p90 NAO SERVE DE ALERTA AQUI, ao contrario do `scada-raw`. Metade dos vaos (6 de 12)
+//    cai na faixa 74-170 h, entao um corte em 133 h fica DENTRO da banda normal e alarmaria no
+//    caso comum. O corte tem de ficar acima dela.
+//
+// ⚠️ E a minha estimativa previa estava ERRADA: eu tinha escrito "algumas vezes por mes", e a
+//    medicao mostra ~2 depositos por semana. Nos 8 lotes recentes (09/08 a 02/09) os vaos vao de
+//    29,6 a 137,7 h — mediana 90,9. 170 h deixa folga sobre o pior recente, e o unico vao acima
+//    dele em toda a serie e o de 320 h.
 const LIMIAR = {
   'scada-raw': { alerta: 50, critico: 74 },
-  // 'inversores-raw': PENDENTE — exige medir a distribuicao dos vaos no proprio container.
+  'inversores-raw': { alerta: 170, critico: 336 },
 };
+
+// ⚠️ E o que este vigia NAO faz, dito antes que alguem conte com ele: com 7 dias de alerta, ele
+//    nao pega uma queda em 15/09 a tempo. A cadencia deste container e humana e irregular, e nao
+//    da para apertar o corte sem alarme falso — quem avisa depressa e o fluxo falhando, nao a
+//    idade do arquivo. Aqui ele serve para parada PROLONGADA, e so.
 // 🔴 A RECUSA E SO DO `vigiar`. `MODO=medir` existe justamente para PRODUZIR o limiar de um
 //    container novo — bloquea-lo aqui tornaria o caminho documentado impossivel de percorrer:
 //    para medir seria preciso ja ter o numero que se quer medir. Ovo e galinha, e foi assim que
