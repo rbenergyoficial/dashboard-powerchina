@@ -782,6 +782,17 @@ async function writeOut(obj, nome) {
         ? ' Mes em curso (dia ' + (s.w2_dias || 0) + ' de '
           + new Date(Date.UTC(+s.mes.slice(0, 4), +s.mes.slice(5, 7), 0)).getUTCDate()
           + '): o numero se refaz a cada dia.' : '';
+      // 🔴 A RAZAO CURTA existe porque o cartao da banda comporta ~35 caracteres (medido), e a
+      //    nota longa nao cabe. Sem ela o PAINEL escreve a propria razao a mao — e escrevia:
+      //    "referencia do ONS incoerente aqui" aparecia em setembro, a MESMA acusacao falsa que
+      //    esta correcao acabou de tirar do gerador, so que do outro lado. Duas copias da mesma
+      //    regra envelhecem em direcoes diferentes; agora o painel le esta.
+      s.nota_curta = s.sem_ons ? 'o operador ainda não publicou'
+        : s.ramp_up ? 'planta em comissionamento'
+        : s.pr_confiavel ? null
+        : s.pr_cobertura_pct < 70 ? 'cobertura da referência baixa'
+        : prCru == null ? 'sem par referência × medição'
+        : 'referência não fecha com a medição';
       s.nota = s.sem_ons ? 'O operador nacional ainda nao publicou este mes. Os indicadores que dependem da referencia dele (corte, disponibilidade e desempenho) entram quando a publicacao sair, com cerca de um dia de atraso.'
         : s.ramp_up ? 'Planta em ramp-up (comissionamento) — potencial e PR nao sao comparaveis'
         : s.pr_confiavel ? null
@@ -798,7 +809,17 @@ async function writeOut(obj, nome) {
             + (prCru > 95 ? 'ABAIXO' : 'ACIMA') + ' da energia que o medidor de faturamento '
             + 'registrou. Nao e dado faltando — o valor da referencia nao fecha com a medicao, e '
             + 'por isso o desempenho nao e publicado.' + emCurso;
-    }); }
+    });
+    // ⚠️ O cartao comporta ~35 caracteres — MEDIDO no render da pagina, nao estimado: 35 cabem,
+    //    45 truncam. Frase maior sai cortada no meio, e texto truncado le como painel quebrado.
+    const longas = serie.filter(s => s.nota_curta && s.nota_curta.length > 35);
+    if (longas.length) throw new Error('razao curta acima de 35 caracteres em '
+      + longas.map(s => s.mes + ' (' + s.nota_curta.length + ')').join(', '));
+    // e a razao curta so existe quando ha nota longa: uma sem a outra e estado incoerente
+    const desirmanadas = serie.filter(s => !!s.nota_curta !== !!s.nota);
+    if (desirmanadas.length) throw new Error('nota e razao curta desirmanadas em '
+      + desirmanadas.map(s => s.mes).join(', '));
+  }
 
   // ---------- 4) mês corrente + projeção + cascata + PPA×ML ----------
   const mesAtual = meses[meses.length - 1];
@@ -1080,7 +1101,7 @@ async function writeOut(obj, nome) {
             outras_gwh: oN(r2(Math.max(0, (ge - gv) - corte) / 1000)),
             pr_pct: oN(prOk ? pr : null), pr_cobertura_pct: oN(cob),
             disp_pct: S.disp_pct, horas_restricao: S.horas_restricao, escopo_complexo: 1,
-            nota: prOk ? null : S.nota };
+            nota: prOk ? null : S.nota, nota_curta: prOk ? null : S.nota_curta };
         };
         // ---- as 9 usinas ----
         const linhasUfv = [];
