@@ -87,11 +87,13 @@ console.log('\n6 · o caminho do SharePoint, codificado');
 //    real tem ACENTO e IDEOGRAMA; montar a URL do Graph por concatenacao crua devolve 400, e a
 //    mensagem do Graph parece dizer que a pasta nao existe. Diagnostico errado, horas perdidas.
 {
-  const fonte = fs.readFileSync(path.join(__dirname, 'gen-scada-intake.js'), 'utf8');
-  const m = /const SP_PASTA_PADRAO = ([\s\S]*?);\n/.exec(fonte);
-  ok(!!m, 'SP_PASTA_PADRAO existe no fonte');
-  const pasta = new Function('return ' + m[1] + ';')();
-  const rel = pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  // ⚠️ O caminho aqui e SINTETICO, e de proposito: ele so precisa ter as mesmas armadilhas do
+  //    real (acento, ideograma, espaco e `&`). O caminho de verdade e dado interno e vem de
+  //    `SP_PASTA` — repositorio publico nao guarda estrutura de pasta do cliente.
+  const pasta = '/Documentos Compartilhados/1.OPERAÇÃO E MANUTENÇÃO - O&M - 運作與維護'
+    + '/01 - OPERAÇÃO - 运行记录/99 - Pasta_De_Ensaio';
+  const rel = M.caminhoGraph(pasta);
+  ok(typeof M.caminhoGraph === 'function', 'o coletor exporta caminhoGraph');
 
   ok(!/[À-ÿ]/.test(rel), 'nenhum acento cru sobrou na URL');
   ok(!/[　-鿿]/.test(rel), 'nenhum ideograma cru sobrou na URL');

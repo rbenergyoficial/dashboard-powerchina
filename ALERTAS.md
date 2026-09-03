@@ -5,17 +5,23 @@ mandam tudo por `scripts/lib-alerta.js`, que entrega em **três destinos indepen
 
 | destino | como | depende de |
 |---|---|---|
-| **webhook** | POST no fluxo *Central de Alertas · Mauriti* | 🔴 licença Power Automate, **vence 15/09/2026** |
+| **webhook** | POST num fluxo do Power Automate | 🔴 licença Premium, **vence 15/09/2026** |
 | **issue** | issue no próprio repositório | `GITHUB_TOKEN` do Actions + `issues: write` |
 | **email** | Microsoft Graph `sendMail` | OIDC + `id-token: write` — **sem segredo** |
 
+> 🔴 Este repositório é **público**. Endereço de pessoa, identificador de locatário, de aplicativo
+> e de assinatura **não entram aqui** — eles vivem nas *variables* do repositório e no documento
+> interno. É a mesma regra do portão `G14` para a `description` de painel: o know-how fica no
+> lugar interno, não no texto público.
+
 ## 🔴 A issue é REGISTRO, não NOTIFICAÇÃO
 
-Medido em 02/09/2026: o repositório tem **1 colaborador e ZERO watchers**, e o destinatário dos
-alertas — `francisco.barros@powerchina.com.br`, lido do fluxo — **não tem conta no GitHub**.
+Medido em 02/09/2026: o repositório tem **1 colaborador e ZERO watchers**, e quem recebe os
+alertas hoje **não tem conta no GitHub**.
 
 Ou seja: a issue guarda o evento com histórico e dedup, e **não avisa a pessoa que precisa saber**.
-Foi por isso que o canal de e-mail teve de existir antes de o fluxo poder ser desligado.
+Foi por isso que o canal de e-mail teve de existir antes de o fluxo poder ser desligado — a
+"segunda rede" que eu havia declarado não cobria o destinatário real.
 
 ## O canal de e-mail, e por que ele não tem segredo
 
@@ -23,56 +29,49 @@ O GitHub troca um token de identidade próprio por um token do Graph. A confian�
 amarrada a **um assunto exato**:
 
 ```
-repo:rbenergyoficial/dashboard-powerchina:ref:refs/heads/main
+repo:<owner>/<repo>:ref:refs/heads/main
 ```
 
 Nenhum outro repositório, branch, tag ou pull request consegue usá-la. Como não existe senha, não
-há o que vazar, girar ou expirar — o que importa num repositório **público**.
+há o que vazar, girar ou expirar.
 
-| peça | valor |
+A configuração vem de quatro **variables** do repositório — identificadores, não credenciais:
+
+| variável | o que é |
 |---|---|
-| app | `mauriti-alertas` · `d1202d1c-14c0-4c55-8292-04375e602a52` |
-| tenant | `b91f0016-d905-498b-bd75-a9bf6a62f269` |
-| permissão | `Mail.Send` (aplicação), com consentimento de administrador |
-| remetente | `rb@rbenergy.com.br` |
-| destinatário | `francisco.barros@powerchina.com.br` |
-
-As quatro variáveis (`AZ_MAIL_TENANT_ID`, `AZ_MAIL_CLIENT_ID`, `MAIL_DE`, `MAIL_PARA`) são
-identificadores, não credenciais — por isso vão em `vars`, não em `secrets`.
+| `AZ_MAIL_TENANT_ID` | locatário do Entra |
+| `AZ_MAIL_CLIENT_ID` | aplicativo com `Mail.Send` (aplicação), consentido |
+| `MAIL_DE` | caixa remetente |
+| `MAIL_PARA` | destinatário (aceita vários, separados por `,` ou `;`) |
 
 ## ⚠️ DÍVIDA: restringir o `Mail.Send` a uma caixa só
 
-`Mail.Send` de aplicação alcança **qualquer caixa do tenant** até ser restringida. Hoje o que
+`Mail.Send` de aplicação alcança **qualquer caixa do locatário** até ser restringida. Hoje o que
 limita o alcance é a credencial federada: só o branch `main` deste repositório consegue pedir o
-token. Isso é forte, mas não é o mínimo.
+token. É forte, mas não é o mínimo.
 
-O mínimo exige Exchange Online PowerShell — **não instalado nesta máquina**:
+O mínimo exige Exchange Online PowerShell — **não instalado na máquina de trabalho**:
 
 ```powershell
 Install-Module ExchangeOnlineManagement -Scope CurrentUser
-Connect-ExchangeOnline -UserPrincipalName rb@rbenergy.com.br
+Connect-ExchangeOnline -UserPrincipalName <caixa-remetente>
 
-New-DistributionGroup -Name "Caixas-Alertas-Mauriti" -Type Security `
-  -Members rb@rbenergy.com.br
+New-DistributionGroup -Name "Caixas-Alertas-Mauriti" -Type Security -Members <caixa-remetente>
 
-New-ApplicationAccessPolicy `
-  -AppId d1202d1c-14c0-4c55-8292-04375e602a52 `
-  -PolicyScopeGroupId "Caixas-Alertas-Mauriti" `
-  -AccessRight RestrictAccess `
-  -Description "mauriti-alertas envia so como rb@"
+New-ApplicationAccessPolicy -AppId <AZ_MAIL_CLIENT_ID> `
+  -PolicyScopeGroupId "Caixas-Alertas-Mauriti" -AccessRight RestrictAccess `
+  -Description "o app de alertas envia so como a caixa remetente"
 
-Test-ApplicationAccessPolicy -Identity rb@rbenergy.com.br `
-  -AppId d1202d1c-14c0-4c55-8292-04375e602a52
+Test-ApplicationAccessPolicy -Identity <caixa-remetente> -AppId <AZ_MAIL_CLIENT_ID>
 ```
 
-Depois disso o app só consegue enviar como `rb@rbenergy.com.br`, e qualquer outra caixa responde
-`AccessDenied`.
+Depois disso, qualquer outra caixa responde `AccessDenied`.
 
 ## 🔴 Normalização sem evento aberto NÃO aciona canal nenhum
 
 O vigia da intake do SCADA chama `resolve` a **cada rodada em que está tudo bem**. O canal de
 issue já tratava isso (*"nada aberto para fechar"*), mas o **webhook não sabe o que é `resolve`**:
-ele só posta, e o fluxo manda e-mail. Hoje sai um *"normalizada"* por rodada.
+ele só posta, e o fluxo manda e-mail. Saía um *"normalizada"* por rodada.
 
 Ligar o e-mail sem corrigir isso multiplicaria o ruído — e **alerta que chega todo dia sem motivo
 ensina a ignorar o alerta**, que é o oposto do que este módulo existe para fazer.
@@ -80,7 +79,23 @@ ensina a ignorar o alerta**, que é o oposto do que este módulo existe para faz
 Com evento aberto, a confirmação continua saindo por todos os canais: ela é o fechamento, e quem
 recebeu o aviso precisa saber que acabou.
 
-## Aposentar o fluxo *Central de Alertas · Mauriti*
+## `ensaio-alerta.yml` — o caminho de REDE
+
+Os outros ensaios do canal rodam contra um GitHub simulado, de propósito: um que abrisse issue de
+verdade a cada execução encheria o repositório do ruído que o dedup existe para evitar. Isso prova
+a **lógica** e deixa a **rede** sem prova — e canal de alerta que nunca foi exercitado não está
+testado.
+
+Este manda um alerta de verdade, **só por `workflow_dispatch`**, com `[ENSAIO — ignore]` no
+assunto. O critério é **por canal**: passar porque a issue subiu esconderia justamente o canal que
+se queria provar.
+
+⚠️ A listagem de issues do GitHub é **eventualmente consistente** — um `resolve` disparado logo
+depois da criação responde "nada aberto para fechar" e deixa a issue aberta. Em produção isso não
+aparece (alerta e normalização ficam separados no tempo); só o ensaio os cola, e por isso ele
+espera e repete.
+
+## Aposentar o fluxo de alertas
 
 **Só depois** de um alerta de verdade ter saído por e-mail pelo canal novo. Alerta é justamente o
 que não se migra no escuro: se o canal novo falhar em silêncio, some o alerta **e** some a notícia

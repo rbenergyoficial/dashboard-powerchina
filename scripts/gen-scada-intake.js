@@ -116,26 +116,30 @@ async function daPasta() {
   });
 }
 
-// ── o SharePoint de verdade, LIDO do fluxo em 02/09/2026 ────────────────────────────────────
-// O stub anterior se recusava a escrever este ramo "para nao supor caminho". O caminho deixou de
-// ser suposicao: foi lido do gatilho do fluxo "SCADA SharePoint para Blob", que e quem alimenta o
-// container hoje.
+// ── leitura do SharePoint por credencial de aplicativo ──────────────────────────────────────
+// O stub anterior se recusava a escrever este ramo "para nao supor caminho", e estava certo. O
+// caminho deixou de ser suposicao — ele foi lido do gatilho do fluxo que alimenta o container
+// hoje — mas NAO mora aqui: site e pasta vem de `SP_SITE` e `SP_PASTA`, e sao dado de ambiente.
 //
-//   site       https://powerchinabr.sharepoint.com/sites/POWERCHINA
-//   biblioteca Documentos
-//   pasta      /Documentos Compartilhados/1.OPERACAO E MANUTENCAO - O&M - .../11 - Dados_Scada_PWC
-//   conexao    francisco.barros@powerchina.com.br
+// 🔴 ESTE REPOSITORIO E PUBLICO. Nome de site, caminho de pasta, locatario e endereco de pessoa
+//    sao know-how interno e nao entram em codigo versionado — a mesma regra do portao G14 para a
+//    `description` de painel. O documento interno (fora daqui) e quem os guarda.
 //
-// 🔴 O TENANT E O DA POWERCHINA (`powerchinabr`), NAO O NOSSO — e isso decide tudo: o registro de
-//    aplicativo tem de existir LA, e a permissao exige consentimento de administrador do tenant
-//    deles. Nao se resolve do nosso lado. Ver `SCADA_INTAKE.md`.
+// 🔴 A origem fica no locatario do CLIENTE, nao no nosso, e isso decide a migracao: o registro de
+//    aplicativo tem de existir LA, e a permissao exige consentimento de administrador de la. Nao
+//    se resolve do nosso lado. Ver `SCADA_INTAKE.md`.
 //
 // ⚠️ RAMO AINDA NAO EXERCITADO: sem credencial ele nem e chamado. Nome, dedup e guarda ja estao
 //    provados pelo modo `pasta`, entao o que precisa de prova no dia da credencial e SO a leitura.
 const GRAPH_HOST = 'graph.microsoft.com';
-const SP_SITE_PADRAO = 'powerchinabr.sharepoint.com:/sites/POWERCHINA';
-const SP_PASTA_PADRAO = '/Documentos Compartilhados/1.OPERAÇÃO E MANUTENÇÃO - O&M - 運作與維護'
-  + '/01 - OPERAÇÃO - 运行记录/11 - Dados_Scada_PWC';
+
+// 🔴 Cada segmento vai por `encodeURIComponent`, e isso NAO e detalhe: o caminho real tem acento e
+//    ideograma. A URL crua devolve 400, e a mensagem do Graph parece dizer que a pasta nao existe
+//    — diagnostico errado, horas perdidas. Funcao propria para o ensaio poder exercita-la com um
+//    caminho SINTETICO, sem que o caminho real precise existir no codigo.
+function caminhoGraph(pasta) {
+  return pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+}
 
 function graphGet(caminho, token, bruto) {
   const https = require('https');
@@ -188,21 +192,21 @@ function tokenGraph() {
 }
 
 async function doGraph() {
-  const falta = ['GRAPH_TENANT', 'GRAPH_CLIENT_ID', 'GRAPH_CLIENT_SECRET']
+  // ⚠️ `SP_SITE` e `SP_PASTA` sao OBRIGATORIOS, sem valor embutido. Um default aqui seria dado
+  //    interno em repositorio publico — e, pior, faria o ramo "funcionar" apontando para um lugar
+  //    que ninguem declarou.
+  const falta = ['GRAPH_TENANT', 'GRAPH_CLIENT_ID', 'GRAPH_CLIENT_SECRET', 'SP_SITE', 'SP_PASTA']
     .filter((k) => !process.env[k]);
   if (falta.length) throw new Error('FONTE=graph exige: ' + falta.join(', '));
 
-  const site = process.env.SP_SITE || SP_SITE_PADRAO;
-  const pasta = process.env.SP_PASTA || SP_PASTA_PADRAO;
+  const site = process.env.SP_SITE;
+  const pasta = process.env.SP_PASTA;
 
   const token = await tokenGraph();
   const s = await graphGet('/sites/' + site, token);
   console.log('  site: ' + (s.displayName || s.name));
 
-  // 🔴 Cada segmento vai por `encodeURIComponent`. A pasta tem acento E ideograma; montar a URL
-  //    por concatenacao crua devolve 400, e a mensagem do Graph parece dizer que a pasta nao
-  //    existe — que e o diagnostico errado.
-  const rel = pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  const rel = caminhoGraph(pasta);
 
   const itens = [];
   let url = '/sites/' + s.id + '/drive/root:/' + rel + ':/children?$top=200';
@@ -231,7 +235,7 @@ async function doGraph() {
 // ── principal ────────────────────────────────────────────────────────────────────────────────
 // ⚠️ so roda quando chamado direto: o ensaio importa este arquivo para exercitar as guardas uma a
 //    uma, e sem isto o `require` dispararia a coleta inteira.
-module.exports = { nomeFinal, carimboDe, casaConsumidor, consumidorDe, CONSUMIDORES };
+module.exports = { nomeFinal, carimboDe, casaConsumidor, consumidorDe, caminhoGraph, CONSUMIDORES };
 if (require.main !== module) return;
 
 (async () => {

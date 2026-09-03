@@ -23,9 +23,8 @@
 //
 // 🔴 A ISSUE E REGISTRO, NAO NOTIFICACAO — medido em 02/09/2026.
 // Eu havia escrito aqui que "o GitHub avisa por e-mail quem acompanha o repositorio". Medido: o
-// repo tem **1 colaborador e ZERO watchers**, e o destinatario dos alertas —
-// `francisco.barros@powerchina.com.br`, lido do fluxo "Central de Alertas · Mauriti" — **nao tem
-// conta no GitHub**. Ou seja: a issue guarda o evento e nao avisa a pessoa que precisa saber.
+// repo tem **1 colaborador e ZERO watchers**, e quem recebe os alertas hoje **nao tem conta no
+// GitHub**. Ou seja: a issue guarda o evento e nao avisa a pessoa que precisa saber.
 //
 // Por isso o canal de e-mail existe, e por isso ele nao e opcional na aposentadoria do fluxo.
 //
