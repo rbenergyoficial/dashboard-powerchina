@@ -758,13 +758,46 @@ async function writeOut(obj, nome) {
     // "a amostra pareada e representativa": >= 70% dos intervalos com sol. Assim out/25 em diante
     // volta a ter PR, com a cobertura declarada no card p/ o leitor pesar o numero.
     s.pr_confiavel = !s.ramp_up && s.pr_cobertura_pct >= 70 && s.pr_pct != null && s.pr_pct >= 50 && s.pr_pct <= 95;
+      // o valor cru some do blob, mas a NOTA precisa dele: e ele que diz por que o mes foi
+      // rejeitado, e um mes que declara o proprio numero nao depende de lista escrita a mao.
+      const prCru = s.pr_pct;
       if (!s.pr_confiavel) { s.pr_pct = null; s.potencial_irr_gwh = null; }   // não publica o indefensável
       // 🔴 mes que o operador ainda NAO PUBLICOU nao e mes com dado incoerente: a nota antiga
       // acusava a fonte de um erro que ela nao cometeu, e quem le vai procurar defeito onde
       // so ha atraso de publicacao.
+      //
+      // 🔴 E `!pr_confiavel` era um ramo PEGA-TUDO com um diagnostico so. Medido em 03/09/2026,
+      //    ele juntava tres causas diferentes sob o texto "o valor publicado esta errado":
+      //      · out/25   cobertura 69,46% — abaixo do minimo; a causa e AMOSTRA, nao valor errado
+      //      · nov/25 a fev/26  cobertura boa e PR fora da faixa — ai o diagnostico procede
+      //      · set/26   cobertura 99,54%, mes com 3 dias — nao tem nada a ver com 2025
+      //    Setembro saia acusando a fonte de um erro que ela nao cometeu naquele mes, citando
+      //    uma lista de meses de 2025. Cada mes passa a declarar o SEU numero e a SUA causa —
+      //    de brinde sai do texto publico uma lista de percentuais escrita a mao, que apodrece.
+      // ⚠️ `s.fechado` NAO existe neste ponto — ele e atribuido no bloco do mes corrente, mais
+      //    abaixo. Usa-lo aqui faz `!undefined` valer sempre, e a primeira versao disto escreveu
+      //    "Mes em curso (dia 31 de 31)" em CINCO meses fechados. O mes corrente sai de `meses`,
+      //    que existe desde o comeco, e o defeito deixa de depender da ordem de atribuicao.
+      const emCurso = s.mes === meses[meses.length - 1]
+        ? ' Mes em curso (dia ' + (s.w2_dias || 0) + ' de '
+          + new Date(Date.UTC(+s.mes.slice(0, 4), +s.mes.slice(5, 7), 0)).getUTCDate()
+          + '): o numero se refaz a cada dia.' : '';
       s.nota = s.sem_ons ? 'O operador nacional ainda nao publicou este mes. Os indicadores que dependem da referencia dele (corte, disponibilidade e desempenho) entram quando a publicacao sair, com cerca de um dia de atraso.'
         : s.ramp_up ? 'Planta em ramp-up (comissionamento) — potencial e PR nao sao comparaveis'
-        : (!s.pr_confiavel ? 'A geracao estimada do ONS e inconsistente neste mes: mesmo somando SO os intervalos em que ela foi publicada, o PR sai fisicamente impossivel (out/25 216% · nov/25 133% · dez/25 188% · jan/26 180% · fev/26 98%). Nao e apenas dado faltando — o valor publicado esta errado. So a partir de mar/26 o PR fica coerente (76%).' : null);
+        : s.pr_confiavel ? null
+        : s.pr_cobertura_pct < 70
+          ? 'A referencia de geracao do operador nacional cobre so ' + s.pr_cobertura_pct
+            + '% dos intervalos com sol deste mes, abaixo dos 70% que o calculo de desempenho '
+            + 'exige. O numero sairia de uma amostra que nao representa o mes, e por isso nao e '
+            + 'publicado.' + emCurso
+        : prCru == null
+          ? 'Nao ha intervalos com sol em que a referencia do operador e a medicao existam ao '
+            + 'mesmo tempo neste mes, entao o desempenho nao pode ser calculado.' + emCurso
+          : 'O desempenho calculado neste mes sai em ' + prCru + '%, fora da faixa defensavel de '
+            + '50 a 95%: a geracao estimada pelo operador nacional esta '
+            + (prCru > 95 ? 'ABAIXO' : 'ACIMA') + ' da energia que o medidor de faturamento '
+            + 'registrou. Nao e dado faltando — o valor da referencia nao fecha com a medicao, e '
+            + 'por isso o desempenho nao e publicado.' + emCurso;
     }); }
 
   // ---------- 4) mês corrente + projeção + cascata + PPA×ML ----------
