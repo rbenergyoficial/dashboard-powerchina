@@ -56,19 +56,31 @@ const SECO = /^(1|true|sim)$/i.test(process.env.SECO || '');
 //
 // ⚠️ Cada marca tem de ser SUBSTRING de exatamente UMA expressao do coletor — a guarda abaixo
 //    exige isso, senao duas familias trocariam de rotulo em silencio.
+// ⚠️ `onde` tem de estar aqui TAMBEM, e nao so no coletor: a guarda de marca orfa percorre esta
+//    lista, e sem o mesmo escopo ela acusa a marca de um container como orfa do outro — alarme
+//    sobre estado legitimo, que e o defeito que este arquivo mais evita.
 const PERFIL = [
-  { marca: 'xlsx',      nome: 'M<parque>.xlsx (SCADA por usina)' },
-  { marca: 'IRR_GERAL', nome: 'IRR_GERAL (estacao)' },
-  { marca: '(^|_)IRR_', nome: 'IRR (sensor GER_IRR)' },
-  { marca: 'Trafo',     nome: 'Trafo (SE)' },
-  { marca: '{2}_',      nome: 'M<NN> csv (inversores/perdas)' },
+  { onde: 'scada-raw', marca: 'xlsx',      nome: 'M<parque>.xlsx (SCADA por usina)' },
+  { onde: 'scada-raw', marca: 'IRR_GERAL', nome: 'IRR_GERAL (estacao)' },
+  { onde: 'scada-raw', marca: '(^|_)IRR_', nome: 'IRR (sensor GER_IRR)' },
+  { onde: 'scada-raw', marca: 'Trafo',     nome: 'Trafo (SE)' },
+  { onde: 'scada-raw', marca: '{2}_',      nome: 'M<NN> csv (inversores/perdas)' },
 
   // ⚠️ `IIRR_` fica de fora do JULGAMENTO de proposito (`vigia: false`): sao despejos manuais de
   //    365 dias, exportados de vez em quando. Vigiar cadencia de algo que nao tem cadencia
   //    produz alarme que acende sempre — e alarme que acende sempre ensina a ignorar a
   //    ferramenta. Ele continua sendo CONTADO, para aparecer na medicao.
-  { marca: 'IIRR',      nome: 'IIRR (despejo manual)', vigia: false },
+  { onde: 'scada-raw', marca: 'IIRR', nome: 'IIRR (despejo manual)', vigia: false },
+
+  // ── inversores-raw ─────────────────────────────────────────────────────────────────────────
+  // ⚠️ `xls[xm]` NAO colide com o `xlsx` do `gen-scada`: sao containers diferentes, e o filtro
+  //    `DESTE` ja separa os dois antes desta lista ser consultada. Dentro de cada container a
+  //    marca continua casando exatamente uma expressao, que e o que a guarda exige.
+  { onde: 'inversores-raw', marca: 'xls[xm]', nome: 'planilhas de falha/troca (inversores)' },
 ];
+
+// o mesmo escopo do coletor, pela mesma razao
+const PERFIL_DESTE = PERFIL.filter((p) => !p.onde || p.onde === RAW);
 
 // ── O LIMIAR, e ele e do CONTAINER, nao da familia ───────────────────────────────────────────
 // 🔴 MEDIDO em 02/09/2026, 38 lotes de `M<parque>.xlsx` (a familia presente em quase todo
@@ -86,17 +98,44 @@ const PERFIL = [
 //    29/08 22:21, 30/08 18:56, 31/08 20:18 e 01/09 11:48 aparecem identicos em quatro delas. O
 //    que difere entre as distribuicoes por familia nao e cadencia: e que nem todo deposito traz
 //    todas as familias. Limiar por familia alarmaria nas que legitimamente pulam um deposito.
-const ALERTA_H = 50;    // o p90 — um dia de deposito inteiramente perdido
-const CRITICO_H = 74;   // acima daqui so vivem as quedas conhecidas (3 dos 37 vaos medidos)
+//
+// 🔴 E ELE E POR CONTAINER, sem default. Herdar 50/74 h no `inversores-raw` seria copiar um
+//    numero medido noutra cadencia: la a equipe salva a planilha algumas vezes por MES (quatro
+//    versoes de P1 desde 15/07), entao um limiar de dois dias acenderia todo dia — e alarme que
+//    acende sempre ensina a ignorar a ferramenta, que e o oposto do que este modulo existe para
+//    fazer. Sem medicao, o vigia RECUSA vigiar em vez de inventar o numero.
+const LIMIAR = {
+  'scada-raw': { alerta: 50, critico: 74 },
+  // 'inversores-raw': PENDENTE — exige medir a distribuicao dos vaos no proprio container.
+};
+if (!LIMIAR[RAW]) {
+  throw new Error('limiar NAO MEDIDO para o container "' + RAW + '". A cadencia de cada container '
+    + 'e diferente; copiar o numero de outro produz alarme que acende sempre. Meca os vaos e '
+    + 'acrescente em LIMIAR.');
+}
+const ALERTA_H = LIMIAR[RAW].alerta;
+const CRITICO_H = LIMIAR[RAW].critico;
 
 const INTAKE = require('./gen-scada-intake.js');
 
+// 🔴 SO OS CONSUMIDORES DESTE CONTAINER. O coletor passou a servir tambem o `inversores-raw`, e
+//    sem este filtro o vigia do `scada-raw` exigia perfil para uma familia que nao e dele — a
+//    guarda disparou em producao, corretamente. Filtrar por `onde` mantem cada vigia com o seu
+//    escopo, e um container novo continua obrigando perfil novo em vez de passar despercebido.
+//
+// ⚠️ Entrada sem `onde` conta como deste container: e o formato antigo, e trata-la como "de
+//    outro" a esconderia do vigia — que e o defeito oposto e mais silencioso.
+//
 // ⚠️ A ORDEM e a do coletor, e ela importa: `IIRR_` e `IRR_GERAL_` tem de ser testados ANTES de
 //    `IRR_`, senao o terceiro padrao os captura. Preservar a ordem e o motivo de percorrer
 //    CONSUMIDORES em vez de iterar PERFIL.
-const FAMILIAS = INTAKE.CONSUMIDORES.map((c) => {
+const DESTE = INTAKE.CONSUMIDORES.filter((c) => !c.onde || c.onde === RAW);
+if (!DESTE.length) {
+  throw new Error('nenhum consumidor declarado para o container "' + RAW + '"');
+}
+const FAMILIAS = DESTE.map((c) => {
   const fonte = String(c.quando);
-  const casam = PERFIL.filter((p) => fonte.includes(p.marca));
+  const casam = PERFIL_DESTE.filter((p) => fonte.includes(p.marca));
   if (casam.length !== 1) {
     // 🔴 Falha ALTA nos DOIS sentidos. Zero: familia nova no coletor que ninguem vigia —
     //    silenciar seria o defeito original com outra roupa. Mais de uma: marca ambigua, e ai
@@ -114,7 +153,7 @@ const FAMILIAS = INTAKE.CONSUMIDORES.map((c) => {
 //    acha que esta valendo e nao esta.
 {
   const usadas = new Set(FAMILIAS.map((f) => f.nome));
-  const orfas = PERFIL.filter((p) => !usadas.has(p.nome)).map((p) => p.marca);
+  const orfas = PERFIL_DESTE.filter((p) => !usadas.has(p.nome)).map((p) => p.marca);
   if (orfas.length) throw new Error('marca sem familia no coletor: ' + orfas.join(', '));
 }
 

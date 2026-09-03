@@ -1,10 +1,16 @@
-// gen-scada-intake.js — a INTAKE do `scada-raw`, hoje feita pelo Power Automate.
+// gen-scada-intake.js — a INTAKE dos containers de arquivo bruto, hoje feita pelo Power Automate.
+//
+// Serve DOIS containers com o mesmo codigo; quem escolhe e `RAW_CONTAINER` (+ `SP_PASTA`):
+//   scada-raw        SCADA/Solarimetria, Transformadores e Perdas de PV
+//   inversores-raw   Inversores (`gen-inversores`)
+// ⚠️ Os dois vem do MESMO site e do MESMO locatario, entao UMA credencial destrava os dois.
 //
 // 🔴 POR QUE ESTE ARQUIVO EXISTE
-// O container `scada-raw` e alimentado pelo fluxo "SCADA SharePoint para Blob", que usa conectores
-// Premium (SharePoint e Azure Blob). Ele e a entrada de QUATRO paginas: SCADA/Solarimetria
-// (`gen-scada`, `gen-irradiancia`), Transformadores (`gen-trafo`) e Perdas de PV (`gen-perdas`).
-// Sem ele, essas paginas param de receber dado novo — e param em silencio, porque os geradores
+// Os containers sao alimentados por fluxos do Power Automate que usam conectores Premium
+// (SharePoint e Azure Blob). Juntos, eles sao a entrada de CINCO paginas: SCADA/Solarimetria
+// (`gen-scada`, `gen-irradiancia`), Transformadores (`gen-trafo`), Perdas de PV (`gen-perdas`) e
+// Inversores (`gen-inversores`).
+// Sem eles, essas paginas param de receber dado novo — e param em silencio, porque os geradores
 // continuam rodando e republicando o que ja tinham.
 //
 // 🔴 O CONTRATO DE NOME E CARGA, NAO ENFEITE — e foi medido nos consumidores, um a um:
@@ -37,8 +43,18 @@
 //                                   credencial existir, so ele precisa ser provado.
 //
 // DESTINO
-//   (padrao)      DADOS_STORAGE + RAW_CONTAINER=scada-raw
+//   (padrao)      DADOS_STORAGE + RAW_CONTAINER=scada-raw | inversores-raw
 //   LOCAL_OUT=dir grava em pasta, sem tocar em producao (ensaio)
+//
+// 🔴 O CONSUMIDOR DOS INVERSORES DESCARTA RASCUNHO PELO NOME (`em revisao`, `copia`, `rascunho`),
+// por SUBSTRING, e escolhe a versao vigente pelo `lastModified` do BLOB. Duas consequencias que
+// amarram este coletor:
+//   · o carimbo e um PREPEND, entao a marca de rascunho sobrevive — um coletor que RENOMEASSE
+//     faria um rascunho passar por versao boa, e o painel mostraria dado provisorio sem nada
+//     ficar vermelho;
+//   · a gravacao vai em ordem cronologica da FONTE, senao a versao velha pode virar a mais
+//     recente do container.
+// As duas estao provadas no ensaio.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -51,26 +67,66 @@ const SECO = /^(1|true|sim)$/i.test(process.env.SECO || '');
 // Cada entrada e um consumidor real do container. `exige` e a expressao que ELE usa; se o nome
 // que vamos gravar nao casar nenhuma, o arquivo entraria no container para ser ignorado — e e
 // isso que a guarda impede.
+// ⚠️ O contrato e POR CONTAINER, e nao so por nome. Sem isso um `.xlsx` de inversores casaria a
+//    regra do `gen-scada` — passaria na guarda, porque o prefixo satisfaz as duas, mas ficaria
+//    atribuido ao consumidor errado. Guarda que aponta o consumidor errado ensina a desconfiar da
+//    guarda no dia em que ela acusar de verdade.
 const CONSUMIDORES = [
-  { quem: 'gen-scada',       quando: /\.xlsx$/i,                 exige: /^(\d+)_/ },
-  { quem: 'gen-irradiancia', quando: /_?IIRR_\d{8}_\d{6}\.csv$/i, exige: /IIRR_(\d{8}_\d{6})\.csv$/i },
-  { quem: 'gen-irradiancia', quando: /_?IRR_GERAL_\d{8}_\d{6}\.csv$/i, exige: /IRR_GERAL_(\d{8}_\d{6})\.csv$/i },
-  { quem: 'gen-irradiancia', quando: /(^|_)IRR_\d{8}_\d{6}\.csv$/i, exige: /_IRR_(\d{8}_\d{6})\.csv$/i },
-  { quem: 'gen-trafo',       quando: /Trafo_\d{8}_\d{6}\.csv$/i,  exige: /Trafo_(\d{8})_(\d{6})\.csv$/i },
-  { quem: 'gen-perdas',      quando: /M\d{2}_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})_(\d{8})_\d{6}\.csv$/i },
+  { onde: 'scada-raw', quem: 'gen-scada',       quando: /\.xlsx$/i,                 exige: /^(\d+)_/ },
+  { onde: 'scada-raw', quem: 'gen-irradiancia', quando: /_?IIRR_\d{8}_\d{6}\.csv$/i, exige: /IIRR_(\d{8}_\d{6})\.csv$/i },
+  { onde: 'scada-raw', quem: 'gen-irradiancia', quando: /_?IRR_GERAL_\d{8}_\d{6}\.csv$/i, exige: /IRR_GERAL_(\d{8}_\d{6})\.csv$/i },
+  { onde: 'scada-raw', quem: 'gen-irradiancia', quando: /(^|_)IRR_\d{8}_\d{6}\.csv$/i, exige: /_IRR_(\d{8}_\d{6})\.csv$/i },
+  { onde: 'scada-raw', quem: 'gen-trafo',       quando: /Trafo_\d{8}_\d{6}\.csv$/i,  exige: /Trafo_(\d{8})_(\d{6})\.csv$/i },
+  { onde: 'scada-raw', quem: 'gen-perdas',      quando: /M\d{2}_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})_(\d{8})_\d{6}\.csv$/i },
+
+  // 🔴 O consumidor dos inversores nao escolhe por NOME: `classifyWb` decide P1/P2 pelo CONTEUDO
+  //    da planilha, e a versao vencedora e a de maior `lastModified` do blob. Entao o prefixo nao
+  //    o afeta — e por isso `exige` aqui so pede que continue sendo planilha.
+  // ⚠️ Mas ha uma guarda POR NOME do outro lado: `NAO_FINAL` descarta "em revisao", "rascunho",
+  //    "copia", "old", "backup". Ela e teste de SUBSTRING, entao o prefixo numerico nao a quebra —
+  //    e um coletor que RENOMEASSE o arquivo faria um rascunho passar por versao boa, e o painel
+  //    inteiro mostraria dado provisorio sem nada ficar vermelho. O nome original vai inteiro.
+  { onde: 'inversores-raw', quem: 'gen-inversores', quando: /\.xls[xm]$/i, exige: /\.xls[xm]$/i },
 ];
 
 // ⚠️ a ordem importa: `IIRR_` e `IRR_GERAL_` tem de ser testados ANTES de `IRR_`, senao o terceiro
 //    padrao os captura. Os tres nomes se parecem de proposito e ja custaram uma correcao ao
 //    gen-irradiancia — a ordem aqui e a mesma que ele usa.
-function consumidorDe(original) {
-  for (const c of CONSUMIDORES) if (c.quando.test(original)) return c;
+// 🔴 As extensoes que interessam saem do PROPRIO contrato, nunca de uma lista escrita ao lado.
+// Foi uma lista escrita a mao (`/\.(csv|xlsx)$/`) que teria engolido a planilha de falhas dos
+// inversores, que virou `.xlsm` em 20/08/2026 — sem erro, sem log, so o painel parando de receber
+// versao nova. Filtrar por extensao NAO afrouxa a guarda: ela julga o NOME, e um `IRR_....csv`
+// limpo continua chegando nela para ser recusado.
+function extensoesDe(onde) {
+  const exts = new Set();
+  for (const c of CONSUMIDORES) {
+    if (onde && c.onde !== onde) continue;
+    for (const m of c.quando.source.matchAll(/\\\.(?:\(([^)]+)\)|([a-z]+)(\[[a-z]+\])?)/gi)) {
+      if (m[1]) m[1].split('|').forEach((e) => exts.add(e.toLowerCase()));
+      else if (m[3]) m[3].slice(1, -1).split('').forEach((ch) => exts.add((m[2] + ch).toLowerCase()));
+      else exts.add(m[2].toLowerCase());
+    }
+  }
+  if (!exts.size) throw new Error('nenhum consumidor declarado para o container "' + onde + '"');
+  return new RegExp('\\.(' + [...exts].join('|') + ')$', 'i');
+}
+
+// `onde` e opcional para nao quebrar quem chama com um argumento so; quando vem, ele DESEMPATA —
+// e e o unico jeito de dizer que um `.xlsx` de inversores nao e um `.xlsx` de SCADA.
+function consumidorDe(original, onde) {
+  for (const c of CONSUMIDORES) {
+    if (onde && c.onde !== onde) continue;
+    if (c.quando.test(original)) return c;
+  }
   return null;
 }
 
-function casaConsumidor(nomeFinal, original) {
-  const c = consumidorDe(original);
-  if (!c) return { ok: false, motivo: 'nenhum consumidor reconhece este nome' };
+function casaConsumidor(nomeFinal, original, onde) {
+  const c = consumidorDe(original, onde);
+  if (!c) {
+    return { ok: false, motivo: 'nenhum consumidor reconhece este nome'
+      + (onde ? ' em "' + onde + '"' : '') };
+  }
   if (!c.exige.test(nomeFinal)) {
     return { ok: false, motivo: 'o ' + c.quem + ' NAO casaria "' + nomeFinal + '"' };
   }
@@ -110,7 +166,8 @@ async function abreDestino() {
 async function daPasta() {
   const dir = process.env.PASTA;
   if (!dir) throw new Error('FONTE=pasta exige PASTA=<caminho>');
-  return fs.readdirSync(dir).filter((f) => /\.(csv|xlsx)$/i.test(f)).map((f) => {
+  const aceita = extensoesDe(RAW_CONTAINER);
+  return fs.readdirSync(dir).filter((f) => aceita.test(f)).map((f) => {
     const p = path.join(dir, f);
     return { original: f, dt: fs.statSync(p).mtime.toISOString(), leia: () => fs.readFileSync(p) };
   });
@@ -232,10 +289,11 @@ async function doGraph() {
   const rel = caminhoGraph(pasta);
 
   const itens = [];
+  const aceita = extensoesDe(RAW_CONTAINER);
   let url = '/sites/' + s.id + '/drive/root:/' + rel + ':/children?$top=200';
   while (url) {
     const p = await graphGet(url, token);
-    for (const it of p.value || []) if (it.file) itens.push(it);
+    for (const it of p.value || []) if (it.file && aceita.test(it.name)) itens.push(it);
     // ⚠️ Paginacao obrigatoria: a pasta acumula um arquivo por dia por parque. Sem seguir o
     //    `@odata.nextLink` a coleta para na primeira pagina — em silencio, com cara de sucesso.
     url = p['@odata.nextLink'] ? p['@odata.nextLink'].replace(/^https:\/\/[^/]+\/v1\.0/, '') : null;
@@ -258,7 +316,7 @@ async function doGraph() {
 // ── principal ────────────────────────────────────────────────────────────────────────────────
 // ⚠️ so roda quando chamado direto: o ensaio importa este arquivo para exercitar as guardas uma a
 //    uma, e sem isto o `require` dispararia a coleta inteira.
-module.exports = { nomeFinal, carimboDe, casaConsumidor, consumidorDe, caminhoGraph, CONSUMIDORES };
+module.exports = { nomeFinal, carimboDe, casaConsumidor, consumidorDe, caminhoGraph, extensoesDe, CONSUMIDORES };
 if (require.main !== module) return;
 
 (async () => {
@@ -275,6 +333,18 @@ if (require.main !== module) return;
     if (m) maiorExistente = Math.max(maiorExistente, Number(m[1]));
   }
 
+  // 🔴 A ORDEM DE GRAVACAO E CARGA, por causa do `gen-inversores`: ele escolhe a planilha vigente
+  //    pelo `lastModified` do BLOB, que e o instante do UPLOAD — nao o do arquivo na origem.
+  //    Subindo na ordem em que a API listou, a versao mais antiga pode virar a mais recente do
+  //    container, e o painel passa a mostrar dado velho sem nada ficar vermelho. Gravando em
+  //    ordem cronologica da FONTE, o blob herda a cronologia de quem salvou o arquivo.
+  //
+  // ⚠️ NAO e a guarda 3 que exige isto, ao contrario do que a intuicao diz: `maiorExistente` e
+  //    calculado UMA vez, do que ja estava no container, e nao cresce dentro do laco. Entao um
+  //    arquivo antigo que chegue depois de um recente na MESMA rodada nao e recusado. Fica dito
+  //    porque a leitura errada e plausivel, e quem a assumisse mexeria na guarda por engano.
+  arquivos.sort((a, b) => Date.parse(a.dt) - Date.parse(b.dt));
+
   const jaTem = new Set(existentes.map((n) => n.split('/').pop()));
   const relatorio = { subiu: 0, repetido: 0, recusado: 0 };
   const falhas = [];
@@ -283,7 +353,8 @@ if (require.main !== module) return;
     const nome = nomeFinal(a.original, a.dt);
 
     // guarda 1 · o consumidor casaria este nome?
-    const c = casaConsumidor(nome, a.original);
+    // O container de destino e quem diz QUAL contrato vale — `.xlsx` existe nos dois.
+    const c = casaConsumidor(nome, a.original, RAW_CONTAINER);
     if (!c.ok) { falhas.push(a.original + ': ' + c.motivo); relatorio.recusado += 1; continue; }
 
     // guarda 2 · idempotencia PRIMEIRO: o mesmo arquivo com o mesmo carimbo ja esta la, e isso

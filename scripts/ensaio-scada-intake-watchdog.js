@@ -112,6 +112,32 @@ async function caso(rot, idades, espera) {
     + 'esperado sim      obtido ' + (cita ? 'sim' : 'nao'));
   if (!cita) falhas++;
 
+  // ── o limiar e POR CONTAINER, e sem medicao o vigia RECUSA ─────────────────────────────────
+  // 🔴 So o lado negativo prova isto: se o modulo aceitasse `inversores-raw` herdando 50/74 h,
+  //    ele carregaria limpo e alarmaria todo dia — a planilha dos inversores e salva algumas
+  //    vezes por MES. Guarda vista so passando nao esta testada.
+  for (const [cont, deveCarregar] of [
+    ['scada-raw', true], ['inversores-raw', false], ['container-que-ninguem-mediu', false],
+  ]) {
+    const antes = process.env.RAW_CONTAINER;
+    process.env.RAW_CONTAINER = cont;
+    delete require.cache[require.resolve('./gen-scada-intake-watchdog.js')];
+    let carregou = true, msg = '';
+    try { require('./gen-scada-intake-watchdog.js'); }
+    catch (e) { carregou = false; msg = e.message; }
+    if (antes === undefined) delete process.env.RAW_CONTAINER;
+    else process.env.RAW_CONTAINER = antes;
+    delete require.cache[require.resolve('./gen-scada-intake-watchdog.js')];
+
+    // ⚠️ recusar nao basta: tem de recusar pelo motivo CERTO. Uma marca orfa tambem derruba o
+    //    carregamento, e passaria por "limiar ausente" se o ensaio so olhasse o sucesso.
+    const bom = carregou === deveCarregar && (carregou || /limiar NAO MEDIDO/.test(msg));
+    console.log((bom ? '  ok     ' : '  FALHOU ') + ('container ' + cont).padEnd(50)
+      + 'esperado ' + (deveCarregar ? 'vigia ' : 'RECUSA')
+      + '   obtido ' + (carregou ? 'vigia' : 'RECUSA'));
+    if (!bom) falhas++;
+  }
+
   console.log('\n' + (falhas ? falhas + ' FALHA(S)' : 'todos os casos passaram'));
   process.exit(falhas ? 1 : 0);
 })();

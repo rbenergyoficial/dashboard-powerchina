@@ -107,6 +107,107 @@ console.log('\n6 · o caminho do SharePoint, codificado');
   ok(/O&M|O%26M/.test(rel), 'o "O&M" do nome sobreviveu');
 }
 
+console.log('\n7 · o CONTAINER desempata: `.xlsx` existe nos dois');
+// 🔴 Sem o container no contrato, um `.xlsx` de inversores casaria a regra do `gen-scada`. Ele
+//    passaria — o prefixo satisfaz as duas — mas ficaria atribuido ao consumidor errado, e guarda
+//    que aponta o consumidor errado ensina a desconfiar da guarda no dia em que ela acusar de
+//    verdade.
+{
+  const px = '20260902120000_';
+  const xlsx = px + 'Inverter Failure Control.xlsx';
+  const xlsm = px + 'Registro de Falhas.xlsm';
+  const csv = px + 'Trafo_20260901_040039.csv';
+
+  ok(M.casaConsumidor(xlsx, 'Inverter Failure Control.xlsx', 'scada-raw').quem === 'gen-scada',
+    'em scada-raw, .xlsx e do gen-scada');
+  ok(M.casaConsumidor(xlsx, 'Inverter Failure Control.xlsx', 'inversores-raw').quem === 'gen-inversores',
+    'em inversores-raw, o MESMO nome e do gen-inversores');
+
+  // o .xlsm (a planilha de falhas virou macro em 20/08/2026) so existe do lado dos inversores
+  ok(!M.casaConsumidor(xlsm, 'Registro de Falhas.xlsm', 'scada-raw').ok,
+    '.xlsm e RECUSADO em scada-raw — nenhum consumidor de la o le');
+  ok(M.casaConsumidor(xlsm, 'Registro de Falhas.xlsm', 'inversores-raw').ok,
+    '.xlsm e aceito em inversores-raw');
+
+  ok(!M.casaConsumidor(csv, 'Trafo_20260901_040039.csv', 'inversores-raw').ok,
+    'um csv de trafo e RECUSADO em inversores-raw');
+  ok(M.casaConsumidor(csv, 'Trafo_20260901_040039.csv', 'scada-raw').quem === 'gen-trafo',
+    'e continua sendo do gen-trafo em scada-raw');
+
+  // ⚠️ sem `onde`, o comportamento antigo continua valendo — quem chamava com dois argumentos
+  //    nao quebra
+  ok(M.casaConsumidor(csv, 'Trafo_20260901_040039.csv').quem === 'gen-trafo',
+    'sem container, o casamento por nome continua funcionando');
+
+  // 🔴 O nome ORIGINAL vai inteiro no fim: o consumidor dos inversores descarta por SUBSTRING
+  //    ("em revisao", "rascunho", "copia"). Um coletor que renomeasse faria um rascunho passar
+  //    por versao boa, e o painel mostraria dado provisorio sem nada ficar vermelho.
+  const rasc = M.nomeFinal('Failure Control (em revisao).xlsx', '2026-09-02T12:00:00Z');
+  ok(/em revisao/i.test(rasc), 'a marca de rascunho sobrevive ao prefixo: ' + rasc);
+}
+
+console.log('\n8 · as extensoes saem do CONTRATO, nao de uma lista escrita ao lado');
+{
+  const s = M.extensoesDe('scada-raw'), i = M.extensoesDe('inversores-raw');
+  // 🔴 `.xlsm` e o caso que uma lista a mao engoliria: a planilha de falhas dos inversores virou
+  //    macro em 20/08/2026. O filtro antigo (`/\.(csv|xlsx)$/`) a descartaria antes de qualquer
+  //    guarda — sem erro, sem log, so o painel parando de receber versao nova.
+  ok(i.test('Registro de Falhas.xlsm'), 'inversores-raw aceita .xlsm');
+  ok(!s.test('Registro de Falhas.xlsm'), 'scada-raw NAO aceita .xlsm');
+  ok(s.test('Trafo_20260901_040039.csv') && !i.test('Trafo_20260901_040039.csv'),
+    '.csv so vale em scada-raw');
+  ok(!s.test('relatorio.docx') && !i.test('relatorio.docx'), 'nenhum dos dois aceita .docx');
+  ok(!s.test('fooxlsx'), 'o ponto e obrigatorio — "fooxlsx" nao casa');
+  let sem = false;
+  try { M.extensoesDe('container-que-nao-existe'); } catch (e) { sem = true; }
+  ok(sem, 'container sem consumidor declarado ESTOURA, em vez de aceitar tudo');
+}
+
+console.log('\n9 · ordem de gravacao: cronologia da FONTE, nao da listagem');
+// 🔴 Sem ordenar, quem decide o que entra e a ordem em que a fonte respondeu:
+//    · a guarda 3 recusa o que nao for maior que o maior ja presente — um arquivo antigo que
+//      chegue DEPOIS de um recente e recusado;
+//    · e o `gen-inversores` escolhe a planilha vigente pelo `lastModified` do BLOB, entao subir
+//      fora de ordem faria a versao velha virar a mais recente do container.
+{
+  const src2 = path.join(tmp, 'inv'), dst2 = path.join(tmp, 'invout');
+  fs.mkdirSync(src2); fs.mkdirSync(dst2);
+  // ⚠️ os nomes sao escolhidos para que a ordem ALFABETICA (a que `readdirSync` devolve) seja o
+  //    INVERSO da cronologica — senao o ensaio passaria mesmo sem a ordenacao.
+  const arqs = [
+    ['A Failure Control.xlsx', '2026-09-03T10:00:00Z'],   // o mais NOVO vem primeiro em A-Z
+    ['B Failure Control.xlsx', '2026-09-02T10:00:00Z'],
+    ['C Registro de Falhas.xlsm', '2026-09-01T10:00:00Z'],
+  ];
+  for (const [n, dt] of arqs) {
+    const p = path.join(src2, n);
+    fs.writeFileSync(p, 'x');
+    fs.utimesSync(p, new Date(dt), new Date(dt));
+  }
+  // 🔴 o que se mede e a ORDEM DE GRAVACAO, e ela so existe no log que o script imprime por
+  //    arquivo. Olhar a pasta de destino nao serve: o nome final comeca pelo carimbo, entao a
+  //    listagem sai cronologica mesmo que a gravacao tenha sido ao contrario — o teste passaria
+  //    sem a correcao.
+  const log = execFileSync(process.execPath, [path.join(__dirname, 'gen-scada-intake.js')],
+    { env: { ...process.env, FONTE: 'pasta', PASTA: src2, LOCAL_OUT: dst2,
+      RAW_CONTAINER: 'inversores-raw' }, encoding: 'utf8' });
+
+  const gravou = [...log.matchAll(/<- (.+?)\s+\[/g)].map((m) => m[1]);
+  const cron = arqs.slice().sort((a, b) => Date.parse(a[1]) - Date.parse(b[1])).map((a) => a[0]);
+  const listagem = fs.readdirSync(src2);   // alfabetica, que e como o readdir/Graph respondem
+
+  ok(JSON.stringify(listagem) !== JSON.stringify(cron),
+    'a listagem NAO e a cronologia — o ensaio exercita o caso certo');
+  ok(JSON.stringify(gravou) === JSON.stringify(cron),
+    'gravou do mais VELHO para o mais novo: ' + gravou.join(' -> '));
+
+  const subiu = fs.readdirSync(dst2).sort();
+  ok(subiu.length === 3, 'os 3 subiram (' + subiu.length + ')');
+  ok(subiu.some((f) => /\.xlsm$/i.test(f)), 'o .xlsm subiu — nao foi engolido pelo filtro');
+  ok(subiu.every((f) => M.casaConsumidor(f, f.replace(/^\d{14}_/, ''), 'inversores-raw').quem
+    === 'gen-inversores'), 'os 3 sao atribuidos ao gen-inversores, nunca ao gen-scada');
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
-console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'a intake respeita o contrato de nome dos quatro consumidores'));
+console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'a intake respeita o contrato dos dois containers e dos cinco consumidores'));
 process.exit(mau ? 1 : 0);
