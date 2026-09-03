@@ -141,11 +141,34 @@ function caminhoGraph(pasta) {
   return pasta.split('/').filter(Boolean).map(encodeURIComponent).join('/');
 }
 
-function graphGet(caminho, token, bruto) {
+// 🔴 O `/content` do Graph responde 302, NAO 200. Ele redireciona para uma URL de download de
+//    curta duracao em OUTRO host. A primeira versao tratava 3xx como erro e o ensaio parou em
+//    `Graph HTTP 302` com corpo VAZIO — uma mensagem que nao diz o que fazer.
+//
+// ⚠️ E o Authorization NAO acompanha o redirecionamento. A URL de destino ja vem
+//    pre-autenticada, e mandar o bearer para outro host e vazar credencial para fora do Graph.
+//
+// ⚠️ O limite de saltos existe para o caso patologico: sem ele, um ciclo de redirecionamento
+//    vira recursao infinita em vez de erro.
+function graphGet(caminho, token, bruto, saltos) {
   const https = require('https');
+  saltos = saltos === undefined ? 5 : saltos;
   return new Promise((ok, ko) => {
-    const req = https.get({ host: GRAPH_HOST, path: '/v1.0' + caminho, family: 4,
-      headers: { Authorization: 'Bearer ' + token }, timeout: 120000 }, (res) => {
+    const abs = /^https?:\/\//.test(caminho);
+    // ⚠️ URL do WHATWG, nao `url.parse`: o Node marca o segundo como obsoleto e avisa que ele
+    //    tem implicacoes de seguranca. `search` tem de entrar no caminho — a URL do 302 leva a
+    //    autorizacao na query, e sem ela o download volta 403.
+    const u = abs ? new URL(caminho) : null;
+    const alvo = abs ? { host: u.host, path: u.pathname + u.search }
+      : { host: GRAPH_HOST, path: '/v1.0' + caminho };
+    const req = https.get({ host: alvo.host, path: alvo.path, family: 4,
+      // sem token no salto: o destino do 302 e pre-autenticado
+      headers: abs ? {} : { Authorization: 'Bearer ' + token }, timeout: 120000 }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();                       // descarta o corpo do redirecionamento
+        if (!saltos) return ko(new Error('redirecionamento demais em ' + caminho));
+        return graphGet(res.headers.location, token, bruto, saltos - 1).then(ok, ko);
+      }
       const ch = [];
       res.on('data', (c) => ch.push(c));
       res.on('end', () => {
@@ -279,7 +302,13 @@ if (require.main !== module) return;
       relatorio.recusado += 1; continue;
     }
 
-    if (!SECO) await destino.poe(nome, a.leia());
+    // 🔴 `await a.leia()` — o await tem de estar nos DOIS. No modo `pasta` o `leia()` devolve
+    //    Buffer sincrono e a falta do await passava despercebida; no modo `graph` ele devolve
+    //    PROMESSA, e o destino recebia a promessa no lugar dos bytes. Medido no primeiro ensaio
+    //    do ramo Graph: `The "data" argument must be of type string or an instance of Buffer
+    //    ... Received an instance of Promise`. `await` sobre Buffer nao custa nada, entao a
+    //    forma correta serve aos dois modos.
+    if (!SECO) await destino.poe(nome, await a.leia());
     jaTem.add(nome);
     relatorio.subiu += 1;
     console.log('  ' + (SECO ? '(seco) ' : '') + nome + '   <- ' + a.original + '   [' + c.quem + ']');
