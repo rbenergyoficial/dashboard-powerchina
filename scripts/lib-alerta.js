@@ -13,13 +13,31 @@
 // DESTINOS
 //   webhook   PA_ALERT_WEBHOOK — o de hoje. Sai quando a licenca cair.
 //   issue     uma ISSUE no proprio repositorio. Nao custa nada, nao precisa de segredo novo (o
-//             GITHUB_TOKEN do Actions basta), tem historico, e o GitHub avisa por e-mail quem
-//             acompanha o repositorio. E o dedup fica natural: uma issue ABERTA por evento; o
-//             alerta de normalizacao a FECHA.
+//             GITHUB_TOKEN do Actions basta), tem historico, e o dedup fica natural: uma issue
+//             ABERTA por evento, e o alerta de normalizacao a FECHA.
+//   email     Microsoft Graph `sendMail`, SEM SEGREDO — ver abaixo.
 //
 // ⚠️ A issue exige `issues: write` nas permissoes do workflow. Sem isso ela falha com 403 — e o
 //    modulo REGISTRA a falha em vez de engoli-la: um canal de alerta que falha calado e pior que
 //    nao ter canal.
+//
+// 🔴 A ISSUE E REGISTRO, NAO NOTIFICACAO — medido em 02/09/2026.
+// Eu havia escrito aqui que "o GitHub avisa por e-mail quem acompanha o repositorio". Medido: o
+// repo tem **1 colaborador e ZERO watchers**, e o destinatario dos alertas —
+// `francisco.barros@powerchina.com.br`, lido do fluxo "Central de Alertas · Mauriti" — **nao tem
+// conta no GitHub**. Ou seja: a issue guarda o evento e nao avisa a pessoa que precisa saber.
+//
+// Por isso o canal de e-mail existe, e por isso ele nao e opcional na aposentadoria do fluxo.
+//
+// 🔴 E ELE NAO USA SEGREDO. O GitHub troca um token de identidade proprio por um token do Graph,
+// pela mesma credencial federada do relogio — amarrada a
+// `repo:rbenergyoficial/dashboard-powerchina:ref:refs/heads/main`. Nao ha senha para vazar nem
+// girar, o que importa num repo PUBLICO. Exige `id-token: write` no workflow.
+//
+// ⚠️ DIVIDA DECLARADA: a permissao `Mail.Send` de APLICACAO alcanca qualquer caixa do tenant ate
+//    ser restringida por `New-ApplicationAccessPolicy` (Exchange Online PowerShell). Enquanto isso
+//    nao for feito, o que limita o alcance e a credencial federada — so o branch main deste repo
+//    consegue pedir o token. Ver `ALERTAS.md`.
 'use strict';
 const https = require('https');
 
@@ -27,6 +45,78 @@ const REPO = process.env.GH_REPO || 'rbenergyoficial/dashboard-powerchina';
 const GH = process.env.GH_TOKEN || process.env.GITHUB_TOKEN || '';
 const WEBHOOK = (process.env.PA_ALERT_WEBHOOK || '').trim();
 const ROTULO = process.env.ALERTA_ROTULO || 'alerta-automatico';
+
+// e-mail: so liga quando as quatro pecas existem. Faltando qualquer uma, o canal fica '-' em vez
+// de falhar — os outros destinos nao podem morrer junto com este.
+const MAIL_TENANT = (process.env.AZ_MAIL_TENANT_ID || '').trim();
+const MAIL_CLIENT = (process.env.AZ_MAIL_CLIENT_ID || '').trim();
+const MAIL_DE = (process.env.MAIL_DE || '').trim();
+const MAIL_PARA = (process.env.MAIL_PARA || '').trim();
+const TEM_OIDC = !!(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
+
+function pedeJson(opts, corpo) {
+  return new Promise((ok, ko) => {
+    const r = https.request(opts, (res) => {
+      const b = [];
+      res.on('data', (c) => b.push(c));
+      res.on('end', () => {
+        const t = Buffer.concat(b).toString('utf8');
+        if (res.statusCode >= 300) {
+          return ko(new Error('HTTP ' + res.statusCode + ' · ' + t.slice(0, 200)));
+        }
+        ok(t ? JSON.parse(t) : null);
+      });
+    });
+    r.on('error', ko);
+    if (corpo) r.write(corpo);
+    r.end();
+  });
+}
+
+// 1) o GitHub emite um token de identidade para o audience que o Entra espera
+async function idTokenGitHub() {
+  const u = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+  u.searchParams.set('audience', 'api://AzureADTokenExchange');
+  const r = await pedeJson({ hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+    headers: { Authorization: 'Bearer ' + process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN },
+    timeout: 30000 });
+  return r.value;
+}
+
+// 2) o Entra o troca por um token do Graph — sem senha, so a asercao
+async function tokenGraph() {
+  const corpo = new URLSearchParams({
+    client_id: MAIL_CLIENT,
+    scope: 'https://graph.microsoft.com/.default',
+    grant_type: 'client_credentials',
+    client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+    client_assertion: await idTokenGitHub(),
+  }).toString();
+  const r = await pedeJson({ hostname: 'login.microsoftonline.com',
+    path: '/' + MAIL_TENANT + '/oauth2/v2.0/token', method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(corpo) }, timeout: 30000 }, corpo);
+  return r.access_token;
+}
+
+async function mandaEmail(acao) {
+  const token = await tokenGraph();
+  const corpo = JSON.stringify({
+    message: {
+      subject: String(acao.assunto || acao.tipo || 'Alerta Mauriti').slice(0, 240),
+      // O corpo dos vigias ja e HTML (`<b>`, `<br>`, `<ul>`) — declarar `Text` mostraria as tags.
+      body: { contentType: 'HTML', content: texto(acao.corpo) },
+      toRecipients: MAIL_PARA.split(/[;,]/).map((e) => e.trim()).filter(Boolean)
+        .map((e) => ({ emailAddress: { address: e } })),
+    },
+    saveToSentItems: false,
+  });
+  await pedeJson({ hostname: 'graph.microsoft.com',
+    path: '/v1.0/users/' + encodeURIComponent(MAIL_DE) + '/sendMail', method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(corpo) }, timeout: 60000 }, corpo);
+  return 'enviado para ' + MAIL_PARA;
+}
 
 function pedeGh(caminho, metodo, corpo) {
   return new Promise((ok, ko) => {
@@ -88,11 +178,40 @@ async function achaAberta(titulo) {
  * @returns { webhook, issue }  o que cada destino respondeu ('-' = nao configurado)
  */
 async function alerta(acao) {
-  const out = { webhook: '-', issue: '-' };
+  const out = { webhook: '-', issue: '-', email: '-' };
+
+  // 🔴 NORMALIZACAO SEM EVENTO ABERTO NAO E NOTICIA — e sem esta guarda vira ENXURRADA.
+  // O vigia da intake do SCADA chama `resolve` a CADA rodada em que esta tudo bem. O canal de
+  // issue ja tratava isso ("nada aberto para fechar"), mas o WEBHOOK nao sabe o que e `resolve`:
+  // ele so posta, e o fluxo manda e-mail. Ou seja, hoje sai um "normalizada" por rodada.
+  //
+  // Acrescentar o canal de e-mail sem corrigir isto seria multiplicar o ruido — e alerta que
+  // chega todo dia sem motivo ensina a ignorar o alerta, que e o oposto do que este modulo existe
+  // para fazer. Com evento aberto, a confirmacao continua saindo por todos os canais.
+  if (acao.resolve && GH) {
+    const jaAberta = await achaAberta(tituloDe(acao)).catch(() => null);
+    if (!jaAberta) {
+      out.issue = 'nada aberto para fechar';
+      console.log('  alerta [' + (acao.chave || acao.tipo) + '] · nada aberto — '
+        + 'nenhum canal acionado');
+      return out;
+    }
+  }
 
   if (WEBHOOK) {
     try { out.webhook = 'HTTP ' + (await postWebhook(WEBHOOK, acao)); }
     catch (e) { out.webhook = 'FALHOU: ' + e.message; }
+  }
+
+  if (MAIL_TENANT && MAIL_CLIENT && MAIL_DE && MAIL_PARA) {
+    // 🔴 Dito, nunca engolido: sem `id-token: write` no workflow o canal simplesmente nao existe,
+    //    e canal de alerta ausente em silencio e o defeito que este modulo combate.
+    if (!TEM_OIDC) {
+      out.email = 'FALHOU: sem OIDC no job (falta `id-token: write` nas permissoes do workflow)';
+    } else {
+      try { out.email = await mandaEmail(acao); }
+      catch (e) { out.email = 'FALHOU: ' + e.message; }
+    }
   }
 
   if (GH) {
@@ -125,7 +244,7 @@ async function alerta(acao) {
   // 🔴 REGISTRA sempre, inclusive a falha. Canal de alerta que falha calado e pior que canal
   //    nenhum: some o alerta E some a noticia de que ele sumiu.
   console.log('  alerta [' + (acao.chave || acao.tipo) + '] · webhook: ' + out.webhook
-    + ' · issue: ' + out.issue);
+    + ' · issue: ' + out.issue + ' · email: ' + out.email);
   return out;
 }
 

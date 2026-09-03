@@ -111,6 +111,21 @@ const acha = (t) => estado.issues.find((i) => i.title === t);
   ok(acha(tTel).state === 'closed', 'a issue da telemetria foi fechada');
   ok(abertas().length === 0, 'nada aberto sobrou');
 
+  console.log('\n3b · resolver o que NAO esta aberto nao aciona canal nenhum');
+  // 🔴 O vigia da intake do SCADA chama `resolve` a CADA rodada em que esta tudo bem. O canal de
+  //    issue ja tratava isso, mas o webhook nao sabe o que e `resolve` — ele so posta, e o fluxo
+  //    manda e-mail. Sem esta guarda, ligar o canal de e-mail sairia como um "normalizada" por
+  //    rodada. Alerta que chega todo dia sem motivo ensina a ignorar o alerta.
+  {
+    const antes = acha(tTel).comentarios.length;
+    const r = await alerta({ tipo: 'normalizado', ...EV_TELEMETRIA, resolve: true,
+      assunto: 'voltou de novo', corpo: 'x' });
+    ok(r.issue === 'nada aberto para fechar', 'a issue diz que nao havia o que fechar');
+    ok(r.webhook === '-' && r.email === '-', 'webhook e e-mail nem foram acionados');
+    ok(acha(tTel).comentarios.length === antes, 'e nenhum comentario novo foi escrito');
+    ok(!entregou(r), 'e nao conta como entrega');
+  }
+
   console.log('\n4 · o evento de MEDIDOR corre em paralelo, sem se confundir');
   await alerta({ tipo: 'medidor_fora', ...EV_MEDIDOR, assunto: '2 medidores fora', corpo: 'e' });
   await alerta({ tipo: 'falha', ...EV_TELEMETRIA, assunto: 'caiu de novo', corpo: 'f' });
@@ -120,13 +135,20 @@ const acha = (t) => estado.issues.find((i) => i.title === t);
   ok(abertas()[0].title === tTel, 'a que sobrou aberta e a da telemetria');
 
   console.log('\n5 · entregou() le a resposta do lib-alerta');
-  ok(entregou({ webhook: '-', issue: 'abriu #3' }), 'so a issue basta (webhook desligado)');
-  ok(entregou({ webhook: 'HTTP 202', issue: '-' }), 'so o webhook basta (issue desligada)');
-  ok(entregou({ webhook: 'FALHOU: x', issue: 'comentou #3' }), 'um canal falhou, o outro entregou');
-  ok(!entregou({ webhook: '-', issue: '-' }), 'nenhum canal configurado: NAO entregue');
-  ok(!entregou({ webhook: 'FALHOU: x', issue: 'FALHOU: y' }), 'os dois falharam: NAO entregue');
-  ok(!entregou({ webhook: '-', issue: 'nada aberto para fechar' }),
+  const E = (o) => entregou({ webhook: '-', issue: '-', email: '-', ...o });
+  ok(E({ issue: 'abriu #3' }), 'so a issue basta');
+  ok(E({ webhook: 'HTTP 202' }), 'so o webhook basta');
+  ok(E({ email: 'enviado para fulano@x.com' }), 'so o e-mail basta');
+  ok(E({ webhook: 'FALHOU: x', issue: 'comentou #3' }), 'um canal falhou, o outro entregou');
+  ok(!E({}), 'nenhum canal configurado: NAO entregue');
+  ok(!E({ webhook: 'FALHOU: x', issue: 'FALHOU: y', email: 'FALHOU: z' }),
+    'os tres falharam: NAO entregue');
+  ok(!E({ issue: 'nada aberto para fechar' }),
     'fechar o que nao existe nao conta como entrega');
+  // 🔴 O canal de e-mail sem `id-token: write` responde com FALHOU, e isso NAO pode contar como
+  //    entrega — foi para dizer isso em voz alta que ele nao devolve '-' nesse caso.
+  ok(!E({ email: 'FALHOU: sem OIDC no job (falta `id-token: write` ...)' }),
+    'e-mail sem OIDC nao conta como entrega');
 
   console.log('\n' + (mau ? mau + ' FALHA(S)' : 'tudo passou'));
   process.exit(mau ? 1 : 0);

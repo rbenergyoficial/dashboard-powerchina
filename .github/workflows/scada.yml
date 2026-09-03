@@ -17,9 +17,13 @@ concurrency:
   cancel-in-progress: true
 # ⚠️ `issues: write` e o que o canal de alerta por issue exige. Sem ela ele falha com 403 —
 #    e canal de alerta que falha calado e pior que canal nenhum.
+# 🔴 `id-token: write`: o canal de E-MAIL usa OIDC — o GitHub troca um token de identidade proprio
+#    por um token do Graph, sem segredo nenhum. Sem esta permissao o job nao consegue pedi-lo, e o
+#    canal responde FALHOU em vez de sumir calado.
 permissions:
   contents: read
   issues: write
+  id-token: write
 
 jobs:
   gen:
@@ -49,4 +53,8 @@ jobs:
           MODO: ${{ github.event.inputs.vigia_modo || 'vigiar' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/gen-scada-intake-watchdog.js

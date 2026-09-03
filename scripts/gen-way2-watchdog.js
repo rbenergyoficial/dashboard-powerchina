@@ -41,7 +41,7 @@ const EV_MEDIDOR = { chave: 'way2:medidores', titulo: 'Medidores Way2 sem comuni
 
 // Entregue = QUALQUER canal aceitou. Antes isto era "o webhook respondeu"; com dois destinos,
 // bastar um é justamente o motivo de existir o segundo. '-' = canal não configurado.
-const entregou = (r) => ['webhook', 'issue'].some((k) => {
+const entregou = (r) => ['webhook', 'issue', 'email'].some((k) => {
   const v = String(r[k]);
   return v !== '-' && !v.startsWith('FALHOU') && !v.startsWith('nada aberto');
 });

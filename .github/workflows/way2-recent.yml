@@ -9,6 +9,9 @@ permissions:
   # ⚠️ o canal de alerta novo abre ISSUE no proprio repositorio — sem isto ele falha com 403,
   #    e canal de alerta que falha e o pior lugar para uma permissao faltando.
   issues: write
+  # 🔴 E o canal de E-MAIL usa OIDC: o GitHub troca um token de identidade proprio por um token do
+  #    Graph, sem segredo nenhum. Sem isto o job nao consegue pedi-lo, e o canal responde FALHOU.
+  id-token: write
 concurrency:
   group: way2-recent
   cancel-in-progress: true
@@ -86,6 +89,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/gen-relogio-watchdog.js
       # 🔴 SEGUNDO DESTINO. Este vigia falava so pelo webhook do Power Automate — ou seja, o vigia
       # da UNICA entrada de dado do ao-vivo tinha um canal so, e esse canal morre com a licenca.
@@ -97,6 +104,10 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           LIMIAR_MIN: '30'
