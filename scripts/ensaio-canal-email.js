@@ -54,10 +54,28 @@ const { alerta } = require('./lib-alerta');
     process.exit(1);
   }
   console.log('\ncanais exercitados de ponta a ponta: ' + ativos.join(', '));
+
   // ⚠️ Fecha a issue do ensaio: deixa-la aberta poria um alarme falso no radar de quem olha as
   //    issues para saber se ha algo errado.
-  await alerta({ tipo: 'ensaio-canal', chave: 'ensaio:canal', resolve: true,
+  //
+  // 🔴 E ela precisa de ESPERA E REPETICAO. A listagem de issues do GitHub e eventualmente
+  //    consistente: medido em 02/09/2026, o `resolve` disparado ~1 s depois da criacao respondeu
+  //    "nada aberto para fechar" e a issue #5 ficou aberta. Em producao isso nao aparece — o
+  //    alerta e a normalizacao ficam minutos ou horas separados — mas aqui os dois sao colados,
+  //    e um ensaio que suja o repositorio ensina a ignorar o repositorio.
+  const fechar = { tipo: 'ensaio-canal', chave: 'ensaio:canal', resolve: true,
     titulo: 'Ensaio do canal de alerta',
     assunto: '[ENSAIO — ignore] canal conferido · ' + quando + ' UTC',
-    corpo: 'O ensaio terminou. Nada a fazer.' });
+    corpo: 'O ensaio terminou. Nada a fazer.' };
+  let fechou = false;
+  for (const espera of [6000, 12000, 20000]) {
+    await new Promise((s) => setTimeout(s, espera));
+    const f = await alerta(fechar);
+    if (String(f.issue).startsWith('fechou')) { fechou = true; break; }
+    console.log('  a listagem ainda nao via a issue — repetindo');
+  }
+  if (!fechou) {
+    console.error('\nNAO consegui fechar a issue do ensaio. Feche-a a mao: ela nao e alarme.');
+    process.exit(1);
+  }
 })().catch((e) => { console.error('FALHOU:', e.message); process.exit(1); });
