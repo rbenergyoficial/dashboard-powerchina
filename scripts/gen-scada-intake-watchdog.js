@@ -108,13 +108,18 @@ const LIMIAR = {
   'scada-raw': { alerta: 50, critico: 74 },
   // 'inversores-raw': PENDENTE — exige medir a distribuicao dos vaos no proprio container.
 };
-if (!LIMIAR[RAW]) {
+// 🔴 A RECUSA E SO DO `vigiar`. `MODO=medir` existe justamente para PRODUZIR o limiar de um
+//    container novo — bloquea-lo aqui tornaria o caminho documentado impossivel de percorrer:
+//    para medir seria preciso ja ter o numero que se quer medir. Ovo e galinha, e foi assim que
+//    a primeira versao desta guarda saiu.
+if (!LIMIAR[RAW] && MODO !== 'medir') {
   throw new Error('limiar NAO MEDIDO para o container "' + RAW + '". A cadencia de cada container '
-    + 'e diferente; copiar o numero de outro produz alarme que acende sempre. Meca os vaos e '
-    + 'acrescente em LIMIAR.');
+    + 'e diferente; copiar o numero de outro produz alarme que acende sempre. Rode MODO=medir '
+    + 'neste container e acrescente o numero MEDIDO em LIMIAR.');
 }
-const ALERTA_H = LIMIAR[RAW].alerta;
-const CRITICO_H = LIMIAR[RAW].critico;
+// no modo medir os limiares nao julgam nada — servem so de referencia impressa ao lado
+const ALERTA_H = (LIMIAR[RAW] || {}).alerta ?? null;
+const CRITICO_H = (LIMIAR[RAW] || {}).critico ?? null;
 
 const INTAKE = require('./gen-scada-intake.js');
 
@@ -209,7 +214,11 @@ function lotes(v) {
 // ── MODO=medir ───────────────────────────────────────────────────────────────────────────────
 function medir(m) {
   const agora = Date.now();
-  console.log('container `' + RAW + '` · ' + new Date(agora).toISOString() + '\n');
+  console.log('container `' + RAW + '` · ' + new Date(agora).toISOString());
+  console.log(LIMIAR[RAW]
+    ? '  limiar em uso: ' + ALERTA_H + ' h alerta / ' + CRITICO_H + ' h critico\n'
+    : '  SEM LIMIAR MEDIDO — este container ainda nao e vigiado. Escolha os cortes na\n'
+      + '  distribuicao abaixo (o p90 e a cauda conhecida) e acrescente em LIMIAR.\n');
   for (const f of FAMILIAS) {
     const v = m.get(f.nome);
     if (!v.length) { console.log(f.nome.padEnd(38) + 'NENHUM arquivo'); continue; }

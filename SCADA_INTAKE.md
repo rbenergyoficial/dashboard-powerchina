@@ -100,4 +100,8 @@ dele não foi medido — lá a equipe salva a planilha algumas vezes por **mês*
 do SCADA acenderia um alarme por dia, e alarme que acende sempre ensina a ignorar a ferramenta. O
 vigia **recusa carregar** para um container sem limiar medido, em vez de inventar o número.
 
+⚠️ A recusa vale só para `MODO=vigiar`. `MODO=medir` roda em qualquer container — é ele que
+produz a distribuição de onde o limiar sai, e bloqueá-lo tornaria o caminho impossível de
+percorrer: para medir seria preciso já ter o número.
+
 **Não desligue estes fluxos** antes de o ramo Graph rodar e reproduzir o que eles fazem.
