@@ -1,0 +1,38 @@
+name: Ensaio do canal de alerta (manda UM e-mail de teste)
+
+# 🔴 SO POR DISPATCH, nunca por cron. Ele manda um alerta de VERDADE pelos canais configurados,
+# para provar o caminho de rede — que os outros ensaios nao tocam, porque rodam contra um GitHub
+# simulado de proposito.
+#
+# Canal de alerta que nunca foi exercitado nao esta testado: o dia em que ele falhar sera o dia em
+# que ele precisava funcionar. Este workflow existe para que esse dia nao seja o primeiro teste.
+#
+# ⚠️ O assunto diz "[ENSAIO — ignore]". Um alerta de ensaio parecido com um de verdade custa uma
+#    ligacao de madrugada.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  # o canal de e-mail usa OIDC — sem isto ele responde FALHOU e o ensaio reprova, que e o certo
+  id-token: write
+
+jobs:
+  ensaiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Mandar um alerta de teste
+        env:
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/ensaio-canal-email.js
