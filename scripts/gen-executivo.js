@@ -1024,7 +1024,12 @@ async function writeOut(obj, nome) {
         { k: 'proj', label: 'Projeção de corte', v: fmt(mes.projecao.frustrada_gwh), u: 'GWh', sub: (function () { const ant = S[S.length - 2]; return ant ? '' + lbl(ant.mes) + ' fechou em ' + fmt(ant.frustrada_gwh) + ' GWh' : 'no fechamento do mes'; })(),
           var: '', var_cor: '#8B93A1', cor: '#5C86BE',
           spark: path(S.map(s => s.frustrada_gwh), '#5C86BE'), spark_ini: ini, spark_fim: fim },
-        { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h', sub: 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
+        // 🔴 `cur.dias` conta os dias que o OPERADOR publicou e e NULO no mes que so a nossa medicao
+        //    conhece (todo dia 1o, ate a publicacao sair). O texto saia "mes parcial · dia null de 30"
+        //    — em texto publico. Sem publicacao o valor do cartao ja e nulo; a linha de apoio diz o
+        //    motivo, com a MESMA frase dos cartoes do Sumario, em vez de contar dias que nao existem.
+        { k: 'horas', label: 'Horas em restrição', v: fmt(cur.horas_restricao), u: 'h',
+          sub: cur.dias == null ? 'o operador ainda não publicou' : 'mês parcial · dia ' + cur.dias + ' de ' + diasTotal,
           var: '', var_cor: '#8B93A1', cor: '#C08A45',
           spark: path(S.map(s => s.horas_restricao), '#C08A45'), spark_ini: ini, spark_fim: fim },
       ]; })(),
@@ -2315,7 +2320,9 @@ async function writeOut(obj, nome) {
       fonte: PRECOD._fonte,
     };
     // 🔴 o rótulo do bloco de pré-COD vai nas TRÊS línguas (o código ENE/CNF/REL não muda)
-    out.pre_cod_razoes.tiles.forEach((z) => rot.localiza(z, ['nome', 'classe_lbl', 'u']));
+    // `l` e o CODIGO da razao (ENE/CNF/REL/ND), igual nas tres linguas — a irma existe para a
+    // paridade fechar no construtor, que exige irma em toda linha da raiz que o painel le
+    out.pre_cod_razoes.tiles.forEach((z) => rot.localiza(z, ['l', 'nome', 'classe_lbl', 'u']));
     console.log('pré-COD por razão (' + PRECOD._revisao + '): ' + P.total_gwh + ' GWh · '
       + P.por_razao.map(z => z.codigo + ' ' + z.gwh).join(' · ')
       + '  [janela art.3º = ' + PRECOD.janela_art3.total_gwh + ' GWh, fora da tela]');

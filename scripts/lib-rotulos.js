@@ -20,7 +20,9 @@
 // ⚠️ UNIDADE é a mesma nas três línguas, e precisa estar aqui: sem isto o relatório acusaria
 //    `MW`, `%` e `min` a cada execução, e alarme que acende sempre ensina a ignorar a ferramenta.
 const IDENT = ['MW', 'GWh', 'MWh', 'kWh', 'kW', 'kV', 'MVA', 'MVAr', '%', 'h', 'min', 'W/m²',
-  '°C', 'm/s', 'mm', 'V', 'A', 'pp', 'Way2', 'ONS', 'SCADA', 'MUST'];
+  '°C', 'm/s', 'mm', 'V', 'A', 'pp', 'Way2', 'ONS', 'SCADA', 'MUST',
+  // codigos das razoes de restricao do operador — sao a sigla oficial, nao se traduzem
+  'ENE', 'CNF', 'REL', 'ND'];
 
 const DIC = {
   // --- barra de selos (way2_saude.json) · 13 páginas -----------------------
@@ -95,6 +97,7 @@ const DIC = {
     en: 'the limitation is recorded for the complex', zh: '限电按电站群整体记录' },
   'no fechamento do mês': { en: 'at month close', zh: '月末结算时' },
   'no fechamento do mes': { en: 'at month close', zh: '月末结算时' },
+  'o operador ainda não publicou': { en: 'the operator has not published yet', zh: '运营方尚未发布' },
   // linha de MÉDIA da tabela por usina — rótulo, não entidade
   'MÉDIA': { en: 'AVERAGE', zh: '平均' },
 };

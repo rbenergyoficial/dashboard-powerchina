@@ -7,6 +7,7 @@
  * Modo teste local: LOCAL_DIR (pasta com os 2 xlsx) / LOCAL_OUT (arquivo de saída).
  */
 const XLSX = require('xlsx');
+const rot = require('./lib-rotulos.js');   // rotulo de mes nas tres linguas (paginas EN/中文)
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'inversores-raw';
 // planilha que o nome declara NÃO ser a vigente. O humano foi explícito: cópia antiga e rascunho
 // não valem como fonte. Sai por NOME porque é o que o autor marca de propósito — conteúdo não diz
@@ -368,6 +369,8 @@ function analyze(wb1, wb2) {
   enrich(P1.por_mes, (x, i, mx) => x.n === mx ? COR.brand : COR.neutral); P1.por_mes.forEach(x => x.lbl = mesLbl(x.mes));
   enrich(P2.bad_actors, x => x.inv.startsWith('M1/TS07') ? COR.crit : (x.inv.startsWith('M3/TS04') ? COR.brand : COR.neutral));
   enrich(P2.isolamento_por_mes, x => x.n >= 300 ? COR.crit : COR.neutral); P2.isolamento_por_mes.forEach(x => x.lbl = mesLbl(x.mes));
+  // o painel de confiabilidade em ingles lia `lbl` sem irma e mostrava o mes em portugues
+  rot.localizaTudo(P1.por_mes, ['lbl']); rot.localizaTudo(P2.isolamento_por_mes, ['lbl']);
   { const tot = P2.por_classe.reduce((a, x) => a + x.n, 0) || 1; const cm = { 'Rede': COR.blue, 'Aviso/Sistema': COR.faint, 'Arranjo FV': COR.teal, 'Inversor · anomalia': COR.brand, 'Inversor · isolamento': COR.warn, 'Inversor · corrente': COR.crit };
     P2.por_classe.forEach(x => { x.pct = Math.round(x.n / tot * 100); x.cor = cm[x.classe] || COR.neutral; }); }
   cruzado.exemplos.forEach(x => { x.cor = /estufado|carboni|superaque|ventoinha/i.test(x.modo_troca) ? COR.crit : (/anomalia/i.test(x.modo_troca) ? COR.brand : COR.faint); });
