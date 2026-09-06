@@ -270,7 +270,7 @@ function guardaTextoPublico(obj) {
   }
 }
 
-async function writeOut(obj, nome) {
+async function writeOut(obj, nome, opts) {
   // 🔴 o rótulo de MÊS sai nas três línguas — varredura, não caça a cada ponto de emissão
   // ⚠️ `label` e `sub` sao o TITULO e a linha de apoio dos cartoes da banda de KPI. Eles
   //    ficaram de fora ate 02/09/2026 porque `label` nao estava na lista de campos de rotulo
@@ -287,8 +287,16 @@ async function writeOut(obj, nome) {
     require('fs').writeFileSync(f, json); return json.length; }
   const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE;
   if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER); await cont.createIfNotExists();
-  await cont.getBlockBlobClient(alvo).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
+  const cli = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER); await cli.createIfNotExists();
+  // ⚠️ `gzip: true` grava comprimido com o cabecalho certo — o Azure NAO comprime sozinho, e um
+  //    blob que o portal baixa por abertura paga o peso cru na rede. Navegador e Infinity
+  //    descomprimem sem saber. So entra onde for pedido, para nao mudar o que ja esta no ar.
+  if (opts && opts.gzip) {
+    const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'));
+    await cli.getBlockBlobClient(alvo).upload(gz, gz.length, { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
+    return gz.length;
+  }
+  await cli.getBlockBlobClient(alvo).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
   return json.length; }
 
 (async () => {
@@ -2535,6 +2543,20 @@ async function writeOut(obj, nome) {
     const dias = [...new Set(perfil.map(x => x.dia))].sort();
     const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json');
     console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
+    // 🔴 perfil_recente.json — o recorte LEVE dos ultimos 8 dias, para o portal. O perfil inteiro
+    //    pesa 1,6 MB na rede; a tela "Ao vivo" do portal precisa so de ontem e anteontem para
+    //    desenhar ENTREGUE contra REFERENCIA (e o vao entre eles, que e o impedido). Baixar 31
+    //    dias para mostrar um seria o mesmo defeito do way2_recent de 7,6 MB, com outro nome.
+    // ⚠️ E a MESMA linha do perfil_dia, sem recalculo: se divergir, o defeito e do recorte.
+    {
+      const rec = dias.slice(-8);
+      const perfilRec = perfil.filter(x => rec.includes(x.dia));
+      const tamR = await writeOut({ gerado_em: new Date().toISOString(), dias: rec, perfil: perfilRec,
+        nota: 'Recorte dos ultimos 8 dias de perfil_dia.json, meia hora a meia hora, por entidade. '
+          + 'ent_mw e a geracao medida; pot_mw e a referencia do operador (chega com ~1 dia de atraso: '
+          + 'o dia corrente vem sem ela, e isso e ausencia, nao zero).' }, 'perfil_recente.json', { gzip: true });
+      console.log('perfil_recente.json OK · ' + rec.length + ' dias · ' + perfilRec.length + ' pontos · ' + Math.round(tamR / 1024) + ' KB');
+    }
     // alimenta o seletor de dia SEM baixar o perfil (1 MB). Objetos, nao strings cruas: a variavel
     // do Infinity le COLUNA de tabela. Mais novo primeiro -> o padrao do seletor e o dia recente.
     out.perfil_dias = dias.slice().reverse().map(d => ({ dia: d }));

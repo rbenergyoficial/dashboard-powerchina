@@ -72,11 +72,38 @@ function monta(elet, saude) {
 
   // Rendimento por usina, na janela COMUM aos 22 circuitos. Sem a janela comum a comparacao mede
   // cobertura em vez de geracao: uma usina cujos circuitos pararam antes pareceria pior.
-  let rend = null, rendAte = null;
+  let rend = null, rendAte = null, curvas = null, kpis = null;
   const CIRC = mapaCircuitos();
   if (CIRC) {
     const sc = {};
     for (const ps of Object.values(CIRC)) for (const p of ps) sc[p] = serie(elet, p);
+
+    // 🔴 CURVAS POR ENTIDADE — a tela do portal segue o filtro (usina, PPA, ML), e antes so
+    //    tinha o conjunto: quem escolhia "M2" via a curva do complexo com o rotulo M2.
+    //    TUDO-OU-NADA POR SLOT: a entidade so existe no instante em que TODOS os seus circuitos
+    //    mediram. Somar oito de nove faria uma queda de cobertura parecer queda de geracao — e a
+    //    queda apareceria justamente no instante em que um medidor falha.
+    //    Custo medido antes de publicar: 11 entidades x 288 slots ~ 45 KB crus, ~10 KB no gzip.
+    const GRUPO = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
+    const somaDe = (ps) => horas
+      .map(h => ps.every(p => sc[p].has(h)) ? [h, r(ps.reduce((a, p) => a + sc[p].get(h), 0), 3)] : null)
+      .filter(Boolean);
+    curvas = {};
+    for (const [u, ps] of Object.entries(CIRC)) curvas[u] = somaDe(ps);
+    for (const [g, us] of Object.entries(GRUPO)) curvas[g] = somaDe(us.flatMap(u => CIRC[u]));
+    // os quatro numeros do topo, POR entidade, pela MESMA conta do conjunto — senao o cartao
+    // "Pico do dia" com M2 selecionado continuaria mostrando o pico do complexo
+    const capDe = (e) => CAP[e] != null ? CAP[e] : (GRUPO[e] || []).reduce((s, u) => s + CAP[u], 0);
+    kpis = {};
+    for (const [e, c] of Object.entries(curvas)) {
+      if (!c.length) { kpis[e] = null; continue; }
+      const en = c.reduce((s, [, v]) => s + v, 0) * 5 / 60;
+      const pk = c.reduce((a, b) => (b[1] > a[1] ? b : a));
+      const ag = c[c.length - 1], cap = capDe(e);
+      kpis[e] = { cap_mw: r(cap, 3), n: c.length, hora: ag[0], agora_mw: ag[1], pico_mw: pk[1], pico_hora: pk[0],
+        pct_cap: r(100 * pk[1] / cap, 1), energia_mwh: r(en, 1),
+        fc_pct: r(100 * en / (cap * c.length * 5 / 60), 1), media_mw: r(en / (c.length * 5 / 60), 1) };
+    }
     const todos = Object.values(sc);
     const comuns = horas.filter(h => todos.every(m => m.has(h)));
     if (comuns.length) {
@@ -101,6 +128,8 @@ function monta(elet, saude) {
     energia_mwh: r(ener, 1), fc_pct: r(100 * ener / (OUTORGA * curva.length * 5 / 60), 1),
     media_mw: r(ener / (curva.length * 5 / 60), 1),
     curva, alta,
+    // por entidade: M1..M9, PPA, ML (o Complexo e `curva`/os campos acima); null onde o mapa nao leu
+    curvas, kpis,
     rendimento: rend, rendimento_ate: rendAte,
     saude: saude ? { ok: saude.resumo && saude.resumo.ok, total: saude.resumo && saude.resumo.total,
       idade_min: saude.idade_min, ancora: saude.ancora, medidores: med } : null
