@@ -28,3 +28,13 @@ jobs:
           FORCAR: ${{ github.event.inputs.forcar }}
           RESOLUCOES: ${{ github.event.inputs.resolucoes }}
         run: node --max-old-space-size=4096 scripts/gen-way2-agg.js
+      # 🔴 Selos de frescor POR FONTE (Lote B, 06/09/2026): o cabecalho de seis paginas dizia
+      #    "11 min · 24/24" (Way2) sobre dado de trafo com 2,7 dias e de oleo com 75. Roda aqui,
+      #    de hora em hora, porque as fontes que ele mede sao diarias/trimestrais — 5 min seria
+      #    baixar 1 MB do ONS 288x/dia para nada. `if: always()`: o selo importa MAIS quando o passo
+      #    anterior falhou.
+      - name: Selos de frescor por fonte
+        if: always()
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-fontes-saude.js
