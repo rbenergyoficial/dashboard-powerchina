@@ -50,7 +50,8 @@ const HIST_BLOB = process.env.HIST_BLOB || 'inv_scada_hist.json';
 //    de aplicar o JSONata. O painel passa a ler agregados que o gerador ja calculou, e o bruto fica
 //    num blob separado que so este gerador le.
 const TOP_SERIE = 20;                                 // de quantos piores a serie diaria e publicada
-const MIN_DIAS = 10;                                  // abaixo disso a mediana do inversor nao decide
+const MIN_DIAS = 10;
+const msDoDia = (dia) => Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3;   // 00:00 BRT (UTC-3)                                  // abaixo disso a mediana do inversor nao decide
 const MIN_PARES = 5;                       // abaixo disso a mediana do TS nao separa defeito de acaso
 const GRANDEZA = 'ENERGIA DIÁRIA GERADA';
 // grandezas de SAUDE que acompanham o inversor no ranking. Nao entram na razao — servem para quem
@@ -274,7 +275,10 @@ function comparaComPares(reg) {
     if (!reg || !reg.inversores.length) { falhos++; console.log('  ATENÇÃO · sem inversor com energia em ' + a.nome.split('/').pop()); continue; }
     lidos++;
     for (const x of comparaComPares(reg))
-      serie.push({ dia: a.dia, ufv: a.parque, ts: x.ts, inv: x.inv, kwh: x.kwh, razao: x.razao, base: x.base });
+      // `ms` = epoch de 00:00 BRT do dia. O painel recorta pela janela do seletor de tempo do Grafana
+      // e NAO pode derivar isto do texto: o JSONata Go le '2026-08-10' como 00:00 UTC e ignora o
+      // offset, o que deslocaria todo ponto para as 21:00 do dia anterior na tela.
+      serie.push({ dia: a.dia, ms: msDoDia(a.dia), ufv: a.parque, ts: x.ts, inv: x.inv, kwh: x.kwh, razao: x.razao, base: x.base });
   }
   if (!serie.length) throw new Error('nenhum inversor com energia em ' + alvo.length + ' arquivo(s) — o layout do export mudou?');
 
@@ -282,6 +286,10 @@ function comparaComPares(reg) {
   const historico = await leHistorico();
   const { serie: full, novas, mantidas } = acumula(historico, serie,
     (l) => l.dia + '|' + l.ufv + '|' + l.ts + '|' + l.inv, JANELA);
+  // ⚠️ as linhas ja publicadas antes de `ms` existir recebem o campo aqui, senao o recorte por
+  //    janela as trataria como ausentes — a mesma lacuna que o `must_diario` ja pagou
+  let msRetro = 0;
+  full.forEach((l) => { if (l.ms == null) { l.ms = msDoDia(l.dia); msRetro++; } });
   const diasFull = [...new Set(full.map((l) => l.dia))].sort();
   // 🔴 GUARDA: nenhum dia que o historico tinha pode sumir, a nao ser por PODA da janela. Sem ela,
   //    uma leitura parcial da fonte encolheria a serie em silencio — e o painel mostraria menos
@@ -337,7 +345,8 @@ function comparaComPares(reg) {
   // 🔴 SO OS PIORES: a serie inteira sao 8 KB por dia na rede, entao um ano seriam 2,9 MB que o
   //    painel baixaria por completo antes de filtrar. O grafico desenha meia duzia de linhas.
   const top = new Set(inversores.slice(0, TOP_SERIE).map((x) => x.ufv + '|' + x.ts + '|' + x.inv));
-  const serie_top = full.filter((l) => top.has(l.ufv + '|' + l.ts + '|' + l.inv));
+  const serie_top = full.filter((l) => top.has(l.ufv + '|' + l.ts + '|' + l.inv))
+    .map((l) => ({ ...l, chave: l.ufv + '/' + l.ts + '/' + l.inv }));   // a chave que o filtro do painel usa
 
   const escopo = {
     pergunta: 'Qual inversor rende abaixo dos pares do mesmo transformador, antes de falhar.',
@@ -365,6 +374,7 @@ function comparaComPares(reg) {
     janela_dias: JANELA, dias_cobertos: diasFull.length, de: escopo.de, ate: escopo.ate, serie: full }, HIST_BLOB)) / 1024);
   console.log('  ' + OUT_BLOB + ' OK · ' + kb + ' KB · ' + inversores.length + ' inversores · '
     + serie_top.length + ' linhas de serie dos ' + TOP_SERIE + ' piores');
+  if (msRetro) console.log('  ms retroativo em ' + msRetro + ' linha(s) do historico');
   console.log('  ' + HIST_BLOB + ' OK · ' + kbh + ' KB · ' + full.length + ' linhas ('
     + novas + ' novas, ' + mantidas + ' do historico) · ' + diasFull.length + ' dias cobertos de ' + JANELA);
   console.log('  frota: mediana ' + r2(refM * 100) + '% · desvio robusto ' + r2(refS * 100)

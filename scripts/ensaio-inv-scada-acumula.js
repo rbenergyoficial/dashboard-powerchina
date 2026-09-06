@@ -67,6 +67,9 @@ let r = roda();
 ok(dias(r.hist).length === 3, 'o historico nasce com os 3 dias da fonte · veio ' + dias(r.hist).length);
 ok(r.pub.inversores.length === 12, '12 inversores agregados · veio ' + r.pub.inversores.length);
 ok(!('serie' in r.pub), 'o blob que o painel le NAO carrega a serie bruta');
+ok(r.pub.serie_top.every((l) => l.ms === Date.parse(l.dia + 'T03:00:00Z') && l.chave === l.ufv + '/' + l.ts + '/' + l.inv),
+  'toda linha da serie tem ms = 00:00 BRT do dia e a chave do inversor');
+ok(r.hist.serie.every((l) => typeof l.ms === 'number'), 'o historico tambem carrega ms');
 ok(r.pub.escopo.dias_cobertos === 3, 'escopo declara 3 dias cobertos · veio ' + r.pub.escopo.dias_cobertos);
 
 // ---------- 2 · o inversor fraco e reconhecido, e o limiar sai da frota ----------
