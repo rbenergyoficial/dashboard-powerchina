@@ -28,6 +28,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      # A disponibilidade por usina sai do contador de operacao do inversor; a regra mora em
+      # lib-disponibilidade.js e o ensaio a prova contra o blob publico ANTES de gerar. Ensaio
+      # vermelho = a janela do dia ou o contador mudaram de natureza: nao publicar por cima.
+      - name: Ensaio da disponibilidade por usina
+        run: node scripts/ensaio-disponibilidade.js
       - name: Gerar perdas_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

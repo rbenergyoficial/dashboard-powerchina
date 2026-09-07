@@ -63,6 +63,7 @@
  */
 const zlib = require('zlib');
 const https = require('https');
+const { disponibilidade } = require('./lib-disponibilidade.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -821,7 +822,25 @@ async function grava(nome, obj) {
     capacidade_ca_mw: CAP_CA_MW,
     cobertura_por_usina: cobertura,
     fonte_medidor: 'medidor de faturamento, o mesmo número publicado na página de comparação de fontes',
+    disponibilidade: {
+      metodo: 'tempo de operação diário de cada inversor sobre a janela do dia (mediana do complexo dos '
+        + 'contadores diurnos); média simples dos inversores da usina; grupos ponderados pelo número '
+        + 'de inversores. Inversor com contador de 24 h conta como disponível e é contado à parte.',
+      campos: { disp_pct: 'disponibilidade da usina no dia, %', inv_parados: 'inversores com menos de metade da janela',
+        inv_parciais: 'entre 50% e 90% da janela', inv_contador_24h: 'inversores cujo contador não zera à noite',
+        janela_h: 'janela de operação do dia, em horas', CX_disp_pct: 'o complexo, ponderado por inversor' },
+      nao_e: 'a disponibilidade declarada ao operador nacional (disp_pct do executivo), que é capacidade '
+        + 'declarada no nível do conjunto — as duas convivem e se conferem',
+    },
   };
+
+  // ---- disponibilidade por usina, do contador de operacao do inversor ----------------------------
+  // A regra mora em lib-disponibilidade.js, com o ensaio dela; aqui so se alimenta e se emite.
+  const DISP = disponibilidade([...porInv.values()].map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, horas: o.horas }))).porDia;
+  { const semJanela = [...DISP.entries()].filter(([, r]) => r.janela_min == null);
+    if (semJanela.length) console.log('  ⚠️ disponibilidade sem janela em ' + semJanela.length + ' dia(s): ' + semJanela.slice(0, 3).map(([d, r]) => d + ' (' + r.nota + ')').join(' · '));
+    const jan = [...DISP.values()].map((r) => r.janela_min).filter((x) => x != null);
+    if (jan.length) console.log('  disponibilidade: janela do dia ' + (Math.min(...jan) / 60).toFixed(2) + ' a ' + (Math.max(...jan) / 60).toFixed(2) + ' h em ' + jan.length + ' dias'); }
 
   const serieDiaria = [...diario.entries()].sort().map(([dia, porU]) => {
     const o = { dia, ms: Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3 };
@@ -845,6 +864,11 @@ async function grava(nome, obj) {
       }
       o[ufv + '_n_conta'] = x.n_conta;
       o[ufv + '_slots'] = x.slots;
+      { const R = DISP.get(dia); const dv = R && R.porUfv[ufv];
+        if (dv) { o[ufv + '_disp_pct'] = dv.disp_pct; o[ufv + '_inv_parados'] = dv.parados;
+          o[ufv + '_inv_parciais'] = dv.parciais; o[ufv + '_inv_contador_24h'] = dv.contador_24h; }
+        if (R && R.janela_min != null && o.janela_h == null) { o.janela_h = r2(R.janela_min / 60);
+          if (R.complexo) o.CX_disp_pct = R.complexo.disp_pct; } }
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
       // consumo proprio da usina: o que o medidor recebeu menos o que ficou liquido
       const L = liq.get(dia);

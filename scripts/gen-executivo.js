@@ -1474,6 +1474,45 @@ async function writeOut(obj, nome, opts) {
   // Derivados DEPOIS do objeto pronto, a partir de out.serie_ufv — assim nada precisa ser movido de
   // lugar e a ordem de avaliação do literal não importa.
   // Cada estrutura ganha uma linha por usina + 'Complexo'; o painel filtra com [ufv='$ufv'].
+  // ---------- 6b) DISPONIBILIDADE POR USINA, medida no inversor (06/09/2026) ----------
+  // O `disp_pct` das linhas por usina e o do CONJUNTO, replicado (escopo_complexo = 1): o operador
+  // nacional nao publica disponibilidade por usina. O humano pediu a abertura, e ela existe por
+  // outro caminho: o tempo de operacao diario de cada inversor, que o gerador de perdas passou a
+  // reduzir a `<ufv>_disp_pct` por dia. Aqui vira media do mes por entidade, em CAMPO NOVO —
+  // `disp_inv_pct` — ao lado do declarado, nunca no lugar dele: sao duas medicoes independentes
+  // (inversor contra declaracao ao operador) e a conferencia entre elas e informacao.
+  // 🔴 Ausencia sai NULA: antes de o gerador de perdas publicar o campo, ou em mes fora da janela
+  //    dele, nao ha numero — e o painel mostra vazio, nao zero.
+  {
+    let PD = null;
+    try { PD = await getJSON(BASE + 'perdas_diario.json'); }
+    catch (e) { console.log('  disponibilidade por usina: perdas_diario indisponivel (' + e.message + ') — campo fica nulo'); }
+    // a media mensal e a ponderacao dos grupos moram na lib, com o ensaio dela: aqui so se monta
+    // o mapa por dia a partir das colunas do blob diario e se distribui o resultado.
+    const MEMBROS = { Complexo: Object.keys(CAP_UFV), PPA, ML };
+    const porDia = new Map();
+    for (const d of ((PD && PD.serie) || [])) {
+      const dia = String(d.dia || ''); if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) continue;
+      const porUfv = {};
+      for (const u of Object.keys(CAP_UFV)) {
+        const v = d[u + '_disp_pct'], n = d[u + '_n_inv'];
+        if (v != null && n > 0) porUfv[u] = { disp_pct: v, n };
+      }
+      if (Object.keys(porUfv).length) porDia.set(dia, { janela_min: d.janela_h != null ? d.janela_h * 60 : 0, porUfv });
+    }
+    const acc = require('./lib-disponibilidade.js').mensal(porDia, MEMBROS);
+    let nFill = 0;
+    (out.serie_ufv || []).forEach(l => {
+      const o = acc[l.ufv + '|' + l.mes];
+      l.disp_inv_pct = o ? o.disp_pct : null;
+      l.disp_inv_dias = o ? o.dias : null;
+      if (o) { nFill++; l.disp_inv_metodo = 'Tempo de operação diário de cada inversor sobre a janela de sol do dia, '
+        + 'média dos inversores da usina; grupos ponderados pelo número de inversores. Medida no supervisório, '
+        + 'independente da disponibilidade declarada ao operador nacional (disp_pct).'; }
+    });
+    console.log('  disponibilidade por usina (inversor): ' + nFill + ' linhas entidade×mês preenchidas'
+      + (nFill ? '' : ' — o gerador de perdas ainda não publicou o campo, ou está fora da janela'));
+  }
   {
     // META RATEADA no mes corrente, para TODAS as entidades (Complexo, PPA, ML e as nove usinas).
     // O `meta_gwh` do serie_ufv e sempre do mes INTEIRO. O rateio existia so no `serie_e_media`, que
