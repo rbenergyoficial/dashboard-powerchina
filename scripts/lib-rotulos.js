@@ -89,6 +89,10 @@ const DIC = {
   // ⚠️ `Performance Ratio` e `Curtailment` ja sao termos ingleses usados em portugues no
   //    setor — em EN ficam como estao, e so o 中文 muda.
   'Performance Ratio': { en: 'Performance Ratio', zh: '性能比' },
+  // 06/09/2026: o cartao passou a usar o nome da casa — a grandeza nao e o PR da IEC
+  'Desempenho com o corte dentro': { en: 'Performance with curtailment included', zh: '含限电的绩效' },
+  'Impedido pelo operador': { en: 'Curtailed by the operator', zh: '被运营方限电' },
+  'sem alvo · aderência à referência do operador': { en: "no target · adherence to the operator's reference", zh: '无目标 · 与运营方基准的一致性' },
   'Disponibilidade': { en: 'Availability', zh: '可用率' },
   'Curtailment': { en: 'Curtailment', zh: '限电' },
   'Projeção de corte': { en: 'Curtailment projection', zh: '限电预测' },
@@ -134,6 +138,10 @@ const FORMAS = [
   { re: /^alvo (.+)$/, en: (m) => 'target ' + m[1], zh: (m) => '目标 ' + m[1] },
   { re: /^(.+) GWh jogados fora$/,
     en: (m) => m[1] + ' GWh thrown away', zh: (m) => m[1] + ' GWh 被弃' },
+  { re: /^(.+) GWh impedidos pelo operador$/,
+    en: (m) => m[1] + ' GWh curtailed by the operator', zh: (m) => m[1] + ' GWh 被运营方限电' },
+  { re: /^(.+) de (.+) GWh de potencial$/,
+    en: (m) => m[1] + ' of ' + m[2] + ' GWh of potential', zh: (m) => m[1] + ' / ' + m[2] + ' GWh 潜在发电量' },
   { re: /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/(\d{2}) fechou em (.+) GWh$/,
     en: (m) => MES_EN[m[1]] + '/' + m[2] + ' closed at ' + m[3] + ' GWh',
     zh: (m) => MES_N[m[1]] + '月/' + m[2] + ' 结算于 ' + m[3] + ' GWh' },

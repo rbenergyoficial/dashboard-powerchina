@@ -1038,15 +1038,18 @@ async function writeOut(obj, nome, opts) {
       const ini = S[0].lbl, fim = S[S.length - 1].lbl;
       const col = (bom, delta) => (bom == null || Math.abs(delta || 0) < LIMIAR) ? '#8B93A1' : (bom ? '#43966B' : '#C85C60');
       return [
-        { k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
+        // 🔴 06/09/2026: o cartao chamava de "Performance Ratio" com "alvo 90%" uma grandeza que NAO e o PR
+        //    da IEC (e aderencia a referencia do operador, com o corte no denominador — ver pipeline.md,
+        //    'PR livre') e o alvo nao tinha norma, contrato nem nota. Nome da casa, sem alvo, sem cor de estado.
+        { k: 'pr', label: 'Desempenho com o corte dentro', v: fmt(cur.pr_pct), u: '%', sub: 'sem alvo · aderência à referência do operador',
           var: cur.var_pr_pp == null ? '' : (cur.var_pr_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_pr_pp)) + ' pp',
-          var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0, cur.var_pr_pp), cor: cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60'),
+          var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0, cur.var_pr_pp), cor: '#8B93A1',
           spark: path(S.map(s => s.pr_pct), '#D9A441'), spark_ini: ini, spark_fim: fim },
         { k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
           var: cur.var_disp_pp == null ? '' : (cur.var_disp_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_disp_pp)) + ' pp',
           var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0, cur.var_disp_pp), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
           spark: path(S.map(s => s.disp_pct), '#4E9A98'), spark_ini: ini, spark_fim: fim },
-        { k: 'corte', label: 'Curtailment', v: fmt(mes.pct_cortado), u: '%', sub: fmt(mes.frustrada_gwh) + ' GWh jogados fora',
+        { k: 'corte', label: 'Impedido pelo operador', v: fmt(mes.pct_cortado), u: '%', sub: fmt(mes.frustrada_gwh) + ' GWh impedidos pelo operador',
           var: cur.var_corte_pp == null ? '' : (cur.var_corte_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_corte_pp)) + ' pp',
           var_cor: col(cur.var_corte_pp == null ? null : cur.var_corte_pp <= 0, cur.var_corte_pp), cor: '#8B7FD4',
           spark: path(S.map(s => s.corte_pct_pot), '#8B7FD4'), spark_ini: ini, spark_fim: fim },
@@ -1678,9 +1681,9 @@ async function writeOut(obj, nome, opts) {
       const antCorte = ant ? ant.cortado_gwh : null;
 
       out.cards_ufv.push(
-        { mes: mSel, ufv: u, k: 'pr', label: 'Performance Ratio', v: fmt(cur.pr_pct), u: '%', sub: 'alvo 90%',
+        { mes: mSel, ufv: u, k: 'pr', label: 'Desempenho com o corte dentro', v: fmt(cur.pr_pct), u: '%', sub: 'sem alvo · aderência à referência do operador',
           var: vPR == null ? '' : seta(vPR) + ' pp', var_cor: corVar(vPR == null ? null : vPR >= 0, vPR),
-          cor: cur.pr_pct == null ? '#8B93A1' : (cur.pr_pct >= 90 ? '#43966B' : (cur.pr_pct >= 80 ? '#C08A45' : '#C85C60')),
+          cor: '#8B93A1',   // sem alvo nao ha estado — mesmo nome e mesma ausencia de alvo do cartao do Sumario
           spark: barras(S.map(x => x.pr_pct), '#D9A441'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
         { mes: mSel, ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
           // mesma razao do card de horas: a disponibilidade e publicada para o conjunto
@@ -1689,10 +1692,12 @@ async function writeOut(obj, nome, opts) {
           cor: compl ? '#8B93A1' : (cur.disp_pct >= 97 ? '#43966B' : '#C08A45'),
           spark: barras(S.map(x => x.disp_pct), compl ? '#6E7683' : '#4E9A98'),
           spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { mes: mSel, ufv: u, k: 'corte', label: 'Curtailment', v: fmt(cur.corte_pct), u: '%',
-          sub: fmt(cur.cortado_gwh) + ' GWh jogados fora',
+        // 🔴 06/09/2026: mesmo numerador e DENOMINADOR do cartao "Frustrado por corte" do Sumario
+        //    (cortado ÷ potencial por usina somado), senao a mesma grandeza saia 24,47% aqui e 24,22% la.
+        { mes: mSel, ufv: u, k: 'corte', label: 'Impedido pelo operador', v: fmt(cur.potencial_gwh > 0 ? 100 * cur.cortado_gwh / cur.potencial_gwh : null), u: '%',
+          sub: fmt(cur.cortado_gwh) + ' de ' + fmt(cur.potencial_gwh) + ' GWh de potencial',
           var: vCorte == null ? '' : seta(vCorte) + ' pp', var_cor: corVar(vCorte == null ? null : vCorte <= 0, vCorte),
-          cor: '#8B7FD4', spark: barras(S.map(x => x.corte_pct), '#8B7FD4'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
+          cor: '#8B7FD4', spark: barras(S.map(x => x.potencial_gwh > 0 ? 100 * x.cortado_gwh / x.potencial_gwh : null), '#8B7FD4'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
         { mes: mSel, ufv: u, k: 'proj', label: 'Projeção de corte', v: fmt(projCorte), u: 'GWh',
           sub: ant ? ant.lbl + ' fechou em ' + fmt(antCorte) + ' GWh' : 'no fechamento do mês',
           var: '', var_cor: '#8B93A1', cor: '#8B7FD4',
