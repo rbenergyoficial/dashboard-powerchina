@@ -459,6 +459,16 @@ function analyze(wb1, wb2) {
   console.log('P2 <- ' + (escolhido2 || '(nenhum)'));
   if (!wb1 || !wb2) throw new Error('faltou ' + (!wb1 ? 'P1 (Failure Control)' : '') + (!wb2 ? ' P2 (Registro Falhas)' : '') + ' no container');
   const out = analyze(wb1, wb2);
+  // Frescor da FONTE, para o selo do cabecalho (gen-fontes-saude): quando a equipe salvou cada
+  // planilha e ate onde o dado dela chega. Um registro de eventos parado nao e registro velho —
+  // por isso a data em que a planilha foi salva vai SEPARADA da data do ultimo evento. Sem nome
+  // de arquivo: o blob e publico.
+  out.fontes = {
+    substituicoes_planilha_em: m1 > 0 ? new Date(m1).toISOString() : null,
+    alarmes_planilha_em: m2 > 0 ? new Date(m2).toISOString() : null,
+    substituicoes_ultima: out.p1.fatos.map(x => x.data).filter(Boolean).sort().pop() || null,
+    alarmes_ultimo_mes: out.p2.fatos.map(x => x.mes).filter(Boolean).sort().pop() || null,
+  };
   const size = await writeOut(out);
   const d = out.dicionario || {}; const e = out.estoque_sn;
   console.log('inversores.json OK · P1=' + out.p1.total + ' trocas (' + out.p1.termico_pct + '% térmico) · P2=' + out.p2.eventos + ' eventos / ' + out.p2.parques.join(',') + ' · bad-actor ' + ((out.p2.bad_actors[0] || {}).inv) + ' · ' + round(size / 1024) + ' KB');

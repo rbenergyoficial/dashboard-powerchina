@@ -17,6 +17,11 @@
 //   trafo   `trafo.yml` roda 1x/dia (10:38 UTC) sobre despejo diario  -> verde ate 36 h, ambar ate 72 h
 //   oleo    coleta TRIMESTRAL, blob gravado por push (sem cron)       -> verde ate 120 d, ambar ate 180 d
 //   ons     publicacao D+1 (consolidado 18:17 UTC)                     -> verde ate 36 h, ambar ate 60 h
+//   inversores (07/09/2026, lote invmt1): duas planilhas da equipe, lidas 2x/dia pelo `inversores.yml`.
+//           A de SUBSTITUICOES e um registro de eventos — evento que nao acontece nao e dado velho, entao
+//           a ultima troca sai CINZA (informativa) e o que leva cor e a data em que a planilha foi SALVA,
+//           contra a revisao mensal do registro (30/60 d). A de ALARMES e um export MENSAL do SCADA:
+//           idade contada do FIM do ultimo mes coberto, 45/75 d.
 //   O que se mede e a idade do ULTIMO DADO (dia/coleta/instante), nao a do blob: um gerador que
 //   republica o mesmo dado velho todo dia manteria o blob fresco e a informacao velha.
 //
@@ -89,6 +94,22 @@ async function ons() {
     ];
   } catch (e) { return [{ ic: '🛰', l: 'ONS', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
+async function inversores() {
+  try {
+    const i = await le('inversores.json'); const f = i.fontes || {};
+    if (!f.substituicoes_planilha_em || !f.alarmes_ultimo_mes) throw new Error('sem fontes');
+    const dP1 = dias(Date.parse(f.substituicoes_planilha_em));
+    const [y, m] = f.alarmes_ultimo_mes.split('-').map(Number);
+    const fimMes = new Date(Date.UTC(y, m, 0, 23, 59, 59) + 3 * 3600000);   // ultimo dia do mes coberto, 23:59 BRT
+    const dP2 = dias(fimMes.getTime());
+    const CINZA = '#8B93A1';
+    return [
+      { ic: '🔁', l: 'Última troca', v: f.substituicoes_ultima ? ddmm(f.substituicoes_ultima) : '—', u: 'registrada', c: CINZA },
+      { ic: '📋', l: 'Planilha de falhas', v: ddmm(f.substituicoes_planilha_em), u: 'salva', c: cor(dP1, 30, 60) },
+      { ic: '🔔', l: 'Alarmes até', v: String(m).padStart(2, '0') + '/' + String(y).slice(2), u: 'mês', c: cor(dP2, 45, 75) },
+    ];
+  } catch (e) { return [{ ic: '🔁', l: 'Inversores', v: 'sem leitura', u: '', c: VERMELHO }]; }
+}
 // a Way2 continua sendo a Way2: copia dos badges que o selo original ja usa, para quem quiser
 // UM arquivo so — e para o ensaio comparar o formato
 async function way2() {
@@ -97,19 +118,20 @@ async function way2() {
 }
 
 (async () => {
-  const [bt, bo, bn, bw] = await Promise.all([trafo(), oleo(), ons(), way2()]);
+  const [bt, bo, bn, bw, bi] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores()]);
   // os rotulos nas tres linguas, como o selo original — a barra esta em paginas traduzidas
-  [bt, bo, bn].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
+  [bt, bo, bn, bi].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
   const out = {
     gerado_em: new Date(AGORA).toISOString(),
     nota: 'Selos de frescor por FONTE. Cada lista mede a idade do ultimo DADO da fonte (dia, coleta ou instante), '
       + 'nao a do arquivo. Limiares pela cadencia de cada fonte: supervisorio diario (36/72 h), oleo trimestral '
-      + '(120/180 dias), ONS D+1 (36/60 h).',
-    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw,
+      + '(120/180 dias), ONS D+1 (36/60 h), planilha de substituicoes de inversores revisada mensalmente (30/60 dias), '
+      + 'export mensal de alarmes do SCADA (45/75 dias do fim do mes coberto).',
+    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi,
   };
   const json = JSON.stringify(out);
   const resumo = (l) => l.map((b) => b.l + ' ' + b.v + (b.u ? ' ' + b.u : '') + ' ' + b.c).join(' · ');
-  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn));
+  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi));
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes'); return; }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');

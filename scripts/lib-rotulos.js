@@ -30,6 +30,22 @@ const DIC = {
   'Medidores': { en: 'Meters', zh: '电表' },
   '230 kV parcial': { en: '230 kV partial', zh: '230 kV 部分' },
   '230 kV fora': { en: '230 kV down', zh: '230 kV 失电' },
+  // --- selos por fonte (fontes_saude.json) · trafos, oleo, ONS, inversores ---
+  'Supervisório': { en: 'Supervisory', zh: '监控系统' },
+  'último dia': { en: 'last day', zh: '最后一天' },
+  'Idade': { en: 'Age', zh: '数据龄' },
+  'dias': { en: 'days', zh: '天' },
+  'Última coleta': { en: 'Last sampling', zh: '最近取样' },
+  'ONS': { en: 'ONS', zh: 'ONS' },
+  'último instante': { en: 'last instant', zh: '最后时刻' },
+  'Última troca': { en: 'Last replacement', zh: '最近更换' },
+  'registrada': { en: 'recorded', zh: '已登记' },
+  'Planilha de falhas': { en: 'Failure sheet', zh: '故障表' },
+  'salva': { en: 'saved', zh: '保存于' },
+  'Alarmes até': { en: 'Alarms through', zh: '告警截至' },
+  'mês': { en: 'month', zh: '月' },
+  'Inversores': { en: 'Inverters', zh: '逆变器' },
+  'sem leitura': { en: 'no reading', zh: '无读数' },
 
   // --- banda de KPI do ONS (ons_kpis.json) · Curtailment -------------------
   'Outorga': { en: 'Granted', zh: '核准容量' },
