@@ -52,7 +52,30 @@ const HIST_BLOB = process.env.HIST_BLOB || 'inv_scada_hist.json';
 const TOP_SERIE = 20;                                 // de quantos piores a serie diaria e publicada
 const MIN_DIAS = 10;
 const msDoDia = (dia) => Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3;   // 00:00 BRT (UTC-3)                                  // abaixo disso a mediana do inversor nao decide
+// o carimbo do CSV e hora LOCAL ingenua ('2026-08-10 13:30:00'); o epoch soma o offset de -3 h,
+// pela mesma razao pela qual `msDoDia` soma: derivar isso no painel poria fuso escrito no JSONata
+const msDoInstante = (t) => Date.parse(String(t).trim().replace(' ', 'T') + 'Z') + 3 * 3600e3;
 const MIN_PARES = 5;                       // abaixo disso a mediana do TS nao separa defeito de acaso
+
+// ---------- o detalhe de MEIA HORA, para descer do dia ao horario ----------------------------
+// A razao diaria diz QUE o inversor rende menos; ela nao diz QUANDO no dia a diferenca se abre —
+// e e isso que separa partida atrasada (rede/comunicacao) de queda o dia inteiro (degradacao) de
+// teto ao meio-dia (limitacao de potencia). O contador `ENERGIA DIÁRIA GERADA` e ACUMULADO dentro
+// do dia, entao a diferenca entre dois instantes JA E a energia daquela meia hora: nao ha coluna
+// nova a ler nem arquivo novo a baixar.
+//
+// 🔴 PISO MEDIDO, nao escolhido. Na primeira e na ultima meia hora de sol todos os inversores
+//    fazem alguns kWh, e uma razao entre numeros pequenos estoura por ruido — o mesmo modo de
+//    falhar que ja obrigou a dispersao de MPPT a ser medida no pico. Medido em 08/09/2026 sobre 48
+//    dias do blob de 30 min, a energia por inversor por meia hora: mediana 100 kWh entre 8h e 15h,
+//    7,3 kWh as 6h e 2,1 kWh as 17h. Com piso de 10 kWh na MEDIANA DOS PARES sobram ~20 das ~22
+//    meias horas de geracao, e caem exatamente as pontas em que a razao nao decide nada.
+const PISO_HORA = 10;                      // kWh na mediana dos pares; abaixo disso a linha nao existe
+const JANELA_HORA = Number(process.env.JANELA_HORA || 30);   // dias de detalhe fino publicados
+// 🔴 BLOB PROPRIO. A pagina de Alarmes tem varios paineis lendo `inv_scada.json`, e o Infinity
+//    baixa a URL INTEIRA antes de aplicar o JSONata: enfiar o detalhe fino ali faria TODOS eles
+//    pagarem por ele. Mesma separacao do historico bruto.
+const HORA_BLOB = process.env.HORA_BLOB || 'inv_scada_hora.json';
 const GRANDEZA = 'ENERGIA DIÁRIA GERADA';
 // grandezas de SAUDE que acompanham o inversor no ranking. Nao entram na razao — servem para quem
 // abrir a linha entender se a queda tem cara de sujeira, de temperatura ou de isolamento.
@@ -198,14 +221,61 @@ function leUsinaDia(buf) {
     const vals = linhas.map((l) => num(l[melhor])).filter((v) => v != null);
     const kk = ts + '|' + iv;
     const o = inv.get(kk) || inv.set(kk, { ts, inv: iv, kwh: null, saude: {} }).get(kk);
-    if (g === GRANDEZA) o.kwh = Math.max(...vals);          // contador diario: o dia e o MAIOR valor
-    else o.saude[g] = r2(vals[vals.length - 1]);            // saude: a ultima leitura do dia
+    if (g === GRANDEZA) {
+      o.kwh = Math.max(...vals);                            // contador diario: o dia e o MAIOR valor
+      // a curva do contador fica ALINHADA ao carimbo — `vals` perde o instante ao filtrar nulo, e
+      // sem instante nao ha meia hora a diferenciar
+      o.curva = linhas.map((l) => ({ t: l[0], v: num(l[melhor]) })).filter((p) => p.v != null);
+    } else o.saude[g] = r2(vals[vals.length - 1]);          // saude: a ultima leitura do dia
   }
   // ⚠️ A falha tem de DIZER O QUE VIU. Sem isto, "nenhum inversor com energia" manda adivinhar
   // entre layout mudado, grandeza renomeada e regex errado — e foi o regex, das tres vezes.
   const achados = [...inv.values()].filter((x) => x.kwh != null);
   if (!achados.length && vistas.length) console.log('    colunas de inversor que NAO casaram: ' + vistas.join(' | '));
   return { dia: linhas[0][0].slice(0, 10), inversores: achados };
+}
+
+// ---------- a mesma razao, meia hora a meia hora ----------------------------------------------
+// Mesma regra do dia, uma resolucao abaixo: energia do inversor no intervalo contra a MEDIANA dos
+// pares do mesmo TS NO MESMO INSTANTE, com a mesma queda para a usina quando o TS e pequeno.
+// Comparar no mesmo instante e o que neutraliza nuvem — ela derruba os pares junto, e a razao nao
+// se mexe.
+function intraDia(reg) {
+  // 1 · a energia de cada meia hora, por inversor
+  const porInv = [];
+  for (const x of reg.inversores) {
+    if (!x.curva || x.curva.length < 2) continue;
+    const passos = [];
+    for (let i = 1; i < x.curva.length; i++) {
+      const d = x.curva[i].v - x.curva[i - 1].v;
+      // ⚠️ o contador ACUMULA no dia: degrau negativo e zeragem ou releitura, nao energia negativa
+      if (d >= 0) passos.push({ t: x.curva[i].t, e: d });
+    }
+    if (passos.length) porInv.push({ ts: x.ts, inv: x.inv, passos });
+  }
+  // 2 · agrupa por instante
+  const porT = new Map();
+  for (const x of porInv) for (const p of x.passos) {
+    const o = porT.get(p.t) || porT.set(p.t, []).get(p.t);
+    o.push({ ts: x.ts, inv: x.inv, e: p.e });
+  }
+  // 3 · a razao, com a mesma queda de TS do dia e o piso medido
+  const out = [];
+  for (const [t, lista] of porT) {
+    const medUsina = mediana(lista.map((x) => x.e).filter((v) => v > 0));
+    const porTS = {};
+    for (const x of lista) (porTS[x.ts] = porTS[x.ts] || []).push(x.e);
+    for (const x of lista) {
+      const pares = (porTS[x.ts] || []).filter((v) => v > 0);
+      const usouTS = pares.length >= MIN_PARES;
+      const base = usouTS ? mediana(pares) : medUsina;
+      // abaixo do piso a razao nao decide nada: a linha simplesmente nao existe naquele instante
+      if (!(base >= PISO_HORA)) continue;
+      out.push({ ms: msDoInstante(t), ts: x.ts, inv: x.inv,
+        kwh: r2(x.e), base_kwh: r2(base), razao: r2(x.e / base), base: usouTS ? 'ts' : 'usina' });
+    }
+  }
+  return out;
 }
 
 // ---------- razao contra os pares ------------------------------------------------------------
@@ -267,6 +337,14 @@ function comparaComPares(reg) {
     + dias[0] + ' a ' + dias[dias.length - 1] + ') · processando ' + alvo.length + ' desde ' + corte);
 
   const serie = [];
+  // o detalhe fino sai dos MESMOS arquivos e da MESMA coluna; so os dias recentes entram, porque
+  // ele existe para descer no que acabou de acontecer — e porque guardar meia hora de um ano seria
+  // 20 vezes o historico diario para uma pergunta que ninguem faz sobre marco
+  // ⚠️ `slice(-0)` devolve o ARRAY INTEIRO em JavaScript, nao o vazio: com a janela em zero o
+  //    detalhe fino sairia com todos os dias, que e o contrario do que a configuracao pede. O
+  //    ensaio pegou; a mesma forma esta no `slice(-DIAS)` acima e vale a mesma leitura.
+  const corteHora = JANELA_HORA > 0 ? dias.slice(-JANELA_HORA)[0] : '9999-99-99';
+  const intra = [];
   let lidos = 0, falhos = 0;
   for (const a of alvo) {
     let reg;
@@ -279,6 +357,7 @@ function comparaComPares(reg) {
       // e NAO pode derivar isto do texto: o JSONata Go le '2026-08-10' como 00:00 UTC e ignora o
       // offset, o que deslocaria todo ponto para as 21:00 do dia anterior na tela.
       serie.push({ dia: a.dia, ms: msDoDia(a.dia), ufv: a.parque, ts: x.ts, inv: x.inv, kwh: x.kwh, razao: x.razao, base: x.base });
+    if (a.dia >= corteHora) for (const h of intraDia(reg)) intra.push({ dia: a.dia, ufv: a.parque, ...h });
   }
   if (!serie.length) throw new Error('nenhum inversor com energia em ' + alvo.length + ' arquivo(s) — o layout do export mudou?');
 
@@ -347,6 +426,12 @@ function comparaComPares(reg) {
   const top = new Set(inversores.slice(0, TOP_SERIE).map((x) => x.ufv + '|' + x.ts + '|' + x.inv));
   const serie_top = full.filter((l) => top.has(l.ufv + '|' + l.ts + '|' + l.inv))
     .map((l) => ({ ...l, chave: l.ufv + '/' + l.ts + '/' + l.inv }));   // a chave que o filtro do painel usa
+  // o detalhe fino segue a MESMA lista de piores e a MESMA chave do filtro: quem escolher um
+  // inversor no painel diario o encontra no painel de horario sem trocar de vocabulario
+  const serie_hora = intra.filter((l) => top.has(l.ufv + '|' + l.ts + '|' + l.inv))
+    .map((l) => ({ ...l, chave: l.ufv + '/' + l.ts + '/' + l.inv }))
+    .sort((a, b) => a.ms - b.ms);
+  const diasHora = [...new Set(serie_hora.map((l) => l.dia))].sort();
 
   const escopo = {
     pergunta: 'Qual inversor rende abaixo dos pares do mesmo transformador, antes de falhar.',
@@ -360,6 +445,9 @@ function comparaComPares(reg) {
     inversores: inversores.length, linhas_historico: full.length,
     referencia: { mediana: r2(refM), desvio_robusto: r2(refS), escala: refTipo, fora_3_desvios: inversores.filter((x) => x.desvios != null && x.desvios < -3).length },
     serie_top_de: TOP_SERIE,
+    hora: { blob: HORA_BLOB, janela_dias: JANELA_HORA, dias_cobertos: diasHora.length,
+      de: diasHora[0] || null, ate: diasHora[diasHora.length - 1] || null,
+      piso_kwh: PISO_HORA, linhas: serie_hora.length },
   };
   const out = {
     atualizado: new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10),
@@ -369,11 +457,25 @@ function comparaComPares(reg) {
     serie_top,
   };
   const kb = Math.round((await escreve(out, OUT_BLOB)) / 1024);
+  const kbHora = Math.round((await escreve({ atualizado: out.atualizado,
+    escopo: { pergunta: 'Em que hora do dia a diferenca contra os pares se abre.',
+      grandeza: 'energia de cada meia hora, obtida da diferenca do contador diario entre dois instantes',
+      par: 'mediana dos inversores do mesmo TS NO MESMO INSTANTE; TS com menos de ' + MIN_PARES
+        + ' reportando cai para a mediana da usina',
+      piso_kwh: PISO_HORA,
+      piso_nota: 'a razao so existe onde a mediana dos pares no instante chega a ' + PISO_HORA
+        + ' kWh; nas pontas do dia todos fazem pouco e a razao entre numeros pequenos nao decide nada',
+      janela_dias: JANELA_HORA, dias_cobertos: diasHora.length,
+      de: diasHora[0] || null, ate: diasHora[diasHora.length - 1] || null,
+      inversores: TOP_SERIE, linhas: serie_hora.length },
+    serie_hora }, HORA_BLOB)) / 1024);
   const kbh = Math.round((await escreve({ atualizado: out.atualizado,
     nota: 'historico bruto por inversor e por dia. Existe para o proprio gerador acumular; os paineis leem os agregados do outro arquivo.',
     janela_dias: JANELA, dias_cobertos: diasFull.length, de: escopo.de, ate: escopo.ate, serie: full }, HIST_BLOB)) / 1024);
   console.log('  ' + OUT_BLOB + ' OK · ' + kb + ' KB · ' + inversores.length + ' inversores · '
     + serie_top.length + ' linhas de serie dos ' + TOP_SERIE + ' piores');
+  console.log('  ' + HORA_BLOB + ' OK · ' + kbHora + ' KB · ' + serie_hora.length + ' linhas de meia hora · '
+    + diasHora.length + ' dia(s) de ' + JANELA_HORA + (diasHora.length ? ' (' + diasHora[0] + ' a ' + diasHora[diasHora.length - 1] + ')' : ''));
   if (msRetro) console.log('  ms retroativo em ' + msRetro + ' linha(s) do historico');
   console.log('  ' + HIST_BLOB + ' OK · ' + kbh + ' KB · ' + full.length + ' linhas ('
     + novas + ' novas, ' + mantidas + ' do historico) · ' + diasFull.length + ' dias cobertos de ' + JANELA);
