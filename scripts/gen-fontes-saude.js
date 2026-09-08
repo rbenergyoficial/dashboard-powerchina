@@ -24,6 +24,9 @@
 //           idade contada do FIM do ultimo mes coberto, 45/75 d.
 //   solarimetria (07/09/2026, lote a88bwp): a ESTACAO do parque chega por export diario (IRR_GERAL) -> 36/72 h
 //           do fim do ultimo dia medido; a irradiancia verificada do ONS e D+1 -> 36/60 h, como o ONS de restricao.
+//   historico (08/09/2026, lote histmt1): a pagina de historico le o DIARIO do medidor, fechado de madrugada pelo
+//           `way2-hist.yml` (03:30 UTC). O selo de 5 min da Way2 nao diz nada sobre ele: o que importa ali e o ULTIMO
+//           DIA FECHADO -> verde ate 36 h do fim desse dia, ambar ate 72 h.
 //   O que se mede e a idade do ULTIMO DADO (dia/coleta/instante), nao a do blob: um gerador que
 //   republica o mesmo dado velho todo dia manteria o blob fresco e a informacao velha.
 //
@@ -125,6 +128,14 @@ async function solarimetria() {
     return out;
   } catch (e) { return [{ ic: '☀️', l: 'Estação', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
+async function historico() {
+  try {
+    const h = await le('way2_daily.json'); const L = (h.dias || []).filter((x) => x && x.completo && x.dia);
+    const ult = L.length ? L[L.length - 1].dia : null; if (!ult) throw new Error('sem dia fechado');
+    const hh = horas(Date.parse(ult + 'T23:59:59-03:00'));
+    return [{ ic: '📒', l: 'Último dia fechado', v: ddmm(ult), u: 'medidor', c: cor(hh, 36, 72) }, { ic: '⏱', l: 'Idade', v: String(Math.round(hh)), u: 'h', c: cor(hh, 36, 72) }];
+  } catch (e) { return [{ ic: '📒', l: 'Último dia fechado', v: 'sem leitura', u: '', c: VERMELHO }]; }
+}
 // a Way2 continua sendo a Way2: copia dos badges que o selo original ja usa, para quem quiser
 // UM arquivo so — e para o ensaio comparar o formato
 async function way2() {
@@ -133,21 +144,21 @@ async function way2() {
 }
 
 (async () => {
-  const [bt, bo, bn, bw, bi, bs] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores(), solarimetria()]);
+  const [bt, bo, bn, bw, bi, bs, bh] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores(), solarimetria(), historico()]);
   // os rotulos nas tres linguas, como o selo original — a barra esta em paginas traduzidas
-  [bt, bo, bn, bi, bs].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
+  [bt, bo, bn, bi, bs, bh].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
   const out = {
     gerado_em: new Date(AGORA).toISOString(),
     nota: 'Selos de frescor por FONTE. Cada lista mede a idade do ultimo DADO da fonte (dia, coleta ou instante), '
       + 'nao a do arquivo. Limiares pela cadencia de cada fonte: supervisorio diario (36/72 h), oleo trimestral '
       + '(120/180 dias), ONS D+1 (36/60 h), planilha de substituicoes de inversores revisada mensalmente (30/60 dias), '
       + 'export mensal de alarmes do SCADA (45/75 dias do fim do mes coberto), estacao solarimetrica por export diario '
-      + '(36/72 h) e irradiancia verificada do ONS D+1 (36/60 h).',
-    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi, badges_solarimetria: bs,
+      + '(36/72 h), irradiancia verificada do ONS D+1 (36/60 h) e ultimo dia fechado do diario do medidor (36/72 h).',
+    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi, badges_solarimetria: bs, badges_historico: bh,
   };
   const json = JSON.stringify(out);
   const resumo = (l) => l.map((b) => b.l + ' ' + b.v + (b.u ? ' ' + b.u : '') + ' ' + b.c).join(' · ');
-  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs));
+  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs)); console.log('hist : ' + resumo(bh));
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes'); return; }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');

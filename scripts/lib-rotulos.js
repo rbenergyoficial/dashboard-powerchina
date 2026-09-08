@@ -47,6 +47,8 @@ const DIC = {
   'Inversores': { en: 'Inverters', zh: '逆变器' },
   'sem leitura': { en: 'no reading', zh: '无读数' },
   'Estação': { en: 'Station', zh: '气象站' },
+  'Último dia fechado': { en: 'Last closed day', zh: '最后完整日' },
+  'medidor': { en: 'meter', zh: '电表' },
 
   // --- banda de KPI do ONS (ons_kpis.json) · Curtailment -------------------
   'Outorga': { en: 'Granted', zh: '核准容量' },
