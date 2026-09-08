@@ -59,7 +59,7 @@ async function gerarClima(conn) {
   // cada métrica já com ícone/cor prontos. Irradiância: sol de dia (âmbar), LUA de noite (índigo).
   const metricas = [
     { chave: 'irradiancia', rotulo: 'Irradiância', valor: Math.round(c.shortwave_radiation || 0), unidade: 'W/m²', icon: isDay ? 'sun' : 'moon', cor: isDay ? '#FFB020' : LUA, destaque: isDay },
-    { chave: 'temperatura', rotulo: 'Temperatura', valor: +(+c.temperature_2m).toFixed(1), unidade: '°C', icon: 'temperature', cor: '#E06C3F', sub: 'Sensação ' + Math.round(c.apparent_temperature) + '°' },
+    { chave: 'temperatura', rotulo: 'Temperatura', valor: +(+c.temperature_2m).toFixed(1), unidade: '°C', icon: 'temperature', cor: '#E06C3F', sub: 'Sensação ' + Math.round(c.apparent_temperature) + ' °C' },
     { chave: 'nuvens', rotulo: 'Nuvens', valor: Math.round(c.cloud_cover || 0), unidade: '%', icon: 'cloud', cor: '#9AA4B2' },
     { chave: 'umidade', rotulo: 'Umidade', valor: Math.round(c.relative_humidity_2m || 0), unidade: '%', icon: 'droplet', cor: '#4C9AFF' },
     { chave: 'vento', rotulo: 'Vento', valor: +(+c.wind_speed_10m).toFixed(1), unidade: 'm/s', icon: 'wind', cor: '#9AA4B2' },
