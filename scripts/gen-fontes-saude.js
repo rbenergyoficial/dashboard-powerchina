@@ -22,6 +22,8 @@
 //           a ultima troca sai CINZA (informativa) e o que leva cor e a data em que a planilha foi SALVA,
 //           contra a revisao mensal do registro (30/60 d). A de ALARMES e um export MENSAL do SCADA:
 //           idade contada do FIM do ultimo mes coberto, 45/75 d.
+//   solarimetria (07/09/2026, lote a88bwp): a ESTACAO do parque chega por export diario (IRR_GERAL) -> 36/72 h
+//           do fim do ultimo dia medido; a irradiancia verificada do ONS e D+1 -> 36/60 h, como o ONS de restricao.
 //   O que se mede e a idade do ULTIMO DADO (dia/coleta/instante), nao a do blob: um gerador que
 //   republica o mesmo dado velho todo dia manteria o blob fresco e a informacao velha.
 //
@@ -110,6 +112,19 @@ async function inversores() {
     ];
   } catch (e) { return [{ ic: '🔁', l: 'Inversores', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
+async function solarimetria() {
+  try {
+    const s = await le('irr_ufv.json'); const L = s.serie_dia || [];
+    const ult = (campo) => L.filter((x) => typeof x[campo] === 'number').map((x) => x.dia).sort().pop();
+    const dEst = ult('gti'), dOns = ult('ons_gti');
+    if (!dEst) throw new Error('sem dia');
+    const hE = horas(Date.parse(dEst + 'T23:59:59-03:00'));
+    const out = [{ ic: '☀️', l: 'Estação', v: ddmm(dEst), u: 'último dia', c: cor(hE, 36, 72) }];
+    if (dOns) { const hO = horas(Date.parse(dOns + 'T23:59:59-03:00')); out.push({ ic: '🛰', l: 'ONS', v: ddmm(dOns), u: 'último dia', c: cor(hO, 36, 60) }); }
+    else out.push({ ic: '🛰', l: 'ONS', v: 'sem leitura', u: '', c: VERMELHO });
+    return out;
+  } catch (e) { return [{ ic: '☀️', l: 'Estação', v: 'sem leitura', u: '', c: VERMELHO }]; }
+}
 // a Way2 continua sendo a Way2: copia dos badges que o selo original ja usa, para quem quiser
 // UM arquivo so — e para o ensaio comparar o formato
 async function way2() {
@@ -118,20 +133,21 @@ async function way2() {
 }
 
 (async () => {
-  const [bt, bo, bn, bw, bi] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores()]);
+  const [bt, bo, bn, bw, bi, bs] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores(), solarimetria()]);
   // os rotulos nas tres linguas, como o selo original — a barra esta em paginas traduzidas
-  [bt, bo, bn, bi].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
+  [bt, bo, bn, bi, bs].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
   const out = {
     gerado_em: new Date(AGORA).toISOString(),
     nota: 'Selos de frescor por FONTE. Cada lista mede a idade do ultimo DADO da fonte (dia, coleta ou instante), '
       + 'nao a do arquivo. Limiares pela cadencia de cada fonte: supervisorio diario (36/72 h), oleo trimestral '
       + '(120/180 dias), ONS D+1 (36/60 h), planilha de substituicoes de inversores revisada mensalmente (30/60 dias), '
-      + 'export mensal de alarmes do SCADA (45/75 dias do fim do mes coberto).',
-    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi,
+      + 'export mensal de alarmes do SCADA (45/75 dias do fim do mes coberto), estacao solarimetrica por export diario '
+      + '(36/72 h) e irradiancia verificada do ONS D+1 (36/60 h).',
+    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi, badges_solarimetria: bs,
   };
   const json = JSON.stringify(out);
   const resumo = (l) => l.map((b) => b.l + ' ' + b.v + (b.u ? ' ' + b.u : '') + ' ' + b.c).join(' · ');
-  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi));
+  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs));
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes'); return; }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
