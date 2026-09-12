@@ -33,3 +33,25 @@ jobs:
           OUT_CONTAINER: dados
           OUT_BLOB: corte_gemeo.json
         run: node scripts/gen-corte-gemeo.js
+
+      # A auditoria do registro da mesa entra DEPOIS do consolidado, pelo mesmo motivo do corte por
+      # gemeo: ela le o `ons_restricao_all.json` que o primeiro passo acabou de gravar. Na ordem
+      # invertida ela conferiria o registro de hoje contra o dado aberto de ontem e chamaria a
+      # diferenca de divergencia.
+      #
+      # 🔴 O ensaio roda ANTES, e ele prova que a auditoria REPROVA: apaga um dia do registro,
+      # planta uma linha ilegivel e desloca a potencia de um dia inteiro, exigindo o gatilho certo
+      # em cada caso. Auditoria vista so no caminho feliz nao esta testada.
+      - name: Ensaio da auditoria do PPC
+        run: node scripts/ensaio-ppc.js
+      # Vermelho aqui significa uma destas tres, e nenhuma delas se conserta no pipeline:
+      #   · o operador nacional limitou e a mesa nao registrou (corte sem registro);
+      #   · ha linha ilegivel no recorte (foi o `11/09/20206`, 18 linhas invisiveis);
+      #   · um dia inteiro saiu desalinhado (mediana acima do limiar, contra 0,000 MW medidos).
+      # A divergencia de BORDA e o atraso de registro vao publicados SEM alarme: sao conhecidos,
+      # medidos, e quem os resolve e a mesa, nao o codigo.
+      - name: Auditar o registro do PPC contra o ONS
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+        run: node scripts/audita-ppc-ons.js

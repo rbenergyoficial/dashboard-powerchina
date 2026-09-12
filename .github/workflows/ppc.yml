@@ -1,0 +1,39 @@
+name: PPC (registro da mesa) -> ppc_restricao.json
+on:
+  schedule:
+    # De hora em hora: a planilha e preenchida AO LONGO do turno, entao nao ha "a hora em que o
+    # dado fica pronto" — ele cresce o dia inteiro. Minuto quebrado de proposito: no :00 o
+    # agendador do GitHub atrasa de 30 a 90 min.
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      ensaio:
+        description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
+        required: false
+        default: ''
+concurrency:
+  group: gen-ppc
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12 xlsx@0.18
+      # 🔴 O container `ppc-raw` e alimentado por um coletor que roda FORA daqui, na maquina onde a
+      # pasta esta sincronizada. Se ele parar, este job continua rodando e republicando o que ja
+      # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao
+      # este workflow: um job verde nao prova que o dado e novo.
+      - name: Gerar ppc_restricao.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW_CONTAINER: ppc-raw
+          OUT_CONTAINER: dados
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc' || '' }}
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-ppc.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
