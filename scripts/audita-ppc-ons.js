@@ -139,8 +139,8 @@ function dataDosDefeitos(eventos, defeitos) {
   const semRegistro = [];
   const diaDe = (k) => k.slice(0, 10);
   const pega = (d) => {
-    if (!porDia.has(d)) porDia.set(d, { dia: d, casa: 0, diverge: 0, parcial: 0, so_ons: 0, so_reg: 0,
-      livres: 0, difs: [], difs_miolo: [] });
+    if (!porDia.has(d)) porDia.set(d, { dia: d, casa: 0, diverge: 0, div_borda: 0, div_miolo: 0,
+      parcial: 0, so_ons: 0, so_reg: 0, livres: 0, difs: [], difs_miolo: [] });
     return porDia.get(d);
   };
 
@@ -165,7 +165,16 @@ function dataDosDefeitos(eventos, defeitos) {
       const dif = p.pot - o.lim;
       x.difs.push(Math.abs(dif));
       if (pos.get(k) === 'MIOLO') x.difs_miolo.push(Math.abs(dif));
-      if (Math.abs(dif) <= TOL) x.casa += 1; else x.diverge += 1;
+      if (Math.abs(dif) <= TOL) x.casa += 1;
+      else {
+        x.diverge += 1;
+        /* 🔴 A DIVERGENCIA DE BORDA E DE OUTRA NATUREZA, e somar as duas esconde o achado: no
+           miolo as duas rotas fecham em 0,000 MW de mediana, e quase toda a divergencia esta na
+           PRIMEIRA e na ULTIMA meia hora do episodio, onde o relogio do registro e o do operador
+           nacional nao coincidem. Publicar so "diverge" faria a tela dizer 12% de desacordo onde
+           o desacordo de MEDICAO e quase nenhum. */
+        if (pos.get(k) === 'MIOLO') x.div_miolo += 1; else x.div_borda += 1;
+      }
     } else if (onsRestr) {
       x.so_ons += 1;
       semRegistro.push({ ts: k, ons_mw: r3(o.lim), razao: o.razao, registro_mw: r3(p.pot), nota: 'registro marca plena' });
@@ -208,12 +217,18 @@ function dataDosDefeitos(eventos, defeitos) {
 
   /* ── o relatorio ──────────────────────────────────────────────────────────────────────── */
   const dias = [...porDia.values()].filter((x) => x.dia <= ate).sort((a, b) => (a.dia < b.dia ? -1 : 1))
-    .map((x) => ({ dia: x.dia, casa: x.casa, diverge: x.diverge, parcial: x.parcial,
+    .map((x) => ({ dia: x.dia, casa: x.casa, diverge: x.diverge,
+      div_borda: x.div_borda, div_miolo: x.div_miolo, parcial: x.parcial,
       so_ons: x.so_ons, so_registro: x.so_reg, livres: x.livres,
       mediana_mw: r3(mediana(x.difs)), p90_mw: r3(quantil(x.difs, 0.9)),
       mediana_miolo_mw: r3(mediana(x.difs_miolo)),
       atraso_inicio_min: x.atraso_inicio_min == null ? null : x.atraso_inicio_min,
-      atraso_liberacao_min: x.atraso_liberacao_min == null ? null : x.atraso_liberacao_min }));
+      atraso_liberacao_min: x.atraso_liberacao_min == null ? null : x.atraso_liberacao_min,
+      /* quanto a janela registrada fica MENOR que a publicada, no dia. So conta o que encurta:
+         atraso no inicio e antecipacao na liberacao. Registro que comeca antes ou termina depois
+         nao "sobra" — sao casos de outra natureza e entram como zero, nao como negativo. */
+      minutos_fora: (x.atraso_inicio_min == null && x.atraso_liberacao_min == null) ? null
+        : Math.max(0, x.atraso_inicio_min || 0) + Math.max(0, -(x.atraso_liberacao_min || 0)) }));
 
   const todasMiolo = [].concat(...[...porDia.values()].map((x) => x.difs_miolo));
   const totCasa = dias.reduce((s, d) => s + d.casa, 0), totDiv = dias.reduce((s, d) => s + d.diverge, 0);
@@ -236,10 +251,16 @@ function dataDosDefeitos(eventos, defeitos) {
       casam: totCasa, divergem: totDiv,
       pct_casam: (totCasa + totDiv) ? Math.round(1000 * totCasa / (totCasa + totDiv)) / 10 : null,
       mediana_miolo_mw: r3(mediana(todasMiolo)), p90_miolo_mw: r3(quantil(todasMiolo, 0.9)),
+      divergem_na_borda: dias.reduce((t, d) => t + d.div_borda, 0),
+      divergem_no_miolo: dias.reduce((t, d) => t + d.div_miolo, 0),
       restricao_sem_registro: semRegistro.length,
       registro_sem_lastro: dias.reduce((s, d) => s + d.so_registro, 0),
       atraso_inicio_mediana_min: mediana(dias.map((d) => d.atraso_inicio_min).filter((v) => v != null)),
       atraso_liberacao_mediana_min: mediana(dias.map((d) => d.atraso_liberacao_min).filter((v) => v != null)),
+      /* o resumo dos dois em UM numero: quantos minutos de restricao ficam de fora do registro num
+         dia tipico. E o que a tela mostra, porque "atraso de +16" e "antecipacao de -14" em duas
+         caixas exigem que o leitor some de cabeca e acerte o sinal. */
+      minutos_fora_mediana_min: mediana(dias.map((d) => d.minutos_fora).filter((v) => v != null)),
     },
     dias, alarmes, defeitos,
   };
