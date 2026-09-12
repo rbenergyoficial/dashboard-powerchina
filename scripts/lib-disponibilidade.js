@@ -96,4 +96,38 @@ function mensal(porDia, grupos) {
   return out;
 }
 
-module.exports = { disponibilidade, mensal, LIMITE_DIURNO_MIN, JANELA_MIN, JANELA_MAX, PARADO, PARCIAL };
+// 🔴 A DISPONIBILIDADE VOLTA PARA OS DIAS QUE JA ESTAVAM NO BLOB SEM ELA.
+//    O campo nasceu em 06/09/2026. Os dias gravados ANTES disso ficaram no `perdas_diario` para
+//    sempre sem ele — nao porque o acumulador os pule (ele nao pula: "a rodada nova sempre GANHA
+//    na colisao"), mas porque o gerador so LE os arquivos brutos dos ultimos DIAS carimbos, e a
+//    fonte guarda 30 dias. Dia que saiu da janela da fonte nunca mais e recalculado.
+//    Medido em 11/09/2026: 11 dias (23/07 a 02/08) sem `*_disp_pct` no diario — e com as 1.104
+//    linhas de contador COMPLETAS no `perdas_inv` publicado, nas nove usinas. A materia-prima
+//    estava em casa; faltava alguem le-la.
+//    ⚠️ Preenche SO o que falta: linha que ja tem o campo nao e tocada. E a janela de cada dia e
+//    calculada DENTRO daquele dia (`lib-disponibilidade`, laco por dia), entao alimentar a funcao
+//    com mais dias nao mexe em nenhum valor ja publicado.
+function completaDisponibilidade(serie, DISP, us, r2) {
+  let n = 0;
+  for (const o of serie) {
+    const R = DISP.get(o.dia);
+    if (!R) continue;
+    let mexeu = false;
+    for (const ufv of us) {
+      const dv = R.porUfv[ufv];
+      if (dv && o[ufv + '_disp_pct'] == null) {
+        o[ufv + '_disp_pct'] = dv.disp_pct;
+        o[ufv + '_inv_parados'] = dv.parados;
+        o[ufv + '_inv_parciais'] = dv.parciais;
+        o[ufv + '_inv_contador_24h'] = dv.contador_24h;
+        mexeu = true;
+      }
+    }
+    if (R.janela_min != null && o.janela_h == null) { o.janela_h = r2(R.janela_min / 60); mexeu = true; }
+    if (R.complexo && o.CX_disp_pct == null) { o.CX_disp_pct = R.complexo.disp_pct; mexeu = true; }
+    if (mexeu) n++;
+  }
+  return n;
+}
+
+module.exports = { disponibilidade, mensal, completaDisponibilidade, LIMITE_DIURNO_MIN, JANELA_MIN, JANELA_MAX, PARADO, PARCIAL };

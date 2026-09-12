@@ -33,6 +33,11 @@ jobs:
       # vermelho = a janela do dia ou o contador mudaram de natureza: nao publicar por cima.
       - name: Ensaio da disponibilidade por usina
         run: node scripts/ensaio-disponibilidade.js
+      # E o ensaio do PREENCHIMENTO RETROATIVO: prova que os dias que estao no perdas_inv sem
+      # disponibilidade no diario passam a te-la, que os que JA tinham saem byte a byte iguais, e
+      # que alimentar a funcao com a janela inteira do perdas_inv nao move nenhum valor publicado.
+      - name: Ensaio da disponibilidade retroativa
+        run: node scripts/ensaio-disp-retroativa.js
       - name: Gerar perdas_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

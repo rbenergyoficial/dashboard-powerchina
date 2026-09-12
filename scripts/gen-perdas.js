@@ -63,7 +63,7 @@
  */
 const zlib = require('zlib');
 const https = require('https');
-const { disponibilidade } = require('./lib-disponibilidade.js');
+const { disponibilidade, completaDisponibilidade } = require('./lib-disponibilidade.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -389,16 +389,24 @@ const diaDeMs = (ms) => new Date(ms - 3 * 3600e3).toISOString().slice(0, 10);
 //    A versao ingenua devolve vazio para tudo, o gerador trata como primeira execucao e regrava o
 //    blob so com os dias da rodada: uma falha de rede apagaria o historico inteiro, sem erro
 //    visivel. E a licao que o `leBlob` do MUST ja tinha pago.
+// memoria por NOME: o `perdas_inv.json` passou a ser lido duas vezes na mesma rodada (uma para
+// alimentar a disponibilidade, outra para acumular na publicacao) e ele e o maior dos quatro.
+// Dentro de uma rodada o blob nao muda, entao cachear e so nao baixar de novo.
+const _anterior = new Map();
 async function leAnterior(nome) {
+  if (_anterior.has(nome)) return _anterior.get(nome);
   try {
     const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
-    return Array.isArray(j.serie) ? j.serie : [];
+    const s = Array.isArray(j.serie) ? j.serie : [];
+    _anterior.set(nome, s);
+    return s;
   } catch (e) {
-    if (/HTTP 404/.test(e.message)) return [];
+    if (/HTTP 404/.test(e.message)) { _anterior.set(nome, []); return []; }
     throw new Error('nao consegui ler o ' + nome + ' publicado (' + e.message + '). Abortando: '
       + 'regravar sem o historico apagaria o que ja foi acumulado.');
   }
 }
+
 
 // funde o que veio agora com o que ja estava publicado; a rodada nova sempre GANHA na colisao,
 // porque um dia pode voltar mais completo do que da primeira vez
@@ -836,7 +844,15 @@ async function grava(nome, obj) {
 
   // ---- disponibilidade por usina, do contador de operacao do inversor ----------------------------
   // A regra mora em lib-disponibilidade.js, com o ensaio dela; aqui so se alimenta e se emite.
-  const DISP = disponibilidade([...porInv.values()].map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, horas: o.horas }))).porDia;
+  // 🔴 ALIMENTADA COM O ACUMULADO, nao so com o que esta rodada leu. O `perdas_inv` publicado
+  //    guarda 60 dias de contador; os arquivos brutos, 30. Usar so os brutos deixava metade da
+  //    janela do proprio blob sem disponibilidade, e para sempre — o dia que sai da fonte nunca
+  //    mais volta. A rodada nova GANHA na colisao, como no acumulador.
+  const chaveInv = (l) => l.dia + '|' + l.ufv + '|' + l.ts + '|' + l.inv;
+  const paraDisp = new Map();
+  for (const l of await leAnterior('perdas_inv.json')) paraDisp.set(chaveInv(l), l);
+  for (const l of porInv.values()) paraDisp.set(chaveInv(l), l);
+  const DISP = disponibilidade([...paraDisp.values()].map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, horas: o.horas }))).porDia;
   { const semJanela = [...DISP.entries()].filter(([, r]) => r.janela_min == null);
     if (semJanela.length) console.log('  ⚠️ disponibilidade sem janela em ' + semJanela.length + ' dia(s): ' + semJanela.slice(0, 3).map(([d, r]) => d + ' (' + r.nota + ')').join(' · '));
     const jan = [...DISP.values()].map((r) => r.janela_min).filter((x) => x != null);
@@ -965,6 +981,12 @@ async function grava(nome, obj) {
   ]) {
     const { serie: sf, novas, mantidas } = acumula(
       await leAnterior(nome), serie, chave, dias, (l) => l.dia || diaDeMs(l.ms));
+    // depois de acumular, e nao antes: os dias que faltam disponibilidade sao justamente os que
+    // vieram do HISTORICO, e esses nao passam pelo montador de `serieDiaria`
+    if (nome === 'perdas_diario.json') {
+      const nd = completaDisponibilidade(sf, DISP, us, r2);
+      if (nd) console.log('  disponibilidade preenchida em ' + nd + ' dia(s) que estavam no blob sem ela');
+    }
     // 🔴 A JANELA MEDIDA VAI AO LADO DA CONFIGURADA. `janela_dias` e o TETO; quem quiser dizer ao
     //    leitor quanto o arquivo cobre HOJE tem de usar `dias_cobertos`. Publicar so o teto e o
     //    que faz um seletor prometer "180 dias" num arquivo de 32 — numero declarado que nao
