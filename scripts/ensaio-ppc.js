@@ -55,6 +55,16 @@ function baixaPublicado() {
   const https = require('https');
   return new Promise((ok, erro) => {
     https.get(BASE + 'ppc_restricao.json', (r) => {
+      if (r.statusCode === 404) {
+        /* 🔴 Esta mensagem existe porque a primeira rodada deste passo caiu assim e o log dizia
+           so "HTTP 404". A falha e legitima — sem registro nao ha o que auditar, e calar seria
+           pior —, mas ela aponta para FORA deste repositorio: quem parou foi a ponte que sobe a
+           planilha. Mensagem que nao diz onde olhar faz procurar defeito no lugar errado. */
+        erro(new Error('o registro do PPC nao esta publicado. Isto NAO se conserta aqui: quem alimenta '
+          + 'o container e o coletor que roda na maquina onde a planilha esta sincronizada. '
+          + 'Conferir se a tarefa agendada dele ainda roda.'));
+        r.resume(); return;
+      }
       if (r.statusCode !== 200) { erro(new Error('HTTP ' + r.statusCode + ' ao ler o registro publicado')); r.resume(); return; }
       const p = [];
       r.on('data', (c) => p.push(c));
