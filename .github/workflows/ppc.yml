@@ -23,6 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12 xlsx@0.18
+      # A duracao sob restricao e publicada por este gerador, entao o ensaio dela roda ANTES de
+      # gerar: ele le o blob PUBLICO, nao precisa de segredo nenhum, e reprova o metodo ingenuo
+      # ("do primeiro ao ultimo lancamento restrito"), que erra em 97 dos 115 dias.
+      - name: Ensaio da duracao sob restricao
+        run: node scripts/ensaio-ppc-duracao.js
       # 🔴 O container `ppc-raw` e alimentado por um coletor que roda FORA daqui, na maquina onde a
       # pasta esta sincronizada. Se ele parar, este job continua rodando e republicando o que ja
       # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao

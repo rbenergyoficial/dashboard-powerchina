@@ -164,9 +164,21 @@ async function grava(nome, obj) {
     x.ultimo = String(e.ts).slice(11);
     if (e.tecnico) x.tecnicos.add(e.tecnico);
   }
-  const resumo = [...porDia.values()].map((x) => ({ dia: x.dia, eventos: x.eventos, restritos: x.restritos,
-    primeiro: x.primeiro, ultimo: x.ultimo, pot_min: x.pot_min == null ? null : Math.round(x.pot_min * 100) / 100,
-    motivo_cods: [...x.cods].sort(), tecnicos: [...x.tecnicos].sort() }));
+  // a DURACAO sai do degrau, nao da contagem de linhas: `restritos` conta EVENTOS, e um dia com
+  // vinte lancamentos pode ser de duas horas ou de dez. Quem faz a conta e o lib, porque a
+  // auditoria e o ensaio leem a mesma escrita.
+  const dur = P.duracaoRestricao(eventos);
+  const resumo = [...porDia.values()].map((x) => {
+    const d = dur.get(x.dia) || { minutos: 0, aberta: 0 };
+    return { dia: x.dia, eventos: x.eventos, restritos: x.restritos,
+      primeiro: x.primeiro, ultimo: x.ultimo, pot_min: x.pot_min == null ? null : Math.round(x.pot_min * 100) / 100,
+      // em HORAS na tela, mas arredondada uma vez so, aqui: o painel nao refaz conta
+      horas_restricao: Math.round((d.minutos / 60) * 100) / 100,
+      // 1 quando o ultimo lancamento do dia ainda esta restrito — a duracao vira PISO, e o painel
+      // tem de poder dizer isso em vez de desenhar um numero curto como se fosse a medida
+      restricao_aberta: d.aberta,
+      motivo_cods: [...x.cods].sort(), tecnicos: [...x.tecnicos].sort() };
+  });
 
   const out = {
     fonte: 'registro da mesa de operacao do controlador de potencia do complexo',

@@ -167,6 +167,41 @@ function leEventos(XLSX, fonte) {
 }
 
 /**
+ * A DURACAO sob restricao, dia a dia, pelo degrau da planilha — devolvida em MINUTOS.
+ *
+ * 🔴 O QUE ISTO E, E O QUE NAO E. Este numero sai do REGISTRO DA MESA, e por isso existe no
+ *    MESMO dia em que a linha e digitada. A energia impedida, em GWh, nao: ela e a diferenca
+ *    contra a geracao de REFERENCIA, que so o operador nacional publica, no dia seguinte. Sao
+ *    duas grandezas diferentes — desenhar as duas como a mesma serie seria o defeito de "dois
+ *    valores para a mesma coisa na mesma tela", que esta casa ja pagou.
+ *
+ * O degrau: o setpoint anotado vale do minuto em que foi escrito ate o evento SEGUINTE do mesmo
+ * dia. O ultimo evento do dia nao tem seguinte, entao ele nao soma duracao nenhuma — e e dai que
+ * vem a marca:
+ *
+ * ⚠️ `aberta` = 1 quando o ULTIMO evento do dia ainda esta restrito. Ai o registro nao diz quando
+ *    a restricao acabou, e a duracao devolvida e um PISO, nao a medida. Medido em 12/09/2026:
+ *    nenhum dos 19 dias de ago-set fecha assim — a mesa sempre lanca a liberacao —, mas forma que
+ *    so fecha no caso medido e sorte, e quem consome tem de poder marcar o caso quando ele vier.
+ */
+function duracaoRestricao(ev) {
+  const porDia = new Map();
+  for (const e of ev) {
+    const d = e.dia || String(e.ts).slice(0, 10);
+    if (!porDia.has(d)) porDia.set(d, []);
+    porDia.get(d).push(e);
+  }
+  const out = new Map();
+  for (const [dia, lista] of porDia) {
+    const l = lista.slice().sort((a, b) => (a.min - b.min) || ((a.linha || 0) - (b.linha || 0)));
+    let minutos = 0;
+    for (let i = 0; i < l.length - 1; i++) if (l[i].restr) minutos += l[i + 1].min - l[i].min;
+    out.set(dia, { minutos, aberta: l[l.length - 1].restr ? 1 : 0 });
+  }
+  return out;
+}
+
+/**
  * Integraliza o degrau da planilha na meia hora do ONS, DENTRO do dia.
  * Devolve um Map "AAAA-MM-DD HH:MM" -> { pot, cobertura, motivos, cods }.
  * ⚠️ Fora do primeiro e do ultimo evento do dia NAO HA registro — e ausencia nao e "sem
@@ -200,4 +235,4 @@ function integraliza(ev) {
   return slots;
 }
 
-module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, integraliza, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };
+module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, integraliza, duracaoRestricao, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };
