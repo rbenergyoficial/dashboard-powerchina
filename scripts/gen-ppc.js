@@ -81,6 +81,13 @@ async function listaArquivos() {
   if (!process.env.DADOS_STORAGE) throw new Error('sem DADOS_STORAGE e sem LOCAL_DIR: nao ha de onde ler');
   const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
   const out = [];
+  /* o container so passa a existir quando o coletor roda pela primeira vez. Distinguir "ainda nao
+     existe" de "existe e esta vazio" e de "a rede falhou" e o que separa uma mensagem util de um
+     rastro de pilha no primeiro dia. */
+  if (!(await c.exists())) {
+    throw new Error('o container ' + RAW_CONTAINER + ' ainda nao existe: o coletor nunca rodou nesta conta. '
+      + 'Registrar a tarefa agendada e rodar `node scripts/coleta-ppc.js` uma vez o cria.');
+  }
   for await (const b of c.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name) || !PREFIXO.test(b.name)) continue;
     out.push({ nome: b.name, quando: (b.properties.lastModified || new Date()).toISOString(),
