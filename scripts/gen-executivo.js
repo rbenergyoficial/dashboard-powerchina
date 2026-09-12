@@ -1045,7 +1045,7 @@ async function writeOut(obj, nome, opts) {
           var: cur.var_pr_pp == null ? '' : (cur.var_pr_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_pr_pp)) + ' pp',
           var_cor: col(cur.var_pr_pp == null ? null : cur.var_pr_pp >= 0, cur.var_pr_pp), cor: '#8B93A1',
           spark: path(S.map(s => s.pr_pct), '#D9A441'), spark_ini: ini, spark_fim: fim },
-        { k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
+        { k: 'disp', label: 'Disponibilidade declarada', v: fmt(cur.disp_pct), u: '%', sub: 'alvo 97%',
           var: cur.var_disp_pp == null ? '' : (cur.var_disp_pp > 0 ? '▲' : '▼') + ' ' + fmt(Math.abs(cur.var_disp_pp)) + ' pp',
           var_cor: col(cur.var_disp_pp == null ? null : cur.var_disp_pp >= 0, cur.var_disp_pp), cor: cur.disp_pct >= 97 ? '#43966B' : '#C08A45',
           spark: path(S.map(s => s.disp_pct), '#4E9A98'), spark_ini: ini, spark_fim: fim },
@@ -1685,7 +1685,7 @@ async function writeOut(obj, nome, opts) {
           var: vPR == null ? '' : seta(vPR) + ' pp', var_cor: corVar(vPR == null ? null : vPR >= 0, vPR),
           cor: '#8B93A1',   // sem alvo nao ha estado — mesmo nome e mesma ausencia de alvo do cartao do Sumario
           spark: barras(S.map(x => x.pr_pct), '#D9A441'), spark_ini: S[0].lbl, spark_fim: cur.lbl },
-        { mes: mSel, ufv: u, k: 'disp', label: 'Disponibilidade', v: fmt(cur.disp_pct), u: '%',
+        { mes: mSel, ufv: u, k: 'disp', label: 'Disponibilidade declarada', v: fmt(cur.disp_pct), u: '%',
           // mesma razao do card de horas: a disponibilidade e publicada para o conjunto
           sub: compl ? 'medida no conjunto · alvo 97%' : 'alvo 97%',
           var: compl ? '· do conjunto' : '', var_cor: '#8B93A1',

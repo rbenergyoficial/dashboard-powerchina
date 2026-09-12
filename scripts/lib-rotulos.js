@@ -113,6 +113,11 @@ const DIC = {
   'Impedido pelo operador': { en: 'Curtailed by the operator', zh: '被运营方限电' },
   'sem alvo · aderência à referência do operador': { en: "no target · adherence to the operator's reference", zh: '无目标 · 与运营方基准的一致性' },
   'Disponibilidade': { en: 'Availability', zh: '可用率' },
+  // 11/09/2026: o cartao passou a DIZER qual disponibilidade. A medida no contador do
+  // inversor entrou no painel [30] do Sumario em ago/26, e as duas apareciam na mesma
+  // tela com o mesmo nome — o cartao mostrando 99,54% em jun/26 logo acima de um painel
+  // dizendo que nao havia medicao. Sao grandezas distintas: esta e a CONTRATUAL.
+  'Disponibilidade declarada': { en: 'Declared availability', zh: '申报可用率' },
   'Curtailment': { en: 'Curtailment', zh: '限电' },
   'Projeção de corte': { en: 'Curtailment projection', zh: '限电预测' },
   'Horas em restrição': { en: 'Hours under restriction', zh: '受限小时数' },
