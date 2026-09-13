@@ -467,7 +467,7 @@ async function writeOut(obj, nome, opts) {
     m.ger += ger * H; m.ref += gref * H; m.n++; m.dias.add(String(r.ts).slice(0, 10));
     // série DIÁRIA do complexo — mesma fonte e mesma fórmula da cascata, p/ os números não brigarem
     const _d = String(r.ts).slice(0, 10);
-    const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0 });
+    const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0, raz: {}, ori: {} });
     dd.ger += ger * H;
     // gerX = gerado no MESMO conjunto de dias em que o corte e apurado; e o denominador honesto do
     // percentual de corte. Sem ele o percentual misturaria numerador filtrado com denominador cheio.
@@ -477,8 +477,14 @@ async function writeOut(obj, nome, opts) {
       LIM_TS.add(String(r.ts));
       dd.fru += perda; dd.horas_restr += H;
       m.fru += perda; m.int_restr++;
-      if (r.razao) m.raz[r.razao] = (m.raz[r.razao] || 0) + perda;
-      if (r.orig) m.ori[r.orig] = (m.ori[r.orig] || 0) + perda; }
+      // MOTIVO E ORIGEM POR DIA, na MESMA linha em que o mes os soma: mesma fonte, mesma formula e
+      // mesma convencao (`lim > 0`), entao a soma dos dias fecha com o mes por construcao — e nao por
+      // conferencia. O painel do portal desenhava um unico bloco "set/26" ao lado de vizinhos que ja
+      // mostram dia a dia, porque a razao so existia por mes.
+      if (r.razao) { m.raz[r.razao] = (m.raz[r.razao] || 0) + perda;
+        dd.raz[r.razao] = (dd.raz[r.razao] || 0) + perda; }
+      if (r.orig) { m.ori[r.orig] = (m.ori[r.orig] || 0) + perda;
+        dd.ori[r.orig] = (dd.ori[r.orig] || 0) + perda; } }
   }
 
   // ---------- 2) por UFV por mês, a partir do ons_irradiancia_YYYY_MM (ge = potencial, gv = realizado) ----------
@@ -1427,7 +1433,39 @@ async function writeOut(obj, nome, opts) {
     serie_diaria: Object.values(DIA).sort((a, b) => a.dia < b.dia ? -1 : 1).slice(-90).map(d => ({
       dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
-      corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0 })) };
+      corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0,
+      // MESMO FORMATO do `razoes`/`origens` mensal, para o painel ler os dois com um codigo so. Dia sem
+      // restricao vem com o objeto VAZIO, e nao ausente: ausente e "nao apurado", vazio e "nao houve" —
+      // sao coisas diferentes na tela, e ja custaram um lote neste projeto.
+      razoes: Object.fromEntries(Object.entries(d.raz).map(([k, v]) =>
+        [k, { gwh: r2(v / 1000), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])),
+      origens: Object.fromEntries(Object.entries(d.ori).map(([k, v]) =>
+        [k, { gwh: r2(v / 1000), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])) })) };
+
+  // GUARDA DE FECHAMENTO do motivo por dia, sobre o mapa DIA INTEIRO (não sobre os 90 publicados):
+  // os dois baldes são somados na mesma linha do mesmo laço, então cada mês tem de reproduzir-se pela
+  // soma dos seus dias. Dia e mês discordando na tela é o defeito que este campo veio consertar, e a
+  // pior hora de descobrir isso é depois de publicado.
+  (() => {
+    const porMes = {};
+    Object.values(DIA).forEach(d => {
+      const m = d.dia.slice(0, 7), b = porMes[m] || (porMes[m] = {});
+      Object.entries(d.raz).forEach(([k, v]) => { b[k] = (b[k] || 0) + v; });
+    });
+    const erros = [];
+    out.serie.forEach(s => {
+      if (!s.razoes) return;
+      const b = porMes[s.mes] || {};
+      Object.entries(s.razoes).forEach(([k, o]) => {
+        const dia = r2((b[k] || 0) / 1000);
+        if (Math.abs((dia || 0) - (o.gwh || 0)) > 0.02) {
+          erros.push(s.mes + ' ' + k + ': dias somam ' + dia + ' GWh e o mês diz ' + o.gwh);
+        }
+      });
+    });
+    if (erros.length) throw new Error('razões por dia NÃO fecham com o mês:\n  ' + erros.join('\n  '));
+    console.log('  razões dia × mês: fecham em ' + out.serie.filter(s => s.razoes).length + ' meses');
+  })();
 
   // ---------- 6b) PR LIVRE por entidade, sobre o serie_ufv ja pronto ----------
   // Feito aqui, e nao dentro de `linha()`, porque `linha()` e chamada com argumentos posicionais em

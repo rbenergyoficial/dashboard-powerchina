@@ -114,6 +114,18 @@ function meses() {
 const novo = () => ({ ger: 0, gref: 0, fru_p: 0, fru_z: 0, n: 0, n_lim_p: 0, n_lim_z: 0, conj: new Set(),
   dias: new Set(), n_excl: 0, razao: {}, origem: {} });
 
+// ---- SERIE DIARIA, so SOLAR e so na ponta da janela -----------------------------------------------
+// O painel de comparacao regional do portal desenhava um unico bloco mensal ao lado de vizinhos que ja
+// mostram dia a dia, porque nao havia Nordeste nem Abaiara por dia em lugar nenhum. Sai daqui de graca:
+// o laco ja le TODO intervalo de 30 min de todo conjunto do subsistema — o que faltava era nao jogar o
+// dia fora ao somar o mes. Custa ~120 linhas no blob, alguns KB.
+//
+// SO SOLAR: a comparacao do painel e contra a geracao solar da regiao; o eolico dobraria o arquivo para
+// alimentar nenhuma tela. So a PONTA: o portal recorta 90 dias na apuracao diaria do operador, e 120
+// da folga para a janela dele sem depender de quando esta rodada aconteceu.
+const DIA_JANELA = 120;
+const DIA_INI = new Date(Date.now() - DIA_JANELA * 86400000).toISOString().slice(0, 10);
+
 // Le um blob JSON ja publicado (historico e corte calculado). Os CSV do ONS vem por `linhas()`,
 // em streaming, porque tem dezenas de MB; estes tem dezenas de KB e cabem na memoria.
 function getJSON(url) {
@@ -137,7 +149,7 @@ function linhas(url) {
   });
 }
 
-async function leMes(f, mo, acc) {
+async function leMes(f, mo, acc, accD) {
   const rl = await linhas(ONS + f.dir + '/' + f.arq + '_' + mo + '.csv');
   let cab = null, iSub, iUsi, iOns, iTs, iGer, iLim, iGref, iRaz, iOri, n = 0;
   for await (const l of rl) {
@@ -178,6 +190,14 @@ async function leMes(f, mo, acc) {
         const or = String(iOri >= 0 ? (c[iOri] || '') : '').trim().toUpperCase() || 'SEM_CODIGO';
         a.razao[rz] = (a.razao[rz] || 0) + perda;
         a.origem[or] = (a.origem[or] || 0) + perda; }
+      // o MESMO intervalo tambem cai no balde do DIA — mesmo criterio, mesma exclusao, mesma formula.
+      // Somar por fora depois seria a segunda escrita da mesma regra.
+      if (accD && fo === 'solar' && dia >= DIA_INI) {
+        const kd = dia + '|' + quem, d = accD[kd] || (accD[kd] = novo());
+        d.ger += ger * H; d.gref += gref * H; d.n++; d.conj.add(c[iOns]);
+        if (temLim) { d.fru_p += perda; d.n_lim_p++; }
+        if (limNum > 0) { d.fru_z += perda; d.n_lim_z++; }
+      }
     }
     n++;
   }
@@ -199,10 +219,10 @@ async function grava(obj) {
 
 (async () => {
   const MS = process.env.MESES ? process.env.MESES.split(',') : meses();
-  const acc = {}, faltou = [];
+  const acc = {}, accD = {}, faltou = [];
   for (const f of FONTES) {
     for (const mo of MS) {
-      try { const n = await leMes(f, mo, acc); console.log('  ' + f.id + ' ' + mo + '  ' + n + ' linhas NE'); }
+      try { const n = await leMes(f, mo, acc, accD); console.log('  ' + f.id + ' ' + mo + '  ' + n + ' linhas NE'); }
       catch (e) { faltou.push(f.id + ' ' + mo + ' (' + e.message.slice(0, 40) + ')'); }
     }
   }
@@ -381,6 +401,74 @@ async function grava(obj) {
       : (x.nosso_corte_pct_calc != null ? 'calculado' : (p != null ? 'estimado' : 'sem dado'));
   });
 
+  // ---- serie DIARIA (solar) ------------------------------------------------------------------
+  // As mesmas tres entidades e o mesmo criterio da mensal, um ponto por dia. `parcial` NAO sai de um
+  // numero escolhido: sai da MEDIANA de intervalos que cada entidade teve na janela — o Nordeste tem
+  // dezenas de conjuntos e o nosso tem um, entao um limiar unico reprovaria um e cegaria o outro.
+  const serieDia = (() => {
+    const dias = [...new Set(Object.keys(accD).map(k => k.split('|')[0]))].sort();
+    const mediana = v => { const s = v.slice().sort((a, b) => a - b); return s.length ? s[s.length >> 1] : 0; };
+    const espera = {};
+    for (const quem of ['NE', ...Object.values(CONJ)]) {
+      espera[quem] = mediana(dias.map(d => (accD[d + '|' + quem] || {}).n || 0).filter(x => x > 0));
+    }
+    return dias.map(dia => {
+      const ne = accD[dia + '|NE'];
+      const l = {
+        dia, fonte: 'solar',
+        ne_gerado_gwh: ne ? r2(ne.ger / 1000) : null, ne_cortado_gwh: ne ? r2(ne.fru_p / 1000) : null,
+        ne_corte_pct: pct(ne), ne_conjuntos: ne ? ne.conj.size : null, intervalos: ne ? ne.n : null,
+      };
+      for (const pref of Object.values(CONJ)) {
+        const a = accD[dia + '|' + pref];
+        l[pref + '_gerado_gwh'] = a ? r2(a.ger / 1000) : null;
+        l[pref + '_cortado_gwh'] = a ? r2(a.fru_p / 1000) : null;
+        l[pref + '_corte_pct'] = pct(a);
+        l[pref + '_horas_restricao'] = a ? r2(a.n_lim_z * H) : null;
+      }
+      // parcial se QUALQUER uma das tres chegou curta: o painel desenha as tres lado a lado, e um dia
+      // em que so a regiao veio inteira compara meio Mauriti com um Nordeste cheio
+      l.parcial = ['NE', ...Object.values(CONJ)].some(q => {
+        const a = accD[dia + '|' + q];
+        return espera[q] > 0 && (!a || a.n < espera[q] * 0.9);
+      }) ? 1 : 0;
+      return l;
+    });
+  })();
+
+  // GUARDA DE FECHAMENTO, e ela ABORTA sem gravar. Os dois baldes saem do MESMO laco, entao a soma dos
+  // dias de um mes COMPLETO dentro da janela tem de reproduzir o mes — nao aproximadamente: dentro do
+  // arredondamento de duas casas que cada linha carrega. Se alguem mexer na convencao de um lado e nao
+  // do outro, a pagina passaria a mostrar dia e mes discordando, que e o defeito que este lote veio
+  // consertar. Custa nada: os dois acumuladores estao em memoria aqui.
+  (() => {
+    const mesesDia = {};
+    serieDia.forEach(l => { (mesesDia[l.dia.slice(0, 7)] = mesesDia[l.dia.slice(0, 7)] || []).push(l); });
+    const diasNoMes = m => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).getUTCDate();
+    const erros = [];
+    for (const [mes, L] of Object.entries(mesesDia)) {
+      if (L.length !== diasNoMes(mes)) continue;                       // mes na ponta da janela, nao fecha
+      const mm = serie.find(x => x.fonte === 'solar' && x.mes === mes);
+      if (!mm) continue;
+      for (const [cd, cm] of [['ne_cortado_gwh', 'ne_cortado_gwh'], ['ne_gerado_gwh', 'ne_gerado_gwh'],
+        ['nosso_cortado_gwh', 'nosso_cortado_gwh'], ['nosso_gerado_gwh', 'nosso_gerado_gwh'],
+        ['abaiara_cortado_gwh', 'abaiara_cortado_gwh'], ['abaiara_gerado_gwh', 'abaiara_gerado_gwh']]) {
+        const soma = L.reduce((a, x) => a + (x[cd] || 0), 0);
+        if (mm[cm] == null) continue;
+        // tolerancia = o arredondamento de duas casas de cada uma das linhas somadas, e nada alem disso
+        const tol = Math.max(0.01, L.length * 0.005);
+        if (Math.abs(soma - mm[cm]) > tol) {
+          erros.push(mes + ' ' + cd + ': dias somam ' + r2(soma) + ' e o mes diz ' + mm[cm]);
+        }
+      }
+    }
+    if (erros.length) {
+      throw new Error('serie_dia NAO fecha com a mensal — nada foi gravado:\n  ' + erros.join('\n  '));
+    }
+    console.log('  fechamento dia x mes: OK em ' + Object.entries(mesesDia)
+      .filter(([m, L]) => L.length === diasNoMes(m)).length + ' meses completos');
+  })();
+
   const out = {
     gerado_em: new Date().toISOString(),
     fonte: 'ONS Dados Abertos — restricao_coff_fotovoltaica_tm e restricao_coff_eolica_tm, nivel CONJUNTO, '
@@ -394,7 +482,12 @@ async function grava(obj) {
       + 'razao mediana entre o nosso corte e o do subsistema nos meses sadios. Vem com estimado=1, '
       + 'estimado_metodo e o valor bruto ao lado. Nunca um estimado se passando por medido.',
     meses_estimados: estim,
-    conjuntos: CONJ, subsistema: SUB, serie,
+    conjuntos: CONJ, subsistema: SUB, serie, serie_dia: serieDia,
+    serie_dia_criterio: 'Mesmo criterio da serie mensal, so SOLAR, um ponto por dia nos ultimos '
+      + DIA_JANELA + ' dias. `parcial` marca o dia que chegou com menos intervalos que a mediana da '
+      + 'janela — a publicacao do operador e D+1 e o ultimo dia costuma vir pela metade. O corte '
+      + 'regional de UM dia oscila muito mais que o do mes, porque um evento sistemico pesa inteiro '
+      + 'num dia so; a leitura de tendencia continua sendo a mensal.',
   };
   if (faltou.length) out.meses_sem_arquivo = faltou;
   const t = await grava(out);
