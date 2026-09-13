@@ -66,7 +66,13 @@ const ALVOS = [
   { arq: 'pr-livre-mes.png',       uid: 'perfmt1',  painel: 90,  larg: 1500, alt: 430 },
   { arq: 'mapa-pr-livre.png',      uid: 'perfmt1',  painel: 92,  larg: 1100, alt: 430 },
   { arq: 'corte-esconde.png',      uid: 'perfmt1',  painel: 91,  larg: 1100, alt: 430 },
-  { arq: 'irradiancia-plano.png',  uid: 'a88bwp',   painel: 201, larg: 1100, alt: 430,
+  // 🔴 era o [201], REMOVIDO do a88bwp em 07/09/2026 por repetir o [410] na mesma tela. O painel
+  // saiu e este manifesto nao foi conferido: o job passou a recusar os NOVE por causa de um, e
+  // ficou 5,6 dias sem publicar — cerca de onze execucoes, porque o cron e `0 10 0,15 * * *`, duas
+  // por dia. Quem o achou foi o vigia de RESULTADO, no dia em que ele passou a existir.
+  // ⚠️ A licao nao e "conferir o manifesto": e que remover painel exige varrer QUEM O CONSOME, e
+  //    o consumidor aqui nao e outro painel — e um job, fora do Grafana.
+  { arq: 'irradiancia-plano.png',  uid: 'a88bwp',   painel: 410, larg: 1100, alt: 430,
     janela: { from: 'now-30d', to: 'now', razao: 'ciclo diario: a 1 ano cada dia ocupa 3 px' } },
   { arq: 'irradiancia-fontes.png', uid: 'a88bwp',   painel: 227, larg: 1100, alt: 430,
     janela: { from: 'now-30d', to: 'now', razao: 'ciclo diario: a 1 ano as duas fontes viram uma mancha' } },
