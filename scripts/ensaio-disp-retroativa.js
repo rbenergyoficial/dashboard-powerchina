@@ -73,7 +73,34 @@ const campos = (o) => Object.keys(o).filter((k) => /_disp_pct$|_inv_parados$|_in
   console.log('    sem disponibilidade: ' + semAntes.length + ' antes → ' + semDepois.length + ' depois'
     + '  (recuperados: ' + recuperados.join(' ') + ')');
   if (teimosos.length) falhas.push('dias com contador no perdas_inv e ainda sem disponibilidade: ' + teimosos.join(' '));
-  if (!recuperados.length) falhas.push('nao recuperou dia nenhum — o ensaio nao julgou nada');
+
+  /* 🔴 A GUARDA JULGA A CAPACIDADE, NAO A OCORRENCIA — e a primeira versao fez o contrario.
+     Ela exigia "recuperou pelo menos um dia", com a intencao certa (guarda que nao julga nada
+     nao e guarda). So que a recuperacao e um evento UNICO: uma vez preenchidos os 11 dias, em
+     11/09/2026, nunca mais ha o que recuperar, e a guarda passou a REPROVAR POR SUCESSO. O
+     `perdas.yml` ficou vermelho de 12/09 ate 13/09, cinco execucoes, e o gerador nao rodou em
+     nenhuma delas — a guarda amarrada a um estado transitorio morre no dia em que o conserto
+     termina.
+     Agora: quando ha dia a recuperar, exige que TODOS sejam recuperados (o `teimosos` acima);
+     quando nao ha, prova a capacidade num caso FORJADO, tirando o campo de um dia que o tem e
+     exigindo que a funcao o devolva igual. Assim ela julga em qualquer estado do blob. */
+  if (!recuperados.length) {
+    const alvo = serie.find((l) => l.CX_disp_pct != null && diasInv.indexOf(l.dia) >= 0);
+    if (!alvo) {
+      falhas.push('nao ha dia com disponibilidade E contador: o ensaio nao consegue julgar nada');
+    } else {
+      const orig = JSON.parse(JSON.stringify(alvo));
+      const forjada = JSON.parse(JSON.stringify(serie));
+      const f = forjada.find((l) => l.dia === alvo.dia);
+      for (const k of Object.keys(f)) if (/_disp_pct$|_inv_parad|_inv_parcia|_inv_contador|^janela_h$/.test(k)) delete f[k];
+      const nf = completaDisponibilidade(forjada, B, US, r2);
+      if (nf !== 1) falhas.push('FORJADA: a funcao preencheu ' + nf + ' dia(s), esperava 1');
+      const dif = Object.keys(orig).filter((k) => JSON.stringify(orig[k]) !== JSON.stringify(f[k]));
+      if (dif.length) falhas.push('FORJADA: ' + alvo.dia + ' voltou diferente em ' + dif.join(','));
+      else console.log('    nada a recuperar hoje · FORJADA: ' + alvo.dia
+        + ' teve a disponibilidade apagada e voltou idêntica');
+    }
+  }
 
   for (const d of recuperados) {
     const l = serie.find((x) => x.dia === d);
