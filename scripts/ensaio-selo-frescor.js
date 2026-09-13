@@ -10,7 +10,9 @@
  *
  *   A · TODO selo que mostra IDADE tem âncora. Selo com unidade de tempo e sem `ms` está
  *       congelado por construção, e é o defeito voltando pela porta dos fundos.
- *   B · a cor publicada e a cor recalculada AGORA são a mesma — as duas contas concordam.
+ *   B · a cor publicada e a que se recalcula NO INSTANTE DA GRAVACAO — as duas contas
+ *       concordam sobre o mesmo relogio. ⚠️ Comparar com o relogio de AGORA reprovaria
+ *       justamente quando a correcao esta funcionando: o dado envelheceu e a cor mudou.
  *   C · NEGATIVA, e é ela que prova a correção: adiantando o relógio para além do limiar de
  *       alerta, todo selo com âncora fica VERMELHO. Guarda que não reprova não é guarda.
  *   D · e no instante da âncora ele é VERDE — senão "fica vermelho" seria só "está sempre
@@ -61,8 +63,17 @@ const UNI_TEMPO = /^(min|h|dias?|d)$/i;
   const listas = [];
   for (const a of ARQS) {
     const j = await le(a);
+    /* 🔴 O INSTANTE DE REFERENCIA E O DA GRAVACAO, NAO O DE AGORA. A cor publicada foi calculada
+       quando o blob foi escrito; comparar com a de agora reprova justamente quando a correcao
+       esta FUNCIONANDO — o dado envelheceu desde entao e a cor mudou, que e o objetivo. A
+       primeira versao fazia isso e acusou dois selos corretos vinte minutos depois de publicar.
+       ⚠️ E a guarda tem de saber de onde vem esse instante: `gerado_em` e ISO com fuso; o
+       `atualizado` do way2_saude e hora local SEM fuso, e le-lo como UTC deslocaria 3 h. */
+    const quando = j.gerado_em ? Date.parse(j.gerado_em)
+      : j.atualizado ? Date.parse(j.atualizado + '-03:00') : null;
+    if (!quando || !isFinite(quando)) { falha(a + ': sem instante de gravacao legivel'); continue; }
     for (const [k, v] of Object.entries(j)) {
-      if (/^badges/.test(k) && Array.isArray(v)) listas.push([a + ' · ' + k, v]);
+      if (/^badges/.test(k) && Array.isArray(v)) listas.push([a + ' · ' + k, v, quando]);
     }
   }
   if (!listas.length) { console.log('🔴 nenhuma lista de selos nos blobs'); process.exit(1); }
@@ -82,19 +93,32 @@ const UNI_TEMPO = /^(min|h|dias?|d)$/i;
   if (!mau) console.log('  ' + comAncora + ' de ' + total + ' selos com âncora; nenhum selo de idade sem ela.');
 
   console.log('');
-  console.log('B · a cor publicada é a cor recalculada agora');
-  for (const [onde, lista] of listas) {
+  console.log('B · a cor publicada é a que se recalcula NO INSTANTE DA GRAVAÇÃO');
+  for (const [onde, lista, quando] of listas) {
     for (const b of lista) {
       if (!b.ms) continue;
-      const c = corPorIdade(b, agora);
+      const c = corPorIdade(b, quando);
       if (!c) { falha(onde + ' · "' + b.l + '" sem as três cores em `cs`'); continue; }
-      /* ⚠️ tolerância de UM minuto: o blob foi escrito alguns segundos antes desta leitura, e um
-         selo exatamente em cima do limiar pode legitimamente cair do outro lado */
-      const cAntes = corPorIdade(b, agora - 60000);
-      if (c !== b.c && cAntes !== b.c) falha(onde + ' · "' + b.l + '": publicada ' + b.c + ' e recalculada ' + c);
+      /* ⚠️ um minuto de folga: entre calcular a cor e gravar o arquivo passam segundos, e um selo
+         em cima do limiar pode legitimamente cair do outro lado */
+      if (c !== b.c && corPorIdade(b, quando - 60000) !== b.c) {
+        falha(onde + ' · "' + b.l + '": publicada ' + b.c + ' e recalculada ' + c);
+      }
     }
   }
   if (!mau) console.log('  as duas contas concordam nos ' + comAncora + ' selos com âncora.');
+
+  /* ℹ️ e a idade AGORA vai impressa, porque e ela que o leitor ve — e quando ela passa da
+     publicada, e o selo fazendo o que este lote existe para ele fazer */
+  for (const [onde, lista] of listas) {
+    for (const b of lista) {
+      if (!b.ms || !b.un) continue;
+      const div = b.un === 'min' ? 1 : b.un === 'h' ? 60 : 1440;
+      console.log('  ' + onde + ' · "' + b.l + '": publicado ' + b.v + ' ' + b.u
+        + ' · na tela agora ' + Math.round((agora - b.ms) / 60000 / div) + ' ' + b.u
+        + ' · ' + corPorIdade(b, agora));
+    }
+  }
 
   console.log('');
   console.log('C · NEGATIVA · com o relógio além do alerta, TODOS ficam vermelhos');
