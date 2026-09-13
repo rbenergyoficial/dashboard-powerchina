@@ -1112,6 +1112,7 @@ async function writeOut(obj, nome, opts) {
           return { ufv, mes: m, mes_ts: S.mes_ts, lbl: S.lbl,
             liquida_gwh: r2(liq / 1000), meta_gwh: meta == null ? null : r2(meta / 1000),
             liquida_mwh: r2(liq),   // o mesmo numero em MWh com centesimos: o portal mostra o Entregue em MWh (13/09/2026)
+            meta_mwh: meta == null ? null : r2(meta),
             atingido_pct: meta > 0 ? r2(100 * liq / meta) : null,
             potencial_gwh: oN(r2(ge / 1000)), entregue_gwh: oN(r2(gv / 1000)),
             cortado_gwh: oN(r2(corte / 1000)),
@@ -1578,6 +1579,7 @@ async function writeOut(obj, nome, opts) {
         const parcial = x.mes === mesAtual && fator < 1;
         x.parcial = parcial ? 1 : 0;
         x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
+        x.meta_rateada_mwh = x.meta_mwh == null ? null : (parcial ? r2(num(x.meta_mwh) * fator) : x.meta_mwh);
         x.dias_corridos = parcial ? dias : null;
         x.dias_do_mes = parcial ? diasDoMes : null;
       });
@@ -1607,6 +1609,7 @@ async function writeOut(obj, nome, opts) {
         const parcial = x.mes === mesAtual && fator < 1;
         x.parcial = parcial ? 1 : 0;
         x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
+        x.meta_rateada_mwh = x.meta_mwh == null ? null : (parcial ? r2(num(x.meta_mwh) * fator) : x.meta_mwh);
         if (!parcial) return;
         rateia(x, num(x.way2_liq_gwh));
         // ⚠️ `bateu` acompanha o numerador novo: num mes em curso ele passa a dizer "esta no
@@ -1834,6 +1837,7 @@ async function writeOut(obj, nome, opts) {
           meses: A.length, primeiro: A[0] ? A[0].lbl : null, ultimo: A[A.length - 1] ? A[A.length - 1].lbl : null,
           liquida_gwh: r2(liqAcum), meta_gwh: temMeta.length ? r2(metaAcum) : null,
           liquida_mwh: r2(somaN('liquida_mwh')),
+          meta_mwh: temMeta.length ? r2(somaN('meta_mwh')) : null,
           atingido_pct: metaAcum > 0 ? r2(100 * liqAcum / metaAcum) : null,
           meses_com_meta: temMeta.length,
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
@@ -2102,11 +2106,14 @@ async function writeOut(obj, nome, opts) {
       (out.serie_ufv || []).forEach(x => {
         if (x.liquida_gwh == null) return;
         if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.006) mau.push(x.ufv + ' ' + x.mes + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+        if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > 0.006)) mau.push(x.ufv + ' ' + x.mes + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
+        if (x.meta_rateada_gwh != null && (x.meta_rateada_mwh == null || Math.abs(x.meta_rateada_mwh / 1000 - x.meta_rateada_gwh) > 0.006)) mau.push(x.ufv + ' ' + x.mes + ': meta rateada ' + x.meta_rateada_mwh + ' MWh contra ' + x.meta_rateada_gwh + ' GWh');
       });
       (out.ytd_ufv || []).forEach(x => {
         if (x.liquida_gwh == null) return;
         // o ano soma meses ja arredondados nas duas unidades: a folga e meio centesimo de GWh por mes
         if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.005 * (x.meses + 1)) mau.push(x.ufv + ' ' + x.ano + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+        if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > 0.005 * (x.meses + 1))) mau.push(x.ufv + ' ' + x.ano + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
       });
       if (mau.length) throw new Error('liquida_mwh NAO fecha com liquida_gwh:\n  ' + mau.join('\n  '));
     }
