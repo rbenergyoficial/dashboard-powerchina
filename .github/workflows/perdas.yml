@@ -70,3 +70,10 @@ jobs:
       - name: Ensaio da curva de 30 min por inversor
         if: always()
         run: node scripts/ensaio-pvstr-hora.js M3
+
+      # 🔴 DEPOIS de gerar tambem, porque julga uma MIGRACAO: o zero da isolacao virou ausencia
+      #    e o historico ja publicado foi anulado por MARCA. Rodado antes, reprovaria justamente
+      #    a rodada que conserta.
+      - name: Ensaio do zero da isolacao
+        if: always()
+        run: node scripts/ensaio-isol-zero.js M3

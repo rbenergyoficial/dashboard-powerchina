@@ -254,6 +254,18 @@ const STRING_RE = /^CORRENTE STRING (\d+)$/;
 //    (mediana 1,15 A) e 06:30 (3,47 A). Abaixo do piso a razao NAO EXISTE, em vez de existir
 //    errada — a mesma decisao que o irmao da razao contra os pares ja tomou com os 10 kWh.
 const PISO_STR_A = 3;
+
+// 🔴 ZERO NA ISOLACAO E AUSENCIA, NAO MEDICAO — e isso foi medido no arquivo CRU, nao deduzido.
+//    Em 12/08 o M3/TS1/INV01 traz isolacao 0 as 12:00 com o inversor entregando 317 kW,
+//    cercada de 462 nos vizinhos; as 18h, 20h e 22h, com o inversor PARADO, traz 462. Arranjo
+//    com isolacao zero esta em curto e nao gera: o 0 e o valor sentinela de "sem leitura".
+//    Os zeros se concentram em 6 dias de 51, em quatro deles na frota INTEIRA — e como
+//    `isol_min` e o MINIMO do dia, um unico instante assim zerava o dia do inversor. Eram
+//    4.468 dias-inversor publicando zero, e o painel desenhava a curva caindo a zero.
+//    ⚠️ Isto NAO e alisar valor implausivel (a licao do canal do 04T2): la o canal descia em
+//       RAMPA e filtrar escondia a rampa. Aqui o zero e exato, isolado e com o equipamento em
+//       plena geracao. Ele vira ausencia, e vai CONTADO.
+const isoSemLeitura = (x) => x === 0;
 const DIAS_HORA = 7;              // a janela do intradiario, por usina — ver o custo no cabecalho
 
 const norm = (s) => String(s == null ? '' : s).trim();
@@ -414,7 +426,12 @@ const diaDeMs = (ms) => new Date(ms - 3 * 3600e3).toISOString().slice(0, 10);
 //    corte por magnitude o deixaria para tras. Um caso em cento e doze mil ainda e um caso, e
 //    varrer isso para baixo e o que esta casa nao faz.
 //    Entao o arquivo DIZ em que esquema esta, e a conversao roda uma vez, sobre o arquivo inteiro.
-const ESQUEMA = 2;               // 1 = setpoint em W · 2 = setpoint em kW
+// 🔴 E O MESMO MECANISMO SERVE AO `isol_min`: as linhas ja publicadas trazem 4.468 zeros, que a
+//    medicao mostrou serem ausencia de leitura e nunca isolamento. Elas nao podem ser
+//    recalculadas — a fonte retem ~30 dias e os dias afetados vao ate 28/07 —, entao o zero
+//    vira NULO: ausencia e honesta, e zero ali e uma afirmacao que sabemos falsa.
+//    ⚠️ So o zero EXATO do campo de isolacao e tocado. Nenhum outro valor, nenhum outro campo.
+const ESQUEMA = 3;   // 1 = setpoint em W · 2 = setpoint em kW · 3 = zero da isolacao e ausencia
 const CAMPOS_SETPOINT = ['setpoint_min', 'setpoint_ger'];
 
 function migraSetpoint(j, nome) {
@@ -432,12 +449,26 @@ function migraSetpoint(j, nome) {
   return s;
 }
 
+function migraIsolZero(j, nome) {
+  const s = Array.isArray(j.serie) ? j.serie : [];
+  if (nome !== 'perdas_inv.json' || !s.length) return s;
+  if (Number(j.esquema) >= 3) return s;
+  let n = 0;
+  for (const l of s) {
+    if (l.isol_min === 0) { l.isol_min = null; n += 1; }
+  }
+  console.log('  isolamento: ' + n + ' minimo(s) do historico que valiam ZERO viraram NULO '
+    + '(esquema ' + (j.esquema || 1) + ' -> ' + ESQUEMA + ')');
+  return s;
+}
+
 const _anterior = new Map();
 async function leAnterior(nome) {
   if (_anterior.has(nome)) return _anterior.get(nome);
   try {
     const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
-    const s = migraSetpoint(j, nome);
+    migraSetpoint(j, nome);
+    const s = migraIsolZero(j, nome);
     _anterior.set(nome, s);
     return s;
   } catch (e) {
@@ -605,6 +636,9 @@ async function grava(nome, obj) {
       const spGer = bons.filter((i) => (ca[i] || 0) > 0.05 * pico)
         .map((i) => (o.serie.setpoint || [])[i]).filter((x) => x != null);
       const spOrd = spGer.slice().sort((x, y) => x - y);
+      const isoCru = (o.serie.isol || []).filter((x) => x != null);
+      const isoSem = isoCru.filter(isoSemLeitura).length;
+      const isoVal = isoCru.filter((x) => !isoSemLeitura(x));
       const sp = (o.serie.setpoint || []).filter((x) => x != null);
       const nom = (o.serie.nominal || []).filter((x) => x != null);
       porInv.set(a.dia + '|' + a.ufv + '|' + o.ts + '|' + o.inv, { dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
@@ -620,8 +654,9 @@ async function grava(nome, obj) {
         // irmas. 100% e equilibrio perfeito; string desconectada leva isso perto de zero.
         mppt_min_pct: dm ? dm.min_pct : null, mppt_n: dm ? dm.n : null,
         str_min_pct: ds ? ds.min_pct : null, str_max_pct: ds ? ds.max_pct : null, str_n: ds ? ds.n : null,
-        isol_min: (o.serie.isol || []).filter((x) => x != null).length
-          ? r2(Math.min(...(o.serie.isol || []).filter((x) => x != null))) : null,
+        isol_min: isoVal.length ? r2(Math.min(...isoVal)) : null,
+        // a contagem vai junto: dia sem leitura tem de PODER ser dito, e nao so ficar vazio
+        ...(isoSem ? { isol_sem_leitura: isoSem } : {}),
         horas: (o.serie.horas || []).filter((x) => x != null).length
           ? r2(Math.max(...(o.serie.horas || []).filter((x) => x != null))) : null,
         n: bons.length });
@@ -651,7 +686,9 @@ async function grava(nome, obj) {
         cur.sm.push(dsi ? dsi.min_pct : null);
         cur.mm.push(dmi ? dmi.min_pct : null);
         cur.t.push(ti == null ? null : r2(ti));
-        cur.iso.push(ii == null ? null : r2(ii));
+        // a MESMA regra do minimo do dia: sem isto a curva desenharia o mergulho a zero que o
+        // diario acabou de deixar de publicar — duas telas discordando sobre o mesmo instante
+        cur.iso.push(ii == null || isoSemLeitura(ii) ? null : r2(ii));
         cur.sp.push(si == null ? null : r2(si / 1000));
       }
       if (cur.h.length) {
