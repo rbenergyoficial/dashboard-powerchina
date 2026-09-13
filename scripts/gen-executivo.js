@@ -1434,13 +1434,18 @@ async function writeOut(obj, nome, opts) {
       dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
       corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0,
-      // MESMO FORMATO do `razoes`/`origens` mensal, para o painel ler os dois com um codigo so. Dia sem
-      // restricao vem com o objeto VAZIO, e nao ausente: ausente e "nao apurado", vazio e "nao houve" —
-      // sao coisas diferentes na tela, e ja custaram um lote neste projeto.
+      // Dia sem restricao vem com o objeto VAZIO, e nao ausente: ausente e "nao apurado", vazio e "nao
+      // houve" — sao coisas diferentes na tela, e ja custaram um lote neste projeto.
+      //
+      // 🔴 EM MWh, e NAO em GWh como o mensal. A primeira versao copiou a unidade do mes e o painel
+      // perdeu a barra de TRES dias em 90: em GWh com duas casas, tudo abaixo de 5 MWh vira 0,00, e a
+      // tela passava a dizer "apurado, e sem restricao registrada" num dia que teve restricao (09/09
+      // com 0,62 MWh, 01/09 com 1,32, 30/07 com 2,34). A energia e irrisoria; a AFIRMACAO nao. MWh e a
+      // unidade natural do dia e a que o campo vizinho `cortado_mwh` desta mesma linha ja usa.
       razoes: Object.fromEntries(Object.entries(d.raz).map(([k, v]) =>
-        [k, { gwh: r2(v / 1000), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])),
+        [k, { mwh: r2(v), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])),
       origens: Object.fromEntries(Object.entries(d.ori).map(([k, v]) =>
-        [k, { gwh: r2(v / 1000), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])) })) };
+        [k, { mwh: r2(v), pct: d.fru > 0 ? r2(100 * v / d.fru) : 0 }])) })) };
 
   // GUARDA DE FECHAMENTO do motivo por dia, sobre o mapa DIA INTEIRO (não sobre os 90 publicados):
   // os dois baldes são somados na mesma linha do mesmo laço, então cada mês tem de reproduzir-se pela

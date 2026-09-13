@@ -41,11 +41,16 @@ function fechaMotivo(exec) {
   const out = [], sd = exec.serie_diaria || [], sm = exec.serie || [];
   if (!sd.length) return ['executivo.serie_diaria vazio'];
   if (!sd.some(d => d.razoes)) return ['executivo.serie_diaria sem o campo `razoes` — o painel do motivo por dia nao tem o que desenhar'];
+  // ⚠️ O DIA PUBLICA EM MWh e o mes em GWh, de proposito: em GWh com duas casas um dia de 0,62 MWh
+  // vira 0,00 e o painel afirma que nao houve restricao. A conversao mora aqui, uma vez.
+  if (sd.some(d => d.razoes && Object.values(d.razoes).some(o => o.mwh == null && o.gwh != null))) {
+    return ['executivo.serie_diaria[].razoes ainda em GWh — dia abaixo de 5 MWh some da tela'];
+  }
   const por = {};
   sd.forEach(d => {
     const m = d.dia.slice(0, 7), b = por[m] || (por[m] = { n: 0, raz: {} });
     b.n++;
-    Object.entries(d.razoes || {}).forEach(([k, o]) => { b.raz[k] = (b.raz[k] || 0) + (o.gwh || 0); });
+    Object.entries(d.razoes || {}).forEach(([k, o]) => { b.raz[k] = (b.raz[k] || 0) + (o.mwh || 0) / 1000; });
   });
   let conferidos = 0;
   Object.entries(por).forEach(([mes, b]) => {
@@ -127,7 +132,7 @@ function provaQueReprova(exec, bench) {
     e.serie_diaria.forEach(d => { n[d.dia.slice(0, 7)] = (n[d.dia.slice(0, 7)] || 0) + 1; });
     const completo = m => n[m] === diasNoMes(m);
     const alvo = [...e.serie_diaria].reverse().find(d => completo(d.dia.slice(0, 7))
-      && Object.values(d.razoes || {}).some(o => o.gwh > 0.2));
+      && Object.values(d.razoes || {}).some(o => (o.mwh || 0) > 200));
     if (alvo) { alvo.razoes = {}; casos.push(['dia de motivo apagado (' + alvo.dia + ')', () => fechaMotivo(e)]); }
     else casos.push(['dia de motivo apagado', () => ['nao houve mes COMPLETO com energia para plantar o defeito']]);
   }
