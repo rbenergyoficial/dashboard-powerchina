@@ -49,3 +49,15 @@ jobs:
           if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
           node scripts/gen-perdas.js
           if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
+
+      # 🔴 ESTE ENSAIO RODA DEPOIS DE GERAR, ao contrario dos dois de cima, e o motivo e que ele
+      # julga uma MIGRACAO: ate a primeira rodada o blob publicado tem o setpoint em W, entao um
+      # ensaio antes reprovaria e travaria justamente a rodada que conserta. Depois de gerar, ele
+      # confere o arquivo que acabou de subir.
+      #
+      # ⚠️ O custo disso e declarado: se ele reprovar, o dado ruim JA esta no ar. Fica assim
+      # mesmo — dado ruim com o job vermelho e melhor que dado ruim em silencio, e a alternativa
+      # (nao conferir) e a que produziu o defeito que este lote corrige.
+      - name: Ensaio da unidade do setpoint
+        if: ${{ !github.event.inputs.ensaio }}
+        run: node scripts/ensaio-setpoint-unidade.js

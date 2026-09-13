@@ -392,12 +392,37 @@ const diaDeMs = (ms) => new Date(ms - 3 * 3600e3).toISOString().slice(0, 10);
 // memoria por NOME: o `perdas_inv.json` passou a ser lido duas vezes na mesma rodada (uma para
 // alimentar a disponibilidade, outra para acumular na publicacao) e ele e o maior dos quatro.
 // Dentro de uma rodada o blob nao muda, entao cachear e so nao baixar de novo.
+// 🔴 O ESQUEMA VAI MARCADO NO BLOB, E A CONVERSAO NAO SE ADIVINHA PELO VALOR.
+//    O setpoint passou de W para kW em 13/09/2026, e as linhas ja publicadas estao em W. A
+//    tentacao e converter quem "parece W" (valor alto), e ela FALHA: medido no arquivo, existe um
+//    valor de 36,9 entre 112.604 — em W e um inversor quase parado, em kW seria 36,9 kW, e o
+//    corte por magnitude o deixaria para tras. Um caso em cento e doze mil ainda e um caso, e
+//    varrer isso para baixo e o que esta casa nao faz.
+//    Entao o arquivo DIZ em que esquema esta, e a conversao roda uma vez, sobre o arquivo inteiro.
+const ESQUEMA = 2;               // 1 = setpoint em W · 2 = setpoint em kW
+const CAMPOS_SETPOINT = ['setpoint_min', 'setpoint_ger'];
+
+function migraSetpoint(j, nome) {
+  const s = Array.isArray(j.serie) ? j.serie : [];
+  if (nome !== 'perdas_inv.json' || !s.length) return s;
+  if (Number(j.esquema) >= 2) return s;
+  let n = 0;
+  for (const l of s) {
+    for (const k of CAMPOS_SETPOINT) {
+      if (typeof l[k] === 'number') { l[k] = Math.round((l[k] / 1000) * 100) / 100; n += 1; }
+    }
+  }
+  console.log('  setpoint: ' + n + ' valor(es) do historico convertidos de W para kW (esquema '
+    + (j.esquema || 1) + ' -> ' + ESQUEMA + ')');
+  return s;
+}
+
 const _anterior = new Map();
 async function leAnterior(nome) {
   if (_anterior.has(nome)) return _anterior.get(nome);
   try {
     const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
-    const s = Array.isArray(j.serie) ? j.serie : [];
+    const s = migraSetpoint(j, nome);
     _anterior.set(nome, s);
     return s;
   } catch (e) {
@@ -564,8 +589,9 @@ async function grava(nome, obj) {
         ef: eCC > 0.001 ? r4(eCA / eCC) : null,
         p_ca_max: r2(Math.max(...bons.map((i) => ca[i] * f)) * 1000),   // kW
         temp_max: t.length ? r2(Math.max(...t)) : null,
-        setpoint_min: sp.length ? r2(Math.min(...sp)) : null,
-        setpoint_ger: spOrd.length >= 3 ? r2(spOrd[spOrd.length >> 1]) : null,
+        // 🔴 EM kW, como `p_ca_max` e `nominal` — ver SETPOINT_EM_W logo abaixo do bloco.
+        setpoint_min: sp.length ? r2(Math.min(...sp) / 1000) : null,
+        setpoint_ger: spOrd.length >= 3 ? r2(spOrd[spOrd.length >> 1] / 1000) : null,
         nominal: nom.length ? r2(nom[nom.length - 1]) : null,
         // no pico do proprio inversor: quanto a MENOR corrente vale em relacao a mediana das suas
         // irmas. 100% e equilibrio perfeito; string desconectada leva isso perto de zero.
@@ -749,10 +775,23 @@ async function grava(nome, obj) {
     + ((totArq / totPlaca) * 100).toFixed(1) + '%) · ausentes ' + (totPlaca - totArq));
 
   // ---- limitacao de despacho, por usina e por dia ------------------------------------------------
-  // 🔴 A REFERENCIA E O PROPRIO INVERSOR, nao a potencia nominal. Medido: `setpoint_min` dividido
-  //    por `POTENCIA ATIVA NOMINAL` da mediana 411 e p90 838 — as duas colunas nao estao na mesma
-  //    unidade, e eu nao sei qual e a de cada uma. Comparar o dia com o valor TIPICO daquele mesmo
-  //    inversor no periodo dispensa saber a unidade: a razao e adimensional por construcao.
+  // 🔴 A UNIDADE DO SETPOINT E WATT — medida em 13/09/2026, e ela NAO era conhecida ate aqui.
+  //    Este bloco dizia "nao estao na mesma unidade, e eu nao sei qual e a de cada uma", e a saida
+  //    era comparar cada dia com o valor TIPICO do proprio inversor, que e adimensional. A razao
+  //    continua valendo e continua sendo publicada; o que mudou e que agora o valor ABSOLUTO
+  //    tambem pode ir para a tela, em kW, ao lado da nominal.
+  //
+  //    A PROVA E A SATURACAO, nao a aparencia do numero: quando o setpoint esta no teto (352 000),
+  //    a potencia ativa maxima do inversor encosta em 352,0 kW e PARA — p99 de 352,5 e maximo de
+  //    353,1 em 3.488 dias. E na faixa em que o limite fica ativo o dia inteiro (250 a 351 kW), a
+  //    razao `p_ca_max / (setpoint/1000)` tem mediana 0,97 e fica abaixo de 1,05 em 88% dos dias.
+  //    Nominal 320 kW, teto 352 kW = 110% dela, que e a sobrecarga configurada.
+  //
+  // ⚠️ DUAS LEITURAS MINHAS CAIRAM NO CAMINHO, e as duas por comparar coisas de janelas
+  //    diferentes: `setpoint_ger` e a MEDIANA do dia e `p_ca_max` e o PICO do dia, entao num dia
+  //    de restricao parcial o pico vem de fora da janela restrita e a razao estoura — 91% dos
+  //    dias "violavam" o limite. E "todos os valores sao multiplos de 320" era falso: os DOZE
+  //    MAIS COMUNS sao, e apenas 0,2% dos valores distintos.
   //
   //    Isto existe para separar DEFEITO de DESPACHO. Sem ele, o painel de perdas acusa o inversor
   //    de um problema que e de operacao: medido no M1 em 09/08, a referencia caiu 94%, a usina
@@ -800,7 +839,12 @@ async function grava(nome, obj) {
   const meta = {
     gerado_em: new Date().toISOString(),
     usinas: us, unidade_de_origem: UNIDADE,
-    unidade: 'energia em MWh; potencia em MW; eficiencia adimensional (0..1)',
+    esquema: ESQUEMA,
+    unidade: 'energia em MWh; potencia em MW; eficiencia adimensional (0..1); '
+      + 'setpoint e potencia nominal do inversor em kW',
+    unidade_setpoint: 'kW · referencia de potencia ativa enviada ao inversor. O teto e 352 kW, '
+      + '110% da nominal de 320 kW, e o inversor satura nele: com o setpoint no teto a potencia '
+      + 'maxima medida fica em 352,0 kW (p99 352,5). Ate 13/09/2026 este campo era publicado em W.',
     rotulo_de_tempo: 'amostra instantânea a cada 30 min (não é média de intervalo)',
     metodo: 'energia CC e CA integradas da MESMA forma (soma das amostras × 0,5 h), para que o '
       + 'erro de integração se cancele na razão; o contador do inversor entra separado, onde a '
