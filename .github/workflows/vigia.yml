@@ -58,6 +58,12 @@ jobs:
           MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/gen-relogio-watchdog.js
 
+      # a regra que decide "roda e falha" e COMPILADA do proprio vigia, entao este ensaio prova a
+      # versao que acabou de rodar — e nao uma copia que concorda consigo mesma.
+      - name: Ensaio do vigia de resultado
+        if: always()
+        run: node scripts/ensaio-vigia-resultado.js
+
       # 2 · O SELO CONSEGUE FICAR VERMELHO? Le os blobs PUBLICOS e exige que todo selo que mostra
       #     idade carregue a ancora e os limiares — sem eles o selo congela no ultimo valor bom
       #     quando o gerador para, que foi o defeito de 13/09/2026. Roda com `always()` porque um
