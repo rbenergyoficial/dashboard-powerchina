@@ -61,3 +61,12 @@ jobs:
       - name: Ensaio da unidade do setpoint
         if: ${{ !github.event.inputs.ensaio }}
         run: node scripts/ensaio-setpoint-unidade.js
+
+      # 🔴 DEPOIS de gerar, como o ensaio do setpoint e pelo mesmo motivo: ele julga o PRODUTO —
+      #    a curva de 30 min por inversor e o piso que separa sinal de amanhecer. Rodado antes,
+      #    conferiria o arquivo da rodada anterior.
+      # ⚠️ Custo declarado: se ele reprovar, o dado ja esta no ar. Dado ruim com o job vermelho e
+      #    melhor que dado ruim em silencio.
+      - name: Ensaio da curva de 30 min por inversor
+        if: always()
+        run: node scripts/ensaio-pvstr-hora.js M3

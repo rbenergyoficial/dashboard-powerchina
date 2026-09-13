@@ -241,6 +241,21 @@ const GRANDEZAS = {
 const MPPT_RE = /^CORRENTE MPPT (\d+)$/;
 const STRING_RE = /^CORRENTE STRING (\d+)$/;
 
+// 🔴 A CURVA DENTRO DO DIA, e o PISO que decide quando ela existe.
+//    Ate 13/09/2026 estas grandezas eram reduzidas ao dia — o pico, o maximo — e a curva de 30 min
+//    que as produz era descartada. O humano pediu quatro vezes os intervalos, e ele estava certo:
+//    a fonte os tem, e a linha 47 deste arquivo ja dizia que a amostra e instantanea a cada 30 min.
+//    Nao ha leitura nova aqui: e a MESMA passada, sem jogar a curva fora.
+//
+// 🔴 O PISO NAO E ESCOLHIDO, e sem ele o painel publicaria ruido como defeito. A dispersao entre
+//    strings e uma RAZAO, e razao entre correntes pequenas estoura: medido no M3 em 12/09, nos 160
+//    inversores, meia hora a meia hora — com a mediana das strings ABAIXO de 3 A a dispersao entre
+//    os inversores e de 56 pp; acima dela, 28 pp. A transicao e abrupta e cai entre 06:00
+//    (mediana 1,15 A) e 06:30 (3,47 A). Abaixo do piso a razao NAO EXISTE, em vez de existir
+//    errada — a mesma decisao que o irmao da razao contra os pares ja tomou com os 10 kWh.
+const PISO_STR_A = 3;
+const DIAS_HORA = 7;              // a janela do intradiario, por usina — ver o custo no cabecalho
+
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const s = norm(v).replace(',', '.'); if (!s) return null;
   const n = Number(s); return isFinite(n) ? n : null; };
@@ -486,6 +501,11 @@ async function grava(nome, obj) {
   const diario = new Map();          // dia -> { ufv -> {...} }
   const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
   const porInv = new Map();          // (dia|ufv|ts|inv) -> linha; lendo em ordem, o ultimo vence
+  // a curva de 30 min, por usina · (ufv) -> Map(dia|ts|inv -> linha de ARRAYS)
+  // 🔴 ARRAYS, e nao uma linha por ponto: medido no dia real do M3, uma linha por ponto da 84 KB
+  //    gzipados e os arrays dao 52 — 38% menos, porque o dia, o eletrocentro e o inversor deixam
+  //    de ser repetidos vinte e cinco vezes.
+  const horaPorUfv = new Map();
   const picos = {}, nInv = {}, cobertura = {};
   let avisouDia = false;       // pico CRU da soma CA e n de inversores, por usina
 
@@ -562,16 +582,19 @@ async function grava(nome, obj) {
       //    relativa estoura por ruido, apontando defeito onde ha so amanhecer.
       let iPico = bons[0];
       for (const i of bons) if ((ca[i] || 0) > (ca[iPico] || 0)) iPico = i;
-      const disp = (pref) => {
+      // ⚠️ O INSTANTE passou a ser PARAMETRO. A reducao ao dia continua sendo no pico — e o
+      //    comentario acima diz por que —, mas a mesma conta serve a curva do dia, e duas escritas
+      //    da mesma dispersao divergiriam na primeira edicao.
+      const disp = (pref, idx, piso) => {
         const v = Object.keys(o.serie).filter((k) => k.startsWith(pref))
-          .map((k) => o.serie[k][iPico]).filter((x) => x != null && x > 0);
+          .map((k) => o.serie[k][idx]).filter((x) => x != null && x > 0);
         if (v.length < 3) return null;
         const ord = v.slice().sort((x, y) => x - y);
         const md = ord[ord.length >> 1];
-        return md > 0.2 ? { n: v.length, med: r2(md),
+        return md > (piso == null ? 0.2 : piso) ? { n: v.length, med: r2(md),
           min_pct: r2((ord[0] / md) * 100), max_pct: r2((ord[ord.length - 1] / md) * 100) } : null;
       };
-      const dm = disp('mppt#'), ds = disp('str#');
+      const dm = disp('mppt#', iPico), ds = disp('str#', iPico);
       const t = (o.serie.temp || []).filter((x) => x != null);
       // 🔴 A REFERENCIA DE DESPACHO SE MEDE DURANTE A GERACAO, nao no minimo do dia. O minimo do
       //    dia e a NOITE: com o inversor desligado a referencia vai a zero, e o minimo diario passa
@@ -602,6 +625,39 @@ async function grava(nome, obj) {
         horas: (o.serie.horas || []).filter((x) => x != null).length
           ? r2(Math.max(...(o.serie.horas || []).filter((x) => x != null))) : null,
         n: bons.length });
+
+      // ---- e a MESMA passada guarda a curva, em vez de descartar -----------------------------
+      // ⚠️ `f` ainda e 1 aqui: a potencia vai CRUA e e escalada depois, junto com todo o resto,
+      //    porque a unidade so pode ser decidida quando todas as usinas tiverem sido vistas.
+      // ⚠️ `nom` e UM numero por inversor-dia, nao um array: a nominal e constante do equipamento.
+      //    Sem ela o painel nao teria como transformar o setpoint em % — e a conta e a MESMA do
+      //    dia (setpoint / nominal), o que faz as duas telas concordarem por construcao.
+      const nomV = (o.serie.nominal || []).filter((x) => x != null);
+      const cur = { d: a.dia, ts: o.ts, inv: o.inv, nom: nomV.length ? r2(nomV[nomV.length - 1]) : null,
+        h: [], pcc: [], pca: [], ef: [], sn: [], sm: [], mm: [], t: [], iso: [], sp: [] };
+      for (const i of bons) {
+        // so a janela com geracao: a madrugada sao 0,0 repetidos que nao dizem nada e pesam
+        if (!(cc[i] > 1 || ca[i] > 1)) continue;
+        const dsi = disp('str#', i, PISO_STR_A);
+        const dmi = disp('mppt#', i, PISO_STR_A);
+        const ti = (o.serie.temp || [])[i], ii = (o.serie.isol || [])[i], si = (o.serie.setpoint || [])[i];
+        cur.h.push(String(d.instantes[i]).slice(11, 16));
+        cur.pcc.push(cc[i]); cur.pca.push(ca[i]);
+        cur.ef.push(cc[i] > 0.001 ? r2((ca[i] / cc[i]) * 100) : null);
+        // ⚠️ `sn` conta as strings COM CORRENTE, e por isso nao tem piso: zero strings ativas as
+        //    06:00 e uma medicao, nao ruido. Quem tem piso e a RAZAO entre elas.
+        cur.sn.push(Object.keys(o.serie).filter((k) => k.startsWith('str#'))
+          .map((k) => o.serie[k][i]).filter((x) => x != null && x > 0.5).length);
+        cur.sm.push(dsi ? dsi.min_pct : null);
+        cur.mm.push(dmi ? dmi.min_pct : null);
+        cur.t.push(ti == null ? null : r2(ti));
+        cur.iso.push(ii == null ? null : r2(ii));
+        cur.sp.push(si == null ? null : r2(si / 1000));
+      }
+      if (cur.h.length) {
+        if (!horaPorUfv.has(a.ufv)) horaPorUfv.set(a.ufv, new Map());
+        horaPorUfv.get(a.ufv).set(a.dia + '|' + o.ts + '|' + o.inv, cur);
+      }
     }
     if (escolhidos.indexOf(a) % 40 === 0) {
       console.log('    ' + a.dia + ' ' + a.ufv + ': ' + totalInv + ' inversores · '
@@ -638,6 +694,14 @@ async function grava(nome, obj) {
     if (o.e_cc != null) o.e_cc = r4(o.e_cc * F);
     if (o.e_ca != null) o.e_ca = r4(o.e_ca * F);
     if (o.p_ca_max != null) o.p_ca_max = r2(o.p_ca_max * F);
+  }
+  // a curva vai em kW, como o `p_ca_max` do dia — mesma grandeza, mesma unidade, e a conferencia
+  // entre as duas so fecha se elas concordarem
+  for (const m of horaPorUfv.values()) {
+    for (const cur of m.values()) {
+      cur.pcc = cur.pcc.map((x) => (x == null ? null : r2(x * F * 1000)));
+      cur.pca = cur.pca.map((x) => (x == null ? null : r2(x * F * 1000)));
+    }
   }
 
   // ---- o medidor, do blob PUBLICO --------------------------------------------------------------
@@ -1041,5 +1105,36 @@ async function grava(nome, obj) {
       + Math.round(await grava(nome, { ...meta, janela_dias: dias, dias_cobertos: cob,
         serie: sf }) / 1024) + ' KB');
   }
+  // ---- a curva do dia, UM ARQUIVO POR USINA ----------------------------------------------------
+  // 🔴 POR USINA, e a razao e de PESO. Medido com o dia real: 52 KB gzipados por usina por dia, o
+  //    que da ~367 KB em sete dias. As nove juntas dariam 5,2 MB num arquivo so, e o Infinity baixa
+  //    a URL INTEIRA antes de aplicar a consulta — quem decide o peso da pagina e o recorte do
+  //    arquivo, nunca o filtro. A pagina ja tem o seletor de usina que escolhe qual baixar; e o
+  //    mesmo recorte por familia que a Solarimetria pagou.
+  // ⚠️ CUSTO DECLARADO: sao sete dias. A fonte retem 30, entao o historico intradiario so cresce a
+  //    partir de hoje, acumulando — a mesma licao do `perdas_inv`. Janela maior e uma linha aqui,
+  //    mas a pagina ja baixa 2,2 MB de `perdas_inv`, e dobrar isso se paga em toda abertura.
+  for (const ufv of us) {
+    const m = horaPorUfv.get(ufv);
+    if (!m) { console.log('  pvstr_hora_' + ufv + ': sem curva nesta rodada'); continue; }
+    const nome = 'pvstr_hora_' + ufv + '.json';
+    const { serie: sf, novas, mantidas } = acumula(await leAnterior(nome), [...m.values()],
+      (l) => l.d + '|' + l.ts + '|' + l.inv, DIAS_HORA, (l) => l.d);
+    const cob = new Set(sf.map((l) => l.d)).size;
+    saidas.push(nome + ': ' + sf.length + ' inversor-dias (' + novas + ' novos, ' + mantidas
+      + ' do historico) · ' + cob + ' dias cobertos de ' + DIAS_HORA + ' · '
+      + Math.round(await grava(nome, {
+        gerado_em: meta.gerado_em, usina: ufv, esquema: ESQUEMA,
+        janela_dias: DIAS_HORA, dias_cobertos: cob,
+        passo: '30 min · amostra INSTANTANEA, nao media de intervalo',
+        unidade: 'pcc e pca em kW; ef em %; sm e mm em % da mediana das irmas; t em C; '
+          + 'iso em MOhm; sp em kW; sn e a contagem de strings com corrente',
+        piso_dispersao_a: PISO_STR_A,
+        nota_piso: 'a razao entre strings (sm) e entre MPPT (mm) so existe quando a mediana das '
+          + 'correntes passa de ' + PISO_STR_A + ' A. Abaixo disso a razao e ruido de amanhecer e '
+          + 'de anoitecer, e sai nula em vez de sair errada.',
+        serie: sf }) / 1024) + ' KB');
+  }
+
   for (const s of saidas) console.log('  ' + s);
 })().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
