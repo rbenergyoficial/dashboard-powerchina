@@ -77,23 +77,12 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-selo-medidores.js --real
-      # 🔴 O RELOGIO PARANDO NAO FAZ BARULHO. Ele dispara os workflows na cadencia dos crons
-      # porque o agendador do GitHub entrega ~1/3 do declarado; se o PAT expirar ou o Function
-      # App cair, nada fica vermelho — a suite so fica velha. Este vigia compara a idade da
-      # ultima execucao de cada workflow com o MAIOR intervalo que o proprio cron dele produz.
-      # E cobre tambem o caso que o job nao cobre sozinho: o job nao RODAR.
-      - name: Vigia de cadencia (o relogio esta tocando?)
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
-          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
-          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
-          MAIL_DE: ${{ vars.MAIL_DE }}
-          MAIL_PARA: ${{ vars.MAIL_PARA }}
-        run: node scripts/gen-relogio-watchdog.js
+      # 🔴 O VIGIA DE CADENCIA SAIU DAQUI, e a saida E a correcao (13/09/2026).
+      # Ele existe para perceber que um workflow DEIXOU DE RODAR — e morava dentro deste, que e
+      # um dos vigiados. Quando uma run presa em `queued` fez o relogio pular o `way2-recent` a
+      # cada 5 min, o ao-vivo ficou duas horas velho na tela e o vigia que teria avisado estava
+      # parado junto. Vigia que mora dentro do job vigiado nao e vigia; ele agora tem workflow
+      # proprio (`vigia.yml`), com gatilho proprio.
       # 🔴 SEGUNDO DESTINO. Este vigia falava so pelo webhook do Power Automate — ou seja, o vigia
       # da UNICA entrada de dado do ao-vivo tinha um canal so, e esse canal morre com a licenca.
       # `GITHUB_TOKEN` + `GH_REPO` ligam a issue no proprio repositorio, que nao depende de licenca

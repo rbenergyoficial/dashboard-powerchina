@@ -1,0 +1,67 @@
+name: Vigia (o relogio esta tocando? o selo consegue ficar vermelho?)
+# 🔴 POR QUE ESTE WORKFLOW EXISTE, e por que ele nao podia continuar onde estava.
+#
+# O vigia de cadencia — o que percebe que um workflow DEIXOU DE RODAR — morava dentro do
+# `way2-recent.yml`. Ou seja: o unico vigia capaz de notar que o ao-vivo parou so falava quando o
+# ao-vivo estava rodando. Em 13/09/2026 isso custou duas horas de dado velho na tela sem que nada
+# ficasse vermelho: uma run presa em `queued` fez o relogio pular o `way2-recent` a cada 5 min, e
+# com ele foi o vigia.
+#
+# E a mesma familia ja registrada no MUST: "os dois vigias caem juntos" quando compartilham a
+# origem. **Vigia que mora dentro do job vigiado nao e vigia.**
+#
+# ⚠️ O QUE ISTO NAO ALCANCA, declarado: este workflow tambem depende de alguem o disparar. Ele tem
+#    DOIS gatilhos independentes de proposito — o cron do proprio GitHub (que entrega ~1/3 do
+#    declarado, mas entrega) e o relogio no Azure, pela agenda. Se os dois pararem ao mesmo tempo,
+#    ninguem avisa. O que ele garante e que a parada de UM job vigiado nao o silencia.
+on:
+  # minuto quebrado e periodo primo de proposito: no `:00` o agendador do GitHub atrasa de 30 a
+  # 90 min, e um periodo que nao divide a hora nao colide sempre com os mesmos vizinhos
+  schedule:
+    - cron: '7,30,53 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  actions: read
+  # o alerta abre ISSUE no proprio repositorio — canal que nao depende de licenca nenhuma
+  issues: write
+  # e o de e-mail troca a identidade do proprio job por um token do Graph, sem segredo
+  id-token: write
+concurrency:
+  group: vigia
+  cancel-in-progress: true
+jobs:
+  vigia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i @azure/storage-blob@12
+
+      # 1 · O RELOGIO ESTA TOCANDO? Compara a idade da ultima execucao de CADA workflow da agenda
+      #     com o maior intervalo que o proprio cron dele produz, vezes a tolerancia. Cobre o caso
+      #     que nenhum job cobre sozinho: o job nao RODAR.
+      #     ⚠️ `if: always()` nao aparece aqui de proposito — este e o primeiro passo, e se ele
+      #        falhar o job fica vermelho, que e o sinal que se quer.
+      - name: Vigia de cadência (o relógio está tocando?)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/gen-relogio-watchdog.js
+
+      # 2 · O SELO CONSEGUE FICAR VERMELHO? Le os blobs PUBLICOS e exige que todo selo que mostra
+      #     idade carregue a ancora e os limiares — sem eles o selo congela no ultimo valor bom
+      #     quando o gerador para, que foi o defeito de 13/09/2026. Roda com `always()` porque um
+      #     vigia de cadencia vermelho e exatamente quando o selo mais importa.
+      - name: Ensaio do selo de frescor
+        if: always()
+        run: node scripts/ensaio-selo-frescor.js

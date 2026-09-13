@@ -36,6 +36,7 @@
 const https = require('https');
 const zlib = require('zlib');
 const rot = require('./lib-rotulos.js');
+const SELO = require('./lib-selo.js');
 
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_BLOB = 'fontes_saude.json';
@@ -55,6 +56,12 @@ const horas = (ms) => (AGORA - ms) / 3600000;
 const dias = (ms) => horas(ms) / 24;
 const cor = (v, verde, ambar) => v <= verde ? VERDE : v <= ambar ? AMBAR : VERMELHO;
 const ddmm = (iso) => iso.slice(8, 10) + '/' + iso.slice(5, 7);
+const H = SELO.HORA, D = SELO.DIA;
+// 🔴 O SELO TEM DE PODER FICAR VERMELHO SOZINHO. `sel()` junta ao badge o instante ANCORA e os
+//    limiares, para o painel refazer a idade contra o relogio de quem le. Sem isto, gerador
+//    parado = selo congelado no ultimo valor bom, e ele nunca denuncia a propria parada.
+//    ⚠️ Badge sem idade (contagem, evento informativo) NAO recebe: ali nao ha o que envelhecer.
+const sel = (b, ms, ok, alt, un) => Object.assign(b, SELO.frescor(ms, ok, alt, un));
 
 // cada fonte devolve os seus badges; erro vira badge vermelho, nunca excecao que derrube o job
 async function trafo() {
@@ -68,8 +75,8 @@ async function trafo() {
     const fim = Date.parse(ult.dia + 'T23:59:59-03:00');          // o dia inteiro medido
     const h = horas(fim);
     return [
-      { ic: '⚡', l: 'Supervisório', v: ddmm(ult.dia), u: 'último dia', c: cor(h, 36, 72) },
-      { ic: '⏱', l: 'Idade', v: String(Math.round(h)), u: 'h', c: cor(h, 36, 72) },
+      sel({ ic: '⚡', l: 'Supervisório', v: ddmm(ult.dia), u: 'último dia', c: cor(h, 36, 72) }, fim, 36 * H, 72 * H),
+      sel({ ic: '⏱', l: 'Idade', v: String(Math.round(h)), u: 'h', c: cor(h, 36, 72) }, fim, 36 * H, 72 * H, 'h'),
     ];
   } catch (e) { return [{ ic: '⚡', l: 'Supervisório', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
@@ -79,10 +86,11 @@ async function oleo() {
     const cm = (o.campanhas_meta || []);
     const ult = cm.length ? cm[cm.length - 1] : null;
     if (!ult || !ult.ultima) throw new Error('sem campanha');
-    const d = dias(Date.parse(ult.ultima + 'T12:00:00-03:00'));
+    const msO = Date.parse(ult.ultima + 'T12:00:00-03:00');
+    const d = dias(msO);
     return [
-      { ic: '🧪', l: 'Última coleta', v: ddmm(ult.ultima), u: ult.camp_rot || '', c: cor(d, 120, 180) },
-      { ic: '⏱', l: 'Idade', v: String(Math.round(d)), u: 'dias', c: cor(d, 120, 180) },
+      sel({ ic: '🧪', l: 'Última coleta', v: ddmm(ult.ultima), u: ult.camp_rot || '', c: cor(d, 120, 180) }, msO, 120 * D, 180 * D),
+      sel({ ic: '⏱', l: 'Idade', v: String(Math.round(d)), u: 'dias', c: cor(d, 120, 180) }, msO, 120 * D, 180 * D, 'd'),
     ];
   } catch (e) { return [{ ic: '🧪', l: 'Última coleta', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
@@ -92,10 +100,11 @@ async function ons() {
     const L = r.consolidado || [];
     const ult = L.length ? L[L.length - 1].ts : null;                 // 'AAAA-MM-DD HH:MM:SS' local
     if (!ult) throw new Error('sem instante');
-    const h = horas(Date.parse(ult.replace(' ', 'T') + '-03:00'));
+    const msN = Date.parse(ult.replace(' ', 'T') + '-03:00');
+    const h = horas(msN);
     return [
-      { ic: '🛰', l: 'ONS', v: ddmm(ult) + ' ' + ult.slice(11, 16), u: 'último instante', c: cor(h, 36, 60) },
-      { ic: '⏱', l: 'Idade', v: String(Math.round(h)), u: 'h', c: cor(h, 36, 60) },
+      sel({ ic: '🛰', l: 'ONS', v: ddmm(ult) + ' ' + ult.slice(11, 16), u: 'último instante', c: cor(h, 36, 60) }, msN, 36 * H, 60 * H),
+      sel({ ic: '⏱', l: 'Idade', v: String(Math.round(h)), u: 'h', c: cor(h, 36, 60) }, msN, 36 * H, 60 * H, 'h'),
     ];
   } catch (e) { return [{ ic: '🛰', l: 'ONS', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
@@ -103,15 +112,16 @@ async function inversores() {
   try {
     const i = await le('inversores.json'); const f = i.fontes || {};
     if (!f.substituicoes_planilha_em || !f.alarmes_ultimo_mes) throw new Error('sem fontes');
-    const dP1 = dias(Date.parse(f.substituicoes_planilha_em));
+    const msP1 = Date.parse(f.substituicoes_planilha_em);
+    const dP1 = dias(msP1);
     const [y, m] = f.alarmes_ultimo_mes.split('-').map(Number);
     const fimMes = new Date(Date.UTC(y, m, 0, 23, 59, 59) + 3 * 3600000);   // ultimo dia do mes coberto, 23:59 BRT
     const dP2 = dias(fimMes.getTime());
     const CINZA = '#8B93A1';
     return [
       { ic: '🔁', l: 'Última troca', v: f.substituicoes_ultima ? ddmm(f.substituicoes_ultima) : '—', u: 'registrada', c: CINZA },
-      { ic: '📋', l: 'Planilha de falhas', v: ddmm(f.substituicoes_planilha_em), u: 'salva', c: cor(dP1, 30, 60) },
-      { ic: '🔔', l: 'Alarmes até', v: String(m).padStart(2, '0') + '/' + String(y).slice(2), u: 'mês', c: cor(dP2, 45, 75) },
+      sel({ ic: '📋', l: 'Planilha de falhas', v: ddmm(f.substituicoes_planilha_em), u: 'salva', c: cor(dP1, 30, 60) }, msP1, 30 * D, 60 * D),
+      sel({ ic: '🔔', l: 'Alarmes até', v: String(m).padStart(2, '0') + '/' + String(y).slice(2), u: 'mês', c: cor(dP2, 45, 75) }, fimMes.getTime(), 45 * D, 75 * D),
     ];
   } catch (e) { return [{ ic: '🔁', l: 'Inversores', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
@@ -121,9 +131,10 @@ async function solarimetria() {
     const ult = (campo) => L.filter((x) => typeof x[campo] === 'number').map((x) => x.dia).sort().pop();
     const dEst = ult('gti'), dOns = ult('ons_gti');
     if (!dEst) throw new Error('sem dia');
-    const hE = horas(Date.parse(dEst + 'T23:59:59-03:00'));
-    const out = [{ ic: '☀️', l: 'Estação', v: ddmm(dEst), u: 'último dia', c: cor(hE, 36, 72) }];
-    if (dOns) { const hO = horas(Date.parse(dOns + 'T23:59:59-03:00')); out.push({ ic: '🛰', l: 'ONS', v: ddmm(dOns), u: 'último dia', c: cor(hO, 36, 60) }); }
+    const msE = Date.parse(dEst + 'T23:59:59-03:00');
+    const hE = horas(msE);
+    const out = [sel({ ic: '☀️', l: 'Estação', v: ddmm(dEst), u: 'último dia', c: cor(hE, 36, 72) }, msE, 36 * H, 72 * H)];
+    if (dOns) { const msO2 = Date.parse(dOns + 'T23:59:59-03:00'); const hO = horas(msO2); out.push(sel({ ic: '🛰', l: 'ONS', v: ddmm(dOns), u: 'último dia', c: cor(hO, 36, 60) }, msO2, 36 * H, 60 * H)); }
     else out.push({ ic: '🛰', l: 'ONS', v: 'sem leitura', u: '', c: VERMELHO });
     return out;
   } catch (e) { return [{ ic: '☀️', l: 'Estação', v: 'sem leitura', u: '', c: VERMELHO }]; }
@@ -132,8 +143,10 @@ async function historico() {
   try {
     const h = await le('way2_daily.json'); const L = (h.dias || []).filter((x) => x && x.completo && x.dia);
     const ult = L.length ? L[L.length - 1].dia : null; if (!ult) throw new Error('sem dia fechado');
-    const hh = horas(Date.parse(ult + 'T23:59:59-03:00'));
-    return [{ ic: '📒', l: 'Último dia fechado', v: ddmm(ult), u: 'medidor', c: cor(hh, 36, 72) }, { ic: '⏱', l: 'Idade', v: String(Math.round(hh)), u: 'h', c: cor(hh, 36, 72) }];
+    const msH = Date.parse(ult + 'T23:59:59-03:00');
+    const hh = horas(msH);
+    return [sel({ ic: '📒', l: 'Último dia fechado', v: ddmm(ult), u: 'medidor', c: cor(hh, 36, 72) }, msH, 36 * H, 72 * H),
+      sel({ ic: '⏱', l: 'Idade', v: String(Math.round(hh)), u: 'h', c: cor(hh, 36, 72) }, msH, 36 * H, 72 * H, 'h')];
   } catch (e) { return [{ ic: '📒', l: 'Último dia fechado', v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
 // a Way2 continua sendo a Way2: copia dos badges que o selo original ja usa, para quem quiser

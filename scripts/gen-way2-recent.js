@@ -10,6 +10,7 @@
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { gerarClima } = require('./gen-clima');
 const rot = require('./lib-rotulos.js');
+const SELO = require('./lib-selo.js');
 
 const CONTAINER = 'dados';
 const LIVE_BLOB = 'way2_eletrico.json';
@@ -185,7 +186,14 @@ function gerarSaude(dados, agoraMs) {
   // e o selo DIZ qual grupo caiu, senao a cor vermelha obriga a abrir a pagina para descobrir
   const sufMed = f230 > 0 ? (f230 === 1 ? '230 kV parcial' : '230 kV fora') : '';
   const badges = [
-    { ic: '⏱', l: 'Way2', v: String(idadeAncora), u: 'min', c: corIdade },
+    // 🔴 `ms`/`ok`/`alt`/`un`/`cs` sao o que faz o selo se REFAZER no navegador. O `v` e o `c`
+    //    continuam iguais: eles sao o que a tela mostra se o painel for velho ou o JS nao rodar.
+    //    Sem isto o selo congela no ultimo valor bom quando ESTE gerador para — e foi assim que
+    //    em 13/09/2026 ele disse "9 min, verde" sobre um dado de duas horas.
+    Object.assign({ ic: '⏱', l: 'Way2', v: String(idadeAncora), u: 'min', c: corIdade },
+      ancora ? SELO.frescor(Date.parse(ancora + '-03:00'), OK_MIN, FALHA_MIN, 'min') : {}),
+    // ⚠️ o de MEDIDORES nao leva frescor: ele conta equipamento, nao mede idade. Um selo que
+    //    envelhecesse sozinho ali diria coisa que o numero nao sustenta.
     { ic: '📡', l: 'Medidores', v: medSaudaveis + '/' + resumo.total, u: sufMed, c: corMed },
   ];
   // 🔴 O rótulo do selo vai nas TRÊS línguas. Esta barra está no topo de 13 páginas traduzidas, e
