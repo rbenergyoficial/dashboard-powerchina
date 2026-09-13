@@ -213,7 +213,32 @@ function dataDosDefeitos(eventos, defeitos) {
   const ILEGIVEL = new Set(['ano_impossivel', 'data_ilegivel', 'hora_ilegivel', 'pot_ilegivel']);
   const defeitos = dataDosDefeitos(reg.eventos || [], reg.defeitos || [])
     .filter((d) => d.dia_aprox == null || d.dia_aprox >= DE);
-  const ilegiveis = defeitos.filter((d) => ILEGIVEL.has(d.tipo));
+
+  /* 🔴 O DIA CORRENTE ESTA SENDO DIGITADO AGORA, e linha pela metade nele nao e defeito.
+     O operador escreve a data e a hora em momentos diferentes; enquanto o turno corre, as ultimas
+     linhas ficam com a hora em branco por CONSTRUCAO. Medido em 13/09/2026: das 41 linhas
+     ilegiveis do registro, 29 eram do dia corrente e 12 de dias fechados (20/07 e 15/08) — e sao
+     essas doze que a guarda existe para achar.
+     Esta casa ja isenta o dia corrente na guarda de "restricao sem motivo", pelo mesmo motivo; a
+     de linha ilegivel nao isentava, e por isso acendia todo dia. Alarme que acende todo dia
+     ensina a ignorar o alarme, que e o oposto do que ele existe para fazer.
+
+     ⚠️ O CORTE E `hoje`, NAO "o ultimo dia do registro": se o registro parar de ser alimentado, o
+        ultimo dia dele vira passado e as linhas quebradas nele PRECISAM acusar. Ancorar no ultimo
+        dia esconderia justamente a parada.
+     ⚠️ E o custo vai declarado: uma linha quebrada de hoje so e acusada amanha. A alternativa e
+        acusar todo dia, e um dia de espera e barato contra um alarme que ninguem le.
+     ⚠️ A isencao herda a aproximacao do `dia_aprox`: a linha ilegivel nao tem data propria e e
+        datada pela ultima linha LEGIVEL acima dela. Uma linha quebrada na virada do dia pode ser
+        isentada por um dia a mais. */
+  const HOJE = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const ilegiveisTodas = defeitos.filter((d) => ILEGIVEL.has(d.tipo));
+  const ilegiveis = ilegiveisTodas.filter((d) => d.dia_aprox !== HOJE);
+  const ilegiveisHoje = ilegiveisTodas.length - ilegiveis.length;
+  if (ilegiveisHoje) {
+    console.log('  ' + ilegiveisHoje + ' linha(s) ilegivel(is) do dia corrente (' + HOJE
+      + ') — o turno ainda esta lancando, nao sao alarme');
+  }
 
   /* ── o relatorio ──────────────────────────────────────────────────────────────────────── */
   const dias = [...porDia.values()].filter((x) => x.dia <= ate).sort((a, b) => (a.dia < b.dia ? -1 : 1))
@@ -237,6 +262,16 @@ function dataDosDefeitos(eventos, defeitos) {
   if (semRegistro.length) alarmes.push({ gatilho: 'restricao_sem_registro', n: semRegistro.length,
     detalhe: semRegistro.slice(0, 20) });
   if (ilegiveis.length) alarmes.push({ gatilho: 'linha_ilegivel', n: ilegiveis.length, detalhe: ilegiveis.slice(0, 20) });
+  /* 🔴 O INFORMATIVO NAO ENTRA NA LISTA QUE REPROVA. `alarmes.length` decide o codigo de saida
+     do job, e a primeira versao deste lote empurrou o informativo para la — o alarme sairia pela
+     porta da frente e voltaria pela dos fundos, com o job vermelho do mesmo jeito. E o laco que
+     imprime faz `a.detalhe.slice(0, 3)`: um item sem `detalhe` estouraria ali.
+     Ele vai para uma lista PROPRIA, publicada no relatorio: isencao calada e a mesma familia da
+     guarda que cala, e quem ler tem de ver que elas existem e por que nao contam. */
+  const avisos = [];
+  if (ilegiveisHoje) avisos.push({ gatilho: 'linha_ilegivel_dia_corrente', n: ilegiveisHoje,
+    dia: HOJE,
+    nota: 'o turno ainda esta lancando este dia; estas linhas nao sao alarme e serao auditadas amanha' });
   const diasFora = dias.filter((d) => d.mediana_miolo_mw != null && d.mediana_miolo_mw > TOL_DIA);
   if (diasFora.length) alarmes.push({ gatilho: 'mediana_do_dia_fora', n: diasFora.length,
     limiar_mw: TOL_DIA, detalhe: diasFora.map((d) => ({ dia: d.dia, mediana_miolo_mw: d.mediana_miolo_mw })) });
@@ -262,7 +297,7 @@ function dataDosDefeitos(eventos, defeitos) {
          caixas exigem que o leitor some de cabeca e acerte o sinal. */
       minutos_fora_mediana_min: mediana(dias.map((d) => d.minutos_fora).filter((v) => v != null)),
     },
-    dias, alarmes, defeitos,
+    dias, alarmes, avisos, defeitos,
   };
 
   console.log('AUDITORIA ' + DE + ' a ' + ate + ' · ' + dias.length + ' dias');
@@ -278,6 +313,8 @@ function dataDosDefeitos(eventos, defeitos) {
   } else {
     console.log('  (SECO — nada gravado)');
   }
+
+  for (const a of avisos) console.log('  ℹ️  ' + a.gatilho + ': ' + a.n + ' (' + a.dia + ') — ' + a.nota);
 
   if (alarmes.length) {
     console.error('');

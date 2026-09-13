@@ -87,14 +87,24 @@ function fechaRegiao(bench) {
     });
   });
   if (!conferidos) out.push('regiao: nenhum mes COMPLETO na janela — a conferencia nao julgou nada');
-  // e o percentual de cada dia tem de sair do proprio par cortado/gerado do dia, nao de outro lugar
+  // E o percentual de cada dia tem de sair do proprio par cortado/gerado do dia, nao de outro lugar.
+  //
+  // 🔴 A TOLERANCIA E DERIVADA, nao escolhida — e a primeira versao deste ensaio provou por que. Com
+  // 0,05 pp fixo ele acusou 24 dias de maio, todos do Mauriti e do Abaiara: num dia a energia deles e
+  // de decimos de GWh, e o blob publica GWh com DUAS casas. Medido, nenhum era divergencia. Sendo
+  //     p = 100c/(c+g)   ->   dp = 100 (g dc - c dg)/(c+g)^2   ->   |dp| <= 0,5/(c+g)
+  // com |dc|,|dg| <= 0,005 GWh; mais 0,005 pp do arredondamento do PROPRIO percentual publicado. Num
+  // dia de 1 GWh isso da meio ponto percentual de folga legitima; no Nordeste, com centenas de GWh,
+  // aperta sozinho para milesimos. Limiar unico cegaria um lado e acusaria o outro.
   sd.forEach(d => {
     [['nosso', d.nosso_cortado_gwh, d.nosso_gerado_gwh, d.nosso_corte_pct],
       ['abaiara', d.abaiara_cortado_gwh, d.abaiara_gerado_gwh, d.abaiara_corte_pct],
       ['ne', d.ne_cortado_gwh, d.ne_gerado_gwh, d.ne_corte_pct]].forEach(([q, c, g, p]) => {
       if (c == null || g == null || p == null || (c + g) <= 0) return;
-      if (Math.abs(100 * c / (c + g) - p) > 0.05) {
-        out.push('regiao ' + d.dia + ' ' + q + ': percentual ' + p + ' nao sai do proprio cortado/gerado');
+      const tol = 0.5 / (c + g) + 0.005;
+      if (Math.abs(100 * c / (c + g) - p) > tol) {
+        out.push('regiao ' + d.dia + ' ' + q + ': percentual ' + p + ' nao sai do proprio cortado/gerado'
+          + ' (dif ' + Math.abs(100 * c / (c + g) - p).toFixed(3) + ' pp, tolerancia ' + tol.toFixed(3) + ')');
       }
     });
   });
@@ -106,12 +116,20 @@ function provaQueReprova(exec, bench) {
   const clone = o => JSON.parse(JSON.stringify(o));
   const casos = [];
 
-  // (a) um dia de motivo perdido: o mes deixa de fechar pela energia daquele dia
+  // (a) um dia de motivo perdido: o mes deixa de fechar pela energia daquele dia.
+  // 🔴 O dia tem de ser de um mes COMPLETO na janela. A primeira versao pegava o ultimo dia com razao,
+  // que cai no mes corrente — e a conferencia pula mes incompleto de proposito, entao o defeito plantado
+  // PASSAVA e o ensaio anunciava uma guarda que nao tinha sido exercitada. Defeito plantado fora do
+  // alcance da regra nao prova nada sobre a regra.
   {
     const e = clone(exec);
-    const alvo = [...e.serie_diaria].reverse().find(d => Object.keys(d.razoes || {}).length
-      && Object.values(d.razoes).some(o => o.gwh > 0.2));
+    const n = {};
+    e.serie_diaria.forEach(d => { n[d.dia.slice(0, 7)] = (n[d.dia.slice(0, 7)] || 0) + 1; });
+    const completo = m => n[m] === diasNoMes(m);
+    const alvo = [...e.serie_diaria].reverse().find(d => completo(d.dia.slice(0, 7))
+      && Object.values(d.razoes || {}).some(o => o.gwh > 0.2));
     if (alvo) { alvo.razoes = {}; casos.push(['dia de motivo apagado (' + alvo.dia + ')', () => fechaMotivo(e)]); }
+    else casos.push(['dia de motivo apagado', () => ['nao houve mes COMPLETO com energia para plantar o defeito']]);
   }
   // (b) o campo inteiro some — o defeito que este lote veio consertar, ao contrario
   {
