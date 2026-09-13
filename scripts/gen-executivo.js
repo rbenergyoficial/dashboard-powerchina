@@ -1111,6 +1111,7 @@ async function writeOut(obj, nome, opts) {
           const oN = (v) => (S.sem_ons ? null : v);
           return { ufv, mes: m, mes_ts: S.mes_ts, lbl: S.lbl,
             liquida_gwh: r2(liq / 1000), meta_gwh: meta == null ? null : r2(meta / 1000),
+            liquida_mwh: r2(liq),   // o mesmo numero em MWh com centesimos: o portal mostra o Entregue em MWh (13/09/2026)
             atingido_pct: meta > 0 ? r2(100 * liq / meta) : null,
             potencial_gwh: oN(r2(ge / 1000)), entregue_gwh: oN(r2(gv / 1000)),
             cortado_gwh: oN(r2(corte / 1000)),
@@ -1832,6 +1833,7 @@ async function writeOut(obj, nome, opts) {
         out.ytd_ufv.push({ ufv: u, ano,
           meses: A.length, primeiro: A[0] ? A[0].lbl : null, ultimo: A[A.length - 1] ? A[A.length - 1].lbl : null,
           liquida_gwh: r2(liqAcum), meta_gwh: temMeta.length ? r2(metaAcum) : null,
+          liquida_mwh: r2(somaN('liquida_mwh')),
           atingido_pct: metaAcum > 0 ? r2(100 * liqAcum / metaAcum) : null,
           meses_com_meta: temMeta.length,
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
@@ -2089,6 +2091,24 @@ async function writeOut(obj, nome, opts) {
             x.vida_acum_liq_gwh = null; x.vida_acum_meta_gwh = null; x.vida_acum_ating_pct = null;
           }
         });
+    }
+
+    // ---- `liquida_mwh` fecha com `liquida_gwh` (13/09/2026) ----
+    // O portal mostra o Entregue em MWh com duas casas; o consolidado mensal e anual so tinha GWh com
+    // 2 casas (resolucao de 10 MWh). O campo novo vai AO LADO do antigo — nada que le o blob quebra — e as
+    // duas escritas do mesmo numero tem de concordar dentro do arredondamento, senao o job para.
+    {
+      const mau = [];
+      (out.serie_ufv || []).forEach(x => {
+        if (x.liquida_gwh == null) return;
+        if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.006) mau.push(x.ufv + ' ' + x.mes + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+      });
+      (out.ytd_ufv || []).forEach(x => {
+        if (x.liquida_gwh == null) return;
+        // o ano soma meses ja arredondados nas duas unidades: a folga e meio centesimo de GWh por mes
+        if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.005 * (x.meses + 1)) mau.push(x.ufv + ' ' + x.ano + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+      });
+      if (mau.length) throw new Error('liquida_mwh NAO fecha com liquida_gwh:\n  ' + mau.join('\n  '));
     }
 
     // ---- SÉRIE + MÉDIA, só para os dois gráficos de entrega mês a mês ----
