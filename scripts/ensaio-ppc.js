@@ -110,6 +110,15 @@ casos.push({ nome: 'D · o dia inteiro deslocado', espera: 'mediana_do_dia_fora'
 
 console.log('ENSAIO DA AUDITORIA DO PPC · recorte ' + DE + ' · dia-cobaia ' + alvo);
 let mau = 0;
+/* 🔴 A LINHA DE BASE E MEDIDA, NAO SUPOSTA. O caso A exigia que o dado de hoje passasse
+   LIMPO — e o dado de hoje pode ter achado LEGITIMO: em 13/09/2026 a mesa nao lancara o dia
+   07/09, a auditoria acusou com razao, e o ensaio inteiro caiu junto. Ensaio cujo controle
+   depende de o mundo estar perfeito nao e ensaio: ele reprova quando a ferramenta ACERTA.
+   Agora o caso A registra QUAIS gatilhos estao ativos hoje, e os casos plantados exigem o
+   gatilho NOVO — a capacidade de detectar independe do estado da planilha. */
+const gatilhosDe = (saida) => new Set((saida.match(/^ {3}(\w+):/gm) || [])
+  .map((x) => x.trim().slice(0, -1)));
+let base_gatilhos = new Set();
 for (const c of casos) {
   const j = c.monta(JSON.parse(JSON.stringify(base)));
   const arq = path.join(TMP, 'ensaio_ppc_' + c.nome.slice(0, 1) + '.json');
@@ -118,11 +127,24 @@ for (const c of casos) {
   try { fs.unlinkSync(arq); } catch (e) { /* o ensaio nao falha por nao conseguir apagar o proprio rascunho */ }
 
   if (!c.espera) {
-    if (r.ok) console.log('  OK   ' + c.nome + ' -> passou, como tem de passar');
-    else { mau += 1; console.log('  FALHA ' + c.nome + ' -> REPROVOU o dado bom:\n' + r.saida.split('\n').slice(-6).join('\n')); }
+    base_gatilhos = gatilhosDe(r.saida);
+    if (r.ok) console.log('  OK   ' + c.nome + ' -> passou limpo');
+    else {
+      /* ⚠️ nao e falha do ensaio: e a auditoria acusando a PLANILHA. Fica como linha de
+         base, e os casos seguintes exigem o gatilho NOVO por cima dela. */
+      console.log('  ℹ️  ' + c.nome + ' -> ja tem achado REAL na planilha: '
+        + [...base_gatilhos].join(', ') + ' (linha de base; nao e falha do ensaio)');
+    }
     continue;
   }
   if (r.ok) { mau += 1; console.log('  FALHA ' + c.nome + ' -> o defeito PASSOU sem alarme'); continue; }
+  if (base_gatilhos.has(c.espera)) {
+    /* 🔴 se o gatilho JA estava aceso antes do defeito plantado, este caso nao prova nada:
+       ele passaria mesmo com a deteccao quebrada. Guarda que passa por vacuidade nao e guarda. */
+    mau += 1;
+    console.log('  FALHA ' + c.nome + ' -> ' + c.espera + ' JA estava aceso na linha de base: o caso nao julga nada');
+    continue;
+  }
   if (r.saida.indexOf(c.espera) < 0) {
     mau += 1;
     console.log('  FALHA ' + c.nome + ' -> reprovou, mas por outro motivo (esperava ' + c.espera + ')');
