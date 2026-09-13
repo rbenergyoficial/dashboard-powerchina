@@ -10,6 +10,8 @@ on:
       - '.github/workflows/*.yml'
       - 'relogio/agenda.json'
       - 'relogio/gerar-agenda.js'
+      - 'relogio/src/index.js'
+      - 'relogio/ensaio-guarda.js'
   workflow_dispatch:
 
 jobs:
@@ -20,3 +22,6 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: node relogio/gerar-agenda.js --conferir
+      # a guarda anti-empilhamento tem ensaio proprio, e ele roda aqui tambem: o deploy so
+      # acontece quando `relogio/**` muda, e um cron novo num workflow pode furar a margem dela
+      - run: node relogio/ensaio-guarda.js

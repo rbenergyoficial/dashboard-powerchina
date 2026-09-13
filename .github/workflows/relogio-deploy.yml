@@ -75,6 +75,13 @@ jobs:
       - name: A agenda bate com os workflows?
         run: node relogio/gerar-agenda.js --conferir
 
+      # 🔴 O ENSAIO DA GUARDA EXISTIA E NINGUEM O RODAVA (achado em 13/09/2026). Ele prova os dois
+      # modos de errar da guarda anti-empilhamento — frouxa demais empilha fila, rigida demais
+      # desliga o workflow em silencio —, e ficava fora do CI, dependendo de alguem lembrar.
+      # Guarda que so roda quando alguem lembra nao e guarda. Aqui ela decide se publica.
+      - name: Ensaio da guarda anti-empilhamento
+        run: node relogio/ensaio-guarda.js
+
       - name: Instalar dependencias
         run: npm install --omit=dev
         working-directory: relogio

@@ -63,18 +63,54 @@ async function gh(caminho, init = {}) {
 // para cima e pega o zumbi de 26 dias por fator 100.
 const TETO_VIVO_MS = 6 * 60 * 60 * 1000;
 
+// 🔴 E O TETO SOZINHO NAO BASTA — medido em 13/09/2026, com o ao-vivo cego por SEIS HORAS.
+// Uma run do `way2-recent` prendeu em `queued` as 09:20 UTC. Dentro das 6 h ela conta como viva,
+// entao o relogio pulou o disparo a cada 5 min — e o Monitor ficou mostrando o dado de duas horas
+// antes. O teto resolve o zumbi ANTIGO e deixa o FRESCO cegar a suite por um turno inteiro.
+//
+// 🔴 O SINAL QUE SERVE NAO E "ZERO JOBS", e isso foi MEDIDO antes de virar codigo. Dos quatro
+// registros presos no repo, tres tinham zero jobs e UM (19/08) tinha um job — parado em `queued`,
+// `runner: null`, "iniciado" ha 25 dias. Uma guarda por contagem de jobs teria deixado esse
+// passar, e ainda custaria uma chamada de API por run.
+//
+// O que os QUATRO tem em comum e `updated_at` IGUAL a `created_at`: o registro nasceu e nunca se
+// mexeu. Numa execucao de verdade o `updated_at` avanca em **4 segundos** (medido no ato, com um
+// disparo real: created 14:02:49, updated 14:02:53). Nao ha chamada extra: os dois campos ja vem
+// na mesma listagem.
+//
+// ⚠️ A MARGEM E DE 5 MINUTOS, e ela nao e gosto: e a menor cadencia da agenda. Assim um registro
+// parado custa no maximo UM ciclo do workflow mais rapido, contra os 72 ciclos que custou hoje —
+// e ainda e 75x o tempo que uma execucao viva leva para se mexer.
+//
+// ⚠️ E o custo de errar e pequeno POR CONSTRUCAO: se uma run legitimamente esperando runner for
+// lida como parada, o relogio dispara outra, e a `concurrency` do proprio workflow resolve. Esta
+// guarda e o cinto por cima do suspensorio — ela pode se dar ao luxo de ser menos conservadora
+// justamente porque o suspensorio existe.
+const PARADA_MS = 5 * 60 * 1000;
+
+const registroParado = (x) => {
+  const c = Date.parse(x.created_at), u = Date.parse(x.updated_at);
+  return isFinite(c) && isFinite(u) && u <= c && (Date.now() - c) > PARADA_MS;
+};
+
 async function jaRodando(wf, log) {
   const busca = (st) => gh('/workflows/' + wf + '/runs?per_page=20&status=' + st).catch(() => null);
   const [r, q] = await Promise.all([busca('in_progress'), busca('queued')]);
   const corte = Date.now() - TETO_VIVO_MS;
   const todas = [...((r && r.workflow_runs) || []), ...((q && q.workflow_runs) || [])];
-  const vivas = todas.filter((x) => Date.parse(x.created_at) >= corte);
-  const zumbis = todas.length - vivas.length;
-  // 🔴 O zumbi passa a ser DITO. Antes ele agia em silencio; um registro que desabilita um
-  // workflow tem de aparecer no log de quem o pula.
-  if (zumbis && log) {
-    log.warn(`${wf}: ${zumbis} run(s) presa(s) ha mais de 6 h — ignorada(s). `
+  const velhas = todas.filter((x) => Date.parse(x.created_at) < corte);
+  const paradas = todas.filter((x) => Date.parse(x.created_at) >= corte && registroParado(x));
+  const vivas = todas.filter((x) => Date.parse(x.created_at) >= corte && !registroParado(x));
+  // 🔴 O registro morto passa a ser DITO, e com o MOTIVO: sao duas coisas diferentes, e quem le o
+  // log precisa saber qual delas aconteceu. Um registro que desabilita um workflow tem de
+  // aparecer no log de quem o pula — antes ele agia em silencio.
+  if (velhas.length && log) {
+    log.warn(`${wf}: ${velhas.length} run(s) presa(s) ha mais de 6 h — ignorada(s). `
       + `Registro morto no GitHub; se persistir, apague-a nas Actions.`);
+  }
+  if (paradas.length && log) {
+    log.warn(`${wf}: ${paradas.length} run(s) criada(s) e nunca iniciada(s) (updated_at = created_at `
+      + `ha mais de 5 min) — ignorada(s). Registro morto no GitHub; se persistir, apague-a nas Actions.`);
   }
   return vivas.length > 0;
 }

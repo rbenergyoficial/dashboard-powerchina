@@ -23,12 +23,15 @@ const ok = (c, m) => { if (!c) { mau += 1; console.log('  [X] ' + m); } else con
 
 const fonte = fs.readFileSync(path.join(__dirname, 'src', 'index.js'), 'utf8');
 const mTeto = /const TETO_VIVO_MS = [^;]+;/.exec(fonte);
+const mParada = /const PARADA_MS = [^;]+;/.exec(fonte);
+const mMorto = /const registroParado = \([\s\S]*?\n\};/.exec(fonte);
 const mFn = /async function jaRodando\(wf, log\) \{[\s\S]*?\n\}/.exec(fonte);
-if (!mTeto || !mFn) throw new Error('nao achei TETO_VIVO_MS ou jaRodando em src/index.js');
+if (!mTeto || !mParada || !mMorto || !mFn) throw new Error('nao achei TETO_VIVO_MS, PARADA_MS, registroParado ou jaRodando em src/index.js');
+const PARADA_MIN = Number(/([0-9]+) \* 60 \* 1000/.exec(mParada[0])[1]);
 
 // `gh` injetado: devolve o que o ensaio mandar, sem rede.
 function monta(respostas) {
-  return new Function('gh', mTeto[0] + '\n' + mFn[0] + '\nreturn jaRodando;')(
+  return new Function('gh', mTeto[0] + '\n' + mParada[0] + '\n' + mMorto[0] + '\n' + mFn[0] + '\nreturn jaRodando;')(
     async (caminho) => {
       const st = /status=(\w+)/.exec(caminho)[1];
       return { workflow_runs: respostas[st] || [] };
@@ -75,6 +78,42 @@ const log = { warn: (m) => registros.push(m), info: () => {} };
     '5 h 59 min: ainda e considerada viva');
   ok(await monta({ queued: [{ created_at: emMin(6 * 60 + 1) }] })('x.yml', log) === false,
     '6 h 01 min: ja e zumbi');
+
+  // ── 6 · o REGISTRO PARADO, que e o caso de 13/09/2026 ─────────────────────────────────────
+  // Ele nasce e nunca se mexe: `updated_at` igual a `created_at`. Numa execucao de verdade esse
+  // campo avanca em 4 s (medido com disparo real). O teto de 6 h nao o pega, e foi por isso que
+  // o ao-vivo ficou cego por seis horas.
+  const parado = (min) => ({ created_at: emMin(min), updated_at: emMin(min) });
+  const andando = (min) => ({ created_at: emMin(min), updated_at: emMin(min - 1) });
+
+  console.log('\n6 · registro criado e NUNCA iniciado');
+  registros.length = 0;
+  ok(await monta({ queued: [parado(240)] })('way2-recent.yml', log) === false,
+    'queued de 4 h, updated = created: NAO bloqueia (o caso de 13/09)');
+  ok(registros.length === 1 && /nunca iniciada/.test(registros[0]),
+    'e ele e dito, com o motivo: ' + (registros[0] || '(nada)').slice(0, 78));
+
+  registros.length = 0;
+  ok(await monta({ queued: [andando(240)] })('x.yml', log) === true,
+    'queued de 4 h que JA se mexeu: bloqueia — este pode estar vivo');
+  ok(registros.length === 0, 'e ninguem o chama de morto');
+
+  console.log('\n7 · a margem, e a borda dela');
+  ok(await monta({ queued: [parado(1)] })('x.yml', log) === true,
+    'parado ha 1 min: ainda bloqueia (a execucao acabou de nascer)');
+  ok(await monta({ queued: [parado(PARADA_MIN + 1)] })('x.yml', log) === false,
+    'parado ha ' + (PARADA_MIN + 1) + ' min: ja nao bloqueia');
+  ok(await monta({ queued: [parado(240), { created_at: emMin(3), updated_at: emMin(2) }] })('x.yml', log) === true,
+    'um parado e uma viva: a VIVA manda');
+
+  // 🔴 a margem nao e escolhida: e a menor cadencia da agenda, para um registro parado custar no
+  //    maximo UM ciclo do workflow mais rapido. Se alguem puser um cron mais curto, isto reprova.
+  const agenda = JSON.parse(fs.readFileSync(path.join(__dirname, 'agenda.json'), 'utf8'));
+  const menor = Math.min(...[].concat(...Object.values(agenda)).map((c) => {
+    const m = /^0 \*\/(\d+) /.exec(c); return m ? Number(m[1]) : 60;
+  }));
+  ok(PARADA_MIN <= menor,
+    'a margem (' + PARADA_MIN + ' min) nao passa da menor cadencia da agenda (' + menor + ' min)');
 
   console.log('\n' + (mau ? mau + ' FALHA(S)' : 'tudo passou'));
   process.exit(mau ? 1 : 0);
