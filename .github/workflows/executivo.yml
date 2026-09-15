@@ -56,6 +56,14 @@ jobs:
       - name: Ensaio · a serie por dia fecha com a por mes
         run: node scripts/ensaio-fechamento-dia.js
 
+      # A relacao usina -> contrato passou a ser publicada para os paineis pararem de carrega-la como
+      # literal em onze lugares. Mapa errado nao quebra tela nenhuma: faz o painel APAGAR a entidade
+      # errada da selecao, em silencio. Por isso o ensaio nao se contenta com coerencia interna — ele
+      # cobra que a soma das partes de cada contrato bata com o contrato PUBLICADO, em todo mes
+      # fechado. Roda DEPOIS de gerar, como os outros que julgam o produto.
+      - name: Ensaio · a hierarquia publicada fecha com a energia
+        run: node scripts/ensaio-hierarquia.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

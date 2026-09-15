@@ -116,6 +116,31 @@ const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
 const CAP_UFV = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };  // outorga por UFV (MW) — soma 343,77
 
+// HIERARQUIA — quem esta DENTRO de quem, para o painel nao ter de saber.
+// Os dashboards do Sumario carregavam esse mapa como LITERAL, em onze lugares (a consulta dos chips
+// em sete paginas e a variavel da selecao efetiva em quatro): somar o Complexo com as nove usinas, ou
+// o PPA com as usinas dele, conta a mesma energia duas vezes, e quem separa "agregado" de "parte" e
+// esta relacao. Ela ja vivia aqui, em `PPA`/`ML`; o que faltava era PUBLICA-LA numa forma que o
+// JSONata leia direto — `estrategia.ppa`/`estrategia.ml` sao listas, e o painel precisa do inverso.
+//
+// 🔴 As guardas rodam na PARTIDA do gerador, como as da placa: contrato duplicado ou usina de fora
+//    deixam o job vermelho em vez de publicar uma hierarquia incoerente, que e o tipo de dado que o
+//    painel usaria em silencio para apagar a entidade errada da selecao.
+const HIERARQUIA = (() => {
+  const contrato = {};
+  PPA.forEach(u => { contrato[u] = 'PPA'; });
+  ML.forEach(u => {
+    if (contrato[u]) throw new Error('hierarquia: ' + u + ' esta em PPA e em ML ao mesmo tempo');
+    contrato[u] = 'ML';
+  });
+  const usinas = Object.keys(CAP_UFV).sort().join(',');
+  const cobertas = Object.keys(contrato).sort().join(',');
+  if (usinas !== cobertas) {
+    throw new Error('hierarquia: os contratos cobrem [' + cobertas + '] e as usinas sao [' + usinas + ']');
+  }
+  return { conjunto: 'Complexo', contratos: ['PPA', 'ML'], contrato };
+})();
+
 // META POR USINA — FONTE ÚNICA DA VERDADE. Esta regra estava DUPLICADA (aqui e na serie_ufv), e a
 // correção de 25/07/2026 só pegou numa das cópias: o painel seguiu mostrando a meta antiga do ML.
 // É o mesmo tipo de erro do divisor da projeção. Agora existe um lugar só.
@@ -1019,6 +1044,12 @@ async function writeOut(obj, nome, opts) {
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA). Alvos confirmados pelo usuário.
     meta: { fonte: 'PENDENTE — planilha SharePoint (P50/P90/PPA)', p50_gwh: null, p90_gwh: null, ppa_mwh: null, pr_alvo_pct: 90, disp_alvo_pct: 97 },
     estrategia: { ppa: PPA, ml: ML, regra: 'Na limitação do ONS, M1/M7/M9 (fora do PPA) são limitados a ~1 MW para blindar a entrega do PPA. Atingida a meta do PPA no mês, o ML deixa de ser limitado.' },
+    // A MESMA relação de `estrategia`, na forma que o painel consome: usina -> contrato. Ela vai
+    // também num blob próprio (`hierarquia.json`, ~200 B) porque a variável que decide a seleção
+    // efetiva é resolvida ANTES dos painéis — mandá-la baixar os 165 KB deste arquivo atrasaria
+    // toda a página para ler nove pares. Mesma origem, duas publicações, e o ensaio exige que
+    // concordem.
+    hierarquia: HIERARQUIA,
     // corte_diario: últimos 75 dias, NÃO só o mês corrente — no dia 5 do mês um recorte mensal
     // deixaria o gráfico praticamente vazio, e a virada de mês é justamente onde a leitura interessa.
     // ---- CARDS (faixa minimalist): o motor calcula TUDO, o template só apresenta ----
@@ -2960,6 +2991,10 @@ async function writeOut(obj, nome, opts) {
     console.log('hora_ufv.json OK · ' + diasH.length + ' dias (' + diasH[0] + ' a ' + diasH[diasH.length - 1] + ') · '
       + horas.length + ' linhas · ' + Math.round(tamH / 1024) + ' KB');
   } catch (e) { console.warn('hora_ufv.json falhou (' + e.message + ') — segue sem a camada horária'); }
+
+  const tamH2 = await writeOut(Object.assign({ gerado_em: new Date().toISOString() }, HIERARQUIA), 'hierarquia.json');
+  console.log('hierarquia.json OK · ' + Object.keys(HIERARQUIA.contrato).length + ' usinas · '
+    + tamH2 + ' B');
 
   const size = await writeOut(out);
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
