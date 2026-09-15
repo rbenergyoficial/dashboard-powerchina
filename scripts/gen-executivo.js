@@ -24,6 +24,8 @@ const https = require('https');
 const zlib = require('zlib');
 // rateio MUST reaproveitado do arquivador — ver nota em gen-way2-hist.js
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
+// o instante do ultimo dado do mes — uma escrita so, ensaiada em casos forjados
+const { instanteAoVivo } = require('./lib-aovivo.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
@@ -1718,8 +1720,12 @@ async function writeOut(obj, nome, opts) {
       const hojeGwh = r2(hojeCru);
       // o "dado até HH:MM" vale mesmo com o dia encerrado — é a hora do último dado, não um selo de
       // "ainda crescendo". Sem isso o painel perdia a marca de atualidade depois do pôr do sol.
-      const parcQq = diasMes.filter(x => x.parcial);
-      const hojeAte = parcQq.length ? parcQq[0].ate : null;
+      // 🔴 15/09/2026: era `parcQq[0].ate` — o PRIMEIRO dia parcial —, e "o primeiro" só é "o mais
+      // recente" quando há um parcial só. Com um dia passado truncado (o caso de 31/08, em que o
+      // `ate` dele sai NULO de propósito) o selo ao vivo SUMIA; entre rodadas completas, o remendo
+      // de 5 min deixa ontem marcado parcial e ele devolvia a hora de ontem. A regra é por DATA e
+      // mora em `lib-aovivo.js`, ensaiada em casos forjados.
+      const hojeAte = instanteAoVivo(diasMes);
       const d = (a, b) => (a == null || b == null) ? null : r2(a - b);
       const vPR = ant ? d(cur.pr_pct, ant.pr_pct) : null;
       const vCorte = ant ? d(cur.corte_pct, ant.corte_pct) : null;

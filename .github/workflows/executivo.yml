@@ -15,6 +15,13 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+
+      # ANTES de gerar, e de proposito: regra quebrada nao pode chegar ao blob. Ele julga a REGRA em
+      # casos FORJADOS (nao o arquivo do dia), entao vale em qualquer estado do mundo — a licao do
+      # ensaio que reprovava porque o conserto tinha funcionado.
+      - name: Ensaio · o selo "ao vivo ate" aponta para o instante mais recente
+        run: node scripts/ensaio-aovivo.js
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
