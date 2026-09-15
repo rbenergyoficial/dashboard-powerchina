@@ -26,6 +26,8 @@ const zlib = require('zlib');
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 // o instante do ultimo dado do mes — uma escrita so, ensaiada em casos forjados
 const { instanteAoVivo } = require('./lib-aovivo.js');
+// a tolerancia do par MWh x GWh, DERIVADA da cadeia de arredondamento (e maior no rateio)
+const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
@@ -2111,9 +2113,16 @@ async function writeOut(obj, nome, opts) {
       const mau = [];
       (out.serie_ufv || []).forEach(x => {
         if (x.liquida_gwh == null) return;
-        if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.006) mau.push(x.ufv + ' ' + x.mes + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
-        if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > 0.006)) mau.push(x.ufv + ' ' + x.mes + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
-        if (x.meta_rateada_gwh != null && (x.meta_rateada_mwh == null || Math.abs(x.meta_rateada_mwh / 1000 - x.meta_rateada_gwh) > 0.006)) mau.push(x.ufv + ' ' + x.mes + ': meta rateada ' + x.meta_rateada_mwh + ' MWh contra ' + x.meta_rateada_gwh + ' GWh');
+        if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > TOL_PAR) mau.push(x.ufv + ' ' + x.mes + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+        if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > TOL_PAR)) mau.push(x.ufv + ' ' + x.mes + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
+        // 🔴 O RATEIO TEM TOLERANCIA PROPRIA, e maior: `meta_gwh` ja nasce arredondado a 10 MWh,
+        // entao as duas bases diferem ANTES do fator, e o fator propaga essa diferenca. Com o 0,006
+        // do par nao rateado a guarda reprovava em 4 dias do mes (15, 20, 26 e 27) sem nada estar
+        // errado no dado — e foi o que deixou o executivo vermelho por 14 h em 15/09/2026. A
+        // derivacao e o fator (que vem dos DIAS da linha, nao dos valores julgados) moram em
+        // `lib-tol-unidade.js`, com ensaio proprio.
+        const tolR = tolRateio(fatorRateio(x));
+        if (x.meta_rateada_gwh != null && (x.meta_rateada_mwh == null || Math.abs(x.meta_rateada_mwh / 1000 - x.meta_rateada_gwh) > tolR)) mau.push(x.ufv + ' ' + x.mes + ': meta rateada ' + x.meta_rateada_mwh + ' MWh contra ' + x.meta_rateada_gwh + ' GWh (tolerancia ' + tolR.toFixed(5) + ')');
       });
       (out.ytd_ufv || []).forEach(x => {
         if (x.liquida_gwh == null) return;

@@ -22,6 +22,12 @@ jobs:
       - name: Ensaio · o selo "ao vivo ate" aponta para o instante mais recente
         run: node scripts/ensaio-aovivo.js
 
+      # A folga do par MWh x GWh no rateio e DERIVADA da cadeia de arredondamento. Afrouxar
+      # tolerancia e o jeito mais facil de apagar um alarme: este ensaio cobra que ela continue
+      # pegando os quatro defeitos plantados enquanto para de reprovar arredondamento.
+      - name: Ensaio · a tolerancia do rateio cobre o arredondamento e ainda pega defeito
+        run: node scripts/ensaio-tol-rateio.js
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
