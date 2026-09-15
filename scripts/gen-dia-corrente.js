@@ -21,6 +21,8 @@ const zlib = require('zlib');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 const { horasDoDia } = require('./lib-horas.js');
+// a conta dos campos da manchete que se movem no dia — a MESMA que o executivo chama
+const { remendaManchete } = require('./lib-manchete.js');
 
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -121,6 +123,30 @@ function baixa(url) {
   const novo = r2(val.Complexo);
   if (novo > teto) { console.log('dia em curso ' + novo + ' MWh acima do teto ' + Math.round(teto) + ' — abortando'); process.exit(1); }
   if (antes != null && novo < antes - 1) { console.log('dia em curso ENCOLHEU (' + antes + ' -> ' + novo + ') — abortando'); process.exit(1); }
+
+  // ---- a MANCHETE do mesmo dia ---------------------------------------------
+  //
+  // 🔴 Sem isto a pagina mostra DOIS dias em curso. Medido em 15/09/2026 09:34, no MESMO blob: a
+  //    serie (esta linha, ja remendada acima) dizia dia 15 ate 09:30, e a manchete — escrita so
+  //    pela rodada COMPLETA do executivo — continuava em `dia_hoje: null`, `ao_vivo_ate: 20:40` e
+  //    `hoje_gwh: 0,00`, de ontem a noite. Treze horas de defasagem.
+  //    E a mesma familia do bloco horario logo abaixo, um andar acima: dois relogios na mesma
+  //    pagina o leitor le como DADO errado, nao como cadencia.
+  //
+  // ⚠️ A conta NAO e reescrita aqui — mora em `lib-manchete.js`, e o executivo chama a MESMA
+  //    funcao. Os campos de energia se movem JUNTOS: avancar `liq_gwh` sozinho, com `atingido` e
+  //    os ritmos parados, criaria a divergencia que este remendo veio consertar.
+  const rem = remendaManchete(j.manchete_ufv, {
+    mes, diaNum: +hoje.slice(8, 10), ate: linha.ate,
+    gwhPorUfv: Object.keys(val).reduce((a, u) => { a[u] = num(val[u]) / 1000; return a; }, {}),
+  });
+  if (rem.quando === 0) {
+    console.log('a manchete ainda nao tem o mes ' + mes + ' em curso — so a serie foi remendada');
+  } else {
+    console.log('manchete: ' + rem.quando + ' entidades com a hora, ' + rem.energia + ' com a energia'
+      + (rem.semAncora ? ' · ' + rem.semAncora + ' sem a ancora `liq_fechada_gwh` (executivo antigo)' : '')
+      + (rem.semDias ? ' · ' + rem.semDias + ' sem contagem de dias' : ''));
+  }
 
   const saida = zlib.gzipSync(Buffer.from(JSON.stringify(j), 'utf8'));
   try {

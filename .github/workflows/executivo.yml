@@ -28,6 +28,12 @@ jobs:
       - name: Ensaio · a tolerancia do rateio cobre o arredondamento e ainda pega defeito
         run: node scripts/ensaio-tol-rateio.js
 
+      # A conta dos campos da manchete que se movem no dia mora numa lib que o executivo e o remendo
+      # de 5 min chamam. Este ensaio cobra que eles andem JUNTOS (energia) e que a projecao, que
+      # parte dos dias fechados, fique PARADA — e que o mes fechado nao seja tocado.
+      - name: Ensaio · o remendo move a manchete inteira, e coerente
+        run: node scripts/ensaio-manchete-remendo.js
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

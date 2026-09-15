@@ -28,6 +28,9 @@ const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 const { instanteAoVivo } = require('./lib-aovivo.js');
 // a tolerancia do par MWh x GWh, DERIVADA da cadeia de arredondamento (e maior no rateio)
 const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
+// os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
+// porque o remendo de 5 min refaz a MESMA conta quando a energia de hoje cresce
+const { r2, fmt, camposDoMes } = require('./lib-manchete.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
@@ -205,16 +208,10 @@ const prLivre = (gv, ge, pares) => {
   const v = Math.round(100 * gv / ge * 100) / 100;
   return (v >= PR_LIVRE_MIN && v <= PR_LIVRE_MAX) ? v : null;
 };
-const r2 = x => Math.round(x * 100) / 100;
-// padrao numerico da casa: ponto decimal, ponto de milhar, 2 casas nas medidas
-const fmt = (n, dec) => { if (n == null) return '—'; const t = Number(n).toFixed(dec == null ? 2 : dec);
-  // SEPARADOR DE MILHAR: espaco estreito (U+202F), nao ponto. Com ponto nos dois papeis a mesma
-  // faixa do topo exibia "343.77 MW" (ponto decimal) ao lado de "5.063 eventos" (ponto de milhar).
-  // O leitor brasileiro aplica a convencao pt-BR ao segundo e le o primeiro como 343 mil. O espaco
-  // estreito nao quebra linha e devolve ao ponto um significado unico em toda a pagina — inclusive
-  // frente aos graficos nativos do Grafana, que usam ponto decimal e nao acompanham o Regional
-  // format (bug aberto grafana/grafana#116351).
-  const [i, f2] = t.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + (f2 ? '.' + f2 : ''); };
+// `r2` e `fmt` vem do `lib-manchete.js` (require no topo). O padrao numerico da casa e ponto
+// decimal, 2 casas nas medidas e espaco estreito (U+202F) no milhar — ele mudou de arquivo
+// porque o remendo de 5 min tambem escreve estes campos, e formato em dois lugares diverge
+// calado: o campo e TEXTO no blob. O porque do separador esta escrito la.
 const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 
 // 🔴 ACUMULA EM BUFFER, NAO EM STRING. Alguns blobs nossos sao gravados em GZIP (o Azure serve
@@ -1774,10 +1771,13 @@ async function writeOut(obj, nome, opts) {
       // O "ja realizado" logo abaixo continua incluindo hoje — aquilo e energia entregue de fato.
       // ⚠️ SEM DIA FECHADO nao ha ritmo de onde projetar: a subtracao da zero e a tela
       // afirmaria "o mes vai fechar em 0 GWh". Nulo — o template ja mostra travessao.
-      const proj = dCorr > 0 ? r2((cur.liquida_gwh - hojeCru) * fatorD) : null;
-      const at = cur.meta_gwh > 0 ? r2(100 * cur.liquida_gwh / cur.meta_gwh) : null;
-      const pj = cur.meta_gwh > 0 ? r2(100 * proj / cur.meta_gwh) : null;
-      const esc = Math.max(120, Math.ceil((pj || 0) / 10) * 10);
+      // 🔴 15/09/2026: a conta destes campos saiu daqui para `lib-manchete.js`, porque o remendo de
+      // 5 min passou a refaze-la quando a energia de hoje cresce. Eles sao um retrato COERENTE —
+      // mover um sozinho cria divergencia —, e a conta em dois arquivos divergiria na primeira
+      // edicao. O que entra aqui e o que sempre entrou, entao a saida nao muda: conferido byte a
+      // byte nos meses fechados, e campo a campo contra o blob publicado.
+      const C = camposDoMes({ liq: cur.liquida_gwh, base: cur.liquida_gwh - hojeCru, hoje: hojeGwh,
+        meta: cur.meta_gwh, dCorr, dTot });
       out.manchete_ufv.push({ mes: mSel, fechado, ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
         dias_restantes: Math.max(0, dTot - dCorr),
         // DIA DO CALENDARIO do dia em curso. `dias_decorridos` conta dias FECHADOS e por isso fica
@@ -1787,9 +1787,14 @@ async function writeOut(obj, nome, opts) {
         // quantos dias entram na projecao, sem escolher entre estar correto e ser compreensivel.
         // Nulo quando nao ha dia em curso (mes fechado) — o template testa com {{#if}}.
         dia_hoje: parc.length ? parc[parc.length - 1].dia_num : null,
-        ao_vivo: hojeAte ? 1 : 0, ao_vivo_ate: hojeAte, hoje_gwh: fmt(hojeGwh),
-        liq_gwh: fmt(cur.liquida_gwh), liq_proj: fmt(proj), meta_gwh: fmt(cur.meta_gwh),
-        atingido: fmt(at), proj_pct: fmt(pj),
+        ao_vivo: hojeAte ? 1 : 0, ao_vivo_ate: hojeAte, hoje_gwh: C.hoje_gwh,
+        liq_gwh: C.liq_gwh, liq_proj: C.liq_proj, meta_gwh: fmt(cur.meta_gwh),
+        // ⚠️ ANCORA DO REMENDO, campo novo e aditivo: a energia do mes SEM o dia em curso. Ela nao
+        // se move dentro do dia, entao `liq = liq_fechada + hoje` e exato e IDEMPOTENTE — sem ela o
+        // remendo teria de aplicar um delta sobre o proprio `liq_gwh` e acumularia arredondamento a
+        // cada uma das ~288 passadas do dia.
+        liq_fechada_gwh: C.liq_fechada_gwh,
+        atingido: C.atingido, proj_pct: C.proj_pct,
         // SPARKLINE DA MANCHETE: os meses ATÉ o selecionado (não o histórico inteiro — num mês
         // passado a curva não pode mostrar o futuro dele). Vai desenhada ATRÁS do número no card,
         // que é justamente o que o `stat` nativo não faz: ele divide o cartão em número|curva.
@@ -1799,19 +1804,16 @@ async function writeOut(obj, nome, opts) {
         // O QUE PRECISA ACONTECER — a pergunta que um card executivo tem que responder e nenhum
         // dos números acima responde: "de quanto por dia eu preciso, e é mais ou menos do que
         // venho fazendo?". Tudo derivado, sem fonte nova.
-        falta_gwh: (() => { const f = cur.meta_gwh - cur.liquida_gwh; return f > 0 ? fmt(r2(f)) : '0.00'; })(),
-        ritmo_nec: (() => { const f = cur.meta_gwh - cur.liquida_gwh, d = Math.max(0, dTot - dCorr);
-          return (f > 0 && d > 0) ? fmt(r2(f / d)) : null; })(),
-        ritmo_atual: dCorr > 0 ? fmt(r2(cur.liquida_gwh / dCorr)) : null,
+        falta_gwh: C.falta_gwh,
+        ritmo_nec: C.ritmo_nec,
+        ritmo_atual: C.ritmo_atual,
         // acelerar ou desacelerar: quantos % o ritmo precisa mudar
-        ritmo_delta_pct: (() => { const f = cur.meta_gwh - cur.liquida_gwh, d = Math.max(0, dTot - dCorr);
-          if (!(f > 0 && d > 0 && dCorr > 0 && cur.liquida_gwh > 0)) return null;
-          return fmt(r2(100 * ((f / d) / (cur.liquida_gwh / dCorr) - 1))); })(),
+        ritmo_delta_pct: C.ritmo_delta_pct,
         // versoes NUMERICAS: a gauge precisa de numero, o texto da manchete precisa de string formatada
-        atingido_n: at, proj_pct_n: pj,
-        realizado_w: at == null ? 0 : r2(at / esc * 100),
-        projecao_w: pj == null ? 0 : r2(Math.max(0, pj - at) / esc * 100),
-        marca100_w: r2(100 / esc * 100),
+        atingido_n: C.atingido_n, proj_pct_n: C.proj_pct_n,
+        realizado_w: C.realizado_w,
+        projecao_w: C.projecao_w,
+        marca100_w: C.marca100_w,
         // ESCOPO ADAPTATIVO: o cabeçalho do painel já mostra OUTORGA 343,77 MW, então repetir a
         // potência aqui quando o filtro é "Complexo" é ruído. Mas o campo não pode sair: ele é a
         // única indicação de QUAL filtro está ativo, e para uma usina a potência é informação nova.
