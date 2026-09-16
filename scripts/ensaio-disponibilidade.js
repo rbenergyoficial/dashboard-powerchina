@@ -3,7 +3,7 @@
  * publico perdas_inv.json, sem segredo nenhum) e contra casos forjados.
  *
  * O que ele exige, cada linha por um modo de falhar visto na analise de 06/09/2026:
- *   1. a janela do dia e o sol de Mauriti (11,9 a 12,5 h) em TODOS os dias — se sair 23 h, o p90
+ *   1. a janela do dia acompanha o dia ASTRONOMICO de Mauriti (−0,5 a +1,5 h) em TODOS os dias — se sair 23 h, o p90
  *      voltou a contaminar a referencia;
  *   2. os inversores de contador de 24 h existem (M4 tem dezenas) e contam como disponiveis;
  *   3. nenhuma usina sai abaixo de 99% no periodo, e o M9 tem o pior dia (27/07, ~80%);
@@ -33,8 +33,40 @@ const ok = (c, m) => { console.log((c ? '  ok   ' : '  FALHA ') + m); if (!c) fa
   console.log('1 · janela do dia, ' + dias.length + ' dias');
   const jan = dias.map((d) => porDia.get(d).janela_min).filter((x) => x != null);
   ok(jan.length === dias.length, 'todo dia tem janela · ' + jan.length + ' de ' + dias.length);
-  ok(Math.min(...jan) >= 11.9 * 60 && Math.max(...jan) <= 12.5 * 60,
-    'janela entre 11,9 e 12,5 h · veio ' + (Math.min(...jan) / 60).toFixed(2) + ' a ' + (Math.max(...jan) / 60).toFixed(2));
+  // 🔴 A JANELA SE COMPARA COM O DIA ASTRONOMICO DAQUELA DATA, nunca com faixa fixa.
+  //    A faixa 11,9-12,5 h foi medida em 42 dias de julho-agosto e o proprio dia a venceu:
+  //    em 14/09/2026 a janela chegou a 12,53 h, o ensaio ficou vermelho e PULOU o gerador
+  //    em tres rodadas seguidas — os dias crescem ate o solsticio de dezembro (12,55 h
+  //    astronomicas em Mauriti), entao a faixa fixa travaria o job ate marco.
+  //    Medido em 54 dias (23/07-15/09/2026): janela − dia astronomico entre +0,20 e +0,52 h,
+  //    mediana +0,45 — o inversor opera um pouco alem do nascer e do por do sol.
+  //    A tolerancia (−0,5 a +1,5 h) cobre essa faixa com folga e continua pegando o defeito
+  //    que a regra existe para pegar: o p90 contaminado da uma janela de ~23 h (+11 h).
+  //    Dia astronomico: declinacao solar e angulo horario do nascer com −0,833° de refracao
+  //    (NOAA), no ponto de Mauriti que o gen-clima.js ja usa (−7,38; −38,77).
+  const LAT = -7.38;
+  const diaAstroH = (iso) => {
+    const d = new Date(iso + 'T12:00:00Z');
+    const n = Math.round((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 864e5) + 1;
+    const g = 2 * Math.PI / 365 * (n - 1);
+    const dec = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g)
+      + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+    const phi = LAT * Math.PI / 180, h0 = -0.833 * Math.PI / 180;
+    const cosH = (Math.sin(h0) - Math.sin(phi) * Math.sin(dec)) / (Math.cos(phi) * Math.cos(dec));
+    return 2 * (Math.acos(cosH) * 180 / Math.PI) / 15;
+  };
+  const difs = dias.filter((d) => porDia.get(d).janela_min != null)
+    .map((d) => ({ d, x: porDia.get(d).janela_min / 60 - diaAstroH(d) }));
+  const faixa = (xs) => xs.every((x) => x >= -0.5 && x <= 1.5);
+  ok(faixa(difs.map((v) => v.x)),
+    'janela − dia astronomico entre −0,5 e +1,5 h · veio ' + Math.min(...difs.map((v) => v.x)).toFixed(2)
+    + ' a ' + Math.max(...difs.map((v) => v.x)).toFixed(2));
+  // a guarda tem de REPROVAR o defeito que motivou a regra, senao nao mede nada
+  ok(!faixa([23 - diaAstroH(dias[0])]) && !faixa([0 - diaAstroH(dias[0])]),
+    'forjado: janela de 23 h (p90 contaminado) e de 0 h seriam reprovadas');
+  ok(diaAstroH('2026-12-21') > 12.4 && diaAstroH('2026-06-21') < 11.8,
+    'o dia astronomico de Mauriti vai de ~11,7 h (jun) a ~12,55 h (dez) · ' + diaAstroH('2026-06-21').toFixed(2)
+    + ' e ' + diaAstroH('2026-12-21').toFixed(2));
 
   console.log('\n2 · contador de 24 h conta como disponivel');
   const c24 = dias.reduce((a, d) => a + ((porDia.get(d).porUfv.M4 || {}).contador_24h || 0), 0) / dias.length;
