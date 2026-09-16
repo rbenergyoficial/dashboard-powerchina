@@ -2,7 +2,7 @@
  "_fonte": "Planilha Base_Dados_MRD.xlsx, aba PPA (SharePoint). Linhas \"Valor Garantido de <mes>\" + \"Energia Equivalente\". ENERGIA LIQUIDA (coluna \"Energia Total de rede\").",
  "_unidade": "MWh",
  "_nota": "Guarda SO o que a planilha entrega. Desde 02/08/2026 ela entrega as NOVE usinas: meta global, meta do PPA (ppa_por_ufv) e meta do Mercado Livre (ml_por_ufv). Antes dessa data o ML nao existia na fonte e era derivado pelo gen-executivo.js. COBERTURA: jan/26 a jul/26 (7 meses). O usuario nao tem PPA de 2025 — set/25 a dez/25 ficam SEM meta de proposito. Validacao da extracao: soma das 6 usinas do PPA bate com o total do PPA (+-0,02) e o PPA/dia e constante em 1199,98 MWh/dia nos 7 meses. EXTENSAO: de 2026-09 a 2027-12 os meses sao DERIVADOS pela regra acima, nao lidos da planilha — cada um traz `_origem`. Uma mudanca de taxa contratual invalida os derivados a partir do mes em que ela valer.",
- "_taxa_global": "A meta global e uma TAXA DIARIA de 1632,0 MWh/dia x dias do mes, unica nos 7 meses de 2026 (50592 em 31 dias, 48960 em 30, 45696 em 28). A do PPA e 1199,98 MWh/dia. CONFERIDO NA FONTE em 2026-08-02 lendo a aba PPA da Base_Dados_MRD.xlsx depois que o usuario corrigiu a planilha — a taxa sai unica, sem excecao. Historico: ate 01/08/2026 quatro meses fugiam disso. fev, mar e abr guardavam a PROPRIA ENERGIA REALIZADA (o usuario gravou por falta de referencia), o que produz 100,00% por aritmetica e nao mede nada; jan trazia 53782,65 (1734,9/dia). Os tres primeiros foram reconstruidos aqui pela taxa e a planilha corrigida confirmou os valores exatos; jan veio da planilha.",
+ "_taxa_global": "ATUALIZADO 16/09/2026: a partir de set/26 a planilha MUDOU a meta global e ela deixou de ser taxa unica — set/26 58000, out/26 57000, nov/26 62000, dez/26 65000 MWh (1933,3 / 1838,7 / 2066,7 / 2096,8 MWh/dia). O PPA segue na taxa de 1199,98. O que esta abaixo vale para jan a ago/26. A meta global e uma TAXA DIARIA de 1632,0 MWh/dia x dias do mes, unica nos 7 meses de 2026 (50592 em 31 dias, 48960 em 30, 45696 em 28). A do PPA e 1199,98 MWh/dia. CONFERIDO NA FONTE em 2026-08-02 lendo a aba PPA da Base_Dados_MRD.xlsx depois que o usuario corrigiu a planilha — a taxa sai unica, sem excecao. Historico: ate 01/08/2026 quatro meses fugiam disso. fev, mar e abr guardavam a PROPRIA ENERGIA REALIZADA (o usuario gravou por falta de referencia), o que produz 100,00% por aritmetica e nao mede nada; jan trazia 53782,65 (1734,9/dia). Os tres primeiros foram reconstruidos aqui pela taxa e a planilha corrigida confirmou os valores exatos; jan veio da planilha.",
  "_mapeamento": "M10 = M1 — MESMO PARQUE, CONFIRMADO PELO USUARIO em 2026-07-17. A planilha PPA nomeia as usinas 'Mauriti 2..10' e NAO EXISTE Mauriti 1; 'UFV Mauriti 10' e o parque de 49,11 MW que o ONS chama CEFMT1 e que o Way2/SCADA chamam M1. Este arquivo ja usa a chave M1. Alias em gen-executivo.js (ALIAS_PLANILHA) p/ quando o pipeline da planilha for ligado. A aritmetica ja apontava isso antes da confirmacao: a Energia Equivalente e exatamente proporcional a outorga (Mauriti7/ref=0,3000 = 14,733/49,11 · Mauriti9/ref=0,1999 = 9,822/49,11 · M2/ref=0,4998 = 24,555/49,11 · Mauriti10=9.091 -> 49,11 MW).",
  "_metodologia_ml": "A planilha PASSOU A EMITIR a meta do ML por usina (colunas \"UFV Mauriti 7 / 10 / 9\" na linha Valor Garantido), corrigida pelo usuario em 02/08/2026 — antes ela so trazia o total do complexo e o do PPA, e o ML tinha de ser derivado. Agora vem em ml_por_ufv e o gerador LE, nao deriva. A regra que o usuario usou: M1 leva a taxa do PPA (137,73 MWh/MW — identico ao M8, mesma potencia) e M7+M9 dividem o resto proporcional a POTENCIA (3977,43/2651,62 = 1,50 = 14,733/9,822). Isso difere do que o gerador derivava (rateio pela Energia Equivalente): a soma e a mesma, mas o M1 ficava com 8929,48 em vez de 6763,70 e M7/M9 com um terco a menos. Historico das regras anteriores: ate 25/07/2026 aplicava-se a taxa do PPA sobre a potencia de cada uma e a diferenca ficava em nao_alocado; de 25/07 a 02/08 o ML era o RESTO rateado pelo equivalente.",
  "meses": {
@@ -240,7 +240,7 @@
    "_origem": "Derivado da taxa diaria (_taxa_global), nao lido da planilha: agosto tem 31 dias como julho, entao 1632,0 x 31 = 50592 e 1199,98 x 31 = 37199,26 — os mesmos valores. Conferir contra a Base_Dados_MRD quando a aba de agosto for publicada."
   },
   "2026-09": {
-   "garantido_total": 48960,
+   "garantido_total": 58000,
    "garantido_ppa": 35999.28,
    "ppa_por_ufv": {
     "M8": 6545.52,
@@ -252,8 +252,8 @@
    },
    "ml_por_ufv": {
     "M1": 6763.7,
-    "M7": 3718.21,
-    "M9": 2478.81
+    "M7": 9142.21,
+    "M9": 6094.81
    },
    "equivalente_total": 63634,
    "equivalente_por_ufv": {
@@ -267,10 +267,10 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria — e CONFERIDO contra a planilha em 01/09/2026, que passou a trazer set/26: as 9 usinas, o total do PPA e o total do complexo batem ao centavo (99 comparacoes)."
+   "_origem": "LIDO da planilha em 16/09/2026. A meta global deixou de ser a taxa unica de 1632,0 MWh/dia: 58000 MWh neste mes. O PPA continua na taxa. O ML e o resto (total - PPA) e a planilha o reparte com M1 fixo e o restante em M7/M9; o gerador aplica a politica da casa (taxa unica por MW no ML)."
   },
   "2026-10": {
-   "garantido_total": 50592,
+   "garantido_total": 57000,
    "garantido_ppa": 37199.26,
    "ppa_por_ufv": {
     "M8": 6763.7,
@@ -282,8 +282,8 @@
    },
    "ml_por_ufv": {
     "M1": 6763.7,
-    "M7": 3977.42,
-    "M9": 2651.62
+    "M7": 7822.23,
+    "M9": 5214.82
    },
    "equivalente_total": 63634,
    "equivalente_por_ufv": {
@@ -297,10 +297,10 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "LIDO da planilha em 16/09/2026. A meta global deixou de ser a taxa unica de 1632,0 MWh/dia: 57000 MWh neste mes. O PPA continua na taxa. O ML e o resto (total - PPA) e a planilha o reparte com M1 fixo e o restante em M7/M9; o gerador aplica a politica da casa (taxa unica por MW no ML)."
   },
   "2026-11": {
-   "garantido_total": 48960,
+   "garantido_total": 62000,
    "garantido_ppa": 35999.28,
    "ppa_por_ufv": {
     "M8": 6545.52,
@@ -312,8 +312,8 @@
    },
    "ml_por_ufv": {
     "M1": 6763.7,
-    "M7": 3718.21,
-    "M9": 2478.81
+    "M7": 11542.21,
+    "M9": 7694.81
    },
    "equivalente_total": 63634,
    "equivalente_por_ufv": {
@@ -327,10 +327,10 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "LIDO da planilha em 16/09/2026. A meta global deixou de ser a taxa unica de 1632,0 MWh/dia: 62000 MWh neste mes. O PPA continua na taxa. O ML e o resto (total - PPA) e a planilha o reparte com M1 fixo e o restante em M7/M9; o gerador aplica a politica da casa (taxa unica por MW no ML)."
   },
   "2026-12": {
-   "garantido_total": 50592,
+   "garantido_total": 65000,
    "garantido_ppa": 37199.26,
    "ppa_por_ufv": {
     "M8": 6763.7,
@@ -342,8 +342,8 @@
    },
    "ml_por_ufv": {
     "M1": 6763.7,
-    "M7": 3977.42,
-    "M9": 2651.62
+    "M7": 12622.23,
+    "M9": 8414.82
    },
    "equivalente_total": 63634,
    "equivalente_por_ufv": {
@@ -357,7 +357,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "LIDO da planilha em 16/09/2026. A meta global deixou de ser a taxa unica de 1632,0 MWh/dia: 65000 MWh neste mes. O PPA continua na taxa. O ML e o resto (total - PPA) e a planilha o reparte com M1 fixo e o restante em M7/M9; o gerador aplica a politica da casa (taxa unica por MW no ML)."
   },
   "2027-01": {
    "garantido_total": 50592,
@@ -387,7 +387,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-02": {
    "garantido_total": 45696,
@@ -417,7 +417,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-03": {
    "garantido_total": 50592,
@@ -447,7 +447,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-04": {
    "garantido_total": 48960,
@@ -477,7 +477,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-05": {
    "garantido_total": 50592,
@@ -507,7 +507,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-06": {
    "garantido_total": 48960,
@@ -537,7 +537,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-07": {
    "garantido_total": 50592,
@@ -567,7 +567,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-08": {
    "garantido_total": 50592,
@@ -597,7 +597,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-09": {
    "garantido_total": 48960,
@@ -627,7 +627,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-10": {
    "garantido_total": 50592,
@@ -657,7 +657,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-11": {
    "garantido_total": 48960,
@@ -687,7 +687,7 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   },
   "2027-12": {
    "garantido_total": 50592,
@@ -717,8 +717,8 @@
     "M1": 9091,
     "M9": 1817
    },
-   "_origem": "Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
+   "_origem": "Derivado da taxa ANTIGA de 1632,0 MWh/dia, que a planilha abandonou em set/26. NAO confirmado: a planilha so vai ate dez/26. Derivado da taxa diaria e das constantes dos meses que a planilha entregou (ver _taxa_global e _regimes). NAO foi lido da planilha. Assim que a planilha trouxer o mes, o valor dela substitui este."
   }
  },
- "_regimes": "TRES regimes, medidos nos 8 meses que a planilha entregou em 2026 e conferidos reproduzindo-os ao centavo: (1) TAXA DIARIA x dias do mes em garantido_total (1632,0), garantido_ppa (1199,976) e ppa_por_ufv; (2) VALOR FIXO mensal em ml_por_ufv.M1 (6763,70), equivalente_total e equivalente_por_ufv — nao encolhem em mes de 30 dias; (3) o RESTO (total - PPA - M1) rateado entre M7 e M9 na proporcao da potencia (14,733/9,822 = 1,5). ATENCAO: o M1 nao acompanhar os dias do mes e o que a planilha diz, e faz a meta dele ser proporcionalmente maior em fevereiro; reproduzido fielmente, nao corrigido."
+ "_regimes": "ATUALIZADO 16/09/2026: a partir de set/26 a planilha MUDOU a meta global e ela deixou de ser taxa unica — set/26 58000, out/26 57000, nov/26 62000, dez/26 65000 MWh (1933,3 / 1838,7 / 2066,7 / 2096,8 MWh/dia). O PPA segue na taxa de 1199,98. O que esta abaixo vale para jan a ago/26. TRES regimes, medidos nos 8 meses que a planilha entregou em 2026 e conferidos reproduzindo-os ao centavo: (1) TAXA DIARIA x dias do mes em garantido_total (1632,0), garantido_ppa (1199,976) e ppa_por_ufv; (2) VALOR FIXO mensal em ml_por_ufv.M1 (6763,70), equivalente_total e equivalente_por_ufv — nao encolhem em mes de 30 dias; (3) o RESTO (total - PPA - M1) rateado entre M7 e M9 na proporcao da potencia (14,733/9,822 = 1,5). ATENCAO: o M1 nao acompanhar os dias do mes e o que a planilha diz, e faz a meta dele ser proporcionalmente maior em fevereiro; reproduzido fielmente, nao corrigido."
 }
