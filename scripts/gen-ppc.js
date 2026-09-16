@@ -124,7 +124,7 @@ async function grava(nome, obj) {
 
   // funde na ordem cronologica: o arquivo mais novo ganha na colisao de carimbo
   const porTs = new Map();
-  const defeitos = [];
+  let defeitos = [];
   let lidos = 0;
   for (const a of arqs) {
     const buf = await a.leia();
@@ -132,7 +132,15 @@ async function grava(nome, obj) {
     lidos += 1;
     console.log('  ' + a.nome + ': ' + ev.length + ' eventos · ' + def.length + ' defeito(s) · ' + vazias + ' linha(s) vazia(s)');
     for (const e of ev) porTs.set(e.ts, e);
-    for (const d of def) defeitos.push(Object.assign({ arquivo: a.nome }, d));
+    /* 🔴 DEFEITO E ESTADO DA PLANILHA, NAO HISTORIA: vale so o da copia MAIS NOVA.
+       O coletor sobe uma copia a cada mudanca e cada copia traz o registro inteiro. Somar os
+       defeitos de todas multiplicava os permanentes (37 copias em 16/09/2026 = 11.734 defeitos
+       para ~311 reais) e, pior, eternizava a linha que o turno estava digitando: a copia das
+       06:13 de 13/09 tinha 13 horas em branco que a mesa preencheu minutos depois, e elas
+       continuaram acusando "linha_ilegivel" dali em diante. O ensaio passou a reprovar, o passo
+       da auditoria foi pulado e o ppc_auditoria.json ficou parado em 13/09.
+       Eventos continuam se fundindo (o mais novo ganha); defeitos sao substituidos a cada copia. */
+    defeitos = def.map((d) => Object.assign({ arquivo: a.nome }, d));
   }
 
   // e com o que ja estava publicado: o historico nao mora so no arquivo vigente
