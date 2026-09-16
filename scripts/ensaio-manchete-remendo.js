@@ -110,8 +110,18 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
     }
     // 3) os derivados andam JUNTOS com a energia
     if (meta > 0) {
-      const at = 100 * parse(b.liq_gwh) / meta;
-      if (Math.abs(parse(b.atingido) - at) > 0.02) f.push(id + ': atingido nao acompanhou liq_gwh');
+      // 🔴 A conta sai da ANCORA, e nao do `liq_gwh` publicado. A ancora vai com 4 casas justamente
+      // para o remendo refazer a energia a partir dela; `liq_gwh` vai com 2, e recompor o percentual
+      // por ele injeta um erro que ESCALA COM 1/meta — ate 0,29 pp no parque de menor contrato
+      // contra 0,01 no Complexo. Nenhuma folga FIXA limita isso: 0,02 era frouxa demais em cima e
+      // apertada demais embaixo, e reprovava SEIS entidades com a conta certa.
+      // Medido em 15/09/2026 nas doze: pela ancora o desvio e ZERO; pelo `liq_gwh`, ate 0,1005.
+      // ⚠️ A folga e de MEIO CENTAVO porque os dois lados sao arredondados a 2 casas: ou caem no
+      // mesmo centavo, ou diferem por pelo menos 0,01. Ela nao admite deriva — so o ulp.
+      const at = Math.round(100 * (base + gwh[a.ufv]) / meta * 100) / 100;
+      if (Math.abs(parse(b.atingido) - at) > 0.005) {
+        f.push(id + ': atingido nao acompanhou a energia (' + parse(b.atingido) + ' contra ' + at + ')');
+      }
       const falta = meta - parse(b.liq_gwh);
       const esp = falta > 0 ? falta : 0;
       if (Math.abs(parse(b.falta_gwh) - esp) > 0.02) f.push(id + ': falta_gwh nao acompanhou');
