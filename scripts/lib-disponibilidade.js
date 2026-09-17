@@ -130,4 +130,80 @@ function completaDisponibilidade(serie, DISP, us, r2) {
   return n;
 }
 
-module.exports = { disponibilidade, mensal, completaDisponibilidade, LIMITE_DIURNO_MIN, JANELA_MIN, JANELA_MAX, PARADO, PARCIAL };
+/* ── DISPONIBILIDADE PELA JANELA DO CONTRATO · 17/09/2026 ──────────────────────────────────────
+ * O anexo de KPI do contrato de O&M mede, por inversor, horas gerando / (horas com irradiancia
+ * acima de 100 W/m2 - horas excluidas), e a do parque e a MEDIA SIMPLES dos inversores.
+ *
+ * 🔴 A JANELA DO CONTADOR NAO SERVE PARA ISTO, e foi MEDIDO: em 38 dias, o contador de operacao
+ *    marca 1,7 h a MAIS que a janela de 100 W/m2 (mediana), porque conta o amanhecer e o fim de
+ *    tarde abaixo do limiar. Com min(contador, janela) a conta saturava em 100,00 % em 23 dos 38
+ *    dias e nao separava inversor nenhum. O que mede e a CURVA de 30 min: conta-se, por inversor,
+ *    quantos instantes DENTRO da janela tem potencia positiva.
+ *
+ * ⚠️ O QUE FALTA PARA SER O NUMERO DO CONTRATO: as HORAS EXCLUIDAS (dez tipos: falha na
+ *    transmissao, pedido do contratante, forca maior, falta de peca...). Elas nao estao em fonte
+ *    que o pipeline leia, e sem elas a conta e CONSERVADORA — uma parada que o contrato excluiria
+ *    entra aqui como indisponibilidade. Por isso o campo leva `sem_exclusoes` no nome.
+ *
+ * ⚠️ A amostra e INSTANTANEA a cada 30 min: "gerando" e ter potencia positiva no instante, e a
+ *    resolucao da medida e meia hora. Parada mais curta que isso nao aparece.
+ */
+const LIMIAR_IRR = 100;       // W/m2, do anexo do contrato
+const MIN_SLOTS_JANELA = 12;  // menos de 6 h de janela num dia: o dia nao serve de base
+
+/** a janela do contrato por (dia, usina): os instantes de 30 min com irradiancia acima do limiar.
+ * @param {Array<Object>} serie linhas do irr_30min: { t: 'AAAA-MM-DDTHH:MM:SS-03:00', <ufv>: W/m2 }
+ * @param {Array<string>} ufvs colunas de usina a considerar
+ * @returns {Map<string, Set<string>>} 'dia|ufv' -> Set('HH:MM') */
+function janelaContrato(serie, ufvs) {
+  const out = new Map();
+  for (const x of serie || []) {
+    if (!x || !x.t) continue;
+    const dia = String(x.t).slice(0, 10), hm = String(x.t).slice(11, 16);
+    for (const u of ufvs || []) {
+      const g = x[u];
+      if (g == null || !isFinite(g) || g <= LIMIAR_IRR) continue;
+      const k = dia + '|' + u;
+      if (!out.has(k)) out.set(k, new Set());
+      out.get(k).add(hm);
+    }
+  }
+  return out;
+}
+
+/** disponibilidade pela janela do contrato, SEM as exclusoes.
+ * @param {Array<{dia:string, ufv:string, ts?:string, inv:string, gerando:number}>} porInv um por
+ *   inversor-dia; `gerando` = instantes de 30 min com potencia positiva DENTRO da janela do dia
+ * @param {Map<string, Set<string>>} janela de janelaContrato
+ * @returns {Map<string, {janela_h:number|null, porUfv:Object, complexo:Object|null}>} por dia */
+function dispContrato(porInv, janela) {
+  const porDia = new Map();
+  for (const l of porInv || []) {
+    if (!l || l.gerando == null || !isFinite(l.gerando)) continue;
+    const J = janela.get(l.dia + '|' + l.ufv);
+    if (!J || J.size < MIN_SLOTS_JANELA) continue;
+    if (!porDia.has(l.dia)) porDia.set(l.dia, {});
+    const P = porDia.get(l.dia);
+    if (!P[l.ufv]) P[l.ufv] = { s: 0, n: 0, slots: J.size, piores: [] };
+    const f = Math.min(1, l.gerando / J.size);
+    P[l.ufv].s += f; P[l.ufv].n++;
+    if (f < PARCIAL) P[l.ufv].piores.push({ inv: (l.ts ? l.ts + '/' : '') + l.inv, pct: r2(100 * f) });
+  }
+  const out = new Map();
+  for (const [dia, P] of porDia) {
+    const res = { janela_h: null, porUfv: {}, complexo: null };
+    let sCx = 0, nCx = 0; const slots = [];
+    for (const [ufv, o] of Object.entries(P)) {
+      res.porUfv[ufv] = { disp_pct: r2(100 * o.s / o.n), n: o.n, janela_h: r2(o.slots / 2),
+        piores: o.piores.sort((a, b) => a.pct - b.pct).slice(0, 3) };
+      sCx += o.s; nCx += o.n; slots.push(o.slots);
+    }
+    res.janela_h = slots.length ? r2((slots.reduce((a, b) => a + b, 0) / slots.length) / 2) : null;
+    res.complexo = nCx ? { disp_pct: r2(100 * sCx / nCx), n: nCx } : null;
+    out.set(dia, res);
+  }
+  return out;
+}
+
+module.exports = { disponibilidade, mensal, completaDisponibilidade, janelaContrato, dispContrato,
+  LIMITE_DIURNO_MIN, JANELA_MIN, JANELA_MAX, PARADO, PARCIAL, LIMIAR_IRR, MIN_SLOTS_JANELA };

@@ -63,7 +63,7 @@
  */
 const zlib = require('zlib');
 const https = require('https');
-const { disponibilidade, completaDisponibilidade } = require('./lib-disponibilidade.js');
+const { disponibilidade, completaDisponibilidade, janelaContrato, dispContrato } = require('./lib-disponibilidade.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -529,6 +529,20 @@ async function grava(nome, obj) {
   console.log('  arquivos: ' + arqs.length + ' · ' + carimbos.length + ' carimbos ('
     + carimbos[0] + ' a ' + carimbos[carimbos.length - 1] + ') · lendo ' + escolhidos.length);
 
+  // a janela do CONTRATO (irradiancia acima de 100 W/m2), por dia e usina, do blob de 30 min que a
+  // solarimetria ja publica. Sem ela a disponibilidade contratual simplesmente nao sai nesta rodada
+  // — e isso vai ao log, em vez de virar um numero calculado com outra janela.
+  let JAN_CONTRATO = new Map();
+  try {
+    const irr30 = await puxa('https://rbenergydata.blob.core.windows.net/dados/irr_30min.json');
+    JAN_CONTRATO = janelaContrato(irr30.serie, (irr30.ufvs || []).filter((u) => u !== 'Complexo'));
+    const hs = [...JAN_CONTRATO.values()].map((s) => s.size / 2).sort((a, b) => a - b);
+    console.log('  janela do contrato (irradiância > 100 W/m²): ' + JAN_CONTRATO.size + ' dias-usina · '
+      + (hs.length ? hs[0].toFixed(1) + ' a ' + hs[hs.length - 1].toFixed(1) + ' h, mediana ' + hs[hs.length >> 1].toFixed(1) + ' h' : '—'));
+  } catch (e) {
+    console.log('  ⚠️ sem irr_30min: a disponibilidade pela janela do contrato não sai nesta rodada (' + e.message + ')');
+  }
+
   const diario = new Map();          // dia -> { ufv -> {...} }
   const meia = new Map();            // ms -> { ufv -> {p_cc, p_ca, n} }
   const porInv = new Map();          // (dia|ufv|ts|inv) -> linha; lendo em ordem, o ultimo vence
@@ -659,6 +673,19 @@ async function grava(nome, obj) {
         ...(isoSem ? { isol_sem_leitura: isoSem } : {}),
         horas: (o.serie.horas || []).filter((x) => x != null).length
           ? r2(Math.max(...(o.serie.horas || []).filter((x) => x != null))) : null,
+        // instantes de 30 min com potencia positiva DENTRO da janela do contrato (> 100 W/m2).
+        // 🔴 Conta-se aqui, na passada que ja tem a curva: o blob por inversor guarda o dia
+        //    reduzido, e depois de publicado nao ha como saber em QUE instantes ele gerou.
+        ...(function () {
+          const J = JAN_CONTRATO.get(a.dia + '|' + a.ufv);
+          if (!J) return {};
+          let ger = 0;
+          for (let i = 0; i < nLin; i++) {
+            if (!J.has(String(d.instantes[i]).slice(11, 16))) continue;
+            if (ca[i] != null && ca[i] > 0) ger++;
+          }
+          return { gerando: ger, jan_slots: J.size };
+        })(),
         n: bons.length });
 
       // ---- e a MESMA passada guarda a curva, em vez de descartar -----------------------------
@@ -982,6 +1009,20 @@ async function grava(nome, obj) {
       campos: { disp_pct: 'disponibilidade da usina no dia, %', inv_parados: 'inversores com menos de metade da janela',
         inv_parciais: 'entre 50% e 90% da janela', inv_contador_24h: 'inversores cujo contador não zera à noite',
         janela_h: 'janela de operação do dia, em horas', CX_disp_pct: 'o complexo, ponderado por inversor' },
+      pela_janela_do_contrato: {
+        metodo: 'a mesma grandeza pela regra do anexo de KPI do contrato de O&M: por inversor, instantes de '
+          + '30 min com potência positiva DENTRO da janela de irradiância acima de 100 W/m² (medida na estação '
+          + 'de cada usina), sobre os instantes da janela; a usina é a média SIMPLES dos inversores',
+        campos: { disp_contrato_pct: 'por usina, %', janela_contrato_h: 'janela de irradiância do dia, em horas',
+          CX_disp_contrato_pct: 'o conjunto, média dos inversores de todas as usinas' },
+        nao_e: 'o número contratual: faltam as HORAS EXCLUÍDAS previstas no contrato (falha na transmissão, '
+          + 'pedido do contratante, força maior, falta de peça e outras), que não estão registradas em fonte '
+          + 'que o pipeline leia. Sem elas a conta é conservadora: uma parada que o contrato excluiria entra '
+          + 'aqui como indisponibilidade',
+        resolucao: 'a amostra é instantânea a cada 30 min: parada mais curta que isso não aparece',
+        comeca_em: 'o campo nasce em 17/09/2026; dia anterior a ele não tem como ser recomposto, porque o '
+          + 'blob por inversor guarda o dia reduzido e não os instantes',
+      },
       nao_e: 'a disponibilidade declarada ao operador nacional (disp_pct do executivo), que é capacidade '
         + 'declarada no nível do conjunto — as duas convivem e se conferem',
     },
@@ -1002,6 +1043,14 @@ async function grava(nome, obj) {
     if (semJanela.length) console.log('  ⚠️ disponibilidade sem janela em ' + semJanela.length + ' dia(s): ' + semJanela.slice(0, 3).map(([d, r]) => d + ' (' + r.nota + ')').join(' · '));
     const jan = [...DISP.values()].map((r) => r.janela_min).filter((x) => x != null);
     if (jan.length) console.log('  disponibilidade: janela do dia ' + (Math.min(...jan) / 60).toFixed(2) + ' a ' + (Math.max(...jan) / 60).toFixed(2) + ' h em ' + jan.length + ' dias'); }
+
+  // ---- e a MESMA materia-prima pela janela do CONTRATO (irradiancia > 100 W/m2), sem as exclusoes -
+  const DISPC = dispContrato([...paraDisp.values()]
+    .map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando })), JAN_CONTRATO);
+  { const cx = [...DISPC.values()].map((r) => r.complexo && r.complexo.disp_pct).filter((x) => x != null).sort((a, b) => a - b);
+    if (cx.length) console.log('  disponibilidade pela janela do contrato (sem exclusões): ' + cx.length
+      + ' dias · ' + cx[0].toFixed(2) + ' a ' + cx[cx.length - 1].toFixed(2) + ' %, mediana ' + cx[cx.length >> 1].toFixed(2) + ' %');
+    else console.log('  disponibilidade pela janela do contrato: nenhum dia com instantes contados (o campo nasce nesta rodada)'); }
 
   const serieDiaria = [...diario.entries()].sort().map(([dia, porU]) => {
     const o = { dia, ms: Date.parse(dia + 'T00:00:00Z') + 3 * 3600e3 };
@@ -1030,6 +1079,10 @@ async function grava(nome, obj) {
           o[ufv + '_inv_parciais'] = dv.parciais; o[ufv + '_inv_contador_24h'] = dv.contador_24h; }
         if (R && R.janela_min != null && o.janela_h == null) { o.janela_h = r2(R.janela_min / 60);
           if (R.complexo) o.CX_disp_pct = R.complexo.disp_pct; } }
+      { const C = DISPC.get(dia); const cv = C && C.porUfv[ufv];
+        if (cv) { o[ufv + '_disp_contrato_pct'] = cv.disp_pct; o[ufv + '_janela_contrato_h'] = cv.janela_h; }
+        if (C && C.complexo && o.CX_disp_contrato_pct == null) { o.CX_disp_contrato_pct = C.complexo.disp_pct;
+          o.janela_contrato_h = C.janela_h; } }
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
       // consumo proprio da usina: o que o medidor recebeu menos o que ficou liquido
       const L = liq.get(dia);
@@ -1131,6 +1184,22 @@ async function grava(nome, obj) {
     if (nome === 'perdas_diario.json') {
       const nd = completaDisponibilidade(sf, DISP, us, r2);
       if (nd) console.log('  disponibilidade preenchida em ' + nd + ' dia(s) que estavam no blob sem ela');
+      // idem para a janela do contrato: os dias que vieram do historico so a recebem aqui, e SO se
+      // o `perdas_inv` daquele dia ja tiver os instantes contados (dia anterior ao campo nao tem).
+      let nc = 0;
+      for (const o of sf) {
+        const C = DISPC.get(o.dia); if (!C) continue;
+        let mexeu = false;
+        for (const ufv of us) {
+          const cv = C.porUfv[ufv];
+          if (cv && o[ufv + '_disp_contrato_pct'] == null) {
+            o[ufv + '_disp_contrato_pct'] = cv.disp_pct; o[ufv + '_janela_contrato_h'] = cv.janela_h; mexeu = true;
+          }
+        }
+        if (C.complexo && o.CX_disp_contrato_pct == null) { o.CX_disp_contrato_pct = C.complexo.disp_pct; o.janela_contrato_h = C.janela_h; mexeu = true; }
+        if (mexeu) nc++;
+      }
+      if (nc) console.log('  disponibilidade pela janela do contrato preenchida em ' + nc + ' dia(s) do histórico');
     }
     // 🔴 A JANELA MEDIDA VAI AO LADO DA CONFIGURADA. `janela_dias` e o TETO; quem quiser dizer ao
     //    leitor quanto o arquivo cobre HOJE tem de usar `dias_cobertos`. Publicar so o teto e o
