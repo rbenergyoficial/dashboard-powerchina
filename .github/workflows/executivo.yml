@@ -80,3 +80,16 @@ jobs:
           # 🔴 Falha de proposito se nao houver export: cair na semente congelaria o painel calado.
           IIRR_CONTAINER: scada-raw
         run: node scripts/gen-irradiancia.js
+
+      # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
+      # irr_60min que o passo anterior grava) e com `always()`: se a irradiancia falhar, o PR recalcula com a
+      # publicada — os dias sem irradiacao nova simplesmente nao fecham.
+      - name: Gerar pr.json (Performance Ratio no 230 kV)
+        if: always()
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-pr.js
+
+      - name: Ensaio · o PR confere com o executivo e com o medidor
+        if: always()
+        run: node scripts/ensaio-pr.js
