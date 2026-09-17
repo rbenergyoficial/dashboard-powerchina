@@ -1041,8 +1041,13 @@ async function writeOut(obj, nome, opts) {
       corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - gv) / x.ge) : 0 }; });
 
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
-    // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA). Alvos confirmados pelo usuário.
-    meta: { fonte: 'PENDENTE — planilha SharePoint (P50/P90/PPA)', p50_gwh: null, p90_gwh: null, ppa_mwh: null, pr_alvo_pct: 90, disp_alvo_pct: 97 },
+    // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA).
+    // 🔴 `pr_alvo_pct: 90` e `disp_alvo_pct: 97` SAÍRAM em 17/09/2026: eram números cravados aqui, sem
+    //    documento nenhum, e viravam limiar de cor e linha de referência na tela — a description do cartão
+    //    do Sumário chegava a dizer que o 97 vinha do CONTRATO. O contrato de O&M garante 99 % e mede NO
+    //    INVERSOR (anexo de KPI); é esse número que a tela usa agora, com a fonte escrita ao lado.
+    //    Varridos ANTES de remover: 88 dashboards e o portal — zero consumidores dos dois campos.
+    meta: { fonte: 'PENDENTE — planilha SharePoint (P50/P90/PPA)', p50_gwh: null, p90_gwh: null, ppa_mwh: null },
     estrategia: { ppa: PPA, ml: ML, regra: 'Na limitação do ONS, M1/M7/M9 (fora do PPA) são limitados a ~1 MW para blindar a entrega do PPA. Atingida a meta do PPA no mês, o ML deixa de ser limitado.' },
     // A MESMA relação de `estrategia`, na forma que o painel consome: usina -> contrato. Ela vai
     // também num blob próprio (`hierarquia.json`, ~200 B) porque a variável que decide a seleção
@@ -2038,7 +2043,7 @@ async function writeOut(obj, nome, opts) {
             const HORAS_RESTR = r2(somaB('nosso_horas_restricao'));
             return {
               disp_ytd_pct: D.length ? r2(D.reduce((a, x) => a + x.disp_pct, 0) / D.length) : null,
-              disp_meses: D.length, disp_alvo_pct: 97,
+              disp_meses: D.length,   /* sem `disp_alvo_pct`: ver a nota no bloco `meta` */
               corte_conj_pct: MAURITI, corte_ne_pct: NORDESTE, corte_abaiara_pct: ABAIARA,
               corte_gwh: CORTADO_GWH, corte_gerada_gwh: GERADA_GWH,
               corte_possivel_gwh: r2(GERADA_GWH + CORTADO_GWH),
