@@ -172,10 +172,23 @@ function janelaContrato(serie, ufvs) {
 }
 
 /** disponibilidade pela janela do contrato, SEM as exclusoes.
- * @param {Array<{dia:string, ufv:string, ts?:string, inv:string, gerando:number}>} porInv um por
- *   inversor-dia; `gerando` = instantes de 30 min com potencia positiva DENTRO da janela do dia
+ *
+ * 🔴 O DENOMINADOR E O LIDO, NAO A JANELA (19/09/2026). Inversor que entra na coleta no meio do dia
+ *    — M9/TS1 INV04/05/06/08/10 em 18/09/2026, telemetria a partir das 14:00, com o contador de
+ *    operacao marcando o dia INTEIRO — saia a 32 % e derrubava a usina a 85 %: a manha SEM LEITURA
+ *    contava como PARADA. Sao coisas distintas: a primeira e falha de coleta, a segunda e o que o
+ *    contrato mede. Divide-se por min(lidos, janela); inversor sem leitura nenhuma na janela fica
+ *    FORA da media (nao ha o que medir), e os instantes sem leitura vao CONTADOS em `sem_leitura`,
+ *    para a tela poder dizer. Registro SEM `lidos` (gravado antes do campo existir) segue com a
+ *    janela inteira: nao se reinterpreta o que nao se mediu.
+ *
+ * @param {Array<{dia:string, ufv:string, ts?:string, inv:string, gerando:number, lidos?:number}>} porInv
+ *   um por inversor-dia; `gerando` = instantes de 30 min com potencia positiva DENTRO da janela do
+ *   dia; `lidos` = instantes da janela em que o inversor TEM leitura
  * @param {Map<string, Set<string>>} janela de janelaContrato
- * @returns {Map<string, {janela_h:number|null, porUfv:Object, complexo:Object|null}>} por dia */
+ * @returns {Map<string, {janela_h:number|null, porUfv:Object, complexo:Object|null}>} por dia; em
+ *   porUfv[u]: disp_pct, n, janela_h, piores, sem_leitura (instantes inversor sem leitura na janela)
+ *   e fora_sem_leitura (inversores sem leitura nenhuma, que nao entraram na media) */
 function dispContrato(porInv, janela) {
   const porDia = new Map();
   for (const l of porInv || []) {
@@ -184,8 +197,12 @@ function dispContrato(porInv, janela) {
     if (!J || J.size < MIN_SLOTS_JANELA) continue;
     if (!porDia.has(l.dia)) porDia.set(l.dia, {});
     const P = porDia.get(l.dia);
-    if (!P[l.ufv]) P[l.ufv] = { s: 0, n: 0, slots: J.size, piores: [] };
-    const f = Math.min(1, l.gerando / J.size);
+    if (!P[l.ufv]) P[l.ufv] = { s: 0, n: 0, slots: J.size, piores: [], semLeitura: 0, foraSemLeitura: 0 };
+    const temLidos = l.lidos != null && isFinite(l.lidos);
+    const den = temLidos ? Math.min(l.lidos, J.size) : J.size;
+    if (temLidos) P[l.ufv].semLeitura += Math.max(0, J.size - l.lidos);
+    if (den <= 0) { P[l.ufv].foraSemLeitura++; continue; }
+    const f = Math.min(1, l.gerando / den);
     P[l.ufv].s += f; P[l.ufv].n++;
     if (f < PARCIAL) P[l.ufv].piores.push({ inv: (l.ts ? l.ts + '/' : '') + l.inv, pct: r2(100 * f) });
   }
@@ -194,8 +211,10 @@ function dispContrato(porInv, janela) {
     const res = { janela_h: null, porUfv: {}, complexo: null };
     let sCx = 0, nCx = 0; const slots = [];
     for (const [ufv, o] of Object.entries(P)) {
+      if (!o.n) continue;   /* usina em que NENHUM inversor teve leitura na janela: nao ha medida a publicar */
       res.porUfv[ufv] = { disp_pct: r2(100 * o.s / o.n), n: o.n, janela_h: r2(o.slots / 2),
-        piores: o.piores.sort((a, b) => a.pct - b.pct).slice(0, 3) };
+        piores: o.piores.sort((a, b) => a.pct - b.pct).slice(0, 3),
+        sem_leitura: o.semLeitura, fora_sem_leitura: o.foraSemLeitura };
       sCx += o.s; nCx += o.n; slots.push(o.slots);
     }
     res.janela_h = slots.length ? r2((slots.reduce((a, b) => a + b, 0) / slots.length) / 2) : null;

@@ -49,6 +49,27 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
   exige(m2.piores.length === 2 && m2.piores[0].inv === 'TS1/INV03', 'os piores inversores deveriam ser nomeados, do pior para o melhor');
   exige(R.complexo && perto(R.complexo.disp_pct, 62.5, 0.01), 'o conjunto e a media dos inversores de todas as usinas');
 
+  /* 🔴 SEM LEITURA nao e PARADO (19/09/2026): o inversor que entra na coleta no meio do dia. O caso real e o
+     M9/TS1 em 18/09/2026 — cinco inversores com telemetria so a partir das 14:00 e o contador de operacao
+     marcando o dia inteiro — que a regra antiga punha a 32 % e a usina a 85 %. */
+  const Rl = L.dispContrato([
+    { dia, ufv: 'M2', ts: 'TS1', inv: 'INV01', gerando: 24, lidos: 24 },   /* dia inteiro lido, gerando: 100 */
+    { dia, ufv: 'M2', ts: 'TS1', inv: 'INV05', gerando: 11, lidos: 11 },   /* so a tarde LIDA, e gerou nela toda: 100, nao 46 */
+    { dia, ufv: 'M2', ts: 'TS1', inv: 'INV06', gerando: 6, lidos: 12 },    /* metade lida, gerou metade dela: 50 */
+    { dia, ufv: 'M2', ts: 'TS1', inv: 'INV07', gerando: 0, lidos: 0 },     /* nada lido: FORA da media, nao "parado" */
+    { dia, ufv: 'M2', ts: 'TS1', inv: 'INV08', gerando: 0, lidos: 24 },    /* lido o dia todo e zero: PARADO de verdade */
+  ], J).get(dia).porUfv.M2;
+  exige(Rl.n === 4, 'inversor sem leitura nenhuma fica fora da media: n deveria ser 4 (veio ' + Rl.n + ')');
+  exige(perto(Rl.disp_pct, (100 + 100 + 50 + 0) / 4, 0.01), 'sem leitura nao e parado: esperava 62,5 % e veio ' + Rl.disp_pct);
+  exige(Rl.sem_leitura === 13 + 12 + 24, 'instantes sem leitura contados: esperava 49 e veio ' + Rl.sem_leitura);
+  exige(Rl.fora_sem_leitura === 1, 'um inversor fora por nao ter leitura (veio ' + Rl.fora_sem_leitura + ')');
+  const nomes = Rl.piores.map((p) => p.inv);
+  exige(nomes[0] === 'TS1/INV08' && nomes.indexOf('TS1/INV05') < 0 && nomes.indexOf('TS1/INV07') < 0,
+    'entre os piores so quem foi LIDO e nao gerou (veio ' + nomes.join(',') + ')');
+  /* e o registro SEM `lidos` (historico) continua julgado pela janela inteira: nao se reinterpreta o que nao se mediu */
+  const Rh = L.dispContrato([{ dia, ufv: 'M2', ts: 'TS1', inv: 'INV09', gerando: 11 }], J).get(dia).porUfv.M2;
+  exige(perto(Rh.disp_pct, 100 * 11 / 24, 0.01) && Rh.sem_leitura === 0, 'registro sem `lidos` mudou de regra (veio ' + Rh.disp_pct + ')');
+
   const curto = { t: dia + 'T12:00:00-03:00', M3: 900 };
   const Jc = L.janelaContrato([curto], ['M3']);
   exige(L.dispContrato([{ dia, ufv: 'M3', inv: 'INV01', gerando: 1 }], Jc).size === 0,
@@ -83,21 +104,32 @@ const le = async (nome) => {
   }
   const us = (irr.ufvs || []).filter((u) => u !== 'Complexo');
   const J = L.janelaContrato(irr.serie, us);
-  const R = L.dispContrato((inv.serie || []).map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando })), J);
+  const linhas = (inv.serie || []).map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando, lidos: o.lidos }));
+  const R = L.dispContrato(linhas, J);
+  /* a regra ANTIGA (janela inteira), para o dia publicado ANTES do campo `sem_leitura` existir: o blob
+     declara qual regra o produziu pela presenca do campo, e o ensaio julga cada dia pela regra dele */
+  const R0 = L.dispContrato(linhas.map((l) => ({ ...l, lidos: undefined })), J);
 
-  let dias = 0, pares = 0;
+  let dias = 0, pares = 0, legado = 0;
   for (const o of comCampo) {
-    const C = R.get(o.dia);
+    const C = R.get(o.dia), C0 = R0.get(o.dia);
     if (!C) { falhas.push(o.dia + ': o dia tem o campo publicado e nao se recompoe do perdas_inv'); continue; }
     dias++;
-    exige(perto(o.CX_disp_contrato_pct, C.complexo.disp_pct, 0.02),
-      o.dia + ': conjunto publicado ' + o.CX_disp_contrato_pct + ' contra ' + C.complexo.disp_pct + ' recomposto');
+    const eLegado = (u) => o[u + '_disp_contrato_sem_leitura'] == null && C.porUfv[u] && C.porUfv[u].sem_leitura > 0;
+    const diaLegado = us.some((u) => o[u + '_disp_contrato_pct'] != null && eLegado(u));
+    if (diaLegado) legado++;
+    const cxEsp = diaLegado ? C0.complexo.disp_pct : C.complexo.disp_pct;
+    exige(perto(o.CX_disp_contrato_pct, cxEsp, 0.02),
+      o.dia + ': conjunto publicado ' + o.CX_disp_contrato_pct + ' contra ' + cxEsp + ' recomposto' + (diaLegado ? ' (regra anterior a `lidos`)' : ''));
     exige(o.janela_contrato_h > 8 && o.janela_contrato_h < 14, o.dia + ': janela do contrato de ' + o.janela_contrato_h + ' h, fora de 8 a 14 h');
     for (const u of us) {
       if (o[u + '_disp_contrato_pct'] == null) continue;
       pares++;
-      exige(perto(o[u + '_disp_contrato_pct'], C.porUfv[u].disp_pct, 0.02),
-        o.dia + ' ' + u + ': ' + o[u + '_disp_contrato_pct'] + ' contra ' + C.porUfv[u].disp_pct);
+      const esp = eLegado(u) ? C0.porUfv[u].disp_pct : C.porUfv[u].disp_pct;
+      exige(perto(o[u + '_disp_contrato_pct'], esp, 0.02),
+        o.dia + ' ' + u + ': ' + o[u + '_disp_contrato_pct'] + ' contra ' + esp + (eLegado(u) ? ' (regra anterior a `lidos`)' : ''));
+      if (o[u + '_disp_contrato_sem_leitura'] != null) exige(o[u + '_disp_contrato_sem_leitura'] === C.porUfv[u].sem_leitura,
+        o.dia + ' ' + u + ': sem_leitura publicado ' + o[u + '_disp_contrato_sem_leitura'] + ' contra ' + C.porUfv[u].sem_leitura + ' recontado');
       exige(o[u + '_disp_contrato_pct'] >= 50 && o[u + '_disp_contrato_pct'] <= 100,
         o.dia + ' ' + u + ': disponibilidade de ' + o[u + '_disp_contrato_pct'] + ' % fora de 50 a 100');
       exige(o[u + '_janela_contrato_h'] > 8 && o[u + '_janela_contrato_h'] < 14, o.dia + ' ' + u + ': janela fora de 8 a 14 h');
@@ -108,7 +140,8 @@ const le = async (nome) => {
       o.dia + ': janela do contrato ' + o.janela_contrato_h + ' h nao e menor que a do contador ' + o.janela_h + ' h');
   }
   exige(dias >= 1 && pares >= 3, 'julgou pouco: ' + dias + ' dias e ' + pares + ' pares usina-dia');
-  console.log('produto: ' + dias + ' dia(s) e ' + pares + ' par(es) usina-dia conferidos contra o perdas_inv e o irr_30min');
+  console.log('produto: ' + dias + ' dia(s) e ' + pares + ' par(es) usina-dia conferidos contra o perdas_inv e o irr_30min'
+    + (legado ? ' · ' + legado + ' dia(s) ainda pela regra anterior a `lidos` (publicados antes do campo; saem na proxima rodada)' : ''));
   fim();
 })().catch((e) => { console.error('REPROVADO: ' + e.message); process.exit(1); });
 

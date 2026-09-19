@@ -693,12 +693,17 @@ async function grava(nome, obj) {
         ...(function () {
           const J = JAN_CONTRATO.get(a.dia + '|' + a.ufv);
           if (!J) return {};
-          let ger = 0;
+          let ger = 0, lid = 0;
           for (let i = 0; i < nLin; i++) {
             if (!J.has(String(d.instantes[i]).slice(11, 16))) continue;
+            // `lidos`: instantes da janela em que o inversor TEM leitura. Sem ele, um inversor que entra
+            // na coleta no meio do dia (M9/TS1 INV04/05/06/08/10 em 18/09/2026, a partir das 14:00)
+            // conta a manha SEM TELEMETRIA como PARADA — e o contador de operacao dele marcava o dia
+            // inteiro. "Sem leitura" e "parado" sao coisas distintas; a lib divide so pelo lido.
+            if (ca[i] != null) lid++;
             if (ca[i] != null && ca[i] > 0) ger++;
           }
-          return { gerando: ger, jan_slots: J.size };
+          return { gerando: ger, lidos: lid, jan_slots: J.size };
         })(),
         n: bons.length });
 
@@ -1043,6 +1048,8 @@ async function grava(nome, obj) {
           + '30 min com potência positiva DENTRO da janela de irradiância acima de 100 W/m² (medida na estação '
           + 'de cada usina), sobre os instantes da janela; a usina é a média SIMPLES dos inversores',
         campos: { disp_contrato_pct: 'por usina, %', janela_contrato_h: 'janela de irradiância do dia, em horas',
+          disp_contrato_sem_leitura: 'por usina, instantes inversor×30 min da janela SEM leitura no supervisório (só quando > 0); '
+            + 'não contam como parada — o denominador de cada inversor é o que foi lido',
           CX_disp_contrato_pct: 'o conjunto, média dos inversores de todas as usinas' },
         nao_e: 'o número contratual: faltam as HORAS EXCLUÍDAS previstas no contrato (falha na transmissão, '
           + 'pedido do contratante, força maior, falta de peça e outras), que não estão registradas em fonte '
@@ -1075,7 +1082,7 @@ async function grava(nome, obj) {
 
   // ---- e a MESMA materia-prima pela janela do CONTRATO (irradiancia > 100 W/m2), sem as exclusoes -
   const DISPC = dispContrato([...paraDisp.values()]
-    .map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando })), JAN_CONTRATO);
+    .map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando, lidos: o.lidos })), JAN_CONTRATO);
   { const cx = [...DISPC.values()].map((r) => r.complexo && r.complexo.disp_pct).filter((x) => x != null).sort((a, b) => a - b);
     if (cx.length) console.log('  disponibilidade pela janela do contrato (sem exclusões): ' + cx.length
       + ' dias · ' + cx[0].toFixed(2) + ' a ' + cx[cx.length - 1].toFixed(2) + ' %, mediana ' + cx[cx.length >> 1].toFixed(2) + ' %');
@@ -1109,7 +1116,9 @@ async function grava(nome, obj) {
         if (R && R.janela_min != null && o.janela_h == null) { o.janela_h = r2(R.janela_min / 60);
           if (R.complexo) o.CX_disp_pct = R.complexo.disp_pct; } }
       { const C = DISPC.get(dia); const cv = C && C.porUfv[ufv];
-        if (cv) { o[ufv + '_disp_contrato_pct'] = cv.disp_pct; o[ufv + '_janela_contrato_h'] = cv.janela_h; }
+        if (cv) { o[ufv + '_disp_contrato_pct'] = cv.disp_pct; o[ufv + '_janela_contrato_h'] = cv.janela_h;
+          // a contagem vai junto, e SO quando ha o que contar: dia em que a coleta faltou tem de PODER ser dito
+          if (cv.sem_leitura) o[ufv + '_disp_contrato_sem_leitura'] = cv.sem_leitura; }
         if (C && C.complexo && o.CX_disp_contrato_pct == null) { o.CX_disp_contrato_pct = C.complexo.disp_pct;
           o.janela_contrato_h = C.janela_h; } }
       if (x.e_cc > 1) o[ufv + '_perda_conv_pct'] = r2(((x.e_cc - x.e_ca) / x.e_cc) * 100);
@@ -1223,6 +1232,7 @@ async function grava(nome, obj) {
           const cv = C.porUfv[ufv];
           if (cv && o[ufv + '_disp_contrato_pct'] == null) {
             o[ufv + '_disp_contrato_pct'] = cv.disp_pct; o[ufv + '_janela_contrato_h'] = cv.janela_h; mexeu = true;
+            if (cv.sem_leitura) o[ufv + '_disp_contrato_sem_leitura'] = cv.sem_leitura;
           }
         }
         if (C.complexo && o.CX_disp_contrato_pct == null) { o.CX_disp_contrato_pct = C.complexo.disp_pct; o.janela_contrato_h = C.janela_h; mexeu = true; }

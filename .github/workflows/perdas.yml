@@ -84,3 +84,11 @@ jobs:
       - name: Ensaio do ef_imp (instantes impossiveis)
         if: always()
         run: node scripts/ensaio-ef-imp.js M3
+
+      # DEPOIS de gerar: julga o PRODUTO. A disponibilidade pela janela do contrato recomposta do
+      # perdas_inv tem de bater com a publicada, dia a dia e usina a usina — e "sem leitura" nao pode
+      # contar como "parado" (19/09/2026: cinco inversores do M9 entrando na coleta as 14:00 punham a
+      # usina a 85 %). Este ensaio existia desde 17/09 e nao estava ligado em workflow nenhum.
+      - name: Ensaio da disponibilidade pela janela do contrato
+        if: always()
+        run: node scripts/ensaio-disp-contrato.js
