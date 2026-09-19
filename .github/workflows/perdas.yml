@@ -77,3 +77,10 @@ jobs:
       - name: Ensaio do zero da isolacao
         if: always()
         run: node scripts/ensaio-isol-zero.js M3
+
+      # DEPOIS de gerar: julga o PRODUTO. O `ef_imp` e quanto da eficiencia do dia vem de instantes
+      # com CA > CC (leituras instantaneas nao simultaneas); o ensaio exige a fisica (ef > 100% so
+      # com instante impossivel) e o fechamento dia x curva de 30 min, inversor a inversor.
+      - name: Ensaio do ef_imp (instantes impossiveis)
+        if: always()
+        run: node scripts/ensaio-ef-imp.js M3

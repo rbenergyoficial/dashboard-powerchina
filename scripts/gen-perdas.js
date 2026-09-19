@@ -255,6 +255,12 @@ const STRING_RE = /^CORRENTE STRING (\d+)$/;
 //    errada — a mesma decisao que o irmao da razao contra os pares ja tomou com os 10 kWh.
 const PISO_STR_A = 3;
 
+// Piso do `ef_imp` (instantes com CA > CC). NAO e escolhido: e a convencao da casa para "o
+// inversor estava gerando" (p >= 1 kW, a mesma da faixa do piso no painel de strings), e ela e
+// onde o ruido de zero acaba. Medido nas nove usinas, 7 dias de curva: ABAIXO de 1 kW de CC,
+// 21 de 21 instantes tem CA > CC (offset de zero, nao energia); de 1 kW para cima, de 0,2% a 2,5%.
+const EF_IMP_PISO_KW = 1;
+
 // 🔴 ZERO NA ISOLACAO E AUSENCIA, NAO MEDICAO — e isso foi medido no arquivo CRU, nao deduzido.
 //    Em 12/08 o M3/TS1/INV01 traz isolacao 0 as 12:00 com o inversor entregando 317 kW,
 //    cercada de 462 nos vizinhos; as 18h, 20h e 22h, com o inversor PARADO, traz 462. Arranjo
@@ -658,6 +664,14 @@ async function grava(nome, obj) {
       porInv.set(a.dia + '|' + a.ufv + '|' + o.ts + '|' + o.inv, { dia: a.dia, ufv: a.ufv, ts: o.ts, inv: o.inv,
         e_cc: r4(eCC), e_ca: r4(eCA),
         ef: eCC > 0.001 ? r4(eCA / eCC) : null,
+        // 🔴 INSTANTES FISICAMENTE IMPOSSIVEIS (CA > CC): as duas leituras sao instantaneas e NAO
+        //    simultaneas, e num ceu que muda uma pega um momento e a outra outro. Um instante assim
+        //    empurra o `ef` do dia para cima. Guarda-se o par CRU aqui; o piso de potencia e a fracao
+        //    saem depois do fator de unidade (ver EF_IMP_PISO_KW). NAO se corta nada do `ef`: o ruido
+        //    e simetrico, e tirar so a cauda de cima vicia o numero para baixo (medido 17/09/2026).
+        _imp: eCC > 0.001 ? {
+          scc: soma(bons.map((i) => cc[i])),
+          pares: bons.filter((i) => ca[i] > cc[i]).map((i) => [cc[i], ca[i]]) } : null,
         p_ca_max: r2(Math.max(...bons.map((i) => ca[i] * f)) * 1000),   // kW
         temp_max: t.length ? r2(Math.max(...t)) : null,
         // 🔴 EM kW, como `p_ca_max` e `nominal` — ver SETPOINT_EM_W logo abaixo do bloco.
@@ -697,9 +711,15 @@ async function grava(nome, obj) {
       const nomV = (o.serie.nominal || []).filter((x) => x != null);
       const cur = { d: a.dia, ts: o.ts, inv: o.inv, nom: nomV.length ? r2(nomV[nomV.length - 1]) : null,
         h: [], pcc: [], pca: [], ef: [], sn: [], sm: [], mm: [], t: [], iso: [], sp: [] };
+      // so a janela com geracao: do PRIMEIRO ao ULTIMO instante gerando. A madrugada sao 0,0 repetidos
+      // que nao dizem nada e pesam; os zeros do MEIO ficam, porque sao PARADA e nao madrugada.
+      // 🔴 Cortar ponto a ponto transformava a parada num vao: o M3/TS2/INV20 em 18/09/2026 ficou em
+      //    0 kW das 11:30 as 14:00 com o setpoint pedindo 63 kW e os vizinhos entregando, e a curva
+      //    simplesmente nao tinha esses instantes — a tela escondia a parada que existe para mostrar.
+      const gerI = bons.filter((i) => cc[i] > 1 || ca[i] > 1);
+      const i0 = gerI.length ? gerI[0] : Infinity, i1 = gerI.length ? gerI[gerI.length - 1] : -Infinity;
       for (const i of bons) {
-        // so a janela com geracao: a madrugada sao 0,0 repetidos que nao dizem nada e pesam
-        if (!(cc[i] > 1 || ca[i] > 1)) continue;
+        if (i < i0 || i > i1) continue;
         const dsi = disp('str#', i, PISO_STR_A);
         const dmi = disp('mppt#', i, PISO_STR_A);
         const ti = (o.serie.temp || [])[i], ii = (o.serie.isol || [])[i], si = (o.serie.setpoint || [])[i];
@@ -758,6 +778,15 @@ async function grava(nome, obj) {
     if (o.e_cc != null) o.e_cc = r4(o.e_cc * F);
     if (o.e_ca != null) o.e_ca = r4(o.e_ca * F);
     if (o.p_ca_max != null) o.p_ca_max = r2(o.p_ca_max * F);
+    // `ef_imp`: quanto do `ef` do dia vem de instantes com CA > CC, em fracao (como o `ef`) —
+    // sum(CA - CC) nesses instantes / sum(CC) do dia. E GRANDEZA, nao limiar: o painel a mostra e
+    // so marca o dia pelo criterio fisico (ef > 100%). `ef_imp_n` conta os instantes.
+    if (o._imp) {
+      const v = o._imp.pares.filter(([c]) => c * F * 1000 >= EF_IMP_PISO_KW);
+      o.ef_imp = o._imp.scc > 0 ? r4(soma(v.map(([c, a]) => a - c)) / o._imp.scc) : 0;
+      o.ef_imp_n = v.length;
+    }
+    delete o._imp;
   }
   // a curva vai em kW, como o `p_ca_max` do dia — mesma grandeza, mesma unidade, e a conferencia
   // entre as duas so fecha se elas concordarem
