@@ -92,3 +92,10 @@ jobs:
       - name: Ensaio da disponibilidade pela janela do contrato
         if: always()
         run: node scripts/ensaio-disp-contrato.js
+
+      # DEPOIS de gerar: julga o PRODUTO. A energia CC e CA da usina no dia tem de FECHAR com a soma dos
+      # inversores — duas rotas sobre a mesma fonte. Ate 19/09/2026 a usina descartava o instante inteiro
+      # quando faltava UM inversor (M9 em 18/09: 19 de 48 instantes, 4,0 MWh contra 12,16 do contador).
+      - name: Ensaio do fechamento usina x inversores
+        if: always()
+        run: node scripts/ensaio-energia-conjunto.js

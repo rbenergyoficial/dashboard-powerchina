@@ -595,21 +595,45 @@ async function grava(nome, obj) {
     picos[a.ufv] = Math.max(picos[a.ufv] || 0, Math.max(...somaCA));
     nInv[a.ufv] = totalInv;
 
-    // ---- por instante, com TUDO-OU-NADA -------------------------------------------------------
-    // 🔴 Somar 800 inversores de 1.104 e chamar de usina INVENTA perda: o que falta some do lado
-    //    CA e do CC em proporcoes diferentes, e a diferenca vira "perda" que ninguem teve.
+    // ---- por instante, com o MESMO CONJUNTO dos dois lados ------------------------------------
+    // 🔴 Somar todo CA disponivel e todo CC disponivel e chamar de usina INVENTA perda: o que falta
+    //    some de um lado e do outro em proporcoes diferentes, e a diferenca vira "perda" que ninguem
+    //    teve. A guarda e o CONJUNTO: em cada instante entram so os inversores que tem CC E CA, e os
+    //    dois lados sao somados sobre esse mesmo conjunto.
+    // 🔴 Ate 19/09/2026 o instante so entrava com TODOS os inversores do arquivo. Cinco inversores do
+    //    M9/TS1 entrando na coleta as 14:00 de 18/09 deixaram o dia com 19 de 48 instantes e 4,0 MWh
+    //    integrados contra 12,16 do contador: a manha inteira, medida em 18 inversores, foi jogada
+    //    fora porque faltavam 5 que ainda nem estavam na coleta — a mesma situacao dos 51 que nunca
+    //    estiveram, e que sempre entraram como COBERTURA, nao como corte de instante. Com o conjunto
+    //    por instante a energia da usina FECHA com a soma dos inversores, que o `perdas_inv` ja
+    //    integrava cada um sobre os seus proprios instantes com os dois lados.
+    const parCC = new Array(nLin).fill(0), parCA = new Array(nLin).fill(0), nPar = new Array(nLin).fill(0);
+    for (const o of d.inv.values()) {
+      const ca = o.serie.p_ca, cc = o.serie.p_cc;
+      if (!ca || !cc) continue;
+      for (let i = 0; i < nLin; i++) if (ca[i] != null && cc[i] != null) { parCC[i] += cc[i]; parCA[i] += ca[i]; nPar[i]++; }
+    }
     for (let i = 0; i < nLin; i++) {
-      if (nCA[i] !== totalInv || nCC[i] !== totalInv) continue;
+      if (!nPar[i]) continue;
       const ms = Date.parse(d.instantes[i].replace(' ', 'T') + 'Z') + 3 * 3600e3;
       if (!meia.has(ms)) meia.set(ms, {});
-      meia.get(ms)[a.ufv] = { cc: somaCC[i] * f, ca: somaCA[i] * f, n: totalInv };
+      meia.get(ms)[a.ufv] = { cc: parCC[i] * f, ca: parCA[i] * f, n: nPar[i] };
     }
 
-    // ---- energia do dia: integra os DOIS lados do mesmo jeito ---------------------------------
-    const completos = [];
-    for (let i = 0; i < nLin; i++) if (nCA[i] === totalInv && nCC[i] === totalInv) completos.push(i);
-    const e_cc = soma(completos.map((i) => somaCC[i] * f)) * 0.5;      // MWh
-    const e_ca = soma(completos.map((i) => somaCA[i] * f)) * 0.5;
+    // ---- energia do dia: integra os DOIS lados do mesmo jeito, sobre o mesmo conjunto ---------
+    const medidos = [];
+    for (let i = 0; i < nLin; i++) if (nPar[i]) medidos.push(i);
+    const e_cc = soma(medidos.map((i) => parCC[i] * f)) * 0.5;      // MWh
+    const e_ca = soma(medidos.map((i) => parCA[i] * f)) * 0.5;
+    // a cobertura DENTRO do dia, para a tela poder dizer "18 de 23 pela manha": fracao dos inversores
+    // do arquivo com o par medido, nos instantes da JANELA DO CONTRATO (irradiancia > 100 W/m2).
+    // ⚠️ Medido antes de escolher a janela: com "CA > 0" o amanhecer entrava — meia frota reporta um
+    //    lado so as 05:30 — e o campo saia 99,9 % com minimo de 157 em dias normais do M8. Ruido de
+    //    aurora nao e falta de coleta; a janela do contrato ja separa os dois, e tem fonte.
+    const JC = JAN_CONTRATO.get(a.dia + '|' + a.ufv);
+    const comGer = JC ? medidos.filter((i) => JC.has(String(d.instantes[i]).slice(11, 16))) : [];
+    const cob_inst_pct = comGer.length ? (soma(comGer.map((i) => nPar[i])) / (comGer.length * totalInv)) * 100 : null;
+    const n_inv_min = comGer.length ? Math.min(...comGer.map((i) => nPar[i])) : null;
     // o contador do lado CA, para a comparacao com o medidor (energia absoluta)
     let e_conta = 0, comConta = 0;
     for (const o of d.inv.values()) {
@@ -618,7 +642,7 @@ async function grava(nome, obj) {
     }
     if (!diario.has(a.dia)) diario.set(a.dia, {});
     diario.get(a.dia)[a.ufv] = { e_cc, e_ca, e_conta: e_conta / 1000, n_inv: totalInv,
-      n_conta: comConta, slots: completos.length, slots_totais: nLin };
+      n_conta: comConta, slots: medidos.length, slots_totais: nLin, cob_inst_pct, n_inv_min };
 
     // ---- por inversor -------------------------------------------------------------------------
     for (const o of d.inv.values()) {
@@ -750,7 +774,7 @@ async function grava(nome, obj) {
     }
     if (escolhidos.indexOf(a) % 40 === 0) {
       console.log('    ' + a.dia + ' ' + a.ufv + ': ' + totalInv + ' inversores · '
-        + completos.length + '/' + nLin + ' slots completos');
+        + medidos.length + '/' + nLin + ' instantes medidos');
     }
   }
 
@@ -1110,6 +1134,8 @@ async function grava(nome, obj) {
       }
       o[ufv + '_n_conta'] = x.n_conta;
       o[ufv + '_slots'] = x.slots;
+      // so quando a cobertura variou dentro do dia: dia com todos os inversores em todo instante nao leva o campo
+      if (x.cob_inst_pct != null && x.cob_inst_pct < 99.995) { o[ufv + '_cob_inst_pct'] = r2(x.cob_inst_pct); o[ufv + '_n_inv_min'] = x.n_inv_min; }
       { const R = DISP.get(dia); const dv = R && R.porUfv[ufv];
         if (dv) { o[ufv + '_disp_pct'] = dv.disp_pct; o[ufv + '_inv_parados'] = dv.parados;
           o[ufv + '_inv_parciais'] = dv.parciais; o[ufv + '_inv_contador_24h'] = dv.contador_24h; }
