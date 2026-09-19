@@ -233,7 +233,54 @@ const GRANDEZAS = {
   freq: 'FREQUÊNCIA DA REDE',
   fp: 'FATOR DE POTÊNCIA TOTAL',
   horas: 'TEMPO DE OPERAÇÃO DIÁRIA',
+  e_vida: 'ENERGIA TOTAL GERADA',        // so para achar o carimbo sem registro (ver carimbosSemRegistro)
 };
+
+// 🔴 O CARIMBO SEM REGISTRO se reconhece pelo CONTADOR DE VIDA, e nao pela tensao ou pela potencia.
+//    Numa parada REAL (disjuntor do alimentador aberto) a tensao e a potencia tambem vao a zero — e
+//    sao medicao. O que so o artefato faz e o contador acumulado DESCER: numa parada ele segura o
+//    valor; no artefato ele vai a zero ou fica a meio caminho (28/07 09:00 a 76%, 12/08 11:00 a 4,6%).
+//    Contador acumulado nao desce por definicao, entao nao ha limiar escolhido. A primeira versao
+//    usava a tensao CA abaixo da faixa do fabricante (640 V) e teria apagado um desligamento real.
+//    A regra e POR ELETROCENTRO: metade ou mais dos inversores do TS com o contador abaixo do ultimo
+//    valor valido, no mesmo carimbo. Uma troca de inversor (um so, o contador novo parte de zero)
+//    nao alcanca a metade, e a parada daquele inversor continua na tela.
+//    Devolve Map(indice do carimbo -> Set de inversores sem registro nele).
+const SEM_REGISTRO = [];
+function carimbosSemRegistro(d) {
+  const n = d.linhas.length;
+  const porTs = new Map();
+  for (const o of d.inv.values()) { if (!porTs.has(o.ts)) porTs.set(o.ts, []); porTs.get(o.ts).push(o); }
+  const fora = new Map();
+  for (const invs of porTs.values()) {
+    const ref = invs.map(() => null);          // ultimo valor VALIDO do contador de cada inversor
+    for (let i = 0; i < n; i++) {
+      let com = 0, desce = 0;
+      const v = invs.map((o) => (o.serie.e_vida || [])[i]);
+      invs.forEach((o, k) => {
+        if (v[k] == null || ref[k] == null) return;
+        com += 1; if (v[k] < ref[k] - 1) desce += 1;
+      });
+      const artefato = com >= 2 && desce * 2 >= com;
+      if (artefato) {
+        if (!fora.has(i)) fora.set(i, new Set());
+        for (const o of invs) fora.get(i).add(o);
+      }
+      /* a referencia so anda fora do artefato: senao o zero escrito pelo servidor viraria a base, e
+         o carimbo seguinte (ainda zero) passaria como valido */
+      invs.forEach((o, k) => { if (v[k] != null && !artefato && !(ref[k] != null && v[k] < ref[k] - 1)) ref[k] = v[k]; });
+      /* troca de UM inversor: o contador novo nao volta ao antigo; depois de 2 carimbos seguidos
+         abaixo, fora de artefato, ele vira a referencia daquele inversor */
+      invs.forEach((o, k) => {
+        if (artefato || v[k] == null || ref[k] == null || !(v[k] < ref[k] - 1)) { o._abaixo = 0; return; }
+        o._abaixo = (o._abaixo || 0) + 1;
+        if (o._abaixo >= 2) { ref[k] = v[k]; o._abaixo = 0; }
+      });
+    }
+  }
+  for (const o of d.inv.values()) delete o._abaixo;
+  return fora;
+}
 // 🔴 As 12 correntes de MPPT e as 24 de string NAO vao para o blob uma a uma: seriam ~40 mil
 //    series para 1.104 inversores, e nenhum painel le isso. O que vai e a DISPERSAO entre elas
 //    no instante de maior potencia do inversor — que e o sinal fino de string suja, sombreada ou
@@ -489,7 +536,16 @@ async function leAnterior(nome) {
 // porque um dia pode voltar mais completo do que da primeira vez
 function acumula(antigas, novas, chave, dias, diaDe) {
   const m = new Map();
-  for (const l of antigas) m.set(chave(l), l);
+  // 🔴 O DIA QUE A RODADA RECALCULOU E INTEIRO DELA. So "ganhar na colisao" nao basta: quando a guarda
+  //    do carimbo sem registro tira as nove usinas de um carimbo, a rodada nao produz linha para ele,
+  //    e a linha velha — o zero escrito pelo servidor — sobrevivia do historico (28/07 09:30, medido
+  //    em 19/09/2026). Linha antiga de um dia recalculado que a rodada nao produziu, sai.
+  //    ⚠️ Por (dia, usina) onde a linha tem usina (uma linha por inversor): uma rodada que lesse so
+  //    algumas usinas de um dia nao pode apagar as outras. Onde a linha junta as usinas, e por dia —
+  //    ali a linha ja era trocada inteira na colisao.
+  const grupo = (l) => diaDe(l) + '|' + (l.ufv || '');
+  const diasNovos = new Set(novas.map(grupo));
+  for (const l of antigas) if (!diasNovos.has(grupo(l))) m.set(chave(l), l);
   let n = 0;
   for (const l of novas) { if (!m.has(chave(l))) n++; m.set(chave(l), l); }
   let todas = [...m.values()];
@@ -575,6 +631,24 @@ async function grava(nome, obj) {
       console.log('  dia do CONTEUDO ' + a.dia + ' · dia do NOME ' + doNome
         + (a.dia === doNome ? '  (iguais)' : '  <- o nome e a data do EXPORT, nao do dado'));
       avisouDia = true;
+    }
+
+    // 🔴 CARIMBO SEM REGISTRO, ESCRITO COMO NUMERO. Quando o servidor do supervisorio fica sem
+    //    registro, o export NAO deixa vazio: escreve ZERO em tudo (potencia, tensao da rede,
+    //    contadores de vida) e interpola rampas nos carimbos vizinhos. Medido em 19/09/2026 nos 57
+    //    dias da fonte: 28/07 09:00-10:00 nas nove usinas (publicado como o complexo a 0 MW),
+    //    05/08 13:30 no M2, 12/08 11:00 e 12:00 no M4 — e ZERO carimbos vazios com a usina gerando.
+    //    O criterio e o contador de vida descendo em metade ou mais do eletrocentro (ver
+    //    `carimbosSemRegistro`): o carimbo vira AUSENCIA para aqueles inversores — nenhuma serie dele
+    //    e usada. Uma parada real segura o contador e continua sendo medicao.
+    const semRegistro = carimbosSemRegistro(d);
+    if (semRegistro.size) {
+      const h = [];
+      for (const [i, invs] of semRegistro) {
+        for (const o of invs) for (const k of Object.keys(o.serie)) o.serie[k][i] = null;
+        h.push(String(d.instantes[i]).slice(11, 16) + '(' + invs.size + ')');
+      }
+      SEM_REGISTRO.push({ ufv: a.ufv, dia: a.dia, h });
     }
 
     // pico da soma CA, para descobrir a unidade
@@ -782,6 +856,8 @@ async function grava(nome, obj) {
   const us = [...new Set(Object.keys(CAP_CA_MW))];
 
   // ---- a unidade, decidida UMA VEZ com todas as usinas a vista --------------------------------
+  console.log('  carimbos sem registro (contador de vida descendo em metade ou mais do eletrocentro): '
+    + (SEM_REGISTRO.length ? SEM_REGISTRO.map((s) => s.dia + ' ' + s.ufv + ' ' + s.h.join(',')).join(' | ') : 'nenhum'));
   const u = decideUnidade(picos);
   UNIDADE = u.unidade;
   console.log('  unidade da coluna de potencia: ' + u.unidade + ' (decidida pelo ' + u.ufv

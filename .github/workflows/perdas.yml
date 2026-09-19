@@ -99,3 +99,11 @@ jobs:
       - name: Ensaio do fechamento usina x inversores
         if: always()
         run: node scripts/ensaio-energia-conjunto.js
+
+      # DEPOIS de gerar: julga a REGRA (compilada do gerador) e o PRODUTO. Quando o servidor do
+      # supervisorio fica sem registro, o export escreve ZERO e interpola rampas; o carimbo em que o
+      # contador de vida desce em metade ou mais do eletrocentro vira ausencia. 28/07/2026 09:30 estava
+      # publicado como o complexo inteiro a 0 MW.
+      - name: Ensaio do carimbo sem registro
+        if: always()
+        run: node scripts/ensaio-sem-registro.js
