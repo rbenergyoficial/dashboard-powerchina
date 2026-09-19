@@ -12,6 +12,8 @@
  *   - a usina e a MEDIA SIMPLES dos inversores, como o anexo do contrato manda
  * PRODUTO (rede, blobs publicos), so onde o campo ja existe:
  *   - a janela publicada bate com a contada no irr_30min, dia a dia e usina a usina
+ *   - e fica entre o piso da REGRA (MIN_SLOTS_JANELA, 6 h) e a janela maxima do contador (14 h):
+ *     dia nublado de 7 h e medida valida, e a primeira versao (8 a 14 h) o reprovava
  *   - a disponibilidade da usina bate com a recomputada de `gerando`/`jan_slots` do perdas_inv
  *   - e ela NAO e a mesma do contador: as duas convivem, e a do contrato usa uma janela mais curta
  */
@@ -19,6 +21,12 @@
 const zlib = require('zlib');
 const L = require('./lib-disponibilidade.js');
 const falhas = [];
+/* 🔴 A FAIXA DA JANELA SAI DA LIB, e nao de um numero do ensaio. A primeira versao exigia 8 a 14 h e
+   reprovou 23 e 24/07/2026 (7,5 a 7,8 h), dias de POUCO SOL com o irr_30min completo (48 carimbos) —
+   enquanto a propria regra aceita qualquer dia com 6 h ou mais (MIN_SLOTS_JANELA meias horas). O piso
+   do produto e o da regra; o teto e a janela maxima do contador (JANELA_MAX), que a do contrato nunca
+   passa, porque e mais curta por construcao. */
+const JAN_MIN_H = L.MIN_SLOTS_JANELA / 2, JAN_MAX_H = L.JANELA_MAX / 60;
 const exige = (ok, msg) => { if (!ok) falhas.push(msg); };
 const perto = (a, b, tol) => Math.abs(a - b) <= tol;
 
@@ -121,7 +129,7 @@ const le = async (nome) => {
     const cxEsp = diaLegado ? C0.complexo.disp_pct : C.complexo.disp_pct;
     exige(perto(o.CX_disp_contrato_pct, cxEsp, 0.02),
       o.dia + ': conjunto publicado ' + o.CX_disp_contrato_pct + ' contra ' + cxEsp + ' recomposto' + (diaLegado ? ' (regra anterior a `lidos`)' : ''));
-    exige(o.janela_contrato_h > 8 && o.janela_contrato_h < 14, o.dia + ': janela do contrato de ' + o.janela_contrato_h + ' h, fora de 8 a 14 h');
+    exige(o.janela_contrato_h >= JAN_MIN_H && o.janela_contrato_h <= JAN_MAX_H, o.dia + ': janela do contrato de ' + o.janela_contrato_h + ' h, fora de ' + JAN_MIN_H + ' a ' + JAN_MAX_H + ' h');
     for (const u of us) {
       if (o[u + '_disp_contrato_pct'] == null) continue;
       pares++;
@@ -132,7 +140,7 @@ const le = async (nome) => {
         o.dia + ' ' + u + ': sem_leitura publicado ' + o[u + '_disp_contrato_sem_leitura'] + ' contra ' + C.porUfv[u].sem_leitura + ' recontado');
       exige(o[u + '_disp_contrato_pct'] >= 50 && o[u + '_disp_contrato_pct'] <= 100,
         o.dia + ' ' + u + ': disponibilidade de ' + o[u + '_disp_contrato_pct'] + ' % fora de 50 a 100');
-      exige(o[u + '_janela_contrato_h'] > 8 && o[u + '_janela_contrato_h'] < 14, o.dia + ' ' + u + ': janela fora de 8 a 14 h');
+      exige(o[u + '_janela_contrato_h'] >= JAN_MIN_H && o[u + '_janela_contrato_h'] <= JAN_MAX_H, o.dia + ' ' + u + ': janela de ' + o[u + '_janela_contrato_h'] + ' h, fora de ' + JAN_MIN_H + ' a ' + JAN_MAX_H + ' h');
     }
     /* 🔴 a janela do contrato e MAIS CURTA que a do contador — e se nao for, uma das duas nao e o
        que se pensa (foi essa diferenca que reprovou a primeira versao, feita com o contador) */
