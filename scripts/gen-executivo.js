@@ -640,24 +640,27 @@ async function writeOut(obj, nome, opts) {
       // (quantos intervalos entraram) vai junto p/ o leitor saber sobre quanto do mês ele está olhando.
       if (util(r)) { irrSoma += irr; irrN++; parN++; if (g > 0) { geP += g * H; gvP += v * H; parOk++;
         if (!LIM_TS.has(String(r.ts))) { gePL += g * H; gvPL += v * H; parLivre++; } } }
-      // O registro "M7" do ONS é o circuito 2 do M3 — logo pertence ao PPA, não ao ML. Antes do reparo
-      // do RTC ele carrega metade do c2 e completa o M3; a partir do reparo o ONS_M3 já vem inteiro e
-      // esse registro vira duplicata, então sai da conta. Sem isso o gráfico diário rouba do PPA e
-      // entrega ao ML — justamente os dois grupos que a estratégia compara.
+      // O registro "M7" do ONS teve TRES vidas, e a regra e por DATA (PROMOVER m7-pos-tag, 23/09/2026):
+      //   ate 11/07               metade do circuito C2 do M3 (o RTC lia 50 %) -> completa o M3, PPA
+      //   12 a 16/07              o C2 INTEIRO, com o RTC ja reparado          -> duplicata, sai da conta
+      //   desde TAG_M7_OK (17/07) o PROPRIO M7                                  -> grupo ML, serie propria
+      // 🔴 Ate 23/09 a terceira vida nao existia aqui: o registro caia no `pula` de 12/07 em diante e o
+      // M7 sumia do corte diario — 5.969,8 MWh de potencial, 16,7 % do grupo ML, fora do painel da
+      // estrategia. A constante TAG_M7_OK ja existia; so o bloco mensal a usava.
       let grp = PPA.includes(u) ? 'ppa' : 'ml';
       let pula = false;
-      if (u === 'M7') { if (dia_ < RTC_M3_REPARO) grp = 'ppa'; else pula = true; }
+      if (u === 'M7') {
+        if (dia_ < RTC_M3_REPARO) grp = 'ppa';
+        else if (dia_ < TAG_M7_OK) pula = true;
+      }
       if (!pula) {
         const pd = porDia[dia_] || (porDia[dia_] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
         pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += v * H;
-        // MESMO registro, aberto por USINA. O alvo sai da identidade que este bloco ja usa e que ja
-        // foi validada contra o medidor em 10 meses: antes do reparo, ONS_M3 + ONS_M7 = M3 inteiro —
-        // entao o registro "M7" ENTRA no M3, em vez de virar uma usina que nao existe. Depois do
-        // reparo ele e duplicata e ja caiu no `pula` acima.
-        // 🔴 O M7 NAO GANHA serie diaria: ele nao tem registro proprio no operador em epoca nenhuma.
-        // O mensal dele vive de realizado do medidor + potencial ESTIMADO, e nada disso existe por dia
-        // aqui. Publicar M7 diario exigiria estimar os dois — numero sem fonte, que esta casa nao faz.
-        const alvo = (u === 'M7') ? 'M3' : u;
+        // MESMO registro, aberto por USINA. Na primeira vida ele ENTRA no M3 (ONS_M3 + ONS_M7 = M3
+        // inteiro, identidade validada contra o medidor em 10 meses); na terceira ele e o M7, com a
+        // referencia do operador como as outras oito — deprimida como a do M1 e a do M9 (NT-0037), o
+        // que o torna comparavel a elas e nao corrige nenhuma.
+        const alvo = (u === 'M7' && dia_ < RTC_M3_REPARO) ? 'M3' : u;
         const pu = porDiaUfv[dia_] || (porDiaUfv[dia_] = {});
         const cu = pu[alvo] || (pu[alvo] = { ge: 0, gv: 0 });
         cu.ge += g * H; cu.gv += v * H;
@@ -686,11 +689,15 @@ async function writeOut(obj, nome, opts) {
         A.geL += antesL.reduce((a, r) => a + num(r.ge) * H, 0);
         A.gvL += antesL.reduce((a, r) => a + num(r.gv) * H, 0);
       }
-      // O registro M7 do ONS é o c2 em QUALQUER época — antes e depois do reparo. Logo o M7 não tem
-      // NEM realizado NEM potencial no ONS. Realizado vem do Way2. Potencial é ESTIMADO: mediana do
-      // ge/MW dos parques de tag boa × 14,733 MW (a irradiância é a mesma no complexo inteiro, então
-      // o potencial específico escala com a capacidade). É estimativa — vai marcada como tal no painel.
-      if (B) {
+      // ATE o mes da correcao da tag o registro M7 do ONS nao e o M7 (e o C2 do M3, pela metade e
+      // depois inteiro). Nesses meses o M7 nao tem NEM realizado NEM potencial no ONS: realizado vem do
+      // Way2 e o potencial e ESTIMADO — mediana do ge/MW dos parques de tag boa × 14,733 MW (a
+      // irradiancia e a mesma no complexo inteiro, entao o potencial especifico escala com a capacidade).
+      // 🔴 DEPOIS dele o registro e o M7, e esta substituicao NAO roda (PROMOVER m7-pos-tag, 23/09/2026).
+      // Ela rodava em TODO mes, sem data, enquanto a linha mensal por usina ja passava a confiar no
+      // dado "cru" de ago/26 em diante (`m7Cru`): o cru chegava ZERADO e o M7 publicou entregue 0 em
+      // ago e set, com o medidor em 2,15 e 1,18 GWh.
+      if (B && mes <= TAG_M7_OK.slice(0, 7)) {
         const CAPS = { M1: 49.11, M2: 24.555, M4: 49.11, M5: 49.11, M6: 49.11, M8: 49.11 };
         const bons = Object.keys(CAPS).map(k => porUfv[k] && porUfv[k].ge > 0 ? porUfv[k].ge / CAPS[k] : null)
           .filter(x => x != null).sort((a, b) => a - b);
@@ -971,8 +978,12 @@ async function writeOut(obj, nome, opts) {
   const W2_UFV = {};
   daily.dias.filter(x => String(x.dia).slice(0, 7) === mesAtual)
     .forEach(x => Object.entries(x.ufv_liq_mwh || {}).forEach(([u, v]) => { W2_UFV[u] = (W2_UFV[u] || 0) + num(v); }));
-  const VIA_WAY2 = ['M7'];   // sai daqui quando o dado ONS pós-16/07 for validado
-  const realizado = u => VIA_WAY2.includes(u) && W2_UFV[u] > 0 ? W2_UFV[u] : ((iCur.porUfv[u] || {}).gv || 0);
+  // A substituicao vale SO ate o mes da correcao da tag (TAG_M7_OK): depois dele o registro do ONS e o
+  // proprio M7, e as nove usinas passam a ler a mesma fonte. Esta lista continua sendo a de quem PODE
+  // ser substituido; a data e que decide se naquele mes e (PROMOVER m7-pos-tag, 23/09/2026).
+  const VIA_WAY2 = ['M7'];
+  const trocadoNoMes = mes => mes <= TAG_M7_OK.slice(0, 7);
+  const realizado = u => VIA_WAY2.includes(u) && trocadoNoMes(mesAtual) && W2_UFV[u] > 0 ? W2_UFV[u] : ((iCur.porUfv[u] || {}).gv || 0);
 
   // ⚠️ num mes que o ONS ainda nao publicou, `iCur.porUfv` e vazio e a soma dava ZERO — o painel
   // da estrategia lia 'corte PPA 0% x ML 0%', que afirma que nao houve corte. Ausencia sai nula.
@@ -1116,15 +1127,17 @@ async function writeOut(obj, nome, opts) {
   // verificada MAIOR que a estimada — impossível) e M3 com ge ~20% abaixo dos gêmeos de 49,11 MW.
   // Enquanto não houver dado ONS pós-correção validado, esses dois NÃO publicam corte: 0% falso engana
   // mais que lacuna assumida. O detector é o próprio dado (gv > ge), não uma data no código.
+  // ➜ Validado: desde 17/07 o ONS do M7 fecha com o medidor (100,7 % em ago, 102,6 % em set). A troca
+  // pelo Way2 ficou restrita aos meses ate TAG_M7_OK (`trocadoNoMes`, PROMOVER m7-pos-tag).
   const porUfv = Object.keys(INV_POR_PARQUE).sort().map(u => { const x = iCur.porUfv[u] || { ge: 0, gv: 0 };
     const gv = realizado(u);
-    const viaWay2 = VIA_WAY2.includes(u) && W2_UFV[u] > 0;
+    const viaWay2 = VIA_WAY2.includes(u) && trocadoNoMes(mesAtual) && W2_UFV[u] > 0;
     const m3corr = u === 'M3' && mesAtual <= RTC_M3_REPARO.slice(0, 7);
     return { ufv: u, grupo: PPA.includes(u) ? 'PPA' : 'ML', inversores: INV_POR_PARQUE[u],
       potencial_gwh: r2(x.ge / 1000), realizado_gwh: r2(gv / 1000),
       potencial_estimado: !!x.ge_estimado,
       fonte_realizado: viaWay2 ? 'Way2 (medidor de faturamento)' : 'ONS (geracao verificada)',
-      nota: viaWay2 ? 'O registro "M7" do ONS NAO e o M7 — e o CIRCUITO 2 do M3 (tag trocada; corrigida no ONS em 16/07/2026). Logo o M7 nao tem nem geracao nem potencial no ONS. REALIZADO vem do Way2 (medidor de faturamento). POTENCIAL e ESTIMADO: mediana do ge/MW dos parques de tag boa x 14,733 MW (a irradiancia e a mesma no complexo, o potencial especifico escala com a capacidade). Volta p/ o ONS quando o dado pos-16/07 for validado.'
+      nota: viaWay2 ? 'Ate 16/07/2026 o registro "M7" do ONS era o CIRCUITO 2 do M3 (tag trocada, corrigida em 17/07). Por isso, neste mes, o M7 nao tem geracao nem potencial proprios no ONS: o REALIZADO vem do Way2 (medidor de faturamento) e o POTENCIAL e ESTIMADO pela mediana do ge/MW dos parques de tag boa x 14,733 MW. A partir de ago/2026 o M7 le o ONS, como as outras oito.'
         : (m3corr ? 'Estrutura real do ONS ate 12/07/2026: ONS_M3 = c1 + c3 + metade do c2 (o RTC do c2 lia 50%) e o registro "M7" = a outra metade do c2. Por isso ONS_M3 + ONS_M7 = M3 inteiro — identidade validada em 10 meses contra o Way2 (97,7 a 100,9%). O motor SOMA os dois ate a data do reparo do RTC; a partir de 12/07 o ONS_M3 ja vem inteiro sozinho e somar contaria o c2 duas vezes.' : null),
       corte_gwh: r2(Math.max(0, x.ge - gv) / 1000),
       corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - gv) / x.ge) : 0 }; });
@@ -1200,7 +1213,8 @@ async function writeOut(obj, nome, opts) {
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
     // a janela sai da DO AGREGADO, nunca de um 75 escrito de novo: dois literais do mesmo recorte
     // divergem na primeira vez que alguem mexer num deles, e o painel mostraria uma abertura que
-    // cobre mais dias que o total ao lado. ⚠️ Sem o M7, que nao tem registro proprio no operador.
+    // cobre mais dias que o total ao lado. O M7 so tem linha desde TAG_M7_OK (17/07/2026): antes o
+    // registro dele era o circuito 2 do M3 e entra no M3 (ate 11/07) ou sai como duplicata (12–16/07).
     corte_diario_ufv: (function () { const de = (corteDiario.slice(-75)[0] || {}).dia || '';
       return corteDiarioUfv.filter(x => x.dia >= de); })(),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
@@ -1258,14 +1272,17 @@ async function writeOut(obj, nome, opts) {
         Object.keys(CAP_UFV).sort().forEach(u => { const x = I.porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0 };
           const liq = w2.reduce((a, d) => a + num((d.ufv_liq_mwh || {})[u]), 0);
           const meta = MPU ? MPU[u] : null;          // <- mesma fonte unica do bloco acima
-          // M7: o "gv" do ONS é o circuito 2 do M3 (tag trocada), e nós o zeramos — usar ele daria
-          // 100% de corte. O realizado do M7 vem do Way2. O PR fica NULL: comparar líquida do Way2
-          // com potencial ESTIMADO não é Performance Ratio, é mistura de bases.
+          // M7 ATE O MES DA CORRECAO DA TAG: o "gv" do ONS era o circuito 2 do M3 e o bloco IRR o
+          // zera — usar ele daria 100% de corte. O realizado vem do Way2 e o PR fica NULL: comparar
+          // liquida do Way2 com potencial ESTIMADO nao e Performance Ratio, e mistura de bases.
           // GATE DE DATA — a tag do M7 no ONS foi corrigida em TAG_M7_OK (17/07/2026). A partir do
           // primeiro mes inteiramente posterior o dado cru vale, e manter a substituicao pelo Way2
           // vira ruido: era ela que deixava um potencial "orfao" no grupo ML, presente no grupo e
           // ausente das tres usinas. Em ago/26 valia 0,16 GWh.
-          const m7Cru = m > TAG_M7_OK.slice(0, 7);
+          // 🔴 O gate estava certo e o dado que ele recebia, nao: o bloco IRR zerava o M7 em todo mes,
+          // e o M7 saiu com entregue 0 em ago e set. A substituicao do IRR passou a respeitar a mesma
+          // data (`trocadoNoMes`), que agora decide nos cinco lugares (PROMOVER m7-pos-tag).
+          const m7Cru = !trocadoNoMes(m);
           const viaW2 = VIA_WAY2.includes(u) && liq > 0 && !m7Cru;
           // POTENCIAL DO M7 — não sai do ONS. Eu usava a mediana do `ge` dos parques de tag boa, mas o
           // `ge` do ONS é inconsistente antes de mar/26 (o mesmo motivo de o PR não existir lá). Isso
@@ -1304,7 +1321,7 @@ async function writeOut(obj, nome, opts) {
             // o corte em ~10 pp (M1 -11,8 · M9 -8,8). Logo o corte real do ML e MAIOR que o publicado.
             l.vies_pp = -10; l.vies_nota = 'piso: validado contra os meses de dado bom, este metodo subestima o corte em ~10 pontos percentuais'; }
           if (viaW2) { l.pr_pct = null; l.fonte_realizado = 'Way2 (medidor de faturamento)';
-            l.nota = 'O registro "M7" do ONS e o circuito 2 do M3 — o M7 nao tem geracao nem potencial proprios na fonte. Realizado vem do Way2; potencial e ESTIMADO pela mediana do ge/MW dos parques de tag boa. PR nao se aplica.'; }
+            l.nota = 'Ate 16/07/2026 o registro "M7" do ONS era o circuito 2 do M3 (tag trocada, corrigida em 17/07). Neste mes o M7 nao tem geracao nem potencial proprios na fonte: o realizado vem do Way2 e o potencial e ESTIMADO (ver potencial_fonte). PR nao se aplica.'; }
           linhasUfv.push(l); });
 
         // ---- RECONCILIACAO: soma das usinas = corte do complexo -----------------------------
@@ -1382,8 +1399,9 @@ async function writeOut(obj, nome, opts) {
           const som = k => us.reduce((a, u) => a + ((I.porUfv[u] || {})[k] || 0), 0);
           const liqG = us.reduce((a, u) => a + w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0), 0);
           const metaG = MPU ? us.reduce((a, u) => a + MPU[u], 0) : null;   // <- fonte unica
-          // M7 entra pelo Way2 (o gv do ONS dele é o c2 do M3)
-          const gvG = us.reduce((a, u) => a + (VIA_WAY2.includes(u)
+          // M7 entra pelo Way2 SO ate o mes da correcao da tag — depois, pela mesma fonte das usinas
+          // dele, senao o grupo e a soma das tres usinas discordam (PROMOVER m7-pos-tag)
+          const gvG = us.reduce((a, u) => a + (VIA_WAY2.includes(u) && trocadoNoMes(m)
             ? w2.reduce((b, d) => b + num((d.ufv_liq_mwh || {})[u]), 0)
             : ((I.porUfv[u] || {}).gv || 0)), 0);
           const lg = linha(g, som('ge'), gvG, som('geP'), som('gvP'), som('parN'), som('parOk'), liqG, metaG, som('geL'), som('gvL'));

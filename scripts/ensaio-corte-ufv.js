@@ -26,8 +26,16 @@
 const https = require('https'), zlib = require('zlib'), fs = require('fs'), path = require('path');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
-const ML = ['M1', 'M9'];          // ⚠️ SEM o M7: ele nao tem registro proprio no operador (ver abaixo)
+const ML = ['M1', 'M7', 'M9'];
 const r2 = v => Math.round(v * 100) / 100;
+// A data da correcao da tag do M7 sai do PROPRIO gerador — escrita de novo aqui, as duas copias
+// divergiriam na primeira edicao, e o ensaio passaria a julgar outra regra.
+const TAG_M7_OK = (function () {
+  const src = fs.readFileSync(path.join(__dirname, 'gen-executivo.js'), 'utf8');
+  const m = src.match(/const TAG_M7_OK = '(\d{4}-\d{2}-\d{2})'/);
+  if (!m) { console.error('✗ nao achei TAG_M7_OK no gen-executivo.js — o ensaio nao sabe a data que julga'); process.exit(1); }
+  return m[1];
+})();
 
 function getJSON(nome) {
   if (!/^https?:/i.test(BASE)) return Promise.resolve(JSON.parse(fs.readFileSync(path.join(BASE, nome), 'utf8')));
@@ -87,15 +95,23 @@ function julga(agg, ufv) {
   if (falta.length) nok('o agregado tem ' + falta.length + ' dia(s) que a abertura nao cobre');
   if (!sobra.length && !falta.length) console.log('  ✓ janela: os mesmos %d dias nos dois', dAgg.size);
 
-  // 3 · ELENCO — as oito usinas com registro proprio, e o M7 FORA
-  // 🔴 A tag "M7" do operador e o circuito 2 do M3: o M7 nao tem geracao nem potencial la em epoca
-  // nenhuma. O mensal dele vive de realizado do medidor + potencial ESTIMADO, e nada disso existe por
-  // dia. Publicar um M7 diario seria estimar os dois — numero sem fonte. A ausencia dele e a leitura
-  // honesta, e esta guarda existe para que ela nao seja desfeita por distracao.
+  // 3 · ELENCO — as nove usinas, e o M7 SO desde a correcao da tag
+  // O registro "M7" do operador foi o circuito 2 do M3 ate 16/07/2026 e e o proprio M7 desde TAG_M7_OK.
+  // 🔴 Ate 23/09 esta guarda exigia o M7 FORA em qualquer data, e por isso nunca viu que o gerador o
+  // descartava tambem depois da correcao — 16,7 % do potencial do grupo ML fora do painel. Guarda que
+  // cristaliza uma premissa defende a premissa, nao o dado (PROMOVER m7-pos-tag).
   const nomes = [...new Set(ufv.map(x => x.ufv))].sort();
   const esperado = PPA.concat(ML).sort();
   if (nomes.join(',') !== esperado.join(',')) nok('elenco: ' + nomes.join(',') + ' · esperado ' + esperado.join(','));
-  else console.log('  ✓ elenco: %s · o M7 fora, como manda a tag trocada', nomes.join(' '));
+  const m7cedo = ufv.filter(x => x.ufv === 'M7' && x.dia < TAG_M7_OK);
+  if (m7cedo.length) nok('M7 com linha antes de ' + TAG_M7_OK + ' (' + m7cedo.length + '): ate la o registro era o circuito 2 do M3');
+  const diasM7 = new Set(ufv.filter(x => x.ufv === 'M7').map(x => x.dia));
+  const semM7 = [...new Set(agg.map(x => x.dia))].filter(d => d >= TAG_M7_OK && !diasM7.has(d));
+  if (semM7.length) nok('M7 ausente em ' + semM7.length + ' dia(s) depois de ' + TAG_M7_OK + ' (ex.: ' + semM7.slice(0, 3).join(', ') + ')');
+  const m7ml = ufv.filter(x => x.ufv === 'M7' && x.grupo !== 'ML');
+  if (m7ml.length) nok('M7 fora do grupo ML em ' + m7ml.length + ' linha(s)');
+  if (nomes.join(',') === esperado.join(',') && !m7cedo.length && !semM7.length && !m7ml.length)
+    console.log('  ✓ elenco: %s · o M7 so desde %s, no grupo ML, em %d dias', nomes.join(' '), TAG_M7_OK, diasM7.size);
 
   // 4 · ARITMETICA DA PROPRIA LINHA — o percentual publicado sai do potencial e do cortado publicados
   let fora = 0;
@@ -133,6 +149,9 @@ function julga(agg, ufv) {
     ['uma usina fora do grupo certo', L => { const r = L.find(x => x.grupo === 'PPA'); r.grupo = 'ML'; return r; }],
     ['um dia com o cortado inflado', L => { const r = L.find(x => x.cortado_mwh > 1); r.cortado_mwh = r2(r.cortado_mwh * 1.5); return r; }],
     ['o corte CRU no lugar do reconciliado', L => { let m = null; L.forEach(x => { if (x.cortado_bruto_mwh !== x.cortado_mwh) { x.cortado_mwh = x.cortado_bruto_mwh; m = x; } }); return m; }],
+    // o defeito que o lote m7-pos-tag conserta, visto pela abertura: sem as linhas do M7 as usinas do
+    // ML deixam de reproduzir o grupo, que agora o inclui
+    ['o M7 fora do grupo ML depois da correcao da tag', L => { let r = null; for (let k = L.length - 1; k >= 0; k--) if (L[k].ufv === 'M7') r = L.splice(k, 1)[0]; return r; }],
   ];
   for (const [nome, planta] of plantios) {
     const L = copia(), antes = JSON.stringify(L);
