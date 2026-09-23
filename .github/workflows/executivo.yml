@@ -64,6 +64,13 @@ jobs:
       - name: Ensaio · a hierarquia publicada fecha com a energia
         run: node scripts/ensaio-hierarquia.js
 
+      # O corte diario passou a ser publicado tambem ABERTO POR USINA, a pedido. As duas escritas saem
+      # do MESMO laco, entao fecham por construcao — e "por construcao" e o que envelhece calado quando
+      # alguem mexe num lado so. Divergir aqui poria o painel por usina e o por contrato dizendo numeros
+      # diferentes sobre o MESMO dia. Roda DEPOIS de gerar, como os outros que julgam o produto.
+      - name: Ensaio · o corte por usina fecha com o corte por contrato
+        run: node scripts/ensaio-corte-ufv.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

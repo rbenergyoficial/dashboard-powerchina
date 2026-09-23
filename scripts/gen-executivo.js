@@ -602,12 +602,14 @@ async function writeOut(obj, nome, opts) {
   const IRR = {};             // mes -> { porUfv, ge, gv, irr_media, rec_pct }
   const RTC_M3_REPARO = "2026-07-12";   // reparo do RTC do c2 -> a estrutura do ONS vira nesta data
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
+  const corteDiarioUfv = [];  // o MESMO dia aberto por usina — campo novo, ao lado, nunca no lugar
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
     const porUfv = {}; let ge = 0, gv = 0, irrSoma = 0, irrN = 0, geRec = 0, geTot = 0;
     let geP = 0, gvP = 0, parN = 0, parOk = 0;   // PR pareado + cobertura
     let gePL = 0, gvPL = 0, parLivre = 0;        // o mesmo par, so nos intervalos SEM limitacao
     const porDia = {};
+    const porDiaUfv = {};       // dia -> usina -> { ge, gv } · a mesma conta do porDia, sem colapsar a usina
     for (const r of C) {
       const u = String(r.u).replace('CEFMT', 'M');          // CEFMT1..9 == M1..M9 (confirmado pela assinatura de capacidade)
       const irr = num(r.irr); let g = num(r.ge); const v = num(r.gv); let rec = false;
@@ -648,6 +650,17 @@ async function writeOut(obj, nome, opts) {
       if (!pula) {
         const pd = porDia[dia_] || (porDia[dia_] = { ppa_ge: 0, ppa_gv: 0, ml_ge: 0, ml_gv: 0 });
         pd[grp + '_ge'] += g * H; pd[grp + '_gv'] += v * H;
+        // MESMO registro, aberto por USINA. O alvo sai da identidade que este bloco ja usa e que ja
+        // foi validada contra o medidor em 10 meses: antes do reparo, ONS_M3 + ONS_M7 = M3 inteiro —
+        // entao o registro "M7" ENTRA no M3, em vez de virar uma usina que nao existe. Depois do
+        // reparo ele e duplicata e ja caiu no `pula` acima.
+        // 🔴 O M7 NAO GANHA serie diaria: ele nao tem registro proprio no operador em epoca nenhuma.
+        // O mensal dele vive de realizado do medidor + potencial ESTIMADO, e nada disso existe por dia
+        // aqui. Publicar M7 diario exigiria estimar os dois — numero sem fonte, que esta casa nao faz.
+        const alvo = (u === 'M7') ? 'M3' : u;
+        const pu = porDiaUfv[dia_] || (porDiaUfv[dia_] = {});
+        const cu = pu[alvo] || (pu[alvo] = { ge: 0, gv: 0 });
+        cu.ge += g * H; cu.gv += v * H;
       }
     }
     // ---- M3 × M7: desfaz a mistura de tag do ONS (estrutura descoberta com o usuário, 2026-07-17) ----
@@ -695,7 +708,83 @@ async function writeOut(obj, nome, opts) {
     Object.entries(porDia).sort().forEach(([dia, x]) => corteDiario.push({ dia, mes,
       ppa_corte_pct: x.ppa_ge > 0 ? r2(100 * Math.max(0, x.ppa_ge - x.ppa_gv) / x.ppa_ge) : 0,
       ml_corte_pct: x.ml_ge > 0 ? r2(100 * Math.max(0, x.ml_ge - x.ml_gv) / x.ml_ge) : 0 }));
+    // a MESMA conta, por usina. Vai com a energia ao lado do percentual, como o `serie_diaria` ja faz:
+    // sem o potencial do dia o leitor nao consegue pesar um corte de 50% de 0,1 GWh contra outro de 50%
+    // de 9 GWh, e e essa a comparacao que abrir por usina existe para permitir.
+    //
+    // 🔴 E O CORTE E RECONCILIADO, pelo MESMO metodo que o mensal ja usa (ver `corte_reconciliado`
+    // adiante): ajustado na proporcao do proprio valor para somar o total do GRUPO naquele dia, que e
+    // o numero publicado ao lado. Sem isso as duas linhas discordam sobre o mesmo dia — e a divergencia
+    // foi MEDIDA: 50 dos 75 dias da janela, sempre com a soma das usinas ACIMA do contrato. A causa
+    // esta no dado do operador, nao na conta: a referencia por usina nao presta (este pipeline ja
+    // declara "o conjunto e integro; a abertura por usina NAO"), e o M3 vem com a referencia ABAIXO da
+    // verificada em 43 dos 75 dias. No grupo essa sobra compensa o deficit dos vizinhos; aberta por
+    // usina, nao compensa. O valor antes do ajuste fica em `cortado_bruto_mwh`, para auditoria.
+    Object.entries(porDiaUfv).sort().forEach(([dia, porU]) => {
+      const linhas = Object.keys(porU).sort().map(ufv => { const c = porU[ufv];
+        return { dia, mes, ufv, grupo: PPA.includes(ufv) ? 'PPA' : 'ML',
+          potencial_mwh: r2(c.ge), cortado_bruto_mwh: r2(Math.max(0, c.ge - c.gv)), _ge: c.ge, _gv: c.gv }; });
+      for (const g of ['PPA', 'ML']) {
+        const L = linhas.filter(l => l.grupo === g); if (!L.length) continue;
+        const alvo = Math.max(0, L.reduce((a, l) => a + l._ge - l._gv, 0));   // o MESMO clamp do agregado
+        const soma = L.reduce((a, l) => a + l.cortado_bruto_mwh, 0);
+        // a mesma condicao do mensal: usina sem potencial no dia deixaria a soma incompleta, e e melhor
+        // a linha nao fechar e DIZER por que do que fechar repartindo sobre um subconjunto.
+        // 🔴 `alvo === 0` NAO e caso de nao reconciliar, e sim o fator ZERO: o grupo nao teve deficit
+        // naquele dia, entao nenhuma usina recebe corte. O contrario poria o M8 em 10,65% numa tela
+        // onde a linha do contrato ao lado diz 0% — dois valores para a mesma coisa. Medido: 70 linhas,
+        // 381 MWh, 0,85% do cortado da janela, e o bruto continua em `cortado_bruto_mwh`.
+        const ok = L.every(l => l.potencial_mwh > 0);
+        const fator = (ok && soma > 0) ? alvo / soma : 0;
+        L.forEach(l => { l.cortado_mwh = ok ? r2(l.cortado_bruto_mwh * fator) : l.cortado_bruto_mwh;
+          l.corte_reconciliado = ok ? 1 : 0; });
+        if (ok && alvo > 0) {   // a sobra de arredondamento vai para a usina de maior corte, p/ fechar ao centavo
+          const dif = r2(alvo - L.reduce((a, l) => a + l.cortado_mwh, 0));
+          if (dif !== 0) { const maior = L.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
+            maior.cortado_mwh = r2(maior.cortado_mwh + dif); }
+        }
+      }
+      linhas.forEach(l => { delete l._ge; delete l._gv;
+        l.corte_pct = l.potencial_mwh > 0 ? r2(100 * l.cortado_mwh / l.potencial_mwh) : 0;
+        corteDiarioUfv.push(l); });
+    });
   }
+  // 🔴 FECHAMENTO, e ele ABORTA sem gravar: a soma das usinas de cada grupo tem de reproduzir o
+  // agregado do grupo, dia a dia, nas duas parcelas. Abrir uma conta que ja e publicada agregada so
+  // vale se as duas escritas nunca divergirem — e aqui elas saem do MESMO laco, entao divergencia e
+  // defeito de emissao (usina fora do grupo, registro contado duas vezes, M7 nao absorvido), nao
+  // arredondamento. Sem esta guarda, o painel por usina e o por contrato diriam numeros diferentes
+  // sobre o mesmo dia, que e a familia "dois valores para a mesma coisa na mesma tela".
+  (function fechaCorteDiario() {
+    const agg = new Map(corteDiario.map(x => [x.dia, x]));
+    const de = (corteDiario.slice(-75)[0] || {}).dia || '';
+    const porDiaG = new Map();
+    for (const r of corteDiarioUfv) {
+      const g = porDiaG.get(r.dia) || porDiaG.set(r.dia, { PPA: [0, 0, true], ML: [0, 0, true] }).get(r.dia);
+      g[r.grupo][0] += r.potencial_mwh; g[r.grupo][1] += r.cortado_mwh;
+      if (!r.corte_reconciliado) g[r.grupo][2] = false;
+    }
+    const ruins = []; let semRec = 0;
+    for (const [dia, g] of porDiaG) {
+      const a = agg.get(dia); if (!a) { ruins.push(dia + ': dia sem o agregado'); continue; }
+      for (const [k, campo] of [['PPA', 'ppa_corte_pct'], ['ML', 'ml_corte_pct']]) {
+        // ⚠️ dia NAO reconciliado nao fecha por construcao, e isso e a decisao do mensal, herdada:
+        // melhor a linha nao fechar e DIZER por que. Ele vai contado, e a linha carrega a marca.
+        if (!g[k][2]) { semRec++; continue; }
+        const pct = g[k][0] > 0 ? r2(100 * g[k][1] / g[k][0]) : 0;
+        // a folga e a do arredondamento de cada parcela publicada (2 casas), nao uma tolerancia escolhida
+        if (Math.abs(pct - a[campo]) > 0.05 && dia >= de) ruins.push(dia + ' ' + k + ': usinas ' + pct + '% x grupo ' + a[campo] + '%');
+      }
+    }
+    if (ruins.length) {
+      console.error('corte por usina NAO fecha com o corte por contrato em ' + ruins.length + ' caso(s):');
+      ruins.slice(0, 8).forEach(s => console.error('  ' + s));
+      throw new Error('corte_diario_ufv nao fecha com corte_diario');
+    }
+    console.log('corte por usina: ' + corteDiarioUfv.length + ' linhas · fecha com o contrato em '
+      + porDiaG.size + ' dias · ' + semRec + ' grupo-dia sem reconciliacao (marcados na linha)');
+  })();
+
   const modelo = { tipo: 'razão mediana ge/irr por faixa de irradiância, por UFV',
     ajustado_em: sadios.map(lbl), validacao: 'cega em jul/26: MAE 1.45 MW · R² 98.34% · viés −0.43%',
     faixas_w_m2: BANDAS.length - 1 };
@@ -1109,6 +1198,11 @@ async function writeOut(obj, nome, opts) {
           spark: path(S.map(s => s.horas_restricao), '#C08A45'), spark_ini: ini, spark_fim: fim },
       ]; })(),
     modelo_ge: modelo, mes, por_ufv: porUfv, serie, corte_diario: corteDiario.slice(-75),
+    // a janela sai da DO AGREGADO, nunca de um 75 escrito de novo: dois literais do mesmo recorte
+    // divergem na primeira vez que alguem mexer num deles, e o painel mostraria uma abertura que
+    // cobre mais dias que o total ao lado. ⚠️ Sem o M7, que nao tem registro proprio no operador.
+    corte_diario_ufv: (function () { const de = (corteDiario.slice(-75)[0] || {}).dia || '';
+      return corteDiarioUfv.filter(x => x.dia >= de); })(),
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
     // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----
