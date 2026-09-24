@@ -317,6 +317,10 @@ async function writeOut(obj, nome, opts) {
   // ⚠️ `gzip: true` grava comprimido com o cabecalho certo — o Azure NAO comprime sozinho, e um
   //    blob que o portal baixa por abertura paga o peso cru na rede. Navegador e Infinity
   //    descomprimem sem saber. So entra onde for pedido, para nao mudar o que ja esta no ar.
+  // ⚠️ `executivo.json` e `hora_ufv.json` passaram a pedir em 24/09/2026: o remendo de 5 min
+  //    (`gen-dia-corrente.js`) ja os regravava COMPRIMIDOS desde 31/08 e 02/09, entao o blob
+  //    alternava entre cru (esta execucao, 15x por dia) e gzip (o remendo, de dia). Todo leitor ja
+  //    convivia com as duas formas; o que faltava era deixar de trafegar 3,3 MB crus a noite.
   if (opts && opts.gzip) {
     const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'));
     await cli.getBlockBlobClient(alvo).upload(gz, gz.length, { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
@@ -3167,7 +3171,7 @@ async function writeOut(obj, nome, opts) {
       gerado_em: new Date().toISOString(),
       fonte: 'Way2 · Demat (potência ativa) média horária por circuito, integrada em 1 h. Energia BRUTA no circuito: não desconta perda de transformação — fica ~0,9% acima da líquida.',
       inicio: diasH[0] || null, fim: diasH[diasH.length - 1] || null, dias: diasH, horas,
-    }, 'hora_ufv.json');
+    }, 'hora_ufv.json', { gzip: true });   // comprimido como o remendo de 5 min ja o grava (ver writeOut)
     console.log('hora_ufv.json OK · ' + diasH.length + ' dias (' + diasH[0] + ' a ' + diasH[diasH.length - 1] + ') · '
       + horas.length + ' linhas · ' + Math.round(tamH / 1024) + ' KB');
   } catch (e) { console.warn('hora_ufv.json falhou (' + e.message + ') — segue sem a camada horária'); }
@@ -3176,7 +3180,7 @@ async function writeOut(obj, nome, opts) {
   console.log('hierarquia.json OK · ' + Object.keys(HIERARQUIA.contrato).length + ' usinas · '
     + tamH2 + ' B');
 
-  const size = await writeOut(out);
+  const size = await writeOut(out, null, { gzip: true });   // comprimido como o remendo de 5 min ja o grava (ver writeOut)
   console.log('executivo.json OK · mês ' + mesAtual + ' (' + cur.dias + '/' + diasTotal + ' dias)');
   console.log('  entregue ' + entregue + ' GWh | potencial ' + potencial + ' | cortado ' + cortado + ' (' + cur.frustrada_pct + '%)');
   console.log('  PR ' + cur.pr_pct + '% | disp ' + cur.disp_pct + '% | projeção fechamento ' + mes.projecao.realizado_gwh + ' GWh');
