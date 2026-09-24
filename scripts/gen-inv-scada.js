@@ -89,8 +89,12 @@ const mediana = (a) => { if (!a.length) return null; const s = a.slice().sort((x
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 
 // M<NN>_<AAAAMMDD>_<HHMMSS>.csv em qualquer posicao do nome (o blob vem prefixado pelo id)
-const CARIMBO = /M(\d{2})_(\d{8})_\d{6}\.csv$/i;
+// `_ATT` entre a usina e a data: o export de 23/09/2026 chegou assim e o padrao antigo o ignorava em
+// silencio (ver o mesmo comentario no gen-perdas.js). Outro sufixo fica fora; o contrato de nome acusa.
+const CARIMBO = /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i;
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
+// a ordem de ENVIO e o numero do prefixo (5 digitos no legado, 14 na entrada nova), nunca o nome como texto
+const envio = (nome) => { const m = String(nome).split('/').pop().match(/^(\d+)_/); return m ? Number(m[1]) : 0; };
 
 // ---------- entrada -------------------------------------------------------------------------
 async function listaArquivos() {
@@ -328,7 +332,7 @@ function comparaComPares(reg) {
     const d = m[2].slice(0, 4) + '-' + m[2].slice(4, 6) + '-' + m[2].slice(6, 8);
     const k = parque(m[1]) + '|' + d;
     const ant = porChave.get(k);
-    if (!ant || a.nome > ant.nome) porChave.set(k, { ...a, parque: parque(m[1]), dia: d });
+    if (!ant || envio(a.nome) > envio(ant.nome)) porChave.set(k, { ...a, parque: parque(m[1]), dia: d });
   }
   const dias = [...new Set([...porChave.values()].map((x) => x.dia))].sort();
   const corte = dias.slice(-DIAS)[0];

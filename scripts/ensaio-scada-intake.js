@@ -36,6 +36,17 @@ for (const [orig, reprovaLimpo, quem] of casos) {
   ok(comPref.ok, '   com prefixo casa ' + (comPref.quem || comPref.motivo));
 }
 
+// 🔴 o nome `_ATT` (24/09/2026) passa, e um sufixo DESCONHECIDO e reconhecido como da familia e reprovado —
+//    nao pode sair como "ninguem o le", que e exatamente o silencio que deixou 23/09 fora do painel
+{
+  const att = 'M02_ATT_20260924_040351.csv', xyz = 'M02_XYZ_20260924_040351.csv';
+  const cA = M.consumidorDe(att), cX = M.consumidorDe(xyz);
+  ok(cA && cA.quem === 'gen-perdas', att.padEnd(30) + ' -> reconhecido por ' + (cA ? cA.quem : 'NINGUEM'));
+  ok(M.casaConsumidor(M.nomeFinal(att, '2026-09-24T12:00:00Z'), att).ok, '   com prefixo casa o consumidor');
+  ok(cX && cX.quem === 'gen-perdas', xyz.padEnd(30) + ' -> reconhecido por ' + (cX ? cX.quem : 'NINGUEM'));
+  ok(!M.casaConsumidor(M.nomeFinal(xyz, '2026-09-24T12:00:00Z'), xyz).ok, '   sufixo desconhecido REPROVA');
+}
+
 console.log('\n2 · o carimbo e monotonico e maior que o id do SharePoint');
 const c1 = M.carimboDe('2026-09-01T12:00:00Z'), c2 = M.carimboDe('2026-09-01T12:00:01Z');
 ok(Number(c2) > Number(c1), 'um segundo depois da carimbo maior (' + c1 + ' < ' + c2 + ')');

@@ -77,7 +77,11 @@ const CONSUMIDORES = [
   { onde: 'scada-raw', quem: 'gen-irradiancia', quando: /_?IRR_GERAL_\d{8}_\d{6}\.csv$/i, exige: /IRR_GERAL_(\d{8}_\d{6})\.csv$/i },
   { onde: 'scada-raw', quem: 'gen-irradiancia', quando: /(^|_)IRR_\d{8}_\d{6}\.csv$/i, exige: /_IRR_(\d{8}_\d{6})\.csv$/i },
   { onde: 'scada-raw', quem: 'gen-trafo',       quando: /Trafo_\d{8}_\d{6}\.csv$/i,  exige: /Trafo_(\d{8})_(\d{6})\.csv$/i },
-  { onde: 'scada-raw', quem: 'gen-perdas',      quando: /M\d{2}_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})_(\d{8})_\d{6}\.csv$/i },
+  // 🔴 `quando` reconhece a FAMILIA com qualquer sufixo entre a usina e a data; `exige` e o padrao dos
+  //    consumidores (gen-perdas e gen-inv-scada). Em 24/09/2026 chegou `M02_ATT_...` e o `quando`
+  //    antigo nem o reconhecia: o arquivo entrou e foi ignorado sem ninguem acusar. Agora o `_ATT` passa
+  //    e um sufixo desconhecido e reconhecido e REPROVADO.
+  { onde: 'scada-raw', quem: 'gen-perdas',      quando: /M\d{2}(?:_[A-Z]+)?_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i },
 
   // 🔴 O consumidor dos inversores nao escolhe por NOME: `classifyWb` decide P1/P2 pelo CONTEUDO
   //    da planilha, e a versao vencedora e a de maior `lastModified` do blob. Entao o prefixo nao

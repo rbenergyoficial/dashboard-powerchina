@@ -74,8 +74,15 @@ const CMP = 'https://rbenergydata.blob.core.windows.net/dados/cmp_diario.json';
 const W2D = 'https://rbenergydata.blob.core.windows.net/dados/way2_daily.json';
 
 // M<NN>_<AAAAMMDD>_<HHMMSS>.csv em qualquer posicao (o blob vem prefixado pelo id do SharePoint)
-const CARIMBO = /M(\d{2})_(\d{8})_\d{6}\.csv$/i;
+// 🔴 `_ATT` entre a usina e a data: em 24/09/2026 o export do dia 23/09 chegou como `M02_ATT_20260924_...`,
+//    ja com os 46 inversores que faltavam, e o padrao antigo o ignorava EM SILENCIO — o dia nao foi
+//    publicado e nada ficou vermelho. Outro sufixo continua fora de proposito: quem o acusa e o contrato
+//    de nome do `gen-scada-intake.js`, que reconhece a familia e reprova o nome desconhecido.
+const CARIMBO = /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i;
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
+// a ordem de ENVIO e o numero do prefixo: 5 digitos no legado, 14 na entrada nova. Comparar o nome como
+// texto poria o legado ("9...") depois do novo ("2026...").
+const envio = (nome) => { const m = String(nome).split('/').pop().match(/^(\d+)_/); return m ? Number(m[1]) : 0; };
 
 // 🔴 A capacidade CA de cada usina e o que permite DESCOBRIR a unidade da coluna de potencia sem
 //    supor, e e tambem a referencia que revela usina rodando abaixo do que deveria. Ver decideUnidade.
@@ -578,10 +585,14 @@ async function grava(nome, obj) {
   //    EXPORTOU, e o export cobre o dia ANTERIOR — medido no irmao dos transformadores, onde
   //    `Trafo_20260822` traz 21/08. Usar o nome desloca a serie inteira em um dia e, pior, casa a
   //    energia dos inversores de um dia com o medidor de outro.
+  // 🔴 UM arquivo por (usina, carimbo): o dia da usina e SOBRESCRITO pelo ultimo lido, e a ordem entre dois
+  //    arquivos do mesmo carimbo nao era determinada. Com `M02_...` e `M02_ATT_...` do mesmo dia, sairia um
+  //    ou outro por acaso. Fica o envio mais recente, a mesma regra do `gen-inv-scada.js`.
   const porChave = new Map();
   for (const a of arqs) {
     const m = a.nome.split('/').pop().match(CARIMBO);
-    porChave.set(a.nome, { ...a, ufv: parque(m[1]), carimbo: m[2] });
+    const k = parque(m[1]) + '|' + m[2], ant = porChave.get(k);
+    if (!ant || envio(a.nome) > envio(ant.nome)) porChave.set(k, { ...a, ufv: parque(m[1]), carimbo: m[2] });
   }
   // o carimbo do nome so serve para ESCOLHER quais ler (os mais recentes); o dia vem do conteudo
   const carimbos = [...new Set([...porChave.values()].map((x) => x.carimbo))].sort();

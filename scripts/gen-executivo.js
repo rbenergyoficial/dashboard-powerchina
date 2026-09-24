@@ -321,6 +321,10 @@ async function writeOut(obj, nome, opts) {
   //    (`gen-dia-corrente.js`) ja os regravava COMPRIMIDOS desde 31/08 e 02/09, entao o blob
   //    alternava entre cru (esta execucao, 15x por dia) e gzip (o remendo, de dia). Todo leitor ja
   //    convivia com as duas formas; o que faltava era deixar de trafegar 3,3 MB crus a noite.
+  // ⚠️ `perfil_dia.json` passou a pedir no mesmo dia, e ele NAO tinha o historico de gzip dos outros
+  //    dois: o unico leitor, varrido nos 88 dashboards, e o "Perfil do dia" da Executiva [979] (PT,
+  //    EN, 中文), pela datasource Infinity — a mesma que ja le os blobs gzipados do MUST e do
+  //    comparativo. O portal nao o le.
   if (opts && opts.gzip) {
     const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'));
     await cli.getBlockBlobClient(alvo).upload(gz, gz.length, { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
@@ -2887,7 +2891,7 @@ async function writeOut(obj, nome, opts) {
     }
 
     const dias = [...new Set(perfil.map(x => x.dia))].sort();
-    const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json');
+    const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json', { gzip: true });
     console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
     // 🔴 perfil_recente.json — o recorte LEVE dos ultimos 8 dias, para o portal. O perfil inteiro
     //    pesa 1,6 MB na rede; a tela "Ao vivo" do portal precisa so de ontem e anteontem para
