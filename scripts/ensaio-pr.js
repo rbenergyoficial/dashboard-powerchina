@@ -3,6 +3,7 @@
  *
  *   node scripts/ensaio-pr.js              regra (casos forjados) + produto publicado
  *   PR_ARQ=<pr.json local> node ...        confere um arquivo local em vez do blob
+ *   PR_HORA_ARQ=<pr_hora.json local>       idem para a meia hora
  *
  * REGRA (sem rede):
  *   - o instante de 5 min rotulado 01:00 cai na hora 00 (o medidor rotula pelo FIM)
@@ -14,6 +15,11 @@
  *   - o mes soma energia e irradiacao (nunca a media dos PR diarios)
  *   - nos meses apurados e com TODOS os dias corrigidos, a impedida somada e a do executivo (outra rota)
  *   - a energia injetada do dia fica ACIMA da liquida do medidor e a diferenca e pequena (consumo)
+ * MEIA HORA (pr_hora.json, 24/09/2026):
+ *   - REGRA: o instante rotulado 10:30 cai na meia hora 10:00; a irradiacao e o TRAPEZIO de T e T+30; abaixo de
+ *     100 W/m2 nao ha PR; acima de 110 % a meia hora sai vazia e contada; o corrigido so no dia que tem corrigido
+ *   - PRODUTO: a soma das meias horas fecha com o dia; cada PR sai da energia e da irradiacao publicadas ao lado; e
+ *     MANHA e TARDE ficam simetricas nas meias horas sem limitacao - e isso que a janela errada quebra (87 x 54 %)
  */
 'use strict';
 const zlib = require('zlib');
@@ -60,6 +66,31 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
   exige(excl.pr_corrigido_pct == null, 'dia excluido pelo executivo nao pode ter corrigido');
   const curto = L.prDia(dia, new Map([...eH].slice(0, 10)), gH, op, ap);
   exige(curto.pr_pct == null, 'dia com menos de 22 horas nao pode ter PR');
+
+  /* -- a meia hora -- */
+  exige(L.chaveMeiaDoFim('2026-08-10T10:05:00') === '2026-08-10T10:00', 'rotulo 10:05 deveria cair na meia hora 10:00');
+  exige(L.chaveMeiaDoFim('2026-08-10T10:30:00') === '2026-08-10T10:00', 'rotulo 10:30 deveria cair na meia hora 10:00 (o medidor rotula pelo fim)');
+  exige(L.chaveMeiaDoFim('2026-08-10T10:35:00') === '2026-08-10T10:30', 'rotulo 10:35 deveria cair na meia hora 10:30');
+  const eM = L.energiaMeias(hist);
+  exige(!eM.has(dia + 'T12:00'), 'meia hora com 5 instantes deveria ficar de fora');
+  exige(eM.get(dia + 'T10:00') && perto(eM.get(dia + 'T10:00').inj_mwh, 100, 1e-9), 'meia hora 10:00: 2 x 100 MW por 0,5 h = 100 MWh');
+  /* amostras: 0 ate 05:30, 800 de 06:00 a 17:30, 60 as 18:00 (abaixo do piso), 0 depois */
+  const sM = new Map();
+  for (let i = 0; i < 49; i++) { const ms = Date.parse(dia + 'T00:00:00Z') + i * 18e5, k = new Date(ms).toISOString().slice(0, 16), hh = i / 2;
+    sM.set(k, hh >= 6 && hh < 18 ? 800 : hh === 18 ? 60 : 0); }
+  const impM = L.impedidaMeias(consolidado);
+  exige(perto(impM.get(dia + 'T10:00'), 50, 1e-9) && perto(impM.get(dia + 'T10:30'), 50, 1e-9), 'impedida por meia hora: (250-150) x 0,5 = 50 MWh em cada');
+  const m = L.prMeias(dia, eM, sM, impM, d);
+  exige(m.irr[11] === 400, 'meia hora 05:30: trapezio de 0 e 800 = 400 W/m2 (veio ' + m.irr[11] + ') - a amostra em T daria 0');
+  exige(m.irr[20] === 800 && perto(m.pr[20], 100 * 100 / (L.P_CC_MWP * 0.4), 0.051), 'meia hora 10:00: PR = 100 / (425,677 x 0,4) (veio ' + m.pr[20] + ')');
+  exige(m.prc != null && perto(m.prc[20], 100 * 150 / (L.P_CC_MWP * 0.4), 0.051), 'corrigido das 10:00 soma os 50 MWh impedidos (veio ' + (m.prc && m.prc[20]) + ')');
+  exige(m.irr[35] === 430, '17:30: trapezio de 800 e 60 = 430 W/m2 (veio ' + m.irr[35] + ')');
+  exige(m.irr[36] === 30 && m.pr[36] === null, '18:00 com 30 W/m2 (abaixo de 100) nao pode ter PR');
+  const semC = L.prMeias(dia, eM, sM, impM, semAp);
+  exige(semC.prc === null && semC.imp === null && semC.pr[20] != null, 'dia sem corrigido: a meia hora nao reabre a pergunta');
+  const muito = new Map(eM); muito.set(dia + 'T08:00', { inj_mwh: 500, n: 6 });
+  const mt = L.prMeias(dia, muito, sM, impM, d);
+  exige(mt.pr[16] === null && mt.acima_teto >= 1, 'PR acima de 110 % sai vazio e contado');
 })();
 
 /* ── PRODUTO ───────────────────────────────────────────────────────────────────────────────────── */
@@ -101,6 +132,45 @@ function puxa(url) {
   }
   exige(dcomp >= 30, 'so ' + dcomp + ' dias comparados com a liquida');
   console.log('produto: ' + pr.dias.length + ' dias, ' + pr.meses.length + ' meses · impedida conferida em ' + comparados + ' meses · injetada x liquida em ' + dcomp + ' dias');
+
+  /* -- a meia hora publicada -- */
+  let ph = null;
+  if (process.env.PR_HORA_ARQ) ph = JSON.parse(zlib.gunzipSync(require('fs').readFileSync(process.env.PR_HORA_ARQ)).toString('utf8'));
+  else { try { ph = await puxa(BASE + 'pr_hora.json'); } catch (e) { if (!/HTTP 404/.test(e.message)) throw e; } }
+  if (!ph) { console.log('pr_hora.json ainda nao publicado: a meia hora so foi julgada na regra'); return fim(); }
+  const ons = await puxa(BASE + 'ons_restricao_all.json');
+  const lim = new Set((ons.consolidado || []).filter(x => parseFloat(String(x.lim || '').replace(',', '.')) > 0).map(x => String(x.ts).slice(0, 16).replace(' ', 'T')));
+  const porDia = new Map(pr.dias.map(d => [d.dia, d]));
+  let fech = 0, conf = 0; const lado = { manha: [0, 0], tarde: [0, 0] };
+  for (const m of ph.dias) {
+    exige(m.inj.length === 48 && m.irr.length === 48 && m.pr.length === 48, m.dia + ': vetor sem 48 meias horas');
+    const d = porDia.get(m.dia);
+    exige(!!m.prc === !!(d && d.pr_corrigido_pct != null), m.dia + ': corrigido na meia hora sem corrigido no dia (ou o contrario)');
+    if (d && d.horas_validas === 24 && !m.inj.some(x => x == null) && !m.irr.some(x => x == null)) {
+      fech++;
+      const E = m.inj.reduce((a, x) => a + x, 0), Hm = m.irr.reduce((a, x) => a + x, 0) / 2000;
+      exige(perto(E, d.inj_mwh, 0.001 * d.inj_mwh + 0.03), m.dia + ': energia das meias horas ' + E.toFixed(3) + ' contra ' + d.inj_mwh + ' do dia');
+      exige(perto(Hm, d.h_kwh_m2, 0.001 * d.h_kwh_m2 + 0.003), m.dia + ': irradiacao das meias horas ' + Hm.toFixed(4) + ' contra ' + d.h_kwh_m2 + ' do dia');
+    }
+    for (let i = 0; i < 48; i++) {
+      const w = m.irr[i], e = m.inj[i];
+      if (m.pr[i] == null) continue;
+      conf++;
+      exige(w >= ph.criterios.piso_irr_w_m2, m.dia + ' ' + i + ': PR abaixo do piso de irradiancia');
+      /* o publicado vem arredondado: a tolerancia sai das casas (inj 3, irr 1, pr 1) */
+      const p = 100 * e / (ph.p_cc_mwp * w / 2000), tol = 0.051 + p * (0.0005 / Math.max(e, 0.001) + 0.05 / w);
+      exige(perto(m.pr[i], p, tol), m.dia + ' ' + i + ': PR ' + m.pr[i] + ' nao sai de ' + e + ' MWh e ' + w + ' W/m2 (' + p.toFixed(2) + ')');
+      const k = m.dia + 'T' + String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00');
+      const lad = i >= 13 && i <= 17 ? 'manha' : i >= 30 && i <= 34 ? 'tarde' : null;   /* 06:30-08:30 e 15:00-17:00 */
+      if (lad && !lim.has(k)) { lado[lad][0] += e; lado[lad][1] += ph.p_cc_mwp * w / 2000; }
+    }
+  }
+  /* 5 e o piso contra a VACUIDADE: a primeira rodada preenche so os 60 dias mais recentes, e 07-23/08 nao tem estacao */
+  exige(fech >= 5, 'so ' + fech + ' dias fechados com o dia - a conferencia nao julgou o bastante');
+  const prL = k => 100 * lado[k][0] / lado[k][1];
+  exige(lado.manha[1] > 0 && lado.tarde[1] > 0 && Math.abs(prL('manha') - prL('tarde')) < 8,
+    'manha ' + prL('manha').toFixed(1) + ' % contra tarde ' + prL('tarde').toFixed(1) + ' % nas meias horas livres - a janela da irradiancia desalinhou');
+  console.log('meia hora: ' + ph.dias.length + ' dias · ' + fech + ' fechados com o dia · ' + conf + ' PR refeitos · manha ' + prL('manha').toFixed(1) + ' % x tarde ' + prL('tarde').toFixed(1) + ' %');
   fim();
 })().catch(e => { console.error('REPROVADO: ' + e.message); process.exit(1); });
 
