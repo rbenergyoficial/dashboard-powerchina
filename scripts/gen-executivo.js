@@ -615,6 +615,12 @@ async function writeOut(obj, nome, opts) {
   // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
   const REF_DESDE = '2026-03-01';
   const refDia = {};          // dia -> usina -> { ge, gv, irr, inv } · CRU, como o ONS publica
+  // a MESMA fonte, meia hora a meia hora (`ref_hora.json`, 24/09/2026): o detalhe do dia no painel da referencia.
+  // Nao se reaproveita o `perfil_dia`: ele anula a referencia quando a verificada passa dela — e esse e
+  // justamente o defeito que o painel existe para mostrar depois das correcoes de julho.
+  const refHora = {};         // dia -> usina -> { ge:[48], gv:[48], irr:[48] } · MW e W/m2, cru
+  const refLim = {};          // dia -> [48] · 1 = o conjunto sob limitacao naquela meia hora
+  const SLOT = (ts) => { const s = String(ts); return Number(s.slice(11, 13)) * 2 + (Number(s.slice(14, 16)) >= 30 ? 1 : 0); };
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
     const porUfv = {}; let ge = 0, gv = 0, irrSoma = 0, irrN = 0, geRec = 0, geTot = 0;
@@ -647,6 +653,15 @@ async function writeOut(obj, nome, opts) {
         // a marca de invalido tem DUAS grafias no arquivo: "True"/"False" ate jul/26 (a leitura do CSV) e "1"/"0" desde
         // ago/26 (a do Parquet). Testar so uma deixa a outra metade da serie sem marca nenhuma, em silencio.
         if (String(r.inv) === 'True' || String(r.inv) === '1') { if (irr > 0) ru.inv++; } else ru.irr += irr * H / 1000;
+        const k = SLOT(r.ts);
+        if (k >= 0 && k < 48) {
+          const hd = refHora[dia_] || (refHora[dia_] = {});
+          const hu = hd[u] || (hd[u] = { ge: new Array(48).fill(null), gv: new Array(48).fill(null), irr: new Array(48).fill(null) });
+          hu.ge[k] = r2(num(r.ge)); hu.gv[k] = r2(v);
+          hu.irr[k] = (String(r.inv) === 'True' || String(r.inv) === '1') ? null : Math.round(irr);
+          const L = refLim[dia_] || (refLim[dia_] = new Array(48).fill(0));
+          if (LIM_TS.has(String(r.ts))) L[k] = 1;
+        }
       }
       (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0, gePL: 0, gvPL: 0, parLivre: 0, irrSoma: 0, irrN: 0 });
       porUfv[u].ge += g * H; porUfv[u].gv += v * H;
@@ -1209,6 +1224,34 @@ async function writeOut(obj, nome, opts) {
     console.log('ref_dia_ufv: %d linhas, de %s a %s · o Complexo fecha com o gref do conjunto em %d dias',
       refDiaUfv.length, (refDiaUfv[0] || {}).dia, (refDiaUfv[refDiaUfv.length - 1] || {}).dia,
       refDiaUfv.filter(x => x.ufv === 'Complexo' && grefDia[x.dia] != null).length);
+  }
+
+  // ---------- 6b) a mesma referencia, meia hora a meia hora (`ref_hora.json`, blob proprio) ----------
+  // So as nove usinas: os agregados o painel soma, tudo-ou-nada por instante, como ja faz com o dia.
+  // 🔴 GUARDA: a soma das meias horas de cada usina (x 0,5 h) tem de reproduzir o dia do `ref_dia_ufv`.
+  //    Folga derivada do arredondamento: 48 meias horas a 0,005 MW x 0,5 h = 0,12 MWh, mais 0,005 do dia.
+  const refHoraOut = { gerado_em: new Date().toISOString(), desde: REF_DESDE, passo_min: 30,
+    unidades: { ge: 'MW (referencia do operador)', gv: 'MW (verificada)', irr: 'W/m2 (irradiancia valida)' },
+    rotulo_de_tempo: 'inicio do intervalo de 30 min, hora local',
+    nota: 'Cru, como o operador publica, por usina. `lim` marca a meia hora com limitacao do conjunto; '
+      + '`excluido` o dia com defeito na publicacao do conjunto (o par livre nao vale nele).',
+    dias: [], serie: [] };
+  {
+    const doDia = new Map(refDiaUfv.map(x => [x.dia + '|' + x.ufv, x]));
+    const ruins = [];
+    for (const dia of Object.keys(refHora).sort()) {
+      refHoraOut.dias.push(Object.assign({ dia, lim: refLim[dia] || new Array(48).fill(0) }, DIAS_EXCLUIDOS.has(dia) ? { excluido: 1 } : {}));
+      for (const u of Object.keys(refHora[dia]).sort()) {
+        const s = refHora[dia][u];
+        refHoraOut.serie.push({ dia, ufv: u, ge: s.ge, gv: s.gv, irr: s.irr });
+        const d = doDia.get(dia + '|' + u); if (!d) continue;
+        const soma = (a) => a.reduce((x, y) => x + (y || 0), 0) * H;
+        if (Math.abs(soma(s.ge) - d.ref_mwh) > 0.125 || Math.abs(soma(s.gv) - d.ger_mwh) > 0.125)
+          ruins.push(dia + ' ' + u + ': meia hora soma ' + soma(s.ge).toFixed(2) + '/' + soma(s.gv).toFixed(2) + ' contra o dia ' + d.ref_mwh + '/' + d.ger_mwh);
+      }
+    }
+    if (ruins.length) throw new Error('ref_hora: a meia hora nao fecha com o ref_dia_ufv em ' + ruins.length + ' usina-dia(s) — ex.: ' + ruins.slice(0, 3).join(' · '));
+    console.log('ref_hora: %d dias, %d usina-dias · fecha com o ref_dia_ufv', refHoraOut.dias.length, refHoraOut.serie.length);
   }
 
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
@@ -3179,6 +3222,9 @@ async function writeOut(obj, nome, opts) {
     console.log('hora_ufv.json OK · ' + diasH.length + ' dias (' + diasH[0] + ' a ' + diasH[diasH.length - 1] + ') · '
       + horas.length + ' linhas · ' + Math.round(tamH / 1024) + ' KB');
   } catch (e) { console.warn('hora_ufv.json falhou (' + e.message + ') — segue sem a camada horária'); }
+
+  const tamRH = await writeOut(refHoraOut, 'ref_hora.json', { gzip: true });
+  console.log('ref_hora.json OK · ' + refHoraOut.dias.length + ' dias · ' + Math.round(tamRH / 1024) + ' KB');
 
   const tamH2 = await writeOut(Object.assign({ gerado_em: new Date().toISOString() }, HIERARQUIA), 'hierarquia.json');
   console.log('hierarquia.json OK · ' + Object.keys(HIERARQUIA.contrato).length + ' usinas · '

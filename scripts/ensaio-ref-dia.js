@@ -43,6 +43,9 @@ function baixa(url) {
 }
 const leExec = () => /^https?:/i.test(BASE) ? baixa(BASE + 'executivo.json')
   : Promise.resolve(JSON.parse(fs.readFileSync(path.join(BASE, 'executivo.json'), 'utf8')));
+// no modo local o gerador grava o blob irmao como `executivo.<nome>` (a regra do LOCAL_OUT)
+const leHora = () => /^https?:/i.test(BASE) ? baixa(BASE + 'ref_hora.json')
+  : Promise.resolve(JSON.parse(fs.readFileSync(path.join(BASE, 'executivo.ref_hora.json'), 'utf8')));
 
 /* 1 · CRU — devolve a lista de divergencias contra o arquivo mensal por usina */
 function julgaCru(R, cru, dias) {
@@ -64,6 +67,26 @@ function julgaCru(R, cru, dias) {
     }
   }
   return { ruins, n };
+}
+
+/* 1b · a MEIA HORA (`ref_hora.json`) contra o mesmo arquivo mensal, instante a instante */
+function julgaHora(H, cru, dias) {
+  const ruins = []; let n = 0;
+  const idx = new Map((H.serie || []).map((x) => [x.dia + '|' + x.ufv, x]));
+  for (const dia of dias) {
+    for (const r of cru[dia.slice(0, 7)] || []) {
+      const ts = String(r.ts); if (ts.slice(0, 10) !== dia) continue;
+      const u = String(r.u).replace('CEFMT', 'M'), x = idx.get(dia + '|' + u);
+      if (!x) { ruins.push(dia + ' ' + u + ': a usina-dia nao esta no ref_hora'); continue; }
+      const k = Number(ts.slice(11, 13)) * 2 + (Number(ts.slice(14, 16)) >= 30 ? 1 : 0);
+      n++;
+      if (Math.abs((x.ge[k] || 0) - (+r.ge || 0)) > 0.006 || Math.abs((x.gv[k] || 0) - (+r.gv || 0)) > 0.006)
+        ruins.push(dia + ' ' + u + ' ' + ts.slice(11, 16) + ': ref_hora ' + x.ge[k] + '/' + x.gv[k] + ' · operador ' + r.ge + '/' + r.gv);
+      const irrEsp = INVALIDO(r.inv) ? null : Math.round(+r.irr || 0);
+      if (x.irr[k] !== irrEsp) ruins.push(dia + ' ' + u + ' ' + ts.slice(11, 16) + ': irradiancia ' + x.irr[k] + ' contra ' + irrEsp);
+    }
+  }
+  return { ruins: [...new Set(ruins)], n };
 }
 
 /* 2 · AGREGADOS */
@@ -116,6 +139,11 @@ function julgaAgregados(R) {
   console.log('1 · CRU: %d usina-dias de %d dias contra o arquivo mensal do operador', c.n, D.length);
   c.ruins.slice(0, 12).forEach(x => console.error('  ✗ ' + x)); falhas += c.ruins.length;
   if (c.n < 9 * D.length) { console.error('  ✗ conferiu %d de %d usina-dias — faltou dado para julgar', c.n, 9 * D.length); falhas++; }
+  const Hh = await leHora();
+  const ch = julgaHora(Hh, cru, D);
+  console.log('1b · MEIA HORA: %d leituras do arquivo mensal conferidas contra o ref_hora', ch.n);
+  ch.ruins.slice(0, 12).forEach(x => console.error('  ✗ ' + x)); falhas += ch.ruins.length;
+  if (ch.n < 9 * 40 * D.length) { console.error('  ✗ conferiu so %d leituras — faltou dado para julgar', ch.n); falhas++; }
   const a = julgaAgregados(R);
   console.log('2 · AGREGADOS: %d linhas, %d dias, de %s a %s', R.length, todos.length, todos[0], todos[todos.length - 1]);
   a.slice(0, 12).forEach(x => console.error('  ✗ ' + x)); falhas += a.length;
