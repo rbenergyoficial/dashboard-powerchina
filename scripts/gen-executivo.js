@@ -603,6 +603,10 @@ async function writeOut(obj, nome, opts) {
   const RTC_M3_REPARO = "2026-07-12";   // reparo do RTC do c2 -> a estrutura do ONS vira nesta data
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   const corteDiarioUfv = [];  // o MESMO dia aberto por usina — campo novo, ao lado, nunca no lugar
+  // a referencia crua por usina so a partir de mar/26: antes disso o `ge` do ONS e inconsistente (o mesmo corte que
+  // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
+  const REF_DESDE = '2026-03-01';
+  const refDia = {};          // dia -> usina -> { ge, gv, irr, inv } · CRU, como o ONS publica
   for (const mes of meses) {
     const C = CRU[mes]; if (!C) continue;
     const porUfv = {}; let ge = 0, gv = 0, irrSoma = 0, irrN = 0, geRec = 0, geTot = 0;
@@ -620,6 +624,22 @@ async function writeOut(obj, nome, opts) {
       // "número errado com cara de certo". Fica pronto p/ tapar buraco PONTUAL de um mês novo.
       if (RECONSTRUIR && g <= 0 && util(r)) { g = estimaGe(r.u, irr); rec = true; }   // chave é CEFMTn, não Mn!
       const dia_ = String(r.ts).slice(0, 10);
+      // A REFERENCIA COMO O ONS PUBLICA, por usina e por dia (PROMOVER ref-ons). CRU de proposito: sem a soma M3+M7 de
+      // antes do reparo, sem o M7 pelo medidor, sem reconstrucao — este campo existe para MOSTRAR o defeito da fonte
+      // (a referencia nao acompanhou as correcoes de 12 e 17/07; NT-MRT-2026-0037), e tratado ele o esconderia.
+      // Irradiancia: so os instantes que o proprio ONS nao marca como invalidos (`inv`), integrada em kWh/m2.
+      if (dia_ >= REF_DESDE) {
+        const rd = refDia[dia_] || (refDia[dia_] = {});
+        const ru = rd[u] || (rd[u] = { ge: 0, gv: 0, geL: 0, gvL: 0, irr: 0, inv: 0 });
+        ru.ge += num(r.ge) * H; ru.gv += v * H;
+        // o par LIVRE: so os intervalos sem limitacao do conjunto. Em 190 dos 206 dias desde mar/26 houve limitacao
+        // (mediana de 8 h por dia), e no dia inteiro a verificada fica abaixo da referencia por CORTE — o que esconde
+        // o defeito da referencia, que so aparece onde a usina pode gerar tudo o que pode.
+        if (!LIM_TS.has(String(r.ts))) { ru.geL += num(r.ge) * H; ru.gvL += v * H; }
+        // a marca de invalido tem DUAS grafias no arquivo: "True"/"False" ate jul/26 (a leitura do CSV) e "1"/"0" desde
+        // ago/26 (a do Parquet). Testar so uma deixa a outra metade da serie sem marca nenhuma, em silencio.
+        if (String(r.inv) === 'True' || String(r.inv) === '1') { if (irr > 0) ru.inv++; } else ru.irr += irr * H / 1000;
+      }
       (porUfv[u] = porUfv[u] || { ge: 0, gv: 0, geP: 0, gvP: 0, parN: 0, parOk: 0, geL: 0, gvL: 0, gePL: 0, gvPL: 0, parLivre: 0, irrSoma: 0, irrN: 0 });
       porUfv[u].ge += g * H; porUfv[u].gv += v * H;
       // BALDE DO CORTE: so os intervalos com limitacao registrada (e ja sem os dias excluidos, que
@@ -1142,6 +1162,47 @@ async function writeOut(obj, nome, opts) {
       corte_gwh: r2(Math.max(0, x.ge - gv) / 1000),
       corte_pct: x.ge > 0 ? r2(100 * Math.max(0, x.ge - gv) / x.ge) : 0 }; });
 
+  // ---------- 6) a referencia do ONS contra a verificada, crua, dia a dia (PROMOVER ref-ons) ----------
+  // As nove usinas e os tres agregados. Energia se SOMA; irradiancia e grandeza intensiva e se faz MEDIA das estacoes
+  // (a mesma regra da solarimetria do conjunto). TUDO-OU-NADA: um agregado com uma usina faltando nao sai — somar
+  // oito contra nove esconderia a falta, e o leitor leria a diferenca como defeito da referencia.
+  const refDiaUfv = [];
+  { const GRUPOS = { Complexo: PPA.concat(ML), PPA, ML };
+    // horas sob limitacao do conjunto, por dia — a mesma bandeira (LIM_TS) que o corte usa
+    const limH = {};
+    LIM_TS.forEach(ts => { const dd = String(ts).slice(0, 10); limH[dd] = (limH[dd] || 0) + H; });
+    for (const dia of Object.keys(refDia).sort()) {
+      const d = refDia[dia];
+      // dia EXCLUIDO do corte (defeito da publicacao do conjunto): a limitacao dele nao esta em LIM_TS, entao o par
+      // livre sairia com os intervalos limitados dentro. Ele fica nulo, declarado — o dia inteiro continua.
+      const excl = DIAS_EXCLUIDOS.has(dia);
+      const lin = (ufv, L) => {
+        if (!L.every(u => d[u])) return;
+        const inv = L.reduce((a, u) => a + d[u].inv, 0);
+        const soma = k => r2(L.reduce((a, u) => a + d[u][k], 0));
+        refDiaUfv.push(Object.assign({ dia, mes: dia.slice(0, 7), ufv,
+          ref_mwh: soma('ge'), ger_mwh: soma('gv'),
+          ref_livre_mwh: excl ? null : soma('geL'), ger_livre_mwh: excl ? null : soma('gvL'),
+          lim_h: r2(limH[dia] || 0),
+          irr_kwh_m2: r2(L.reduce((a, u) => a + d[u].irr, 0) / L.length) }, inv ? { irr_inv: inv } : {}, excl ? { excluido: 1 } : {}));
+      };
+      PPA.concat(ML).sort().forEach(u => lin(u, [u]));
+      Object.entries(GRUPOS).forEach(([g, L]) => lin(g, L));
+    }
+    // 🔴 GUARDA DE FECHAMENTO contra OUTRA fonte: a referencia do conjunto e o SOMATORIO das parcelas das usinas
+    // (RO-AO.BR.13 5.2.2.5), e isso foi medido em 17.376 patamares do SAGER. Entao o Complexo somado aqui tem de bater,
+    // dia a dia, com o `gref` do arquivo do CONJUNTO — que o gerador ja le. Se nao bater, uma usina sumiu ou foi lida
+    // errada, e o campo nao sai. Folga: 0,03 MWh/h por patamar (o maximo medido) x 48 x 0,5 h = 0,72 MWh no dia.
+    const grefDia = {};
+    for (const r of restr.consolidado) { const dd = String(r.ts).slice(0, 10); if (dd >= REF_DESDE) grefDia[dd] = (grefDia[dd] || 0) + num(r.gref) * H; }
+    const ruins = refDiaUfv.filter(x => x.ufv === 'Complexo' && grefDia[x.dia] != null && Math.abs(x.ref_mwh - grefDia[x.dia]) > 0.75);
+    if (ruins.length) throw new Error('ref_dia_ufv: a referencia do Complexo, somada das usinas, nao fecha com a do arquivo do conjunto em '
+      + ruins.length + ' dia(s) — ex.: ' + ruins.slice(0, 3).map(x => x.dia + ' ' + x.ref_mwh + ' x ' + r2(grefDia[x.dia])).join(' · '));
+    console.log('ref_dia_ufv: %d linhas, de %s a %s · o Complexo fecha com o gref do conjunto em %d dias',
+      refDiaUfv.length, (refDiaUfv[0] || {}).dia, (refDiaUfv[refDiaUfv.length - 1] || {}).dia,
+      refDiaUfv.filter(x => x.ufv === 'Complexo' && grefDia[x.dia] != null).length);
+  }
+
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA).
     // 🔴 `pr_alvo_pct: 90` e `disp_alvo_pct: 97` SAÍRAM em 17/09/2026: eram números cravados aqui, sem
@@ -1217,6 +1278,8 @@ async function writeOut(obj, nome, opts) {
     // registro dele era o circuito 2 do M3 e entra no M3 (ate 11/07) ou sai como duplicata (12–16/07).
     corte_diario_ufv: (function () { const de = (corteDiario.slice(-75)[0] || {}).dia || '';
       return corteDiarioUfv.filter(x => x.dia >= de); })(),
+    // a referencia do ONS contra a verificada, CRUA, por entidade e por dia, desde mar/26 (PROMOVER ref-ons)
+    ref_dia_ufv: refDiaUfv,
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
     // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----

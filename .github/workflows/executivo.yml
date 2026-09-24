@@ -71,6 +71,12 @@ jobs:
       - name: Ensaio · o corte por usina fecha com o corte por contrato
         run: node scripts/ensaio-corte-ufv.js
 
+      # A referencia do operador contra a verificada, crua, dia a dia. O campo existe para MOSTRAR um defeito da
+      # fonte, entao tem de provar que e cru: cada usina contra o arquivo mensal do operador (o gerador ja fecha o
+      # conjunto contra o arquivo do conjunto), e os agregados contra as suas partes.
+      - name: Ensaio · a referencia do operador por usina e a crua
+        run: node scripts/ensaio-ref-dia.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
