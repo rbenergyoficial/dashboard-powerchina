@@ -135,18 +135,31 @@ function puxa(url) {
 //    A versao ingenua devolve vazio para tudo, o gerador trata como primeira execucao e regrava o
 //    blob so com os dias desta rodada: uma falha de rede apagaria o historico inteiro, sem erro
 //    visivel. E a licao que o `leBlob` do MUST ja pagou.
+// 🔴 O DIA SAI DO CONTEUDO, NAO DO NOME (24/09/2026). O nome do arquivo e a data do EXPORT, que cobre o
+//    dia ANTERIOR; esta rotina rotulava pelo nome e publicava cada dia com um dia de atraso — o
+//    `gen-perdas` ja fazia o certo. O historico gravado ate aqui (sem `esquema`, ou esquema 1) e
+//    MIGRADO uma vez, por MARCA: cada linha recua um dia. Medido antes, pela correlacao entre os
+//    inversores contra o `perdas_inv` (rotulado pelo conteudo): recuar um dia casa em 55 de 60 dias,
+//    3 empatam, 2 nao tem par, e NENHUM contraria.
+const ESQUEMA_HIST = 2;
+const diaAnterior = (dia) => new Date(Date.parse(dia + 'T12:00:00Z') - 86400e3).toISOString().slice(0, 10);
+function migraHistorico(j) {
+  const serie = Array.isArray(j.serie) ? j.serie : [];
+  if (Number(j.esquema) >= ESQUEMA_HIST) return serie;
+  for (const l of serie) { l.dia = diaAnterior(l.dia); l.ms = msDoDia(l.dia); }
+  console.log('  historico migrado para o dia do CONTEUDO: ' + serie.length + ' linha(s) recuaram um dia');
+  return serie;
+}
 async function leHistorico() {
   if (process.env.LOCAL_OUT_DIR) {
     const fs = require('fs'), path = require('path');
     const f = path.join(process.env.LOCAL_OUT_DIR, HIST_BLOB);
     if (!fs.existsSync(f)) return [];
     let b = fs.readFileSync(f); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-    const j = JSON.parse(b.toString('utf8'));
-    return Array.isArray(j.serie) ? j.serie : [];
+    return migraHistorico(JSON.parse(b.toString('utf8')));
   }
   try {
-    const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + HIST_BLOB);
-    return Array.isArray(j.serie) ? j.serie : [];
+    return migraHistorico(await puxa('https://rbenergydata.blob.core.windows.net/dados/' + HIST_BLOB));
   } catch (e) {
     if (/HTTP 404/.test(e.message)) return [];
     throw new Error('nao consegui ler o ' + HIST_BLOB + ' publicado (' + e.message
@@ -360,8 +373,9 @@ function comparaComPares(reg) {
       // `ms` = epoch de 00:00 BRT do dia. O painel recorta pela janela do seletor de tempo do Grafana
       // e NAO pode derivar isto do texto: o JSONata Go le '2026-08-10' como 00:00 UTC e ignora o
       // offset, o que deslocaria todo ponto para as 21:00 do dia anterior na tela.
-      serie.push({ dia: a.dia, ms: msDoDia(a.dia), ufv: a.parque, ts: x.ts, inv: x.inv, kwh: x.kwh, razao: x.razao, base: x.base });
-    if (a.dia >= corteHora) for (const h of intraDia(reg)) intra.push({ dia: a.dia, ufv: a.parque, ...h });
+      serie.push({ dia: reg.dia, ms: msDoDia(reg.dia), ufv: a.parque, ts: x.ts, inv: x.inv, kwh: x.kwh, razao: x.razao, base: x.base });
+    // o CORTE da janela fina continua pelo nome (escolhe QUAIS arquivos ler); o rotulo e o do conteudo
+    if (a.dia >= corteHora) for (const h of intraDia(reg)) intra.push({ dia: reg.dia, ufv: a.parque, ...h });
   }
   if (!serie.length) throw new Error('nenhum inversor com energia em ' + alvo.length + ' arquivo(s) — o layout do export mudou?');
 
@@ -475,6 +489,7 @@ function comparaComPares(reg) {
     serie_hora }, HORA_BLOB)) / 1024);
   const kbh = Math.round((await escreve({ atualizado: out.atualizado,
     nota: 'historico bruto por inversor e por dia. Existe para o proprio gerador acumular; os paineis leem os agregados do outro arquivo.',
+    esquema: ESQUEMA_HIST,   // 2 = dia do CONTEUDO; sem a marca, a proxima rodada migraria de novo
     janela_dias: JANELA, dias_cobertos: diasFull.length, de: escopo.de, ate: escopo.ate, serie: full }, HIST_BLOB)) / 1024);
   console.log('  ' + OUT_BLOB + ' OK · ' + kb + ' KB · ' + inversores.length + ' inversores · '
     + serie_top.length + ' linhas de serie dos ' + TOP_SERIE + ' piores');

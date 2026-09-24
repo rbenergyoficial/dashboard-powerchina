@@ -71,7 +71,7 @@ function daCurva(c, piso) {
     const cc = c.pcc[i], ca = c.pca[i];
     if (cc == null || ca == null) continue;
     scc += cc;
-    if (ca > cc && cc >= piso) { ex += ca - cc; n += 1; }
+    if (ca > cc && ca >= piso) { ex += ca - cc; n += 1; }   // o piso vale sobre o lado ALTO, como no gerador
   }
   return { f: scc > 0 ? ex / scc : 0, n };
 }
@@ -119,15 +119,22 @@ function daCurva(c, piso) {
   ok(pior <= 0, 'nenhum par fora da tolerancia' + (onde ? ' — pior: ' + onde : ''));
 
   console.log('\nD · NEGATIVA');
-  /* ⚠️ o piso quase nunca morde NA CURVA: ela so guarda a janela com geracao, e os instantes de
-     CC < 1 kW com CA > CC sao os da noite (21 de 21 abaixo do piso, medido em 17/09). Exigir que
-     ele mude algum dia aqui reprovaria por falta do caso no mundo, nao por defeito — entao o
-     numero vai INFORMADO, e o que se prova e que o recalculo desta rota respeita o piso. */
+  /* ⚠️ o piso quase nunca morde NA CURVA: ela so guarda a janela com geracao, onde os dois lados
+     raramente ficam juntos abaixo de 1 kW. Exigir que ele mude algum dia aqui reprovaria por falta
+     do caso no mundo, nao por defeito — entao o numero vai INFORMADO, e o que se prova e que o
+     recalculo desta rota respeita o piso. (Os 21 instantes de CC < 1 kW com CA > CC medidos em
+     17/09 NAO eram todos offset: 7 eram queda de leitura do CC com CA de 12 a 123 kW — 24/09.) */
   console.log('      sem o piso, ' + semPiso + ' dia(s) mudariam na curva (informativo)');
   {
-    const c = { h: ['05:30', '12:00'], pcc: [0.5, 200], pca: [3, 196] };
+    const c = { h: ['05:30', '12:00'], pcc: [0.3, 200], pca: [0.8, 196] };
     ok(daCurva(c, PISO_KW).n === 0 && daCurva(c, 0).n === 1,
-      'um instante plantado abaixo do piso (CC 0,5 kW, CA 3 kW) fica FORA com o piso e dentro sem ele');
+      'um instante plantado com os DOIS lados abaixo do piso (CC 0,3 kW, CA 0,8 kW) fica FORA com o piso e dentro sem ele');
+  }
+  {
+    /* 🔴 o caso que o piso no CC deixava passar: queda de leitura do CC com o CA em plena geracao
+       (medido em 21/09/2026 14:30, CC 0,03 kW e CA 122 kW, em quatro usinas no mesmo instante) */
+    const c = { h: ['14:00', '14:30'], pcc: [120, 0.03], pca: [117, 122] };
+    ok(daCurva(c, PISO_KW).n === 1, 'uma queda de leitura do CC (CC 0,03 kW, CA 122 kW) CONTA como instante impossivel');
   }
   {
     const alvo = com.find((l) => l.ef > 1) || { ef: 1.02, ef_imp: 0.03, ef_imp_n: 1 };

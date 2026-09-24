@@ -562,10 +562,11 @@ if (require.main !== module) return;
     let antigo = null;
     try { antigo = await leBlob(res.blob); }
     catch (e) { throw new Error('nao consegui ler ' + res.blob + ': ' + e.message); }
+    // a FOTOGRAFIA do que esta no ar, tirada ANTES da fusao e da poda — que mexem nos mesmos objetos
+    const antigoTxt = JSON.stringify(((antigo && antigo.serie) || []).slice().sort((a, b) => a.ms - b.ms));
     const porChave = new Map();
     for (const l of ((antigo && antigo.serie) || [])) porChave.set(l.t, l);
     const antes = porChave.size;
-    const ultimoAntes = antes ? [...porChave.keys()].sort().pop() : null;
     for (const l of novas) porChave.set(l.t, l);
 
     // --- poda pela janela ----------------------------------------------------------------------
@@ -587,12 +588,12 @@ if (require.main !== module) return;
     }
     if (podadas) console.log('    ' + podadas + ' chaves de esquema antigo podadas');
 
-    const ultimo = serie.length ? serie[serie.length - 1].t : null;
-
-    // A guarda olha contagem E ultimo instante — a contagem sozinha nao muda quando o dia corrente
-    // cresce dentro do mesmo dia, e o dado mais recente nunca subiria. E `podadas` entra porque
-    // uma limpeza que a guarda engole e uma limpeza que nunca acontece.
-    if (serie.length === antes && ultimo === ultimoAntes && !podadas && !FORCAR) {
+    // 🔴 A guarda compara o CONTEUDO, nao contagem e ultimo instante (24/09/2026). No DIARIO o ultimo
+    //    instante e o proprio dia, e ele nao muda enquanto o dia cresce: 23/09 ficou com o valor das
+    //    10:40 (42% do medidor) ate um dia novo entrar, e o `gen-perdas` leu o dia pela metade. A mesma
+    //    forma do "dia parcial que virou permanente" do MUST. A poda de esquema entra sozinha: ela muda
+    //    o texto da serie.
+    if (JSON.stringify(serie) === antigoTxt && !FORCAR) {
       console.log('    sem mudanca — nao regrava (versao a toa e ruido)');
       continue;
     }

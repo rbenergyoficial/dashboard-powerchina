@@ -313,6 +313,11 @@ const PISO_STR_A = 3;
 // inversor estava gerando" (p >= 1 kW, a mesma da faixa do piso no painel de strings), e ela e
 // onde o ruido de zero acaba. Medido nas nove usinas, 7 dias de curva: ABAIXO de 1 kW de CC,
 // 21 de 21 instantes tem CA > CC (offset de zero, nao energia); de 1 kW para cima, de 0,2% a 2,5%.
+// 🔴 O piso vale sobre o CA (o lado ALTO do par), nao sobre o CC — corrigido em 24/09/2026. Aqueles 21
+//    NAO eram todos offset: 14 tinham CA de 1 a 5 kW (rampa) e 7 tinham CA de 12 a 123 kW com CC abaixo
+//    de 1 kW — queda de leitura do lado CC, seis no MESMO instante (21/09 14:30) em quatro usinas. O piso
+//    no CC descartava justamente esses, e tres dias ficaram com ef > 100% e ef_imp zero. Com o piso no
+//    CA, fica de fora so o que o piso existe para tirar: os dois lados perto de zero.
 const EF_IMP_PISO_KW = 1;
 
 // 🔴 ZERO NA ISOLACAO E AUSENCIA, NAO MEDICAO — e isso foi medido no arquivo CRU, nao deduzido.
@@ -832,8 +837,16 @@ async function grava(nome, obj) {
       //    simplesmente nao tinha esses instantes — a tela escondia a parada que existe para mostrar.
       const gerI = bons.filter((i) => cc[i] > 1 || ca[i] > 1);
       const i0 = gerI.length ? gerI[0] : Infinity, i1 = gerI.length ? gerI[gerI.length - 1] : -Infinity;
-      for (const i of bons) {
-        if (i < i0 || i > i1) continue;
+      // 🔴 E o instante SEM LEITURA dentro da janela fica no eixo, com tudo nulo (24/09/2026). Percorrer so
+      //    os `bons` apagava o instante: o carimbo sem registro (eletrocentro inteiro anulado, 21/09 14:00
+      //    as 15:30 no M3/TS2) virava 14:00 vizinho de 15:30, e num eixo de CATEGORIA a falta sumia da tela.
+      const bom = new Set(bons);
+      for (let i = i0; i <= i1; i += 1) {
+        if (!bom.has(i)) {
+          cur.h.push(String(d.instantes[i]).slice(11, 16));
+          for (const k of ['pcc', 'pca', 'ef', 'sn', 'sm', 'mm', 't', 'iso', 'sp']) cur[k].push(null);
+          continue;
+        }
         const dsi = disp('str#', i, PISO_STR_A);
         const dmi = disp('mppt#', i, PISO_STR_A);
         const ti = (o.serie.temp || [])[i], ii = (o.serie.isol || [])[i], si = (o.serie.setpoint || [])[i];
@@ -898,7 +911,7 @@ async function grava(nome, obj) {
     // sum(CA - CC) nesses instantes / sum(CC) do dia. E GRANDEZA, nao limiar: o painel a mostra e
     // so marca o dia pelo criterio fisico (ef > 100%). `ef_imp_n` conta os instantes.
     if (o._imp) {
-      const v = o._imp.pares.filter(([c]) => c * F * 1000 >= EF_IMP_PISO_KW);
+      const v = o._imp.pares.filter(([, a]) => a * F * 1000 >= EF_IMP_PISO_KW);   // o lado ALTO (CA), ver EF_IMP_PISO_KW
       o.ef_imp = o._imp.scc > 0 ? r4(soma(v.map(([c, a]) => a - c)) / o._imp.scc) : 0;
       o.ef_imp_n = v.length;
     }

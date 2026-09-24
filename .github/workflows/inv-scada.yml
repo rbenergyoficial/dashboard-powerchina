@@ -51,3 +51,9 @@ jobs:
           HORA_BLOB: inv_scada_hora.json
           LISTAR: ${{ github.event.inputs.listar }}
         run: node scripts/gen-inv-scada.js
+
+      # O historico e rotulado pelo dia do CONTEUDO desde 24/09/2026 (antes, pelo nome do arquivo, um dia
+      # adiante). O ensaio prova pela assinatura de cada dia entre os inversores, contra o perdas_inv, e roda
+      # DEPOIS de gerar: ele julga o produto, inclusive a migracao do historico que a primeira rodada faz.
+      - name: Ensaio · o historico esta no dia do conteudo
+        run: node scripts/ensaio-inv-scada-dia.js

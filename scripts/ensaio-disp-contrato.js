@@ -118,9 +118,16 @@ const le = async (nome) => {
      declara qual regra o produziu pela presenca do campo, e o ensaio julga cada dia pela regra dele */
   const R0 = L.dispContrato(linhas.map((l) => ({ ...l, lidos: undefined })), J);
 
-  let dias = 0, pares = 0, legado = 0;
+  /* 🔴 O diario guarda 730 dias e o `perdas_inv` so 60: um dia que SAIU da janela do arquivo por inversor
+     continua publicado e nao tem de onde ser recomposto. Julga--lo reprovava o ensaio no dia em que a
+     janela andava (22/09/2026, com 23/07 saindo) — guarda amarrada ao estado do mundo, nao a ferramenta.
+     Ele e pulado e DECLARADO; dentro da janela, nao se recompor continua reprovando. */
+  const cobertos = new Set((inv.serie || []).map((o) => o.dia));
+  const primeiro = [...cobertos].sort()[0] || '';
+  let dias = 0, pares = 0, legado = 0, foraJanela = 0;
   for (const o of comCampo) {
     const C = R.get(o.dia), C0 = R0.get(o.dia);
+    if (!cobertos.has(o.dia) && o.dia < primeiro) { foraJanela++; continue; }
     if (!C) { falhas.push(o.dia + ': o dia tem o campo publicado e nao se recompoe do perdas_inv'); continue; }
     dias++;
     const eLegado = (u) => o[u + '_disp_contrato_sem_leitura'] == null && C.porUfv[u] && C.porUfv[u].sem_leitura > 0;
@@ -149,7 +156,8 @@ const le = async (nome) => {
   }
   exige(dias >= 1 && pares >= 3, 'julgou pouco: ' + dias + ' dias e ' + pares + ' pares usina-dia');
   console.log('produto: ' + dias + ' dia(s) e ' + pares + ' par(es) usina-dia conferidos contra o perdas_inv e o irr_30min'
-    + (legado ? ' · ' + legado + ' dia(s) ainda pela regra anterior a `lidos` (publicados antes do campo; saem na proxima rodada)' : ''));
+    + (legado ? ' · ' + legado + ' dia(s) ainda pela regra anterior a `lidos` (publicados antes do campo; saem na proxima rodada)' : '')
+    + (foraJanela ? ' · ' + foraJanela + ' dia(s) antes de ' + primeiro + ', fora da janela do perdas_inv: sem de onde recompor, nao julgados' : ''));
   fim();
 })().catch((e) => { console.error('REPROVADO: ' + e.message); process.exit(1); });
 

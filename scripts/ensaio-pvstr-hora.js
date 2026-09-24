@@ -39,6 +39,18 @@ const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
 const le = (nome) => new Promise((res, rej) => {
+  /* LOCAL_DIR julga a saida de uma rodada local ANTES de publicar (24/09/2026): sem isto o ensaio so
+     via o blob no ar, e uma correcao do gerador so podia ser provada depois de publicada */
+  if (process.env.LOCAL_DIR) {
+    const fs = require('fs'), path = require('path');
+    let b = fs.readFileSync(path.join(process.env.LOCAL_DIR, nome));
+    const gz = b[0] === 0x1f && b[1] === 0x8b;
+    const naRede = gz ? b.length : zlib.gzipSync(b).length;   // o peso que a pagina paga e o COMPRIMIDO
+    if (gz) b = zlib.gunzipSync(b);
+    const j = JSON.parse(b.toString('utf8'));
+    j.__bytes = naRede;
+    res(j); return;
+  }
   https.get(BASE + nome, { family: 4 }, (r) => {
     /* so o 404 e ausencia; qualquer outra falha estoura em vez de virar "nada a conferir" */
     if (r.statusCode !== 200) { r.resume(); rej(new Error(nome + ': HTTP ' + r.statusCode)); return; }
