@@ -82,6 +82,7 @@ const GRANDEZA = 'ENERGIA DIÁRIA GERADA';
 const SAUDE = ['TEMPERATURA INTERNA', 'RESISTÊNCIA DE ISOLAÇÃO', 'TENSÃO NEGATIVA À TERRA'];
 
 const zlib = require('zlib');
+const { casaCru } = require('./lib-inversor-cru.js');
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const s = norm(v).replace(',', '.'); if (!s) return null; const n = Number(s); return isFinite(n) ? n : null; };
 const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
@@ -217,7 +218,9 @@ function leUsinaDia(buf) {
   const RE = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_\1 \2 \3 (.+?)(_\d)?$/;
   const vistas = [];
   cols.forEach((c, i) => {
-    const m = norm(c).match(RE);
+    /* o registro CRU (M9 TS1 INV13..22) entra na MESMA chave da coluna nomeada — lib-inversor-cru.js */
+    const cr = casaCru(norm(c));
+    const m = norm(c).match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
     if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
     const g = m[4];
     if (g !== GRANDEZA && !SAUDE.includes(g)) return;

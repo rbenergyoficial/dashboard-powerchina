@@ -64,6 +64,7 @@
 const zlib = require('zlib');
 const https = require('https');
 const { disponibilidade, completaDisponibilidade, janelaContrato, dispContrato } = require('./lib-disponibilidade.js');
+const { casaCru } = require('./lib-inversor-cru.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -397,7 +398,10 @@ function leUsinaDia(buf) {
   const cand = new Map();
   const vistas = [];
   cols.forEach((c, i) => {
-    const m = norm(c).match(RE);
+    /* o registro CRU (M9 TS1 INV13..22) entra na MESMA chave da coluna nomeada, e a escolha "a coluna que tem
+       dado" abaixo decide entre as duas — ninguem e contado duas vezes. Mapa e provas: lib-inversor-cru.js */
+    const cr = casaCru(norm(c));
+    const m = norm(c).match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
     if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
     let chave = alvo.get(m[4]);
     if (!chave && MPPT_RE.test(m[4])) chave = 'mppt#' + m[4].match(MPPT_RE)[1];

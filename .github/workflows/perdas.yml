@@ -107,3 +107,10 @@ jobs:
       - name: Ensaio do carimbo sem registro
         if: always()
         run: node scripts/ensaio-sem-registro.js
+
+      # DEPOIS de gerar: o M9 TS1 INV13..22 mede em REGISTRO CRU (lib-inversor-cru.js). Julga a regra do
+      # casamento e o PRODUTO: com o M9 completo, medidor / soma dos contadores cai na faixa das outras usinas
+      # no mesmo dia (lido pela metade, passava de 140 %). Um dia forjado a 141 % tem de reprovar.
+      - name: Ensaio dos inversores em registro cru
+        if: always()
+        run: node scripts/ensaio-inversor-cru.js
