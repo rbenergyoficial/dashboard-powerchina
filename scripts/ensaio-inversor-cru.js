@@ -7,7 +7,7 @@
  *           MPPT, e nenhuma grandeza recebe dois codigos.
  * PRODUTO · a identidade que denunciava o buraco: medidor / soma dos contadores dos inversores. Com o M9 lido pela
  *           metade (23 de 33) ela passava de 140 %, o que e fisicamente impossivel; com os crus, cai na faixa das
- *           outras usinas NO MESMO DIA. Todo dia do diario em que o M9 tem mais de 23 inversores e julgado; e as
+ *           outras usinas (corrigidas pela cobertura) NO MESMO DIA. So o dia com o M9 COMPLETO e julgado; e as
  *           linhas por inversor do M9 TS1 INV13..22 tem de ter eficiencia e pico possiveis.
  * PLANTIO · o mesmo julgamento sobre um dia forjado com a razao do M9 em 141 % tem de reprovar.
  *
@@ -41,11 +41,20 @@ const J81 = casaCru(cru('13', '13', 'J81'));
 exige(J81 && J81.grandeza === 'SETPOINT POTÊNCIA ATIVA', 'J81 tem de ser o SETPOINT (nao a potencia ativa, a primeira leitura errada)');
 
 // ── PRODUTO ──────────────────────────────────────────────────────────────────────────────────────────
+/* 🔴 SO O DIA COM O M9 COMPLETO (medidos = placa), e a faixa das outras CORRIGIDA PELA COBERTURA. A primeira versao
+   julgava todo dia com "mais de 23" e reprovou 11 a 17/09 — com 28 de 33 (cinco do TS1 so entraram no export em
+   18/09) o medidor fica ~33/28 acima dos contadores: era cobertura, nao leitura. E a faixa das outras vinha inflada
+   pelo mesmo motivo (M7 com 39 de 44 a 113 %). Corrigir o M9 pela cobertura tambem nao serve: supoe que os ausentes
+   geram como os presentes, e um ensaio nao julga extrapolacao. */
+const corr = (r, u) => {
+  const q = r[u + '_razao_med_conta'], n = r[u + '_n_inv'], p = r[u + '_n_placa'];
+  return typeof q === 'number' && typeof n === 'number' && p > 0 ? q * n / p : null;
+};
 function julgaDia(r) {
   const U = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8'];
-  const outras = U.map((u) => r[u + '_razao_med_conta']).filter((v) => typeof v === 'number');
+  const outras = U.map((u) => corr(r, u)).filter((v) => v != null);
   const m9 = r.M9_razao_med_conta;
-  if (outras.length < 5 || typeof m9 !== 'number') return null;
+  if (outras.length < 5 || typeof m9 !== 'number' || !(r.M9_n_inv > 0 && r.M9_n_inv === r.M9_n_placa)) return null;
   const lo = Math.min(...outras) - 0.03, hi = Math.max(...outras) + 0.03;
   return { ok: m9 >= lo && m9 <= hi, m9, lo, hi };
 }
@@ -75,7 +84,7 @@ function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zl
     if (r.p_ca_max != null) exige(r.p_ca_max <= 353.5, `${r.dia} M9/TS1/${r.inv}: pico ${r.p_ca_max} kW acima do teto`);
     if (r.str_n != null) exige(r.str_n <= 22, `${r.dia} M9/TS1/${r.inv}: ${r.str_n} strings`);
   }
-  if (!julgados) console.log('  (o produto ainda nao tem dia com o M9 acima de 23 inversores: a parte do produto nao julgou nada — rodada anterior ao lote)');
+  if (!julgados) console.log('  (o produto ainda nao tem dia com o M9 completo: a parte do produto nao julgou nada — rodada anterior ao lote)');
   else console.log(`  produto: ${julgados} dia(s) com o M9 completo, medidor/contadores dentro da faixa das outras usinas · ${L.length} linhas do TS1 INV13..22`);
   // ── PLANTIO ────────────────────────────────────────────────────────────────────────────────────────
   const forjado = Object.assign({}, D.serie.find((r) => julgaDia(r)) || {}, { M9_razao_med_conta: 1.41 });
