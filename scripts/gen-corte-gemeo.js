@@ -184,6 +184,9 @@ const num = s => (s === '' || s == null) ? null : Number(s);
     const ons = verdade[mes] != null ? verdade[mes] : null;
     return { mes, lbl: MES_LBL(mes), eixo_x: EIXO_X(mes),
       corte_gwh: r2(o.gwh), gerado_gwh: r2(GER[mes]),
+      // o calculado em MWh com centesimos (PROMOVER mwh-gerador): o portal escreve MWh com 2 casas, e o GWh de 2
+      // casas so tem 10 MWh de resolucao. E a saida do modelo, com o erro medido do modelo (MAE ~6 %).
+      corte_mwh: r2(o.gwh * 1000),
       corte_pct: r2(100 * o.gwh / (o.gwh + GER[mes])),
       corte_ons_gwh: ons,
       corte_calculado_gwh: (ons == null && conf !== 'baixa') ? r2(o.gwh) : null,

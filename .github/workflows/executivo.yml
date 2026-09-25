@@ -77,6 +77,12 @@ jobs:
       - name: Ensaio · a referencia do operador por usina e a crua
         run: node scripts/ensaio-ref-dia.js
 
+      # Corte, potencial, entregue, resto e razoes do mes tambem em MWh, da energia crua (o GWh de 2 casas so tem
+      # 10 MWh de resolucao, e o portal escreve MWh com 2 casas). O gerador ja confere antes de gravar; este e a
+      # segunda rota, sobre o PRODUTO publicado, e prova reprovar em quatro defeitos plantados.
+      - name: Ensaio · o par GWh x MWh do executivo fecha
+        run: node scripts/ensaio-par-mwh.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

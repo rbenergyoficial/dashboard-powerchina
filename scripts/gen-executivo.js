@@ -28,6 +28,7 @@ const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 const { instanteAoVivo } = require('./lib-aovivo.js');
 // a tolerancia do par MWh x GWh, DERIVADA da cadeia de arredondamento (e maior no rateio)
 const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
+const { conferePares } = require('./lib-par-mwh.js');
 // os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
 // porque o remendo de 5 min refaz a MESMA conta quando a energia de hoje cresce
 const { r2, fmt, camposDoMes } = require('./lib-manchete.js');
@@ -910,8 +911,11 @@ async function writeOut(obj, nome, opts) {
       way2_gwh_dia: w2.length ? r2(w2.reduce((a, x) => a + num(x.ene_ger_mwh), 0) / w2.length / 1000) : null,
       pico_mw: w2.length ? Math.round(Math.max(...w2.map(x => num(x.pico_mw)))) : null,
       horas_restricao: oN(r2(m.int_restr * H)), intervalos_restricao: oN(m.int_restr),
-      razoes: semONS ? null : Object.fromEntries(Object.entries(m.raz).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])),
-      origens: semONS ? null : Object.fromEntries(Object.entries(m.ori).map(([k, v]) => [k, { gwh: r2(v / 1000), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])) };
+      // `mwh` ao lado do `gwh` (PROMOVER mwh-gerador, 25/09/2026): o portal escreve energia em MWh com 2 casas,
+      // e o GWh de 2 casas so tem resolucao de 10 MWh — em MWh ele sairia com zeros que ninguem mediu
+      razoes: semONS ? null : Object.fromEntries(Object.entries(m.raz).map(([k, v]) => [k, { gwh: r2(v / 1000), mwh: r2(v), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])),
+      origens: semONS ? null : Object.fromEntries(Object.entries(m.ori).map(([k, v]) => [k, { gwh: r2(v / 1000), mwh: r2(v), pct: m.fru > 0 ? r2(100 * v / m.fru) : 0 }])),
+      frustrada_mwh: oN(r2(m.fru)) };
   });
 
   // ---------- 3b) CLASSIFICA a confiabilidade de cada mês — o painel só mostra o que dá p/ DEFENDER ----------
@@ -1377,6 +1381,11 @@ async function writeOut(obj, nome, opts) {
             cortado_gwh: oN(r2(corte / 1000)),
             corte_pct: oN(ge > 0 ? r2(100 * corte / ge) : null),
             outras_gwh: oN(r2(Math.max(0, (ge - gv) - corte) / 1000)),
+            // as mesmas quatro em MWh com centesimos, da energia CRUA (PROMOVER mwh-gerador). Toda edicao
+            // posterior de `cortado_gwh`/`outras_gwh` (reconciliacao, Complexo, grupos, reparticao
+            // estimada, PPA antes de mar/26) refaz tambem o par em MWh — a guarda no fim confere.
+            potencial_mwh: oN(r2(ge)), entregue_mwh: oN(r2(gv)), cortado_mwh: oN(r2(corte)),
+            outras_mwh: oN(r2(Math.max(0, (ge - gv) - corte))),
             pr_pct: oN(prOk ? pr : null), pr_cobertura_pct: oN(cob),
             disp_pct: S.disp_pct, horas_restricao: S.horas_restricao, escopo_complexo: 1,
             nota: prOk ? null : S.nota, nota_curta: prOk ? null : S.nota_curta };
@@ -1428,6 +1437,7 @@ async function writeOut(obj, nome, opts) {
           // 5,86% em out/25). E aqui não dá para estimar como no ML: as usinas do PPA SÃO a referência,
           // usá-las contra si mesmas seria circular. Fica VAZIO, com a nota dizendo por quê.
           if (geRuim && PPA.includes(u)) { l.cortado_gwh = null; l.corte_pct = null; l.outras_gwh = null;
+            l.cortado_mwh = null; l.outras_mwh = null;
             l.nota = 'Corte por usina indisponivel neste mes: depende da geracao estimada do ONS, inconsistente antes de mar/26 — o calculo dava 0,0% para as seis usinas do PPA, o que e falso (o complexo cortou neste mes). Nas usinas do ML foi possivel estimar pelas irmas do PPA; para o proprio PPA a referencia seria circular.'; }
           if (usaIrma) { l.potencial_piso = 1;
             l.potencial_fonte = 'mediana do rendimento (MWh/MW) das usinas do PPA, medido pelo Way2 no mesmo mês';
@@ -1465,6 +1475,19 @@ async function writeOut(obj, nome, opts) {
           const dif = r2(alvoCorte - comCorte.reduce((a, l) => a + l.cortado_gwh, 0));
           if (dif !== 0) { const maior = comCorte.slice().sort((a, b) => b.cortado_gwh - a.cortado_gwh)[0];
             maior.cortado_gwh = r2(maior.cortado_gwh + dif); }
+          // O MESMO ajuste em MWh, sobre a energia CRUA e contra o total do conjunto em MWh (PROMOVER
+          // mwh-gerador). Nao se deriva do GWh ja ajustado: ele parte de brutos arredondados a 10 MWh, e a
+          // soma das usinas em MWh deixaria de fechar com o conjunto justamente na casa que o campo existe
+          // para mostrar. O resto (`outras_mwh`) e refeito DEPOIS da sobra, para as tres parcelas fecharem.
+          const alvoM = S.frustrada_mwh, somaM = comCorte.reduce((a, l) => a + (l.cortado_mwh || 0), 0);
+          if (alvoM > 0 && somaM > 0) {
+            const fM = alvoM / somaM;
+            comCorte.forEach(l => { l.cortado_bruto_mwh = l.cortado_mwh; l.cortado_mwh = r2(l.cortado_mwh * fM); });
+            const difM = r2(alvoM - comCorte.reduce((a, l) => a + l.cortado_mwh, 0));
+            if (difM !== 0) { const maiorM = comCorte.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
+              maiorM.cortado_mwh = r2(maiorM.cortado_mwh + difM); }
+            comCorte.forEach(l => { l.outras_mwh = r2(Math.max(0, l.potencial_mwh - l.entregue_mwh - l.cortado_mwh)); });
+          }
         }
         linhasUfv.forEach(l => { l.corte_reconciliado = recOk ? 1 : 0;
           l.corte_reconc_fator = recOk ? Math.round(fatorRec * 1e6) / 1e6 : null;
@@ -1503,6 +1526,9 @@ async function writeOut(obj, nome, opts) {
           // mar/26). O grupo ja fazia esta conta; a linha do Complexo tinha ficado para tras.
           l.outras_gwh = l.cortado_gwh == null ? null
             : r2(Math.max(0, l.potencial_gwh - l.entregue_gwh - l.cortado_gwh));
+          l.cortado_mwh = S.frustrada_mwh == null ? null : S.frustrada_mwh;   // o mesmo total, em MWh (PROMOVER mwh-gerador)
+          l.outras_mwh = l.cortado_mwh == null || l.potencial_mwh == null ? null
+            : r2(Math.max(0, l.potencial_mwh - l.entregue_mwh - l.cortado_mwh));
           if (m < '2026-03') l.corte_base = 'cortado / (gerado + cortado) — nao usa a geracao estimada do ONS, que e inconsistente antes de mar/26';
           out.push(l); }
         // ---- grupos PPA e ML como se fossem "usinas" ----
@@ -1530,6 +1556,10 @@ async function writeOut(obj, nome, opts) {
             ? r2(100 * lg.cortado_gwh / lg.potencial_gwh) : null;
           lg.outras_gwh = lg.cortado_gwh == null ? null
             : r2(Math.max(0, lg.potencial_gwh - lg.entregue_gwh - lg.cortado_gwh));
+          // em MWh, pela mesma regra: a soma das usinas do grupo (PROMOVER mwh-gerador)
+          lg.cortado_mwh = semCorte ? null : r2(membros.reduce((a, l) => a + l.cortado_mwh, 0));
+          lg.outras_mwh = lg.cortado_mwh == null || lg.potencial_mwh == null ? null
+            : r2(Math.max(0, lg.potencial_mwh - lg.entregue_mwh - lg.cortado_mwh));
           lg.corte_reconciliado = recOk ? 1 : 0;
           lg.corte_reconc_nota = semCorte
             ? 'Corte do grupo indisponivel: alguma usina do grupo nao tem corte publicado neste mes.'
@@ -1586,6 +1616,10 @@ async function writeOut(obj, nome, opts) {
             if (!P || !M || P.cortado_gwh != null) return;          // so onde a repartição falta
             M.cortado_gwh = r2(cx.cortado_gwh * shML);
             P.cortado_gwh = r2(cx.cortado_gwh - M.cortado_gwh);
+            // a mesma reparticao em MWh, sobre o total do conjunto em MWh (PROMOVER mwh-gerador)
+            M.cortado_mwh = cx.cortado_mwh == null ? null : r2(cx.cortado_mwh * shML);
+            P.cortado_mwh = cx.cortado_mwh == null ? null : r2(cx.cortado_mwh - M.cortado_mwh);
+            P.outras_mwh = null; M.outras_mwh = null;
             [P, M].forEach(l => { l.corte_estimado = 1; l.corte_reconciliado = 1;
               l.corte_ml_share = Math.round(shML * 1e4) / 1e4;
               l.corte_pct = l.potencial_gwh > 0 ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null;
@@ -2114,6 +2148,7 @@ async function writeOut(obj, nome, opts) {
           meses_com_meta: temMeta.length,
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
           cortado_gwh: comCorte.length ? r2(comCorte.reduce((a, x) => a + x.cortado_gwh, 0)) : null,
+          cortado_mwh: comCorte.length && comCorte.every(x => x.cortado_mwh != null) ? r2(comCorte.reduce((a, x) => a + x.cortado_mwh, 0)) : null,
           meses_com_corte: comCorte.length,
           // ---- ATINGIMENTO SOBRE META INDEPENDENTE ----
           // Em fev, mar e abr/2026 a meta gravada e EXATAMENTE a energia realizada (diferenca
@@ -2395,6 +2430,14 @@ async function writeOut(obj, nome, opts) {
         if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > 0.005 * (x.meses + 1))) mau.push(x.ufv + ' ' + x.ano + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
       });
       if (mau.length) throw new Error('liquida_mwh NAO fecha com liquida_gwh:\n  ' + mau.join('\n  '));
+    }
+    // ---- corte, potencial, entregue, resto e razoes em MWh (PROMOVER mwh-gerador, 25/09/2026) ----
+    // A regra mora em lib-par-mwh.js, que o ensaio tambem usa: par com o GWh onde os dois nascem do mesmo cru,
+    // e as IDENTIDADES da reconciliacao em MWh onde o GWh ja parte de valor arredondado. Nao fecha: nao grava.
+    {
+      const mauM = conferePares(out);
+      if (mauM.length) throw new Error('par GWh x MWh do executivo NAO fecha:\n  ' + mauM.slice(0, 30).join('\n  '));
+      console.log('  par GWh x MWh: corte, potencial, entregue, resto e razoes fecham');
     }
 
     // ---- SÉRIE + MÉDIA, só para os dois gráficos de entrega mês a mês ----
