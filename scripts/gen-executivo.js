@@ -2077,7 +2077,10 @@ async function writeOut(obj, nome, opts) {
       // mover um sozinho cria divergencia —, e a conta em dois arquivos divergiria na primeira
       // edicao. O que entra aqui e o que sempre entrou, entao a saida nao muda: conferido byte a
       // byte nos meses fechados, e campo a campo contra o blob publicado.
-      const C = camposDoMes({ liq: cur.liquida_gwh, base: cur.liquida_gwh - hojeCru, hoje: hojeGwh,
+      // 🔴 a ANCORA em GWh sai da energia em MWh quando ela existe (complemento do PROMOVER manchete-mwh, 27/09): de
+      // `liquida_gwh`, arredondada a 10 MWh, ela diferia ate 5 MWh da ancora em MWh, o remendo de 5 min somava o mesmo
+      // dia as duas e o ensaio da manchete reprovava (8.571,30 MWh contra 8,58 GWh no ML) — e com ele os passos seguintes
+      const C = camposDoMes({ liq: cur.liquida_gwh, base: (cur.liquida_mwh != null ? cur.liquida_mwh / 1000 : cur.liquida_gwh) - hojeCru, hoje: hojeGwh,
         meta: cur.meta_gwh, dCorr, dTot });
       // a MESMA conta em MWh com centesimos, das energias em MWh da serie (PROMOVER manchete-mwh): aditiva
       const CM = camposMwh({ liqMwh: cur.liquida_mwh, baseMwh: cur.liquida_mwh == null ? null : cur.liquida_mwh - 1000 * hojeCru,
