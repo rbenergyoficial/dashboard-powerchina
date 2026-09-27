@@ -83,9 +83,15 @@ const ok = (c, m) => { console.log((c ? '  ok   ' : '  FALHA ') + m); if (!c) fa
     const med = v.reduce((a, x) => a + x, 0) / v.length;
     ok(med >= 99 && med <= 100, u + ' media do periodo entre 99 e 100 · ' + med.toFixed(2));
   }
-  const m9 = (porDia.get('2026-07-27') || { porUfv: {} }).porUfv.M9;
-  ok(m9 && m9.disp_pct > 78 && m9.disp_pct < 83, 'M9 em 27/07 entre 78 e 83% · ' + (m9 ? m9.disp_pct : 'sem dia'));
-  ok(m9 && m9.parciais >= 3, 'e o motivo esta na contagem de parciais · ' + (m9 ? m9.parciais : '-'));
+  /* o pior dia MEDIDO (27/07) sai da janela de 60 dias do arquivo por inversor em 27/09/2026 — guarda amarrada a um dia
+     fixo envelhece e passa a reprovar o mundo, nao a regra (a mesma licao do ensaio-disp-contrato, 24/09). Fora da janela
+     o caso e declarado e pulado; a CAPACIDADE (um parado, um parcial) segue provada nos forjados do bloco 5. */
+  if (!porDia.has('2026-07-27')) console.log('  --  27/07 fora da janela do arquivo por inversor: o pior dia medido do M9 nao se julga mais (bloco 5 prova a regra)');
+  else {
+    const m9 = porDia.get('2026-07-27').porUfv.M9;
+    ok(m9 && m9.disp_pct > 78 && m9.disp_pct < 83, 'M9 em 27/07 entre 78 e 83% · ' + (m9 ? m9.disp_pct : 'sem dia'));
+    ok(m9 && m9.parciais >= 3, 'e o motivo esta na contagem de parciais · ' + (m9 ? m9.parciais : '-'));
+  }
 
   console.log('\n4 · fecha com a disponibilidade declarada ao operador');
   const ex = await get(BASE + 'executivo.json');
