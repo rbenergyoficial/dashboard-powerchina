@@ -96,6 +96,33 @@ function camposDoMes({ liq, base, hoje, meta, dCorr, dTot, projFixa }) {
 }
 
 /**
+ * A MESMA conta em MWh com centesimos (PROMOVER manchete-mwh, 26/09/2026). Os campos acima saem de `liq` e `meta` em GWh
+ * ja arredondados a 2 casas (10 MWh): com o M5 a meta ia a 6,55 GWh contra 6.545,52 MWh da serie mensal, e o portal
+ * escrevia "9.730,00 MWh projetados" com um ",00" que a conta nao tem. Estes partem das energias em MWh que a serie ja
+ * publica. Aditivos: os campos antigos nao mudam, porque o Grafana le as strings.
+ * Entradas: liqMwh (com hoje), baseMwh (sem hoje), metaMwh, e projFixaMwh no caminho do remendo. Sem as tres primeiras,
+ * nao sai campo nenhum — o remendo de uma linha antiga nao pode apagar o que nao sabe refazer.
+ */
+function camposMwh({ liqMwh, baseMwh, metaMwh, dCorr, dTot, projFixaMwh }) {
+  if (liqMwh == null || baseMwh == null || metaMwh == null) return {};
+  const L = Number(liqMwh), B = Number(baseMwh), M = Number(metaMwh), dC = Number(dCorr), dT = Number(dTot);
+  if (![L, B, M, dC, dT].every(isFinite)) return {};
+  const proj = projFixaMwh != null ? Number(projFixaMwh) : (dC > 0 ? B * (dT / dC) : null);
+  const falta = M - L, rest = Math.max(0, dT - dC);
+  return {
+    liq_mwh: r2(L),
+    liq_fechada_mwh: r2(B),   // a ancora do remendo, como `liq_fechada_gwh`
+    meta_mwh: r2(M),
+    liq_proj_mwh: proj == null ? null : r2(proj),
+    atingido_exato: M > 0 ? r2(100 * L / M) : null,
+    proj_pct_exato: M > 0 && proj != null ? r2(100 * proj / M) : null,
+    falta_mwh: falta > 0 ? r2(falta) : 0,
+    ritmo_nec_mwh: (falta > 0 && rest > 0) ? r2(falta / rest) : null,
+    ritmo_atual_mwh: dC > 0 ? r2(L / dC) : null,
+  };
+}
+
+/**
  * Aplica o remendo de 5 min nas linhas de manchete do mes em curso, no lugar.
  *
  * ⚠️ Os campos de QUANDO (`dia_hoje`, `ao_vivo`, `ao_vivo_ate`) entram SEMPRE: eles descrevem o
@@ -125,9 +152,14 @@ function remendaManchete(linhas, { mes, diaNum, ate, gwhPorUfv }) {
     const C = camposDoMes({ liq: base + hoje, base, hoje, meta: parse(m.meta_gwh),
       dCorr: dC, dTot: dT, projFixa: parse(m.liq_proj) });
     Object.keys(C).forEach((k) => { m[k] = C[k]; });
+    // a MESMA passada nos campos em MWh, pela ancora em MWh e com a projecao da rodada completa fixa (manchete-mwh)
+    const bM = m.liq_fechada_mwh != null ? Number(m.liq_fechada_mwh) : null;
+    const CM = camposMwh({ liqMwh: bM == null ? null : bM + 1000 * hoje, baseMwh: bM, metaMwh: m.meta_mwh,
+      dCorr: dC, dTot: dT, projFixaMwh: m.liq_proj_mwh });
+    Object.keys(CM).forEach((k) => { m[k] = CM[k]; });
     c.energia += 1;
   });
   return c;
 }
 
-module.exports = { r2, fmt, parse, camposDoMes, remendaManchete };
+module.exports = { r2, fmt, parse, camposDoMes, camposMwh, remendaManchete };

@@ -83,6 +83,11 @@ jobs:
       - name: Ensaio · o par GWh x MWh do executivo fecha
         run: node scripts/ensaio-par-mwh.js
 
+      # A manchete do mes (meta, projecao, falta, ritmos) tambem em MWh com centesimos, das energias em MWh da serie:
+      # origem, identidades, o remendo de 5 min movendo os campos em MWh, e dois plantios que reprovam.
+      - name: Ensaio · a manchete em MWh
+        run: node scripts/ensaio-manchete-mwh.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

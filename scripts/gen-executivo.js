@@ -31,7 +31,7 @@ const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
 const { conferePares } = require('./lib-par-mwh.js');
 // os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
 // porque o remendo de 5 min refaz a MESMA conta quando a energia de hoje cresce
-const { r2, fmt, camposDoMes } = require('./lib-manchete.js');
+const { r2, fmt, camposDoMes, camposMwh } = require('./lib-manchete.js');
 // META MENSAL = INPUT DO USUÁRIO (planilha PPA do SharePoint, linha "Valor Garantido de <mês>").
 // Não existe em fonte pública. Fica em JSON VERSIONADO no repo até o pipeline SharePoint→blob existir.
 // ⚠️ É ENERGIA LÍQUIDA → tem que ser comparada com a líquida do Way2, nunca com a bruta do ONS.
@@ -2074,6 +2074,9 @@ async function writeOut(obj, nome, opts) {
       // byte nos meses fechados, e campo a campo contra o blob publicado.
       const C = camposDoMes({ liq: cur.liquida_gwh, base: cur.liquida_gwh - hojeCru, hoje: hojeGwh,
         meta: cur.meta_gwh, dCorr, dTot });
+      // a MESMA conta em MWh com centesimos, das energias em MWh da serie (PROMOVER manchete-mwh): aditiva
+      const CM = camposMwh({ liqMwh: cur.liquida_mwh, baseMwh: cur.liquida_mwh == null ? null : cur.liquida_mwh - 1000 * hojeCru,
+        metaMwh: cur.meta_mwh, dCorr, dTot });
       out.manchete_ufv.push({ mes: mSel, fechado, ufv: u, lbl: cur.lbl, dias_decorridos: dCorr, dias_total: dTot,
         dias_restantes: Math.max(0, dTot - dCorr),
         // DIA DO CALENDARIO do dia em curso. `dias_decorridos` conta dias FECHADOS e por isso fica
@@ -2090,6 +2093,7 @@ async function writeOut(obj, nome, opts) {
         // remendo teria de aplicar um delta sobre o proprio `liq_gwh` e acumularia arredondamento a
         // cada uma das ~288 passadas do dia.
         liq_fechada_gwh: C.liq_fechada_gwh,
+        ...CM,
         atingido: C.atingido, proj_pct: C.proj_pct,
         // SPARKLINE DA MANCHETE: os meses ATÉ o selecionado (não o histórico inteiro — num mês
         // passado a curva não pode mostrar o futuro dele). Vai desenhada ATRÁS do número no card,
