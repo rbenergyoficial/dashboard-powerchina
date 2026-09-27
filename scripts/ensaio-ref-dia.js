@@ -48,15 +48,18 @@ const leHora = () => /^https?:/i.test(BASE) ? baixa(BASE + 'ref_hora.json')
   : Promise.resolve(JSON.parse(fs.readFileSync(path.join(BASE, 'executivo.ref_hora.json'), 'utf8')));
 
 /* 1 · CRU — devolve a lista de divergencias contra o arquivo mensal por usina */
-function julgaCru(R, cru, dias) {
-  const ruins = []; let n = 0;
+/* `lim` = a marca de limitacao do conjunto por meia hora (dia -> [48]), a do `ref_hora`: a irradiancia LIVRE soma so
+   as meias horas sem limitacao, as mesmas do par livre (PROMOVER refons-irr) */
+function julgaCru(R, cru, dias, lim) {
+  const ruins = []; let n = 0, nLivreMenor = 0;
   for (const dia of dias) {
-    const esp = {};
+    const esp = {}, L = lim[dia];
     for (const r of cru[dia.slice(0, 7)] || []) {
-      if (String(r.ts).slice(0, 10) !== dia) continue;
-      const u = String(r.u).replace('CEFMT', 'M'), e = esp[u] || (esp[u] = { ref: 0, ger: 0, irr: 0 });
+      const ts = String(r.ts); if (ts.slice(0, 10) !== dia) continue;
+      const u = String(r.u).replace('CEFMT', 'M'), e = esp[u] || (esp[u] = { ref: 0, ger: 0, irr: 0, irrL: 0 });
       e.ref += (+r.ge || 0) * 0.5; e.ger += (+r.gv || 0) * 0.5;
-      if (!INVALIDO(r.inv)) e.irr += (+r.irr || 0) * 0.5 / 1000;
+      const k = Number(ts.slice(11, 13)) * 2 + (Number(ts.slice(14, 16)) >= 30 ? 1 : 0);
+      if (!INVALIDO(r.inv)) { e.irr += (+r.irr || 0) * 0.5 / 1000; if (L && L[k] !== 1) e.irrL += (+r.irr || 0) * 0.5 / 1000; }
     }
     for (const u of NOVE) {
       const x = R.find(y => y.dia === dia && y.ufv === u), e = esp[u];
@@ -64,9 +67,14 @@ function julgaCru(R, cru, dias) {
       n++;
       for (const [k, v] of [['ref_mwh', e.ref], ['ger_mwh', e.ger], ['irr_kwh_m2', e.irr]])
         if (Math.abs(x[k] - v) > 0.011) ruins.push(dia + ' ' + u + ' ' + k + ': produto ' + x[k] + ' · operador ' + v.toFixed(3));
+      if (x.excluido) { if (x.irr_livre_kwh_m2 != null) ruins.push(dia + ' ' + u + ': dia excluido com a irradiancia livre preenchida'); continue; }
+      if (!L) { ruins.push(dia + ': sem a marca de limitacao do ref_hora para julgar a irradiancia livre'); continue; }
+      if (x.irr_livre_kwh_m2 == null || Math.abs(x.irr_livre_kwh_m2 - e.irrL) > 0.011)
+        ruins.push(dia + ' ' + u + ' irr_livre_kwh_m2: produto ' + x.irr_livre_kwh_m2 + ' · operador, nas meias horas livres, ' + e.irrL.toFixed(3));
+      if (e.irrL < e.irr - 0.05) nLivreMenor++;
     }
   }
-  return { ruins, n };
+  return { ruins, n, nLivreMenor };
 }
 
 /* 1b · a MEIA HORA (`ref_hora.json`) contra o mesmo arquivo mensal, instante a instante */
@@ -112,8 +120,11 @@ function julgaAgregados(R) {
         const s = L.reduce((a, u) => a + d[u][k], 0), tol = 0.005 * (L.length + 1) + 0.001;   // cada parcela arredondada a 2 casas
         if (Math.abs(d[g][k] - s) > tol) ruins.push(dia + ' ' + g + ' ' + k + ': ' + d[g][k] + ' contra a soma das usinas ' + s.toFixed(2));
       }
-      const mi = L.reduce((a, u) => a + d[u].irr_kwh_m2, 0) / L.length;
-      if (Math.abs(d[g].irr_kwh_m2 - mi) > 0.011) ruins.push(dia + ' ' + g + ': irradiancia ' + d[g].irr_kwh_m2 + ' contra a media ' + mi.toFixed(3));
+      for (const k of ['irr_kwh_m2', 'irr_livre_kwh_m2']) {
+        if (d[g][k] == null) continue;
+        const mi = L.reduce((a, u) => a + d[u][k], 0) / L.length;
+        if (Math.abs(d[g][k] - mi) > 0.011) ruins.push(dia + ' ' + g + ': ' + k + ' ' + d[g][k] + ' contra a media ' + mi.toFixed(3));
+      }
     }
     if (d.PPA && d.ML && d.Complexo && Math.abs(d.PPA.ref_mwh + d.ML.ref_mwh - d.Complexo.ref_mwh) > 0.021)
       ruins.push(dia + ': PPA + ML nao fecha com o Complexo na referencia');
@@ -135,11 +146,15 @@ function julgaAgregados(R) {
   const D = [...dias].sort();
 
   let falhas = 0;
-  const c = julgaCru(R, cru, D);
-  console.log('1 · CRU: %d usina-dias de %d dias contra o arquivo mensal do operador', c.n, D.length);
+  const Hh = await leHora();
+  const LIM = {}; (Hh.dias || []).forEach(x => { LIM[x.dia] = x.lim; });
+  const c = julgaCru(R, cru, D, LIM);
+  console.log('1 · CRU: %d usina-dias de %d dias contra o arquivo mensal do operador · irradiancia livre abaixo da do dia em %d',
+    c.n, D.length, c.nLivreMenor);
   c.ruins.slice(0, 12).forEach(x => console.error('  ✗ ' + x)); falhas += c.ruins.length;
   if (c.n < 9 * D.length) { console.error('  ✗ conferiu %d de %d usina-dias — faltou dado para julgar', c.n, 9 * D.length); falhas++; }
-  const Hh = await leHora();
+  // sem dia com limitacao a irradiancia livre coincide com a do dia e a exigencia passaria por vacuidade
+  if (!c.nLivreMenor) { console.error('  ✗ nenhum usina-dia com a irradiancia livre abaixo da do dia — a exigencia nao julgou nada'); falhas++; }
   const ch = julgaHora(Hh, cru, D);
   console.log('1b · MEIA HORA: %d leituras do arquivo mensal conferidas contra o ref_hora', ch.n);
   ch.ruins.slice(0, 12).forEach(x => console.error('  ✗ ' + x)); falhas += ch.ruins.length;
@@ -155,11 +170,13 @@ function julgaAgregados(R) {
       P.filter(x => x.ufv === 'M3' && x.dia < '2026-07-12').forEach(x => { const m7 = P.find(y => y.ufv === 'M7' && y.dia === x.dia); if (m7) x.ref_mwh = +(x.ref_mwh + m7.ref_mwh).toFixed(2); }); }],
     ['o Complexo publicado sem uma usina num dia', 'agr', P => { const i = P.findIndex(x => x.ufv === 'M9' && x.dia === D[0]); P.splice(i, 1); }],
     ['o par livre acima do dia inteiro', 'agr', P => { const x = P.find(y => y.ufv === 'M5' && y.dia === D[1] && y.ref_livre_mwh != null); x.ref_livre_mwh = x.ref_mwh + 5; }],
+    // o defeito que o PROMOVER refons-irr corrigiu: a irradiancia do dia inteiro ao lado da energia das meias horas livres
+    ['a irradiancia do dia inteiro no lugar da livre', 'cru', P => { const x = P.find(y => y.ufv === 'M5' && D.includes(y.dia) && y.lim_h > 1 && y.irr_livre_kwh_m2 != null); x.irr_livre_kwh_m2 = x.irr_kwh_m2; }],
   ];
   for (const [nome, qual, f] of planta) {
     const P = copia(); f(P);
     if (JSON.stringify(P) === JSON.stringify(R)) { console.error('  ✗ plantio "%s" nao alterou nada — nao prova nada', nome); falhas++; continue; }
-    const r = qual === 'cru' ? julgaCru(P, cru, D).ruins : julgaAgregados(P);
+    const r = qual === 'cru' ? julgaCru(P, cru, D, LIM).ruins : julgaAgregados(P);
     if (r.length) console.log('3 · PLANTIO: "%s" reprovado (%s)', nome, r[0]);
     else { console.error('  ✗ o plantio "%s" passou — a exigencia nao julga', nome); falhas++; }
   }

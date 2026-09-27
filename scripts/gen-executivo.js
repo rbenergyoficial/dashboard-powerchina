@@ -645,7 +645,7 @@ async function writeOut(obj, nome, opts) {
       // Irradiancia: so os instantes que o proprio ONS nao marca como invalidos (`inv`), integrada em kWh/m2.
       if (dia_ >= REF_DESDE) {
         const rd = refDia[dia_] || (refDia[dia_] = {});
-        const ru = rd[u] || (rd[u] = { ge: 0, gv: 0, geL: 0, gvL: 0, irr: 0, inv: 0 });
+        const ru = rd[u] || (rd[u] = { ge: 0, gv: 0, geL: 0, gvL: 0, irr: 0, irrL: 0, inv: 0 });
         ru.ge += num(r.ge) * H; ru.gv += v * H;
         // o par LIVRE: so os intervalos sem limitacao do conjunto. Em 190 dos 206 dias desde mar/26 houve limitacao
         // (mediana de 8 h por dia), e no dia inteiro a verificada fica abaixo da referencia por CORTE — o que esconde
@@ -653,7 +653,11 @@ async function writeOut(obj, nome, opts) {
         if (!LIM_TS.has(String(r.ts))) { ru.geL += num(r.ge) * H; ru.gvL += v * H; }
         // a marca de invalido tem DUAS grafias no arquivo: "True"/"False" ate jul/26 (a leitura do CSV) e "1"/"0" desde
         // ago/26 (a do Parquet). Testar so uma deixa a outra metade da serie sem marca nenhuma, em silencio.
-        if (String(r.inv) === 'True' || String(r.inv) === '1') { if (irr > 0) ru.inv++; } else ru.irr += irr * H / 1000;
+        if (String(r.inv) === 'True' || String(r.inv) === '1') { if (irr > 0) ru.inv++; }
+        else { ru.irr += irr * H / 1000;
+          // a irradiancia das MESMAS meias horas do par livre (PROMOVER refons-irr): a do dia inteiro ao lado de uma energia
+          // de meio dia sugeria uma relacao que nao existe (13/09: sol pleno e quase nenhuma energia livre)
+          if (!LIM_TS.has(String(r.ts))) ru.irrL += irr * H / 1000; }
         const k = SLOT(r.ts);
         if (k >= 0 && k < 48) {
           const hd = refHora[dia_] || (refHora[dia_] = {});
@@ -1211,7 +1215,8 @@ async function writeOut(obj, nome, opts) {
           ref_mwh: soma('ge'), ger_mwh: soma('gv'),
           ref_livre_mwh: excl ? null : soma('geL'), ger_livre_mwh: excl ? null : soma('gvL'),
           lim_h: r2(limH[dia] || 0),
-          irr_kwh_m2: r2(L.reduce((a, u) => a + d[u].irr, 0) / L.length) }, inv ? { irr_inv: inv } : {}, excl ? { excluido: 1 } : {}));
+          irr_kwh_m2: r2(L.reduce((a, u) => a + d[u].irr, 0) / L.length),
+          irr_livre_kwh_m2: excl ? null : r2(L.reduce((a, u) => a + d[u].irrL, 0) / L.length) }, inv ? { irr_inv: inv } : {}, excl ? { excluido: 1 } : {}));
       };
       PPA.concat(ML).sort().forEach(u => lin(u, [u]));
       Object.entries(GRUPOS).forEach(([g, L]) => lin(g, L));
