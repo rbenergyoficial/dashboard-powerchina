@@ -114,3 +114,10 @@ jobs:
       - name: Ensaio dos inversores em registro cru
         if: always()
         run: node scripts/ensaio-inversor-cru.js
+      # DEPOIS de gerar: a leitura que o supervisorio REPETE (CA, CC e temperatura iguais, com potencia, em 4+ meias
+      # horas seguidas) vira ausencia (PROMOVER leitura-congelada). M1/TS5/INV14 repetiu 22,15 kW de 25/09 16:30 a
+      # 26/09 14:00 e contava como geracao. Julga a regra do gerador contra casos forjados (congelamento sai; limite de
+      # potencia, madrugada em zero e parada de dia ficam) e o produto (nenhum patamar nos pvstr_hora).
+      - name: Ensaio da leitura congelada
+        if: always()
+        run: node scripts/ensaio-leitura-congelada.js

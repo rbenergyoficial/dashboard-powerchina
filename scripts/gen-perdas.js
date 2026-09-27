@@ -289,6 +289,39 @@ function carimbosSemRegistro(d) {
   for (const o of d.inv.values()) delete o._abaixo;
   return fora;
 }
+// 🔴 A LEITURA CONGELADA (PROMOVER leitura-congelada, 27/09/2026). O supervisorio pode repetir o ULTIMO valor de um
+//    inversor em vez de deixar vazio: M1/TS5/INV14 marcou 22,15 kW CA, 22,79 kW CC e 62,4 °C, iguais, de 25/09 16:30 a
+//    26/09 14:00 — madrugada inclusive. O gerador contava aquilo como geracao (21 instantes "gerando", 100 % disponivel,
+//    0,33 MWh que ninguem mediu) e a curva de 30 min ia de 00:30 a 23:00, esticando a grade do mapa das nove usinas.
+//    O criterio e a IGUALDADE EXATA de potencia CA, potencia CC e temperatura em instantes seguidos: uma medicao de verdade
+//    varia em pelo menos uma das tres. Inversor segurado no limite de potencia fica com a CA parada, mas a CC e a
+//    temperatura andam; parado de dia, a temperatura anda com o sol. So a sequencia de CONGELA_MIN instantes (2 h) ou
+//    mais conta; o PRIMEIRO instante dela fica (e a ultima leitura boa), os repetidos viram AUSENCIA.
+//    Devolve Map(indice do carimbo -> Set de inversores congelados nele).
+const CONGELA_MIN = 4;
+const CONGELADAS = [];
+function carimbosCongelados(d) {
+  const n = d.linhas.length, fora = new Map();
+  // so patamar com potencia ACIMA de zero: de noite CA e CC ficam em zero e a temperatura parada, e isso e repouso, nao
+  // congelamento (a primeira versao anulava 14 a 19 instantes noturnos de quase todo inversor). O valor congelado que
+  // engana e o que AFIRMA geracao.
+  const gera = (o, i) => ['p_ca', 'p_cc'].every((k) => (o.serie[k] || [])[i] > 0);
+  const igual = (o, i) => gera(o, i) && ['p_ca', 'p_cc', 'temp'].every((k) => { const s = o.serie[k] || [];
+    return s[i] != null && s[i - 1] != null && s[i] === s[i - 1]; });
+  for (const o of d.inv.values()) {
+    let ini = 0;
+    for (let i = 1; i <= n; i++) {
+      if (i < n && igual(o, i)) continue;
+      // [ini, i) e um patamar: ini e a leitura boa, ini+1..i-1 sao as repeticoes. Mas ini so e "boa" se houver LEITURA no
+      // instante anterior: o patamar de M1/TS5/INV14 em 26/09 vem congelado do dia anterior, com 00:00 vazio, e comeca em
+      // 00:30 — sem leitura antes, nao ha leitura boa, e ele sai inteiro (senao a curva do dia comecaria na madrugada)
+      const temAntes = ini > 0 && ['p_ca', 'p_cc', 'temp'].every((k) => (o.serie[k] || [])[ini - 1] != null);
+      if (i - ini >= CONGELA_MIN) for (let k = temAntes ? ini + 1 : ini; k < i; k++) { if (!fora.has(k)) fora.set(k, new Set()); fora.get(k).add(o); }
+      ini = i;
+    }
+  }
+  return fora;
+}
 // 🔴 As 12 correntes de MPPT e as 24 de string NAO vao para o blob uma a uma: seriam ~40 mil
 //    series para 1.104 inversores, e nenhum painel le isso. O que vai e a DISPERSAO entre elas
 //    no instante de maior potencia do inversor — que e o sinal fino de string suja, sombreada ou
@@ -670,6 +703,16 @@ async function grava(nome, obj) {
       }
       SEM_REGISTRO.push({ ufv: a.ufv, dia: a.dia, h });
     }
+    // 🔴 LEITURA CONGELADA (ver `carimbosCongelados`): as repeticoes do ultimo valor viram AUSENCIA, como o carimbo acima
+    const congeladas = carimbosCongelados(d);
+    if (congeladas.size) {
+      const porInv = new Map();
+      for (const [i, invs] of congeladas) for (const o of invs) {
+        for (const k of Object.keys(o.serie)) o.serie[k][i] = null;
+        porInv.set(o, (porInv.get(o) || 0) + 1);
+      }
+      CONGELADAS.push({ ufv: a.ufv, dia: a.dia, inv: [...porInv].map(([o, c]) => o.ts + '/' + o.inv + '(' + c + ')') });
+    }
 
     // pico da soma CA, para descobrir a unidade
     const nLin = d.linhas.length;
@@ -886,6 +929,8 @@ async function grava(nome, obj) {
   // ---- a unidade, decidida UMA VEZ com todas as usinas a vista --------------------------------
   console.log('  carimbos sem registro (contador de vida descendo em metade ou mais do eletrocentro): '
     + (SEM_REGISTRO.length ? SEM_REGISTRO.map((s) => s.dia + ' ' + s.ufv + ' ' + s.h.join(',')).join(' | ') : 'nenhum'));
+  console.log('  leituras congeladas (CA, CC e temperatura iguais em ' + CONGELA_MIN + '+ instantes seguidos, instantes anulados): '
+    + (CONGELADAS.length ? CONGELADAS.map((s) => s.dia + ' ' + s.ufv + ' ' + s.inv.join(',')).join(' | ') : 'nenhuma'));
   const u = decideUnidade(picos);
   UNIDADE = u.unidade;
   console.log('  unidade da coluna de potencia: ' + u.unidade + ' (decidida pelo ' + u.ufv
