@@ -121,3 +121,15 @@ jobs:
       - name: Ensaio da leitura congelada
         if: always()
         run: node scripts/ensaio-leitura-congelada.js
+      # DEPOIS de gerar: a RETA que o export desenha ao sair do repouso (o zero da noite ou um patamar congelado) vira ausencia
+      # (PROMOVER rampa-amanhecer). M6/TS2/INV19 marcou 0,79 · 1,67 · 2,55 · 3,43 kW de 04:00 a 05:30 de 25/09, antes do
+      # sol, com o contador andando 0,09 kWh. Julga a regra do gerador contra casos forjados (a reta do amanhecer e a
+      # saida do patamar congelado saem; a reta do meio-dia, a reta real saindo de um vao, o amanhecer que acelera e o
+      # passo unico ficam) e o produto (nenhuma
+      # curva dos pvstr_hora abre em reta).
+      - name: Ensaio da rampa do amanhecer
+        if: always()
+        env:
+          # num dispatch de ensaio (nada publicado) o produto esta em /tmp/perdas, nao no blob
+          LOCAL_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
+        run: node scripts/ensaio-rampa-amanhecer.js

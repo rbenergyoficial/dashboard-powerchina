@@ -322,6 +322,47 @@ function carimbosCongelados(d) {
   }
   return fora;
 }
+// 🔴 A RAMPA DO AMANHECER QUE O EXPORT DESENHA (PROMOVER rampa-amanhecer, 28/09/2026). Sem amostra guardada de madrugada,
+//    o export liga o ultimo zero da noite a primeira leitura da manha por uma RETA, e a reta cai nos carimbos de 30 min:
+//    M6/TS2/INV19 em 25/09 marcou 0,79 · 1,67 · 2,55 · 3,43 kW CA de 04:00 a 05:30 (passo de 0,88), com a CC no mesmo
+//    passo e 6,7 °C de temperatura interna — o sol nasce em Mauriti perto das 05:20. O contador de energia, no mesmo
+//    trecho, andou 0,09 kWh contra 3,17 kWh da potencia. Medido nos exports de 23 a 26/09 das nove usinas: a reta abria a
+//    curva de centenas de inversores por dia as 04:30 ou 05:00, antes do sol, e esticava a grade do mapa; e a isolacao
+//    desenhada na mesma reta punha 5 inversor-dias abaixo do limite de 50 kΩ (M8/TS2/INV17 em 26/09: 41,48 kΩ na reta,
+//    203 kΩ na menor leitura real).
+//    O criterio e a RETA que sai do REPOUSO: o instante anterior com CA e CC LIDOS em zero e, dali, CA e CC andando com o
+//    MESMO passo em 2+ passos seguidos. RAMPA_TOL e o arredondamento de duas casas do export: cada ponto erra ate 0,005,
+//    e a diferenca entre passos (a - 2b + c) soma 1 + 2 + 1 = 4 erros, 0,02. Os pontos da reta viram AUSENCIA.
+//    O mesmo desenho sai de um PATAMAR CONGELADO (o ultimo valor repetido e a ultima amostra guardada): M1/TS5/INV14 em
+//    26/09 desceu 17,49 · 9,68 · 1,86 kW depois do patamar, com o contador DIARIO de operacao caindo de 650 a 54 min —
+//    contador diario nao desce no meio do dia. Por isso o instante anulado por `carimbosCongelados` tambem e repouso.
+//    🔴 A AUSENCIA simples NAO e repouso: perto do meio-dia 1,1 % das janelas de 3 pontos estao em reta na CA e na CC de
+//    verdade (M1/TS1/INV16 em 21/09, 179,38 · 179,70 · 180,01 kW), e um inversor que volta de um vao numa dessas perderia
+//    hora e meia de geracao real. Reta no meio do dia sem repouso antes tambem nao e pega (M2/TS2/INV08 em 23/09, 262,62
+//    a 263,86 kW, com o contador CONCORDANDO: 263,01 contra 263,24 kWh).
+//    `congeladas` e o Map que `carimbosCongelados` devolveu. Devolve Map(indice do carimbo -> Set de inversores).
+const RAMPA_TOL = 0.02;
+const RAMPAS = [];
+function rampasDoRepouso(d, congeladas) {
+  const n = d.linhas.length, fora = new Map();
+  for (const o of d.inv.values()) {
+    const P = o.serie.p_ca || [], C = o.serie.p_cc || [];
+    const repouso = (i) => (P[i] === 0 && C[i] === 0) || !!(congeladas && congeladas.has(i) && congeladas.get(i).has(o));
+    const gera = (i) => P[i] > 0 || C[i] > 0;
+    const passo = (i) => P[i] != null && P[i + 1] != null && P[i + 2] != null && C[i] != null && C[i + 1] != null && C[i + 2] != null
+      && P[i + 1] !== P[i] && Math.abs((P[i + 2] - P[i + 1]) - (P[i + 1] - P[i])) <= RAMPA_TOL + 1e-9
+      && Math.abs((C[i + 2] - C[i + 1]) - (C[i + 1] - C[i])) <= RAMPA_TOL + 1e-9;
+    for (let i = 1; i < n; i += 1) {
+      if (!repouso(i - 1) || !gera(i)) continue;
+      let j = i;
+      while (j + 2 < n && passo(j)) j += 1;
+      if (j === i) continue;
+      for (let k = i; k <= j + 1; k += 1) { if (!fora.has(k)) fora.set(k, new Set()); fora.get(k).add(o); }
+      i = j + 1;
+    }
+  }
+  return fora;
+}
 // 🔴 As 12 correntes de MPPT e as 24 de string NAO vao para o blob uma a uma: seriam ~40 mil
 //    series para 1.104 inversores, e nenhum painel le isso. O que vai e a DISPERSAO entre elas
 //    no instante de maior potencia do inversor — que e o sinal fino de string suja, sombreada ou
@@ -713,6 +754,17 @@ async function grava(nome, obj) {
       }
       CONGELADAS.push({ ufv: a.ufv, dia: a.dia, inv: [...porInv].map(([o, c]) => o.ts + '/' + o.inv + '(' + c + ')') });
     }
+    // 🔴 A RAMPA DO AMANHECER (ver `rampasDoRepouso`): a reta que o export desenha entre o zero da noite e a primeira
+    //    leitura vira AUSENCIA, como os dois casos acima
+    const rampas = rampasDoRepouso(d, congeladas);
+    if (rampas.size) {
+      const porInv = new Map();
+      for (const [i, invs] of rampas) for (const o of invs) {
+        for (const k of Object.keys(o.serie)) o.serie[k][i] = null;
+        porInv.set(o, (porInv.get(o) || 0) + 1);
+      }
+      RAMPAS.push({ ufv: a.ufv, dia: a.dia, inv: [...porInv].map(([o, c]) => o.ts + '/' + o.inv + '(' + c + ')') });
+    }
 
     // pico da soma CA, para descobrir a unidade
     const nLin = d.linhas.length;
@@ -931,6 +983,8 @@ async function grava(nome, obj) {
     + (SEM_REGISTRO.length ? SEM_REGISTRO.map((s) => s.dia + ' ' + s.ufv + ' ' + s.h.join(',')).join(' | ') : 'nenhum'));
   console.log('  leituras congeladas (CA, CC e temperatura iguais em ' + CONGELA_MIN + '+ instantes seguidos, instantes anulados): '
     + (CONGELADAS.length ? CONGELADAS.map((s) => s.dia + ' ' + s.ufv + ' ' + s.inv.join(',')).join(' | ') : 'nenhuma'));
+  console.log('  rampas do amanhecer (reta saindo do repouso, CA e CC no mesmo passo, instantes anulados): '
+    + (RAMPAS.length ? RAMPAS.length + ' usina-dias · ' + RAMPAS.map((s) => s.dia + ' ' + s.ufv + ' ' + s.inv.join(',')).join(' | ') : 'nenhuma'));
   const u = decideUnidade(picos);
   UNIDADE = u.unidade;
   console.log('  unidade da coluna de potencia: ' + u.unidade + ' (decidida pelo ' + u.ufv
