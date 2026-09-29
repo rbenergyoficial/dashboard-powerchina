@@ -34,6 +34,10 @@ jobs:
       - name: Ensaio · o remendo move a manchete inteira, e coerente
         run: node scripts/ensaio-manchete-remendo.js
 
+      # ... e que, de noite, com a ancora que ja contem o dia, o remendo nao conte o dia duas vezes (a regra, antes de gerar)
+      - name: Ensaio · o remendo nao conta o dia duas vezes (regra)
+        run: node scripts/ensaio-manchete-noite.js --lib
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -87,6 +91,11 @@ jobs:
       # origem, identidades, o remendo de 5 min movendo os campos em MWh, e dois plantios que reprovam.
       - name: Ensaio · a manchete em MWh
         run: node scripts/ensaio-manchete-mwh.js
+
+      # A energia do mes na manchete e a soma dos dias da serie (o remendo de 5 min contou o dia 28/09 duas vezes depois do
+      # por do sol). Aqui, o produto da rodada completa; no way2-recent, o de cada remendo.
+      - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
+        run: node scripts/ensaio-manchete-noite.js --produto
 
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:

@@ -136,9 +136,24 @@ function baixa(url) {
   // ⚠️ A conta NAO e reescrita aqui — mora em `lib-manchete.js`, e o executivo chama a MESMA
   //    funcao. Os campos de energia se movem JUNTOS: avancar `liq_gwh` sozinho, com `atingido` e
   //    os ritmos parados, criaria a divergencia que este remendo veio consertar.
+  //
+  // 🔴 A energia do mes e a SOMA DOS DIAS da serie (o de hoje ja remendado acima), nao ancora + hoje
+  //    (PROMOVER manchete-noite). A ancora so desconta o dia enquanto ele rende; depois do por do sol
+  //    ela ja o contem, e ancora + hoje contou o dia 28/09/2026 duas vezes (58.350 MWh publicados,
+  //    56.563 medidos, "meta ja batida" no portal). A soma so vale com TODOS os dias do mes presentes
+  //    na entidade — dia faltando cai no caminho antigo, declarado no log.
+  const diaNum = +hoje.slice(8, 10);
+  const mwhMesPorUfv = {}, semCobertura = [];
+  Object.keys(val).forEach((u) => {
+    const dias = (j.serie_dia_ufv || []).filter((x) => x.ufv === u && x.dia.slice(0, 7) === mes && x.liq_mwh != null);
+    if (new Set(dias.map((x) => x.dia)).size !== diaNum) { semCobertura.push(u + ' (' + dias.length + '/' + diaNum + ' dias)'); return; }
+    mwhMesPorUfv[u] = r2(dias.reduce((s, x) => s + Number(x.liq_mwh), 0));
+  });
+  if (semCobertura.length) console.log('soma do mes incompleta, ancora + hoje em: ' + semCobertura.join(', '));
   const rem = remendaManchete(j.manchete_ufv, {
-    mes, diaNum: +hoje.slice(8, 10), ate: linha.ate,
+    mes, diaNum, ate: linha.ate,
     gwhPorUfv: Object.keys(val).reduce((a, u) => { a[u] = num(val[u]) / 1000; return a; }, {}),
+    mwhMesPorUfv,
   });
   if (rem.quando === 0) {
     console.log('a manchete ainda nao tem o mes ' + mes + ' em curso — so a serie foi remendada');

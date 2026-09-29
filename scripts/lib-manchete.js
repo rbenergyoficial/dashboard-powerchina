@@ -133,9 +133,17 @@ function camposMwh({ liqMwh, baseMwh, metaMwh, dCorr, dTot, projFixaMwh }) {
  * ⚠️ NAO se movem, de proposito: `dias_decorridos` (so a rodada completa sabe do por do sol),
  * `spark_*` (desenhadas da serie MENSAL, que tem vintagem propria) e o cadastro.
  *
+ * 🔴 A ENERGIA DO MES VEM DA SERIE DIARIA, quando o chamador a passa (`mwhMesPorUfv`, PROMOVER manchete-noite,
+ * 28/09/2026). A ancora `liq_fechada_*` desconta o dia de hoje so enquanto ele esta RENDENDO (`parcial && !encerrado` na
+ * rodada completa — a regra da projecao). Depois do por do sol o dia e "encerrado", a ancora ja o contem, e o remendo
+ * somava o dia de novo: em 28/09 as 20:40 a manchete do Complexo foi a 58.350,06 MWh (56.565,08 + 1.784,98 do dia 28, que ja
+ * estava dentro) e o portal anunciou "meta ja batida" com 56.563,30 MWh medidos. Com a soma dos dias do mes — o dia de hoje
+ * ja remendado na propria serie —, nao ha dia contado duas vezes em hora nenhuma; a ancora fica so para a projecao, que
+ * ja e fixa. Sem `mwhMesPorUfv` o caminho antigo (ancora + hoje) segue valendo.
+ *
  * @returns {{ quando:number, energia:number, semAncora:number, semDias:number }}
  */
-function remendaManchete(linhas, { mes, diaNum, ate, gwhPorUfv }) {
+function remendaManchete(linhas, { mes, diaNum, ate, gwhPorUfv, mwhMesPorUfv }) {
   const c = { quando: 0, energia: 0, semAncora: 0, semDias: 0 };
   (linhas || []).forEach((m) => {
     if (!m || m.mes !== mes || m.fechado !== 0) return;
@@ -149,12 +157,13 @@ function remendaManchete(linhas, { mes, diaNum, ate, gwhPorUfv }) {
     const dT = Number(m.dias_total), dC = Number(m.dias_decorridos);
     if (!(dT > 0) || !(dC >= 0)) { c.semDias += 1; return; }
     const hoje = Number(gwhPorUfv[m.ufv]);
-    const C = camposDoMes({ liq: base + hoje, base, hoje, meta: parse(m.meta_gwh),
+    const mesMwh = mwhMesPorUfv && mwhMesPorUfv[m.ufv] != null && isFinite(Number(mwhMesPorUfv[m.ufv])) ? Number(mwhMesPorUfv[m.ufv]) : null;
+    const C = camposDoMes({ liq: mesMwh != null ? mesMwh / 1000 : base + hoje, base, hoje, meta: parse(m.meta_gwh),
       dCorr: dC, dTot: dT, projFixa: parse(m.liq_proj) });
     Object.keys(C).forEach((k) => { m[k] = C[k]; });
     // a MESMA passada nos campos em MWh, pela ancora em MWh e com a projecao da rodada completa fixa (manchete-mwh)
     const bM = m.liq_fechada_mwh != null ? Number(m.liq_fechada_mwh) : null;
-    const CM = camposMwh({ liqMwh: bM == null ? null : bM + 1000 * hoje, baseMwh: bM, metaMwh: m.meta_mwh,
+    const CM = camposMwh({ liqMwh: mesMwh != null ? mesMwh : (bM == null ? null : bM + 1000 * hoje), baseMwh: bM, metaMwh: m.meta_mwh,
       dCorr: dC, dTot: dT, projFixaMwh: m.liq_proj_mwh });
     Object.keys(CM).forEach((k) => { m[k] = CM[k]; });
     c.energia += 1;

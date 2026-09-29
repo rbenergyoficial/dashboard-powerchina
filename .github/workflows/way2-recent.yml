@@ -50,6 +50,11 @@ jobs:
       # uma leitura e uma escrita e mantem SO a linha do dia em curso fresca, na cadencia de
       # 5 min deste job. Grava com If-Match: se o executivo reescrever o blob no meio, ele
       # desiste e a proxima rodada refaz sobre o estado novo.
+      # A energia do mes na manchete e a soma dos dias da serie: o remendo somava ancora + hoje, e depois do por do sol a
+      # ancora ja contem o dia (28/09/2026: 58.350 MWh publicados, 56.563 medidos). A REGRA se julga ANTES de gravar, em
+      # linhas forjadas (lib quebrada nao chega ao blob); o PRODUTO, no fim do job.
+      - name: Ensaio · o remendo nao conta o dia duas vezes (regra)
+        run: node scripts/ensaio-manchete-noite.js --lib
       - name: Dia em curso no executivo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -77,6 +82,11 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-selo-medidores.js --real
+      # O PRODUTO que o remendo acabou de gravar: manchete = soma dos dias, e um dia contado duas vezes reprova. No fim e com
+      # always(): vermelho aqui nao pode tirar do job a cobertura de perdas nem o ensaio do selo.
+      - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
+        if: always()
+        run: node scripts/ensaio-manchete-noite.js --produto
       # 🔴 O VIGIA DE CADENCIA SAIU DAQUI, e a saida E a correcao (13/09/2026).
       # Ele existe para perceber que um workflow DEIXOU DE RODAR — e morava dentro deste, que e
       # um dos vigiados. Quando uma run presa em `queued` fez o relogio pular o `way2-recent` a
