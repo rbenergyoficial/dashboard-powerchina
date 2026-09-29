@@ -33,6 +33,11 @@ jobs:
       # vermelho = a janela do dia ou o contador mudaram de natureza: nao publicar por cima.
       - name: Ensaio da disponibilidade por usina
         run: node scripts/ensaio-disponibilidade.js
+      # O nome do export ja mudou duas vezes sem aviso (`_ATT` em 24/09, `_ATT-02` em 29/09: o M5 de 28/09 saiu com 990
+      # de 1.155 inversores) e nas duas o dia sumiu em silencio. Le o CARIMBO do fonte do gerador e o julga contra os
+      # nomes que chegaram, antes de gerar.
+      - name: Ensaio · o gerador le todo nome de export que chegou
+        run: node scripts/ensaio-carimbo-inversor.js
       # E o ensaio do PREENCHIMENTO RETROATIVO: prova que os dias que estao no perdas_inv sem
       # disponibilidade no diario passam a te-la, que os que JA tinham saem byte a byte iguais, e
       # que alimentar a funcao com a janela inteira do perdas_inv nao move nenhum valor publicado.

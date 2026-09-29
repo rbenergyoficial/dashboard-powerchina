@@ -79,7 +79,10 @@ const W2D = 'https://rbenergydata.blob.core.windows.net/dados/way2_daily.json';
 //    ja com os 46 inversores que faltavam, e o padrao antigo o ignorava EM SILENCIO — o dia nao foi
 //    publicado e nada ficou vermelho. Outro sufixo continua fora de proposito: quem o acusa e o contrato
 //    de nome do `gen-scada-intake.js`, que reconhece a familia e reprova o nome desconhecido.
-const CARIMBO = /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i;
+// 🔴 e `_ATT-<n>` (29/09/2026): o export do M5 do dia 28/09 chegou como `M05_ATT-02_20260929_...`, ja com os
+//    165 do M5 e o TS1 INV01 (vazio desde 23/09) de volta, e este padrao o ignorou EM SILENCIO: 28/09 saiu com
+//    990 de 1.155 inversores. Entre `_ATT` e `_ATT-02` do mesmo carimbo fica o envio mais recente (`envio`).
+const CARIMBO = /M(\d{2})(?:_ATT(?:-\d+)?)?_(\d{8})_\d{6}\.csv$/i;
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
 // a ordem de ENVIO e o numero do prefixo: 5 digitos no legado, 14 na entrada nova. Comparar o nome como
 // texto poria o legado ("9...") depois do novo ("2026...").

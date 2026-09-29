@@ -81,7 +81,9 @@ const CONSUMIDORES = [
   //    consumidores (gen-perdas e gen-inv-scada). Em 24/09/2026 chegou `M02_ATT_...` e o `quando`
   //    antigo nem o reconhecia: o arquivo entrou e foi ignorado sem ninguem acusar. Agora o `_ATT` passa
   //    e um sufixo desconhecido e reconhecido e REPROVADO.
-  { onde: 'scada-raw', quem: 'gen-perdas',      quando: /M\d{2}(?:_[A-Z]+)?_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i },
+  // 🔴 29/09/2026: `M05_ATT-02_...` chegou, e o `quando` com `_[A-Z]+` nao o reconhecia (hifen e digito). A familia
+  //    agora aceita letras, digitos e hifen no sufixo; o `exige` acompanha os consumidores (`_ATT` e `_ATT-<n>`).
+  { onde: 'scada-raw', quem: 'gen-perdas',      quando: /M\d{2}(?:_[A-Z0-9-]+)?_\d{8}_\d{6}\.csv$/i, exige: /M(\d{2})(?:_ATT(?:-\d+)?)?_(\d{8})_\d{6}\.csv$/i },
 
   // 🔴 O consumidor dos inversores nao escolhe por NOME: `classifyWb` decide P1/P2 pelo CONTEUDO
   //    da planilha, e a versao vencedora e a de maior `lastModified` do blob. Entao o prefixo nao

@@ -45,6 +45,14 @@ for (const [orig, reprovaLimpo, quem] of casos) {
   ok(M.casaConsumidor(M.nomeFinal(att, '2026-09-24T12:00:00Z'), att).ok, '   com prefixo casa o consumidor');
   ok(cX && cX.quem === 'gen-perdas', xyz.padEnd(30) + ' -> reconhecido por ' + (cX ? cX.quem : 'NINGUEM'));
   ok(!M.casaConsumidor(M.nomeFinal(xyz, '2026-09-24T12:00:00Z'), xyz).ok, '   sufixo desconhecido REPROVA');
+  // 🔴 29/09/2026: `_ATT-02` (o M5 de 28/09) passa; um sufixo desconhecido COM hifen e digito e reconhecido e reprovado
+  const a2 = 'M05_ATT-02_20260929_034125.csv', x2 = 'M05_XYZ-03_20260929_034125.csv';
+  const cA2 = M.consumidorDe(a2), cX2 = M.consumidorDe(x2);
+  ok(cA2 && cA2.quem === 'gen-perdas', a2.padEnd(30) + ' -> reconhecido por ' + (cA2 ? cA2.quem : 'NINGUEM'));
+  ok(M.casaConsumidor(M.nomeFinal(a2, '2026-09-29T12:00:00Z'), a2).ok, '   com prefixo casa o consumidor');
+  ok(cX2 && cX2.quem === 'gen-perdas', x2.padEnd(30) + ' -> reconhecido por ' + (cX2 ? cX2.quem : 'NINGUEM'));
+  ok(!M.casaConsumidor(M.nomeFinal(x2, '2026-09-29T12:00:00Z'), x2).ok, '   sufixo desconhecido com hifen REPROVA');
+  // os geradores de verdade sao conferidos pelo `ensaio-carimbo-inversor.js`, que roda antes de cada um
 }
 
 console.log('\n2 · o carimbo e monotonico e maior que o id do SharePoint');

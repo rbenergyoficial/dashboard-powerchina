@@ -92,7 +92,10 @@ const mediana = (a) => { if (!a.length) return null; const s = a.slice().sort((x
 // M<NN>_<AAAAMMDD>_<HHMMSS>.csv em qualquer posicao do nome (o blob vem prefixado pelo id)
 // `_ATT` entre a usina e a data: o export de 23/09/2026 chegou assim e o padrao antigo o ignorava em
 // silencio (ver o mesmo comentario no gen-perdas.js). Outro sufixo fica fora; o contrato de nome acusa.
-const CARIMBO = /M(\d{2})(?:_ATT)?_(\d{8})_\d{6}\.csv$/i;
+// 🔴 e `_ATT-<n>` (29/09/2026): o export do M5 do dia 28/09 chegou como `M05_ATT-02_20260929_...`, ja com os
+//    165 do M5 e o TS1 INV01 (vazio desde 23/09) de volta, e este padrao o ignorou EM SILENCIO: 28/09 saiu com
+//    990 de 1.155 inversores. Entre `_ATT` e `_ATT-02` do mesmo carimbo fica o envio mais recente (`envio`).
+const CARIMBO = /M(\d{2})(?:_ATT(?:-\d+)?)?_(\d{8})_\d{6}\.csv$/i;
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1, ver a nomenclatura
 // a ordem de ENVIO e o numero do prefixo (5 digitos no legado, 14 na entrada nova), nunca o nome como texto
 const envio = (nome) => { const m = String(nome).split('/').pop().match(/^(\d+)_/); return m ? Number(m[1]) : 0; };

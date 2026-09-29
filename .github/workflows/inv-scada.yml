@@ -38,6 +38,10 @@ jobs:
       # horarios opostos provam que o horario separa o que o total do dia nao separa.
       - name: Ensaio do detalhe de meia hora (CSV sintetico, sem rede)
         run: node scripts/ensaio-inv-scada-hora.js
+      # O nome do export ja mudou duas vezes sem aviso (`_ATT` em 24/09, `_ATT-02` em 29/09) e nas duas o dia sumiu em
+      # silencio. O ensaio le o CARIMBO do fonte do gerador e o julga contra os nomes que chegaram, antes de gerar.
+      - name: Ensaio · o gerador le todo nome de export que chegou
+        run: node scripts/ensaio-carimbo-inversor.js
       - name: Gerar inv_scada.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
