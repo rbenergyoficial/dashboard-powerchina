@@ -5,7 +5,8 @@
  * O que ele exige, cada linha por um modo de falhar visto na analise de 06/09/2026:
  *   1. a janela do dia acompanha o dia ASTRONOMICO de Mauriti (−0,5 a +1,5 h) em TODOS os dias — se sair 23 h, o p90
  *      voltou a contaminar a referencia;
- *   2. os inversores de contador de 24 h existem (M4 tem dezenas) e contam como disponiveis;
+ *   2. os inversores de contador de 24 h contam como disponiveis (nos dias reais da janela, se ainda houver, e
+ *      num caso forjado sempre: o defeito acabou em 09/08/2026);
  *   3. nenhuma usina sai abaixo de 99% no periodo, e o M9 tem o pior dia (27/07, ~80%);
  *   4. o complexo fecha com a disponibilidade DECLARADA ao operador (executivo.json) em ate 1,5 pp
  *      no mes fechado mais recente — dois caminhos independentes no mesmo numero;
@@ -68,11 +69,22 @@ const ok = (c, m) => { console.log((c ? '  ok   ' : '  FALHA ') + m); if (!c) fa
     'o dia astronomico de Mauriti vai de ~11,7 h (jun) a ~12,55 h (dez) · ' + diaAstroH('2026-06-21').toFixed(2)
     + ' e ' + diaAstroH('2026-12-21').toFixed(2));
 
+  /* 🔴 O contador de 24 h era um defeito do supervisorio que ACABOU em 09/08/2026 (desde 10/08 nenhum inversor o
+     marca). A versao antiga exigia "o M4 tem mais de 20 por dia, em media, na janela" — e quando a janela de 60 dias
+     andou a media caiu para 18 e o ensaio passou a REPROVAR porque o defeito sumiu, pulando o gerador em 29/09/2026
+     (o M5 de 28/09 ficou fora do ar). Guarda amarrada a estado transitorio mede o mundo, nao a regra. Agora: os dias
+     REAIS com o contador ainda na janela sao julgados; sem nenhum, o caso e declarado e a regra e provada no forjado. */
   console.log('\n2 · contador de 24 h conta como disponivel');
-  const c24 = dias.reduce((a, d) => a + ((porDia.get(d).porUfv.M4 || {}).contador_24h || 0), 0) / dias.length;
-  ok(c24 > 20, 'M4 tem dezenas de inversores com contador de 24 h por dia · veio ' + c24.toFixed(0));
-  const m4 = dias.map((d) => (porDia.get(d).porUfv.M4 || {}).disp_pct).filter((x) => x != null);
-  ok(Math.min(...m4) > 98, 'e mesmo assim o M4 nunca cai de 98% · pior ' + Math.min(...m4));
+  const dias24 = dias.filter((d) => ((porDia.get(d).porUfv.M4 || {}).contador_24h || 0) > 0);
+  if (!dias24.length) console.log('  --  nenhum dia com contador de 24 h na janela (o defeito acabou em 09/08): o caso real nao se julga mais');
+  else {
+    const m4 = dias24.map((d) => (porDia.get(d).porUfv.M4 || {}).disp_pct).filter((x) => x != null);
+    ok(Math.min(...m4) > 98, 'nos ' + dias24.length + ' dias com contador de 24 h o M4 nunca cai de 98% · pior ' + Math.min(...m4));
+  }
+  const com24 = []; for (let i = 0; i < 100; i++) com24.push({ dia: '2030-01-01', ufv: 'MX', inv: 'I' + i, horas: i < 30 ? 1410 : 740 });
+  const r24 = disponibilidade(com24).porDia.get('2030-01-01').porUfv.MX;
+  ok(r24 && r24.disp_pct === 100 && r24.contador_24h === 30,
+    'forjado: 30 de 100 com contador de 24 h = 100,00% e 30 contados · veio ' + (r24 ? r24.disp_pct + ' / ' + r24.contador_24h : 'sem usina'));
 
   console.log('\n3 · usinas e pior dia');
   const grupos = { Complexo: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'], PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
