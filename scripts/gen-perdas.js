@@ -343,6 +343,9 @@ function carimbosCongelados(d) {
 //    verdade (M1/TS1/INV16 em 21/09, 179,38 · 179,70 · 180,01 kW), e um inversor que volta de um vao numa dessas perderia
 //    hora e meia de geracao real. Reta no meio do dia sem repouso antes tambem nao e pega (M2/TS2/INV08 em 23/09, 262,62
 //    a 263,86 kW, com o contador CONCORDANDO: 263,01 contra 263,24 kWh).
+//    O passo exige que CA OU CC mudem, e as DUAS em reta: a reta pode sair com a CA PARADA em zero (M3/TS8/INV14 em
+//    28/09: CA 0 · 0 · 0,01 · 0,01 e CC 0,16 · 1,16 · 2,16 · 3,16 kW de 04:00 a 05:30, 0,82 °C as 04:00). A versao
+//    anterior exigia que a CA mudasse no primeiro passo, e a reta ficou na curva publicada (PROMOVER rampa-ca-parada).
 //    `congeladas` e o Map que `carimbosCongelados` devolveu. Devolve Map(indice do carimbo -> Set de inversores).
 const RAMPA_TOL = 0.02;
 const RAMPAS = [];
@@ -353,7 +356,7 @@ function rampasDoRepouso(d, congeladas) {
     const repouso = (i) => (P[i] === 0 && C[i] === 0) || !!(congeladas && congeladas.has(i) && congeladas.get(i).has(o));
     const gera = (i) => P[i] > 0 || C[i] > 0;
     const passo = (i) => P[i] != null && P[i + 1] != null && P[i + 2] != null && C[i] != null && C[i + 1] != null && C[i + 2] != null
-      && P[i + 1] !== P[i] && Math.abs((P[i + 2] - P[i + 1]) - (P[i + 1] - P[i])) <= RAMPA_TOL + 1e-9
+      && (P[i + 1] !== P[i] || C[i + 1] !== C[i]) && Math.abs((P[i + 2] - P[i + 1]) - (P[i + 1] - P[i])) <= RAMPA_TOL + 1e-9
       && Math.abs((C[i + 2] - C[i + 1]) - (C[i + 1] - C[i])) <= RAMPA_TOL + 1e-9;
     for (let i = 1; i < n; i += 1) {
       if (!repouso(i - 1) || !gera(i)) continue;

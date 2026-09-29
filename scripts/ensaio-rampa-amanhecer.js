@@ -106,6 +106,14 @@ function abreEmReta(serie) {
     'um passo so (dois pontos nao provam reta): nada sai');
   ok(anulados(regra, [0, 0.79, 1.67, 2.55, 48.42], [0, 1.02, 2.4, 3.1, 50.6]) === '',
     'reta so na CA, com a CC andando de outro jeito: nada sai');
+  // M3/TS8/INV14, 28/09: 03:30 = indice 0 ... 06:00 = indice 5. A CA fica PARADA no primeiro passo (0 -> 0) e a CC anda
+  // em reta de passo 1,00; a regra que exigia a CA mudando deixou a reta na curva publicada
+  ok(anulados(regra, [0, 0, 0, 0.01, 0.01, 13.07, 19.87], [0, 0.16, 1.16, 2.16, 3.16, 14.37, 21.35]) === '1,2,3,4',
+    'M3/TS8/INV14 em 28/09: reta com a CA parada em zero (CC 0,16 · 1,16 · 2,16 · 3,16 kW) sai, e as 06:00 fica');
+  ok(anulados(regra, [0, 0, 0, 0, 0, 13.07], [0, 0.5, 0.5, 0.5, 0.5, 14.37]) === '',
+    'CA e CC paradas depois do primeiro passo (patamar, nao reta): nada sai');
+  ok(anulados(regra, [0, 0, 0, 0, 20.4, 60.2], [0, 0.3, 1.2, 4.5, 22.1, 62.3]) === '',
+    'CA parada e CC acelerando (amanhecer que conecta tarde): nada sai');
 
   console.log('B · o produto: pvstr_hora das nove usinas' + (process.env.LOCAL_DIR ? ' (saida local)' : ''));
   let n = 0, primeiro = null;
