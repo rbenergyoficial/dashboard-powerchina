@@ -29,7 +29,7 @@ const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
 function regraDoGerador() {
-  const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8').replace(/\r\n/g, '\n');
   const i = src.indexOf('function carimbosSemRegistro(');
   if (i < 0) throw new Error('o gerador nao tem mais carimbosSemRegistro');
   const fim = src.indexOf('\n}\n', i);
@@ -83,7 +83,7 @@ const doTs = (d, ts) => [...d.inv.values()].filter((o) => o.ts === ts);
 
   console.log('\nC · o acumulador do gerador: o dia recalculado e inteiro da rodada');
   {
-    const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8').replace(/\r\n/g, '\n');
     const i = src.indexOf('function acumula(');
     // eslint-disable-next-line no-new-func
     const acumula = new Function(src.slice(i, src.indexOf('\n}\n', i) + 3) + '; return acumula;')();

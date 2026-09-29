@@ -36,7 +36,7 @@ let mau = 0;
 const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
-const SRC = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8').replace(/\r\n/g, '\n');
 const RAMPA_TOL = (() => { const m = SRC.match(/const RAMPA_TOL = ([\d.]+);/); if (!m) throw new Error('o gerador nao tem RAMPA_TOL'); return +m[1]; })();
 function regraDoGerador() {
   const i = SRC.indexOf('function rampasDoRepouso(');

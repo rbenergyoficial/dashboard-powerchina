@@ -68,7 +68,7 @@ const le = (nome) => new Promise((res, rej) => {
 /* 🔴 A REGRA VEM DO PRÓPRIO GERADOR, como ela sobe. Reescrevê-la aqui provaria só que a minha
       cópia concorda consigo mesma — é a lição do ensaio da guarda do relógio. */
 function migracaoDoGerador() {
-  const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8').replace(/\r\n/g, '\n');
   const i = src.indexOf('function migraIsolZero(');
   if (i < 0) throw new Error('o gerador não tem mais a função de migração do isolamento');
   const fim = src.indexOf('\n}\n', i);
