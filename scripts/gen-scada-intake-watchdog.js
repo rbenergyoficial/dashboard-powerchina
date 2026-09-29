@@ -64,7 +64,10 @@ const PERFIL = [
   { onde: 'scada-raw', marca: 'IRR_GERAL', nome: 'IRR_GERAL (estacao)' },
   { onde: 'scada-raw', marca: '(^|_)IRR_', nome: 'IRR (sensor GER_IRR)' },
   { onde: 'scada-raw', marca: 'Trafo',     nome: 'Trafo (SE)' },
-  { onde: 'scada-raw', marca: '{2}_',      nome: 'M<NN> csv (inversores/perdas)' },
+  // ⚠️ a marca era `{2}_` e deixou de casar quando o contrato passou a aceitar o `M<NN>_ATT_`
+  //    (`{2}(?:_[A-Z]+)?_`, depois `{2}(?:_[A-Z0-9-]+)?_` com o `ATT-02`): o vigia morreu no PERFIL
+  //    AUSENTE a cada rodada desde 24/09. `{2}(?:` sobrevive a qualquer sufixo que entre no grupo.
+  { onde: 'scada-raw', marca: '{2}(?:',    nome: 'M<NN> csv (inversores/perdas)' },
 
   // ⚠️ `IIRR_` fica de fora do JULGAMENTO de proposito (`vigia: false`): sao despejos manuais de
   //    365 dias, exportados de vez em quando. Vigiar cadencia de algo que nao tem cadencia
