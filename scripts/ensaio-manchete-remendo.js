@@ -36,6 +36,16 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
 (async () => {
   const exec = await getJSON(BASE + 'executivo.json');
   const mes = exec.mes_atual;
+  /* A JANELA DE FIM DE MES (30/09/2026): do por do sol do ultimo dia ate o mes seguinte ganhar linha, o blob publicado tem o
+     mes atual FECHADO e nenhuma linha aberta. O ensaio reprovava "nada a julgar", e como ele roda ANTES de gerar, o
+     executivo parava de gerar — e o blob so ganha mes aberto quando o executivo gera: um impasse que atravessaria a
+     rodada da madrugada. O que se julga aqui e a REGRA do remendo sobre a forma real das linhas; entao, nessa janela, as
+     linhas do mes atual (com as ancoras que ja trazem) sao reabertas numa COPIA e o ensaio diz em que modo rodou. */
+  const mesAtualFechado = (exec.manchete_ufv || []).filter(x => x.mes === mes);
+  if (!(exec.manchete_ufv || []).some(x => x.mes === mes && x.fechado === 0) && mesAtualFechado.length && mesAtualFechado.every(x => x.fechado === 1)) {
+    exec.manchete_ufv = exec.manchete_ufv.map(x => (x.mes === mes ? Object.assign({}, x, { fechado: 0 }) : x));
+    console.log('   ⚠️ ' + mes + ' esta FECHADO no blob e nao ha mes aberto (fim de mes): as ' + mesAtualFechado.length + ' linhas dele reabertas numa copia');
+  }
   const orig = (exec.manchete_ufv || []).filter(x => x.mes === mes && x.fechado === 0);
   const fechadas = (exec.manchete_ufv || []).filter(x => x.fechado === 1);
   const f = [];

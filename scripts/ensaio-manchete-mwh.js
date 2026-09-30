@@ -70,7 +70,12 @@ function julga(exec) {
 
 function remendo(exec) {
   const f = [];
-  const mes = exec.mes_atual, R = clone((exec.manchete_ufv || []).filter(x => x.mes === mes && x.fechado === 0 && x.liq_fechada_mwh != null));
+  const mes = exec.mes_atual, doMes = (exec.manchete_ufv || []).filter(x => x.mes === mes);
+  /* a janela de fim de mes (30/09/2026): o mes atual FECHADO e nenhuma linha aberta. Julga-se a regra do remendo sobre
+     as linhas do mes atual reabertas numa copia (com as ancoras que ja trazem; sem ancora continua reprovando) */
+  const fimDeMes = doMes.length > 0 && doMes.every(x => x.fechado === 1);
+  const R = clone(doMes.filter(x => (fimDeMes || x.fechado === 0) && x.liq_fechada_mwh != null)).map(x => Object.assign(x, { fechado: 0 }));
+  if (fimDeMes && R.length) console.log('   ⚠️ ' + mes + ' esta FECHADO no blob e nao ha mes aberto (fim de mes): remendo julgado em ' + R.length + ' linhas reabertas numa copia');
   if (!R.length) return { f: ['nenhuma linha do mes em curso com a ancora em MWh — o remendo nao foi julgado'], n: 0 };
   const antes = clone(R), extra = 0.5;   // meio GWh de hoje, forjado
   const gwhPorUfv = {}; R.forEach(m => { gwhPorUfv[m.ufv] = extra; });
