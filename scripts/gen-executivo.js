@@ -1010,6 +1010,20 @@ async function writeOut(obj, nome, opts) {
 
   // ---------- 4) mês corrente + projeção + cascata + PPA×ML ----------
   const mesAtual = meses[meses.length - 1];
+  // 🔴 O MES ESTA ABERTO enquanto os dias fechados ou encerrados forem menos que os dias do mes — a MESMA regra do `fechado`
+  //    da manchete (PROMOVER mes-aberto, 30/09/2026). O `parcial` da serie mensal saia de `fator < 1` ("a meta ainda precisa
+  //    ser rateada"), e no ULTIMO dia do mes, com os 30 dias ja medidos, o fator vira 1 e o mes era dado como FECHADO de
+  //    manha: em 30/09 o serie_ufv publicou set/26 com `parcial: 0` enquanto a manchete dizia 1 dia restante, e o portal
+  //    perdeu a regua da capa, o "% do mes" do Entregue e abriu no ano. Rateio e mes aberto sao perguntas diferentes: o
+  //    rateio segue pelo fator (no ultimo dia, 1). E a regra e a da manchete, nao o relogio: um criterio de meia-noite
+  //    deixaria a serie aberta e a manchete fechada entre o por do sol e a virada — dois relogios no mesmo blob.
+  //    Funcao, nao valor: a serie diaria so existe mais abaixo, e e dela que a regra le.
+  const mesAberto = () => {
+    const D = ((typeof out !== 'undefined' && out.serie_dia_ufv) || []).filter(x => x.mes === mesAtual && x.ufv === 'Complexo' && x.liq_mwh != null);
+    if (!D.length) return false;
+    const dTot = new Date(Date.UTC(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0)).getUTCDate();
+    return D.filter(x => !x.parcial || x.encerrado).length < dTot;
+  };
   const cur = serie.find(s => s.mes === mesAtual);
   const diasTotal = new Date(+mesAtual.slice(0, 4), +mesAtual.slice(5, 7), 0).getDate();
   // ⚠️ `cur.dias` conta os dias que o ONS publicou. Num mes que so a nossa medicao conhece ele e
@@ -1878,7 +1892,7 @@ async function writeOut(obj, nome, opts) {
       const dias = num(CUR.w2_dias) || 0;
       const fator = (dias > 0 && dias < diasDoMes) ? dias / diasDoMes : 1;
       out.serie_ufv.forEach(x => {
-        const parcial = x.mes === mesAtual && fator < 1;
+        const parcial = x.mes === mesAtual && (fator < 1 || mesAberto());   /* PROMOVER mes-aberto */
         x.parcial = parcial ? 1 : 0;
         x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
         x.meta_rateada_mwh = x.meta_mwh == null ? null : (parcial ? r2(num(x.meta_mwh) * fator) : x.meta_mwh);
@@ -1908,7 +1922,7 @@ async function writeOut(obj, nome, opts) {
       // o CONJUNTO tem a mesma conta, e ate agora nem publicava a meta rateada — os paineis a
       // recalculavam. Publicando-a aqui, a regra passa a existir num lugar so.
       out.serie.forEach(x => {
-        const parcial = x.mes === mesAtual && fator < 1;
+        const parcial = x.mes === mesAtual && (fator < 1 || mesAberto());   /* PROMOVER mes-aberto */
         x.parcial = parcial ? 1 : 0;
         x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
         x.meta_rateada_mwh = x.meta_mwh == null ? null : (parcial ? r2(num(x.meta_mwh) * fator) : x.meta_mwh);
@@ -2517,7 +2531,7 @@ async function writeOut(obj, nome, opts) {
           cx_ating_pct: pc(src('way2_liq_gwh'), src('meta_gwh')) });
       return A.map(x => Object.assign(linha(x.lbl, 0, k => rateia(x, k)), {
         mes: x.mes,
-        parcial: x.mes === mesAtual && fatorMes < 1 ? 1 : 0,
+        parcial: x.mes === mesAtual && (fatorMes < 1 || mesAberto()) ? 1 : 0,   /* PROMOVER mes-aberto */
         dias_corridos: x.mes === mesAtual ? diasCorridos : null,
         dias_do_mes: x.mes === mesAtual ? diasDoMes : null,
         meta_cheia_gwh: x.mes === mesAtual ? x.meta_gwh : null,

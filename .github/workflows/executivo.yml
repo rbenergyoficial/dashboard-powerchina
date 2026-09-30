@@ -97,6 +97,11 @@ jobs:
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
         run: node scripts/ensaio-manchete-noite.js --produto
 
+      # A serie mensal e a manchete dizem a MESMA coisa sobre o mes estar aberto: em 30/09/2026, ultimo dia do mes, a serie
+      # deu set/26 por fechado de manha (o fator do rateio vira 1) enquanto a manchete dizia 1 dia restante.
+      - name: Ensaio · a serie mensal e a manchete concordam sobre o mes aberto
+        run: node scripts/ensaio-mes-aberto.js
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
