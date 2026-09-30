@@ -2690,6 +2690,21 @@ async function writeOut(obj, nome, opts) {
     }
   }
 
+  // ---------- HISTÓRICO DA PROJEÇÃO (PROMOVER hist-projecao) ----------
+  // O cartao Projecao so fala do mes aberto; fechado o mes, nao ficava registro de quanto ela errou. Por entidade e mes
+  // LIQUIDADO: meta, gerado e a projecao com 5, 10, 15, 20 e 25 dias fechados, com o erro e se ela disse certo que a meta
+  // seria (ou nao) batida. A conta e a regra de inclusao moram em lib-historico-projecao.js.
+  if (out.serie_dia_ufv && out.serie_ufv) {
+    const metas = {};
+    out.serie_ufv.forEach(x => { if (x.meta_mwh != null) (metas[x.ufv] = metas[x.ufv] || {})[x.mes] = x.meta_mwh; });
+    const H = require('./lib-historico-projecao.js').historicoProjecao({ dias: out.serie_dia_ufv, metas,
+      rampUp: new Set(serie.filter(s => s.ramp_up).map(s => s.mes)),
+      aberto: m => m > mesAtual || (m === mesAtual && mesAberto()) });
+    out.historico_projecao = H.linhas;
+    out.historico_projecao_acerto = H.acerto;
+    console.log('historico_projecao: ' + H.linhas.length + ' linhas, ' + new Set(H.linhas.map(l => l.mes)).size + ' meses');
+  }
+
   // ---------- VIDA INTEIRA DA USINA: pré-COD × pós-COD ----------
   // O painel mostrava só o pós-COD (o ONS começa em 04/09/2025), escondendo os ~304 GWh que o
   // complexo gerou em teste e performance. Mas o Way2 mede desde 23/01/2025 — a energia SEMPRE

@@ -43,6 +43,11 @@ jobs:
       - name: Ensaio · a leitura travada sai da serie (regra)
         run: node scripts/ensaio-irr-travada.js --lib
 
+      # O historico da projecao (meta, gerado e o que a projecao diria com 5..25 dias fechados, por mes fechado) e o
+      # registro do que a manchete publicou: a REGRA, em casos forjados, antes de gerar.
+      - name: Ensaio · o historico da projecao (regra)
+        run: node scripts/ensaio-historico-projecao.js --lib
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -52,6 +57,7 @@ jobs:
         run: node scripts/gen-benchmark-ons.js
 
       - name: Gerar executivo.json
+        id: gen_exec
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -107,6 +113,11 @@ jobs:
       - name: Ensaio · a serie mensal e a manchete concordam sobre o mes aberto
         run: node scripts/ensaio-mes-aberto.js
 
+      # ... e o PRODUTO: cada linha publicada contra uma segunda conta feita da serie diaria, nenhum mes liquidado de fora,
+      # o comissionamento e o gerado contra a serie mensal, o resumo refeito; cada plantio reprova pelo que plantou.
+      - name: Ensaio · o historico da projecao (produto)
+        run: node scripts/ensaio-historico-projecao.js --produto
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -141,3 +152,18 @@ jobs:
       - name: Ensaio · o PR confere com o executivo e com o medidor
         if: always()
         run: node scripts/ensaio-pr.js
+
+      # O que a manchete de fato publicou para o mes aberto, por entidade e dias fechados, num arquivo que so cresce. No FIM
+      # do job e com `if`: roda sempre que o executivo foi gravado, mesmo com um ensaio vermelho acima (a chave de um dia
+      # que passou nao volta), e um estouro dele nao pula ensaio nem gerador nenhum. So o 404 conta como inexistente.
+      - name: Gravar projecao_registro.json (o que a projecao disse, dia a dia)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT_CONTAINER: dados
+        run: node scripts/gen-registro-projecao.js
+
+      # ... e o registro publicado: chaves unicas, versoes coerentes, toda linha de mes aberto da manchete presente nele.
+      - name: Ensaio · o registro da projecao
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        run: node scripts/ensaio-historico-projecao.js --registro
