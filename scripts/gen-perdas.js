@@ -65,6 +65,7 @@ const zlib = require('zlib');
 const https = require('https');
 const { disponibilidade, completaDisponibilidade, janelaContrato, dispContrato } = require('./lib-disponibilidade.js');
 const { casaCru } = require('./lib-inversor-cru.js');
+const STR = require('./lib-strings.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -477,10 +478,12 @@ function leUsinaDia(buf) {
   const alvo = new Map(Object.entries(GRANDEZAS).map(([k, v]) => [v, k]));
   const cand = new Map();
   const vistas = [];
+  const doCru = new Set();   // indices de coluna que vieram do registro CRU (a ordem das strings dele nao esta provada)
   cols.forEach((c, i) => {
     /* o registro CRU (M9 TS1 INV13..22) entra na MESMA chave da coluna nomeada, e a escolha "a coluna que tem
        dado" abaixo decide entre as duas — ninguem e contado duas vezes. Mapa e provas: lib-inversor-cru.js */
     const cr = casaCru(norm(c));
+    if (cr) doCru.add(i);
     const m = norm(c).match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
     if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
     let chave = alvo.get(m[4]);
@@ -509,6 +512,7 @@ function leUsinaDia(buf) {
     const kk = ts + '|' + iv;
     if (!inv.has(kk)) inv.set(kk, { ts, inv: iv, serie: {} });
     inv.get(kk).serie[chave] = linhas.map((l) => num(l[melhor]));
+    if (doCru.has(melhor) && chave.startsWith('str#')) inv.get(kk).cru = true;
   }
   return { linhas, inv, instantes: linhas.map((l) => l[0]) };
 }
@@ -690,6 +694,10 @@ async function grava(nome, obj) {
     .sort((a, b) => (a.carimbo + a.ufv < b.carimbo + b.ufv ? -1 : 1));
   console.log('  arquivos: ' + arqs.length + ' · ' + carimbos.length + ' carimbos ('
     + carimbos[0] + ' a ' + carimbos[carimbos.length - 1] + ') · lendo ' + escolhidos.length);
+  // a curva de 30 min so e montada para os carimbos que o arquivo de DIAS_HORA dias ainda vai guardar: os mais
+  // velhos seriam descartados no acumulo, e guardar a corrente de cada string meia hora a meia hora para 30 dias
+  // custaria centenas de MB (1.155 inversores x 36 entradas x ~25 instantes x 30 dias)
+  const CURVA_CARIMBOS = new Set(carimbos.slice(-(DIAS_HORA + 1)));
 
   // a janela do CONTRATO (irradiancia acima de 100 W/m2), por dia e usina, do blob de 30 min que a
   // solarimetria ja publica. Sem ela a disponibilidade contratual simplesmente nao sai nesta rodada
@@ -852,19 +860,17 @@ async function grava(nome, obj) {
       //    relativa estoura por ruido, apontando defeito onde ha so amanhecer.
       let iPico = bons[0];
       for (const i of bons) if ((ca[i] || 0) > (ca[iPico] || 0)) iPico = i;
-      // ⚠️ O INSTANTE passou a ser PARAMETRO. A reducao ao dia continua sendo no pico — e o
-      //    comentario acima diz por que —, mas a mesma conta serve a curva do dia, e duas escritas
-      //    da mesma dispersao divergiriam na primeira edicao.
-      const disp = (pref, idx, piso) => {
-        const v = Object.keys(o.serie).filter((k) => k.startsWith(pref))
-          .map((k) => o.serie[k][idx]).filter((x) => x != null && x > 0);
-        if (v.length < 3) return null;
-        const ord = v.slice().sort((x, y) => x - y);
-        const md = ord[ord.length >> 1];
-        return md > (piso == null ? 0.2 : piso) ? { n: v.length, med: r2(md),
-          min_pct: r2((ord[0] / md) * 100), max_pct: r2((ord[ord.length - 1] / md) * 100) } : null;
+      // 🔴 A DISPERSAO SAI DEPOIS DO LACO, SO ENTRE AS ENTRADAS REAIS (lib-strings.js). Ate 30/09/2026 ela era calculada
+      //    aqui descartando so a corrente exatamente zero: entrada VAZIA com residual virava "o mais fraco" (MPPT 12 a
+      //    1,8 %) e string MORTA com zero exato sumia da conta. O conjunto real so e conhecido com todos os dias da
+      //    rodada e o historico acumulado; aqui se guarda a corrente de cada entrada no instante que interessa.
+      // ⚠️ O INSTANTE e parametro: a reducao ao dia e no PICO (o comentario acima diz por que), e a curva usa a mesma
+      //    regra em cada meia hora — duas escritas da mesma dispersao divergiriam na primeira edicao.
+      const pega = (pref, idx) => {
+        const r = {};
+        for (const k of Object.keys(o.serie)) if (k.startsWith(pref)) r[Number(k.slice(pref.length))] = o.serie[k][idx];
+        return r;
       };
-      const dm = disp('mppt#', iPico), ds = disp('str#', iPico);
       const t = (o.serie.temp || []).filter((x) => x != null);
       // 🔴 A REFERENCIA DE DESPACHO SE MEDE DURANTE A GERACAO, nao no minimo do dia. O minimo do
       //    dia e a NOITE: com o inversor desligado a referencia vai a zero, e o minimo diario passa
@@ -899,8 +905,10 @@ async function grava(nome, obj) {
         nominal: nom.length ? r2(nom[nom.length - 1]) : null,
         // no pico do proprio inversor: quanto a MENOR corrente vale em relacao a mediana das suas
         // irmas. 100% e equilibrio perfeito; string desconectada leva isso perto de zero.
-        mppt_min_pct: dm ? dm.min_pct : null, mppt_n: dm ? dm.n : null,
-        str_min_pct: ds ? ds.min_pct : null, str_max_pct: ds ? ds.max_pct : null, str_n: ds ? ds.n : null,
+        // preenchidos depois do laco (ver `dispersao` em lib-strings.js); `_pk` e `_cru` saem antes de publicar
+        mppt_min_pct: null, mppt_n: null,
+        str_min_pct: null, str_max_pct: null, str_n: null,
+        _pk: { s: pega('str#', iPico), m: pega('mppt#', iPico) }, _cru: !!o.cru,
         isol_min: isoVal.length ? r2(Math.min(...isoVal)) : null,
         // a contagem vai junto: dia sem leitura tem de PODER ser dito, e nao so ficar vazio
         ...(isoSem ? { isol_sem_leitura: isoSem } : {}),
@@ -932,9 +940,11 @@ async function grava(nome, obj) {
       // ⚠️ `nom` e UM numero por inversor-dia, nao um array: a nominal e constante do equipamento.
       //    Sem ela o painel nao teria como transformar o setpoint em % — e a conta e a MESMA do
       //    dia (setpoint / nominal), o que faz as duas telas concordarem por construcao.
+      if (!CURVA_CARIMBOS.has(a.carimbo)) continue;
       const nomV = (o.serie.nominal || []).filter((x) => x != null);
+      // `sm`/`mm` (razao da mais fraca) e `sw`/`mw` (QUAL entrada e) saem depois do laco, das correntes em `_c`
       const cur = { d: a.dia, ts: o.ts, inv: o.inv, nom: nomV.length ? r2(nomV[nomV.length - 1]) : null,
-        h: [], pcc: [], pca: [], ef: [], sn: [], sm: [], mm: [], t: [], iso: [], sp: [] };
+        h: [], pcc: [], pca: [], ef: [], sn: [], sm: [], mm: [], sw: [], mw: [], t: [], iso: [], sp: [], _c: [], _cru: !!o.cru };
       // so a janela com geracao: do PRIMEIRO ao ULTIMO instante gerando. A madrugada sao 0,0 repetidos
       // que nao dizem nada e pesam; os zeros do MEIO ficam, porque sao PARADA e nao madrugada.
       // 🔴 Cortar ponto a ponto transformava a parada num vao: o M3/TS2/INV20 em 18/09/2026 ficou em
@@ -949,11 +959,9 @@ async function grava(nome, obj) {
       for (let i = i0; i <= i1; i += 1) {
         if (!bom.has(i)) {
           cur.h.push(String(d.instantes[i]).slice(11, 16));
-          for (const k of ['pcc', 'pca', 'ef', 'sn', 'sm', 'mm', 't', 'iso', 'sp']) cur[k].push(null);
+          for (const k of ['pcc', 'pca', 'ef', 'sn', 'sm', 'mm', 'sw', 'mw', 't', 'iso', 'sp', '_c']) cur[k].push(null);
           continue;
         }
-        const dsi = disp('str#', i, PISO_STR_A);
-        const dmi = disp('mppt#', i, PISO_STR_A);
         const ti = (o.serie.temp || [])[i], ii = (o.serie.isol || [])[i], si = (o.serie.setpoint || [])[i];
         cur.h.push(String(d.instantes[i]).slice(11, 16));
         cur.pcc.push(cc[i]); cur.pca.push(ca[i]);
@@ -962,8 +970,8 @@ async function grava(nome, obj) {
         //    06:00 e uma medicao, nao ruido. Quem tem piso e a RAZAO entre elas.
         cur.sn.push(Object.keys(o.serie).filter((k) => k.startsWith('str#'))
           .map((k) => o.serie[k][i]).filter((x) => x != null && x > 0.5).length);
-        cur.sm.push(dsi ? dsi.min_pct : null);
-        cur.mm.push(dmi ? dmi.min_pct : null);
+        cur.sm.push(null); cur.mm.push(null); cur.sw.push(null); cur.mw.push(null);
+        cur._c.push({ s: pega('str#', i), m: pega('mppt#', i) });
         cur.t.push(ti == null ? null : r2(ti));
         // a MESMA regra do minimo do dia: sem isto a curva desenharia o mergulho a zero que o
         // diario acabou de deixar de publicar — duas telas discordando sobre o mesmo instante
@@ -983,6 +991,89 @@ async function grava(nome, obj) {
 
   if (!diario.size) throw new Error('nenhum dia aproveitado');
   const us = [...new Set(Object.keys(CAP_CA_MW))];
+
+  // ---- STRINGS: quais entradas sao reais, qual e a mais fraca, quais estao mortas ou fracas (lib-strings.js) ----
+  // O conjunto REAL de cada inversor sai do historico ACUMULADO (`pvstr_entradas.json`) somado a esta rodada: uma
+  // string que morreu antes da janela do bruto continua sendo string, e continua na lista de alarmes.
+  const ENTRADAS = STR.fundeEntradas(await leAnterior('pvstr_entradas.json'),
+    [...porInv.values()].flatMap((l) => [
+      { ufv: l.ufv, ts: l.ts, inv: l.inv, g: 's', dia: l.dia, c: l._pk.s },
+      { ufv: l.ufv, ts: l.ts, inv: l.inv, g: 'm', dia: l.dia, c: l._pk.m }]), PISO_STR_A);
+  const REAIS = STR.indiceReais(ENTRADAS);
+  const reaisDe = (ufv, ts, inv, g) => (REAIS.get(ufv + '|' + ts + '|' + inv + '|' + g) || {}).reais;
+  const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10);
+  for (const l of porInv.values()) {
+    const ds = STR.dispersao(l._pk.s, reaisDe(l.ufv, l.ts, l.inv, 's'), 0.2, PISO_STR_A);
+    const dm = STR.dispersao(l._pk.m, reaisDe(l.ufv, l.ts, l.inv, 'm'), 0.2, PISO_STR_A);
+    l.mppt_min_pct = dm ? dm.min_pct : null; l.mppt_n = dm ? dm.n : null;
+    l.str_min_pct = ds ? ds.min_pct : null; l.str_max_pct = ds ? ds.max_pct : null; l.str_n = ds ? ds.n : null;
+    // QUAL entrada: nula no registro cru (M9 TS1 INV13..22), cuja ordem das strings NAO esta provada
+    l.str_min_n = ds && !l._cru ? ds.min_n : null;
+    l.mppt_min_n = dm && !l._cru ? dm.min_n : null;
+    l.str_mortas = ds ? ds.mortas : null;
+  }
+  // a curva: a mesma dispersao em cada meia hora, com o piso de leitura; e o arquivo POR ELETROCENTRO com a razao
+  // de CADA string contra a mediana das reais — e o que o filtro por string do painel le
+  const porTsStr = new Map();
+  for (const [ufv, m] of horaPorUfv) {
+    for (const cur of m.values()) {
+      const rs = reaisDe(ufv, cur.ts, cur.inv, 's'), rm = reaisDe(ufv, cur.ts, cur.inv, 'm');
+      const lista = rs ? [...rs].sort((a, b) => a - b) : [];
+      const row = { d: cur.d, ufv, ts: cur.ts, inv: cur.inv, h: cur.h, md: [], s: {}, reais: lista,
+        ...(cur._cru ? { ordem_nao_provada: 1 } : {}) };
+      for (const n of lista) row.s[n] = [];
+      cur._c.forEach((c, i) => {
+        const ds = c ? STR.dispersao(c.s, rs, PISO_STR_A) : null;
+        const dm = c ? STR.dispersao(c.m, rm, PISO_STR_A) : null;
+        cur.sm[i] = ds ? ds.min_pct : null; cur.mm[i] = dm ? dm.min_pct : null;
+        cur.sw[i] = ds && !cur._cru ? ds.min_n : null; cur.mw[i] = dm && !cur._cru ? dm.min_n : null;
+        row.md.push(ds ? ds.med : null);
+        for (const n of lista) { const x = c ? c.s[n] : null; row.s[n].push(ds && x != null ? r1((x / ds.med) * 100) : null); }
+      });
+      delete cur._c; delete cur._cru;
+      const kt = ufv + '|' + cur.ts;
+      if (!porTsStr.has(kt)) porTsStr.set(kt, []);
+      porTsStr.get(kt).push(row);
+    }
+  }
+  // a LISTA DE ALARMES: por string real, `STR.alarme` sobre os dias da rodada (morta no ultimo dia valido; fraca pela
+  // mediana dos ultimos 30 dias validos). Os dias vem do PICO de cada inversor-dia, os mesmos da dispersao diaria.
+  const ALARMES = [];
+  {
+    const porK = new Map();
+    for (const l of porInv.values()) { const k = l.ufv + '|' + l.ts + '|' + l.inv; if (!porK.has(k)) porK.set(k, []); porK.get(k).push(l); }
+    for (const [k, ls] of porK) {
+      const R = REAIS.get(k + '|s');
+      if (!R) continue;
+      ls.sort((a, b) => (a.dia < b.dia ? -1 : 1));
+      const [ufv, ts, inv] = k.split('|');
+      const cru = ls.some((l) => l._cru);
+      const mds = ls.map((l) => STR.mediana([...R.reais].map((q) => l._pk.s[q]).filter((x) => x != null)));
+      for (const n of R.reais) {
+        const al = STR.alarme(ls.map((l, i) => ({ dia: l.dia, x: l._pk.s[n], md: mds[i] })), PISO_STR_A);
+        if (!al) continue;
+        const u = ls.find((l) => l.dia === al.dia);
+        const okHist = R.ultimo_ok[n];
+        ALARMES.push({ ufv, ts, inv, str: n, ...al, a: r2(u._pk.s[n]), med_a: r2(mds[ls.indexOf(u)]),
+          // o ultimo dia com a string a 40 % ou mais das irmas no pico, do historico acumulado (so diz algo na morta)
+          ultimo_com_corrente: okHist || null,
+          ...(cru ? { ordem_nao_provada: 1 } : {}) });
+      }
+    }
+    ALARMES.sort((a, b) => (a.classe !== b.classe ? (a.classe === 'morta' ? -1 : 1) : a.pct - b.pct));
+  }
+  const RESUMO_STR = us.map((u) => {
+    let n = 0;
+    for (const [k, v] of REAIS) if (k.startsWith(u + '|') && k.endsWith('|s')) n += v.reais.size;
+    const placa = Math.round(PLACA[u].modulos / MODULOS_POR_STRING);
+    return { ufv: u, strings_com_corrente: n, placa, sem_corrente_no_registro: placa - n };
+  });
+  for (const l of porInv.values()) { delete l._pk; delete l._cru; }
+  console.log('  strings: ' + ENTRADAS.length + ' entradas no historico · reais por usina contra a placa: '
+    + RESUMO_STR.map((r) => r.ufv + ' ' + r.strings_com_corrente + '/' + r.placa).join(' · '));
+  console.log('  strings em alarme: ' + ALARMES.filter((a) => a.classe === 'morta').length + ' mortas · '
+    + ALARMES.filter((a) => a.classe === 'fraca').length + ' fracas · '
+    + ALARMES.slice(0, 8).map((a) => a.ufv + '/' + a.ts + '/' + a.inv + ' s' + a.str + ' ' + a.classe + ' ' + a.pct + '%').join(' | '));
 
   // ---- a unidade, decidida UMA VEZ com todas as usinas a vista --------------------------------
   console.log('  carimbos sem registro (contador de vida descendo em metade ou mais do eletrocentro): '
@@ -1507,7 +1598,8 @@ async function grava(nome, obj) {
         gerado_em: meta.gerado_em, usina: ufv, esquema: ESQUEMA,
         janela_dias: DIAS_HORA, dias_cobertos: cob,
         passo: '30 min · amostra INSTANTANEA, nao media de intervalo',
-        unidade: 'pcc e pca em kW; ef em %; sm e mm em % da mediana das irmas; t em C; '
+        unidade: 'pcc e pca em kW; ef em %; sm e mm em % da mediana das irmas REAIS; sw e mw o NUMERO da string e '
+          + 'do MPPT mais fracos (nulo no registro cru, de ordem nao provada); t em C; '
           + 'iso em MOhm; sp em kW; sn e a contagem de strings com corrente',
         piso_dispersao_a: PISO_STR_A,
         nota_piso: 'a razao entre strings (sm) e entre MPPT (mm) so existe quando a mediana das '
@@ -1515,6 +1607,45 @@ async function grava(nome, obj) {
           + 'de anoitecer, e sai nula em vez de sair errada.',
         serie: sf }) / 1024) + ' KB');
   }
+
+  // ---- strings: o historico das entradas, a lista de alarmes e a razao de cada string por eletrocentro ----------
+  // 🔴 O HISTORICO DAS ENTRADAS NAO TEM JANELA: e ele que lembra que uma entrada ja foi string depois que o bruto
+  //    (~30 dias) esqueceu. Cada entrada guarda so ate 3 dias bons e o ultimo — o conjunto, nao uma soma, entao a
+  //    mesma rodada repetida da o mesmo arquivo.
+  saidas.push('pvstr_entradas.json: ' + ENTRADAS.length + ' entradas · '
+    + Math.round(await grava('pvstr_entradas.json', { gerado_em: meta.gerado_em, esquema: 1,
+      regra: 'entrada REAL = pelo menos ' + STR.DIAS_REAL + ' dias com a corrente no pico >= '
+        + (STR.RAZAO_REAL * 100) + ' % da mediana das irmas (> ' + STR.IRMA_A + ' A), com a mediana acima de '
+        + PISO_STR_A + ' A; g = s (string) ou m (MPPT); ok = ate ' + STR.DIAS_REAL + ' desses dias',
+      serie: ENTRADAS }) / 1024) + ' KB');
+  saidas.push('strings_alarme.json: ' + ALARMES.length + ' strings em alarme · '
+    + Math.round(await grava('strings_alarme.json', { gerado_em: meta.gerado_em, esquema: 1,
+      criterio: {
+        morta: 'string real com ate ' + STR.MORTA_A + ' A no pico do inversor no ULTIMO dia valido, com a mediana das '
+          + 'strings reais acima de ' + PISO_STR_A + ' A (corrente zero com as irmas gerando)',
+        fraca: 'mediana, nos ultimos ' + STR.JANELA_FRACA + ' dias validos, da corrente da string no pico abaixo de '
+          + (STR.FRACA * 100) + ' % da mediana das strings reais. Limiar medido no parque (vao entre 46 e 51 % na '
+          + 'mediana de 30 dias), sem norma nem contrato',
+        string_real: 'pelo menos ' + STR.DIAS_REAL + ' dias com >= ' + (STR.RAZAO_REAL * 100) + ' % das irmas no historico',
+        dia_valido: 'mediana das strings reais acima de ' + PISO_STR_A + ' A no pico do inversor',
+        campos: 'pct = razao que decide a classe (a do dia na morta, a mediana da janela na fraca); pct_dia = a do '
+          + 'ultimo dia; desde = inicio do trecho final na classe; a e med_a = corrente da string e mediana das reais (A)',
+        ordem_nao_provada: 'registro cru do M9 TS1 INV13..22: a numeracao das strings nao esta provada',
+      },
+      resumo: RESUMO_STR, serie: ALARMES }) / 1024) + ' KB');
+  let nTs = 0, kbTs = 0, maiorTs = 0;
+  for (const [kt, rows] of porTsStr) {
+    const [ufv, ts] = kt.split('|');
+    const nome = 'pvstr_str_' + ufv + '_' + ts + '.json';
+    const { serie: sf } = acumula(await leAnterior(nome), rows, (l) => l.d + '|' + l.ts + '|' + l.inv, DIAS_HORA, (l) => l.d);
+    const kb = (await grava(nome, { gerado_em: meta.gerado_em, usina: ufv, ts, esquema: 1, janela_dias: DIAS_HORA,
+      unidade: 's: corrente de cada string real em % da mediana das strings reais do inversor, por instante; md: essa '
+        + 'mediana em A. Nulo com a mediana abaixo de ' + PISO_STR_A + ' A (piso de leitura).',
+      serie: sf })) / 1024;
+    nTs++; kbTs += kb; maiorTs = Math.max(maiorTs, kb);
+  }
+  saidas.push('pvstr_str_<usina>_<ts>.json: ' + nTs + ' arquivos · ' + Math.round(kbTs) + ' KB no total · maior '
+    + Math.round(maiorTs) + ' KB');
 
   for (const s of saidas) console.log('  ' + s);
 })().catch((e) => { console.error('ERRO:', e.message); process.exit(1); });

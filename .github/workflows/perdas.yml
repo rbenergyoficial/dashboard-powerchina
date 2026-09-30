@@ -138,3 +138,12 @@ jobs:
           # num dispatch de ensaio (nada publicado) o produto esta em /tmp/perdas, nao no blob
           LOCAL_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
         run: node scripts/ensaio-rampa-amanhecer.js
+      # DEPOIS de gerar: as strings REAIS de cada inversor, a mais fraca e a lista de alarmes (PROMOVER strings-lote1,
+      # lib-strings.js). A dispersao descartava so o zero exato: o MPPT 12 vazio do M2/TS2/INV10 (0,27 A) virava o
+      # "mais fraco a 1,8 %" e a string morta com zero exato sumia. Julga a regra contra casos forjados e o produto: nenhum
+      # inversor-dia aponta entrada que nao e real, e o arquivo por eletrocentro concorda com a curva (sm e sw).
+      - name: Ensaio das strings (reais, mais fraca, alarmes)
+        if: always()
+        env:
+          LOCAL_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
+        run: node scripts/ensaio-strings.js
