@@ -67,8 +67,12 @@ const hojeLocal = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0,
 const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:00Z'); t <= Date.parse(b + 'T00:00:00Z'); t += 86400e3) o.push(new Date(t).toISOString().slice(0, 10)); return o; };
 
 (async () => {
-  const [irr, ons, gem, ant, irr30, antM] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json'), puxa(BASE + 'corte_gemeo.json'), leAnterior(),
-    puxa(BASE + 'irr_plano_30min.json'), leAnterior('pr_hora.json')]);
+  const [irr, ons, gem, ant, irr30, antM, iu] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json'), puxa(BASE + 'corte_gemeo.json'), leAnterior(),
+    puxa(BASE + 'irr_plano_30min.json'), leAnterior('pr_hora.json'), puxa(BASE + 'irr_ufv.json').catch((e) => { if (/HTTP 404/.test(e.message)) return null; throw e; })]);
+  /* PROMOVER irr-travada: dia com leitura de irradiancia TRAVADA retirada (declarado pela solarimetria em
+     `leituras_travadas`) e refeito, mesmo fora dos ultimos REFAZ_DIAS — o PR publicado dele saiu com a irradiacao errada
+     (23/09/2026: 79,92 % com a manha do M5 a 0,26 W/m2). Sem o campo (solarimetria antiga), nada muda. */
+  const travDias = new Set(((iu && iu.leituras_travadas) || []).map((t) => t.dia));
   const sM = L.amostrasIrr(irr30.serie, 'gti_w_Complexo'), impM = L.impedidaMeias(ons.consolidado);
   if (!sM.size) throw new Error('irr_plano_30min sem a coluna gti_w_Complexo: formato mudou?');
   const gH = L.irradiacaoHoras(irr.serie);
@@ -86,7 +90,7 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
 
   const alvo = diasEntre(inicio, ultimoIrr).filter(d => {
     const v = velhos.get(d);
-    return !v || d >= limiteRefaz || v.pr_pct == null || (v.pr_corrigido_pct == null && apurados.has(d.slice(0, 7)));
+    return !v || d >= limiteRefaz || v.pr_pct == null || (v.pr_corrigido_pct == null && apurados.has(d.slice(0, 7))) || travDias.has(d);
   });
   /* a meia hora: acumulativa como o dia; refaz o que o dia refaz e o que ainda nao tem (a primeira rodada faz tudo) */
   const primeiroM = [...sM.keys()].sort()[0].slice(0, 10), inicioM = primeiroM > inicio ? primeiroM : inicio;
@@ -97,7 +101,8 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const faltam = diasEntre(inicioM, ultimoIrr).filter(d => !alvoSet.has(d) && !velhosM.has(d)).reverse().slice(0, LOTE_MEIAS);
   const alvoM = diasEntre(inicioM, ultimoIrr).filter(d => alvoSet.has(d)).concat(faltam).sort();
   const baixar = [...new Set([...alvo, ...alvoM])].sort();
-  console.log('irradiacao', primeiroIrr, 'a', ultimoIrr, '·', alvo.length, 'dias a calcular ·', velhos.size, 'ja publicados ·', alvoM.length, 'dias em meias horas');
+  console.log('irradiacao', primeiroIrr, 'a', ultimoIrr, '·', alvo.length, 'dias a calcular ·', velhos.size, 'ja publicados ·', alvoM.length, 'dias em meias horas'
+    + ' · ' + [...travDias].filter((d) => d >= inicio && d <= ultimoIrr).length + ' com leitura travada retirada');
 
   const novos = new Map(), novosM = new Map(), alvoMSet = new Set(alvoM);
   let i = 0, falhas = 0;

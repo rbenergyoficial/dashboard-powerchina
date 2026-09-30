@@ -38,6 +38,11 @@ jobs:
       - name: Ensaio · o remendo nao conta o dia duas vezes (regra)
         run: node scripts/ensaio-manchete-noite.js --lib
 
+      # A leitura de irradiancia TRAVADA sai da meia hora e da hora da estacao (23/09/2026: a estacao do M5 repetiu 0,26 W/m2
+      # das 05:00 as 11:30 e o PR do conjunto saiu 79,92 %). A REGRA, em casos forjados, antes de gerar qualquer coisa.
+      - name: Ensaio · a leitura travada sai da serie (regra)
+        run: node scripts/ensaio-irr-travada.js --lib
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -118,6 +123,11 @@ jobs:
           # 🔴 Falha de proposito se nao houver export: cair na semente congelaria o painel calado.
           IIRR_CONTAINER: scada-raw
         run: node scripts/gen-irradiancia.js
+
+      # e o PRODUTO: nenhum trecho travado na serie de 30 min publicada; o M5 travado reinserido reprova. Depois de gerar
+      # e antes do PR, que le esta irradiancia (e refaz os dias com leitura retirada).
+      - name: Ensaio · a leitura travada sai da serie (produto)
+        run: node scripts/ensaio-irr-travada.js --produto
 
       # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
       # irr_60min que o passo anterior grava) e com `always()`: se a irradiancia falhar, o PR recalcula com a

@@ -32,6 +32,7 @@
  *     ele deixa de ser usado e o dado passa a vir do CSV.
  */
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
+const { travadas } = require('./lib-irr-travada.js');   // PROMOVER irr-travada
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
 // SAIDA EM DOIS GRUPOS:
 //   irr_ufv.json          - o blob principal: serie diaria, mensal, qualidade e a lista dias_hora.
@@ -436,6 +437,7 @@ async function emiteFamilias(meta, semihora, resFonte) {
         const k = l.dia + '|' + slot;
         const a = acc[k] || (acc[k] = { dia: l.dia, slot, v: {} });
         for (const c of campos) {
+          if (c === 'gti_w' && l.travada) { const kk = c + '_' + l.ufv; (a.v[kk] || (a.v[kk] = { s: 0, n: 0 })).trav = 1; continue; }   // PROMOVER irr-travada
           if (l[c] == null) continue;
           const kk = c + '_' + l.ufv;
           const o = a.v[kk] || (a.v[kk] = { s: 0, n: 0 });
@@ -455,6 +457,7 @@ async function emiteFamilias(meta, semihora, resFonte) {
         // offset ao parsear a data, e derivar o instante no painel erraria em ate um dia
         const l = { t, ms: Date.parse(t) };
         for (const [kk, o] of Object.entries(a.v)) {
+          if (o.trav || !o.n) continue;                   // PROMOVER irr-travada: a hora com meia hora retirada sai vazia
           const nome = kk.slice(0, kk.lastIndexOf('_'));
           l[kk] = r2(CAMPO_SOMA.has(nome) ? o.s : o.s / o.n);
         }
@@ -524,12 +527,13 @@ async function emiteResolucoes(meta, semihora, resFonte) {
     // agrega no balde do passo pedido; a irradiancia e POTENCIA, entao o balde e a media
     const acc = {};
     for (const l of semihora) {
-      if (l.dia < corte || l.gti_w == null) continue;
+      if (l.dia < corte || (l.gti_w == null && !l.travada)) continue;
       const mm = Math.round(l.t * 60);                    // t vem em hora decimal
       const slot = Math.floor(mm / min) * min;            // borda ESQUERDA, como o SCADA rotula
       const k = l.dia + '|' + slot;
       const a = acc[k] || (acc[k] = { dia: l.dia, slot, v: {} });
       const c = a.v[l.ufv] || (a.v[l.ufv] = { s: 0, n: 0 });
+      if (l.travada) { c.trav = 1; continue; }            // PROMOVER irr-travada: o balde com meia hora retirada sai vazio
       c.s += l.gti_w; c.n++;
     }
     const chaves = Object.keys(acc).sort((x, y) => {
@@ -545,7 +549,7 @@ async function emiteResolucoes(meta, semihora, resFonte) {
       // derivar o instante no painel erraria em ate um dia — o mesmo defeito que ja custou caro
       // no MUST. Com `ms` o painel compara numero com numero.
       const l = { t, ms: Date.parse(t) };
-      for (const u of ufvs) { const c = a.v[u]; if (c && c.n) l[u] = r2(c.s / c.n); }
+      for (const u of ufvs) { const c = a.v[u]; if (c && c.n && !c.trav) l[u] = r2(c.s / c.n); }
       return l;
     });
     if (serie.length > TETO_LINHAS) {
@@ -1040,6 +1044,17 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   //    e a do ONS continua, que e a leitura honesta.
   // ⚠️ As duas chaves usam formatos DIFERENTES de slot (`|09` no nosso, `|9` no do ONS). Unir sem
   //    normalizar duplicaria as nove primeiras meias-horas de cada dia.
+  // 🔴 A LEITURA TRAVADA SAI da meia hora da estacao (PROMOVER irr-travada, 30/09/2026): em 23/09 a estacao do M5
+  //    repetiu 0,26 W/m2 das 05:00 as 11:30 e o conjunto saiu 11 % abaixo, com o PR do dia a 79,92 %. A regra mora em
+  //    lib-irr-travada.js: 4+ meias horas com o mesmo valor, so onde a mediana das outras estacoes passa do limiar do
+  //    contrato. Retira, nao substitui: o conjunto (que exige as nove) fica sem valor ali, e o PR do dia vira incompleto.
+  //    O DIARIO (`gti` de serie_dia) nao e refeito: ele ja sai `suspeito` por cobertura, e refaze-lo e lote proprio.
+  const TRAVA = travadas(Object.fromEntries(Object.entries(accH)
+    .filter(([, g]) => g['IRRADIAÇÃO INCLINADA'] && g['IRRADIAÇÃO INCLINADA'].n)
+    .map(([k, g]) => [k, g['IRRADIAÇÃO INCLINADA'].s / g['IRRADIAÇÃO INCLINADA'].n])));
+  TRAVA.retirar.forEach((k) => { if (accH[k]) delete accH[k]['IRRADIAÇÃO INCLINADA']; });
+  console.log('  leituras travadas: ' + TRAVA.retirar.size + ' meia(s) hora(s) retiradas em ' + TRAVA.trechos.length + ' trecho(s)'
+    + TRAVA.trechos.slice(0, 12).map((t) => ' · ' + t.dia + ' ' + t.ufv + ' ' + t.valor + ' W/m2 x' + t.n).join(''));
   const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(accHA), ...Object.keys(ons).map((k) => {
     const p = k.split('|'); return p[0] + '|' + p[1] + '|' + String(+p[2]).padStart(2, '0');
   })])].sort();
@@ -1090,6 +1105,15 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   //    principal, os arquivos por nivel de zoom e os por resolucao. Mesmo ponto unico do modo
   //    semente — a regra da media nao pode existir em dois lugares.
   const nc = comComplexo(serie_dia, serie_mes, serie_semihora);
+  // PROMOVER irr-travada: a MARCA da meia hora retirada, na estacao e no conjunto do mesmo instante. Os agregadores de 60
+  // min anulam a HORA inteira de quem tem marca — sem isso a hora saia da meia hora que sobrou, amostrada pela metade, e
+  // e dessa hora que o PR le. So estas horas: hora com lacuna comum segue como sempre.
+  { const instRet = new Set([...TRAVA.retirar].map((k) => { const [d, , sl] = k.split('|'); return d + '|' + (+sl); }));
+    // a meia hora retirada que nao tinha outra grandeza nem viraria linha: ela entra so com a marca
+    const tem = new Set(serie_semihora.map((l) => l.dia + '|' + l.ufv + '|' + String(Math.round(l.t * 2)).padStart(2, '0')));
+    TRAVA.retirar.forEach((k) => { if (!tem.has(k)) { const [d, u, sl] = k.split('|'); serie_semihora.push({ dia: d, ufv: u, t: +sl / 2 }); } });
+    serie_semihora.forEach((l) => { const sl = Math.round(l.t * 2);
+      if (l.ufv === COMPLEXO ? instRet.has(l.dia + '|' + sl) : TRAVA.retirar.has(l.dia + '|' + l.ufv + '|' + String(sl).padStart(2, '0'))) l.travada = 1; }); }
   console.log('conjunto (media das ' + ufvs.length + ' estacoes) · ' + nc.dia + ' dias · '
     + nc.mes + ' meses · ' + nc.semihora + ' instantes de 30 min');
 
@@ -1105,6 +1129,9 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     //    `gti_aux` — ou um leitor que compare os dois periodos — nao teria como saber que o
     //    instrumento mudou. Os dois medem a mesma grandeza no mesmo instante e divergem ~4,5%.
     dias_sensor_auxiliar: [...diasAux].sort(),
+    // os trechos de leitura TRAVADA retirados da serie de 30 min (PROMOVER irr-travada): declarados, para o leitor saber
+    // por que a meia hora da estacao — e a do conjunto — esta vazia
+    leituras_travadas: TRAVA.trechos.map((t) => ({ dia: t.dia, ufv: t.ufv, ini: t.ini / 2, fim: t.fim / 2, valor_w: t.valor, meias_horas: t.n })),
     sensor_auxiliar: 'Grupo GER_IRR da mesma estação, sensor distinto do principal. Publicado em '
       + 'campo próprio (gti_aux / gti_aux_w) e só nos dias em que o principal não mediu.',
     serie_dia, serie_mes, qualidade,

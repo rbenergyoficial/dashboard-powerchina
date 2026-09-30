@@ -112,12 +112,42 @@ function puxa(url) {
   const recalc = L.prMeses(pr.dias);
   exige(JSON.stringify(recalc) === JSON.stringify(pr.meses), 'os meses publicados nao saem dos dias publicados');
 
+  /* PROMOVER irr-travada: os dias com leitura de irradiancia TRAVADA retirada (declarados em `irr_ufv.leituras_travadas`).
+     1 · o PR publicado de cada um e o RECALCULADO com a irradiacao publicada — o gen-pr refaz esses dias mesmo fora dos
+         ultimos 5; sem esta conferencia, a volta atras disso passaria calada (23/09/2026 ficaria nos 79,92 %);
+     2 · a impedida do dia soma so as horas com irradiacao valida (as mesmas de E e H), e a do executivo, todas: a
+         conferencia do mes DESCONTA do executivo a impedida das horas que perderam a irradiacao, e o mes segue julgado. */
+  let iu = null;
+  try { iu = await puxa(BASE + 'irr_ufv.json'); } catch (e) { if (!/HTTP 404/.test(e.message)) throw e; }
+  const porDiaPr = new Map(pr.dias.map(d => [d.dia, d]));
+  const travDias = [...new Set(((iu && iu.leituras_travadas) || []).map(t => t.dia))].filter(d => porDiaPr.has(d)).sort();
+  const descontoMes = new Map();
+  let travConf = 0;
+  if (travDias.length) {
+    const [irr60, ons0] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json')]);
+    const gH = L.irradiacaoHoras(irr60.serie), op = L.operadorHoras(ons0.consolidado);
+    const apur = new Set((gem.serie || []).filter(x => x.base === 'apurado').map(x => x.mes));
+    for (const dia of travDias) {
+      let hist = null;
+      try { hist = await puxa(BASE + 'hist/way2_' + dia + '.json'); } catch (e) { if (!/HTTP 404/.test(e.message)) throw e; }
+      if (!hist) continue;
+      const eH = L.energiaHoras(hist), ref = L.prDia(dia, eH, gH, op, apur), pub = porDiaPr.get(dia);
+      travConf++;
+      exige(pub.pr_pct === ref.pr_pct && pub.horas_validas === ref.horas_validas, dia + ': PR publicado ' + pub.pr_pct + ' (' + pub.horas_validas
+        + ' h) contra ' + ref.pr_pct + ' (' + ref.horas_validas + ' h) recalculado com a irradiacao publicada — o dia com leitura travada nao foi refeito');
+      let c = 0;
+      for (let h = 0; h < 24; h++) { const k = dia + 'T' + String(h).padStart(2, '0'); if (eH.get(k) && !gH.has(k)) c += op.impedida.get(k) || 0; }
+      descontoMes.set(dia.slice(0, 7), (descontoMes.get(dia.slice(0, 7)) || 0) + c);
+    }
+  }
   let comparados = 0;
   for (const m of pr.meses) {
     const g = (gem.serie || []).find(x => x.mes === m.mes);
     if (!g || g.base !== 'apurado' || m.dias_corrigido !== m.dias_no_mes || g.corte_ons_gwh == null) continue;
     comparados++;
-    exige(perto(m.impedida_mwh / 1000, g.corte_ons_gwh, 0.02), m.mes + ': impedida ' + (m.impedida_mwh / 1000).toFixed(2) + ' GWh contra ' + g.corte_ons_gwh + ' do executivo');
+    const desc = descontoMes.get(m.mes) || 0;
+    exige(perto(m.impedida_mwh / 1000, g.corte_ons_gwh - desc / 1000, 0.02), m.mes + ': impedida ' + (m.impedida_mwh / 1000).toFixed(2) + ' GWh contra '
+      + g.corte_ons_gwh + ' do executivo' + (desc ? ' menos ' + (desc / 1000).toFixed(3) + ' GWh das horas sem irradiacao por leitura travada' : ''));
   }
   exige(comparados >= 1, 'nenhum mes completo para comparar a impedida - a conferencia nao julgou nada');
 
@@ -131,7 +161,8 @@ function puxa(url) {
     exige(d.inj_mwh - l <= Math.max(25, 0.03 * l), d.dia + ': injetada ' + d.inj_mwh + ' longe demais da liquida ' + l + ' (o consumo e ~12 MWh/dia)');
   }
   exige(dcomp >= 30, 'so ' + dcomp + ' dias comparados com a liquida');
-  console.log('produto: ' + pr.dias.length + ' dias, ' + pr.meses.length + ' meses · impedida conferida em ' + comparados + ' meses · injetada x liquida em ' + dcomp + ' dias');
+  console.log('produto: ' + pr.dias.length + ' dias, ' + pr.meses.length + ' meses · impedida conferida em ' + comparados + ' meses'
+    + ' · ' + travConf + ' dia(s) com leitura travada recalculado(s)' + (descontoMes.size ? ' (desconto em ' + [...descontoMes.keys()].join(', ') + ')' : '') + ' · injetada x liquida em ' + dcomp + ' dias');
 
   /* -- a meia hora publicada -- */
   let ph = null;
