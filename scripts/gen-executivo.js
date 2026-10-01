@@ -2190,7 +2190,10 @@ async function writeOut(obj, nome, opts) {
           // de 100% responde "esteve sempre acima?" antes de qualquer leitura, e o delta diz para
           // onde vai. Ambos derivados do que ja existe — nenhuma fonte nova.
           ...(() => {
-            const cor = { Complexo: '#E0B84A', PPA: '#7FA8E8', ML: '#5FBF8E' }[u] || '#98A2B3';
+            // as cores de entidade do aurora.json (tokens complexo, ppa, ml; as usinas ficam no cinza de antes). Eram as de
+            // antes de 23/08 (o Complexo dourado do M2): nenhum painel le `ufvcor`/`spark_ating` hoje, e o portal os zera, mas
+            // cor velha num blob publico e convite ao proximo consumidor pintar errado (PROMOVER cor-entidade-blob)
+            const cor = { Complexo: '#B85137', PPA: '#498DF2', ML: '#96D67A' }[u] || '#98A2B3';
             const serie = temMeta.map(x => x.atingido_pct);
             const n = serie.length;
             const d = (n >= 2 && serie[n - 1] != null && serie[n - 2] != null)
