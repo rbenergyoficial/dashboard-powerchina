@@ -113,6 +113,11 @@ jobs:
       - name: Ensaio · a serie mensal e a manchete concordam sobre o mes aberto
         run: node scripts/ensaio-mes-aberto.js
 
+      # O atingimento do mes aberto sai do MWh, e o do conjunto e o do Complexo (em 01/10/2026, pelo GWh de 2 casas, o M9
+      # publicava 77,78 % contra 77,20 % exatos). Sem mes aberto, so os plantios forjados.
+      - name: Ensaio · o atingimento do mes aberto sai do MWh
+        run: node scripts/ensaio-atingido-mwh.js
+
       # ... e o PRODUTO: cada linha publicada contra uma segunda conta feita da serie diaria, nenhum mes liquidado de fora,
       # o comissionamento e o gerado contra a serie mensal, o resumo refeito; cada plantio reprova pelo que plantou.
       - name: Ensaio · o historico da projecao (produto)

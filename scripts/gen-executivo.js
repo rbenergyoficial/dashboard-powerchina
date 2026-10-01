@@ -1911,13 +1911,18 @@ async function writeOut(obj, nome, opts) {
       // ⚠️ O outro numero NAO se perde: `atingido_mes_cheio_pct` guarda "quanto da meta do mes
       //    inteiro ja foi entregue", que e uma pergunta legitima e e a que o card executivo mostra
       //    na coluna `% ja entregue`. Sao perguntas diferentes e agora tem nomes diferentes.
-      const rateia = (x, liq) => {
-        x.atingido_mes_cheio_pct = x.atingido_pct;
+      // 🔴 E A CONTA SAI DO MWh quando os dois lados existem (PROMOVER ating-mwh, 01/10/2026). Pelo GWh de 2 casas o
+      //    arredondamento (5 MWh de cada lado) pesava sobre metas pequenas: em 01/10, com um dia, o M9 publicava 77,78 %
+      //    contra 77,20 % exatos e o ML 75,00 % contra 75,47 %. O GWh fica de reserva para linha sem MWh.
+      const exatoDe = (u) => (u && u.liquida_mwh != null && num(u.meta_rateada_mwh) > 0)
+        ? { at: r2(100 * u.liquida_mwh / u.meta_rateada_mwh), cheio: u.meta_mwh > 0 ? r2(100 * u.liquida_mwh / u.meta_mwh) : null } : null;
+      const rateia = (x, liq, ex) => {
+        x.atingido_mes_cheio_pct = ex && ex.cheio != null ? ex.cheio : x.atingido_pct;
         const mr = num(x.meta_rateada_gwh);
-        x.atingido_pct = (mr > 0 && liq != null) ? r2(100 * liq / mr) : x.atingido_pct;
+        x.atingido_pct = ex ? ex.at : ((mr > 0 && liq != null) ? r2(100 * liq / mr) : x.atingido_pct);
       };
       out.serie_ufv.filter(x => x.parcial === 1)
-        .forEach(x => rateia(x, num(x.liquida_gwh)));
+        .forEach(x => rateia(x, num(x.liquida_gwh), exatoDe(x)));
 
       // o CONJUNTO tem a mesma conta, e ate agora nem publicava a meta rateada — os paineis a
       // recalculavam. Publicando-a aqui, a regra passa a existir num lugar so.
@@ -1927,7 +1932,8 @@ async function writeOut(obj, nome, opts) {
         x.meta_rateada_gwh = parcial ? r2(num(x.meta_gwh) * fator) : x.meta_gwh;
         x.meta_rateada_mwh = x.meta_mwh == null ? null : (parcial ? r2(num(x.meta_mwh) * fator) : x.meta_mwh);
         if (!parcial) return;
-        rateia(x, num(x.way2_liq_gwh));
+        // o conjunto e o Complexo: a mesma entidade, e a conta exata sai da linha dele (que tem o MWh)
+        rateia(x, num(x.way2_liq_gwh), exatoDe(out.serie_ufv.find(u => u.ufv === 'Complexo' && u.mes === x.mes)));
         // ⚠️ `bateu` acompanha o numerador novo: num mes em curso ele passa a dizer "esta no
         //    ritmo de bater", que e a leitura util. Quem conta meses fechados filtra por `fechado`.
         x.bateu = x.atingido_pct == null ? null : (x.atingido_pct >= 100 ? 1 : 0);
