@@ -23,6 +23,8 @@
 'use strict';
 const zlib = require('zlib');
 const L = require('./lib-pr.js');
+const { PLACA } = require('./lib-placa.js');
+const LOTE_UFV = Number(process.env.PR_LOTE_UFV || 60);   /* dias de historico por entidade preenchidos por rodada */
 
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
@@ -67,8 +69,9 @@ const hojeLocal = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0,
 const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:00Z'); t <= Date.parse(b + 'T00:00:00Z'); t += 86400e3) o.push(new Date(t).toISOString().slice(0, 10)); return o; };
 
 (async () => {
-  const [irr, ons, gem, ant, irr30, antM, iu] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json'), puxa(BASE + 'corte_gemeo.json'), leAnterior(),
-    puxa(BASE + 'irr_plano_30min.json'), leAnterior('pr_hora.json'), puxa(BASE + 'irr_ufv.json').catch((e) => { if (/HTTP 404/.test(e.message)) return null; throw e; })]);
+  const [irr, ons, gem, ant, irr30, antM, iu, antU, exe] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json'), puxa(BASE + 'corte_gemeo.json'), leAnterior(),
+    puxa(BASE + 'irr_plano_30min.json'), leAnterior('pr_hora.json'), puxa(BASE + 'irr_ufv.json').catch((e) => { if (/HTTP 404/.test(e.message)) return null; throw e; }),
+    leAnterior('pr_ufv.json'), puxa(BASE + 'executivo.json')]);
   /* PROMOVER irr-travada: dia com leitura de irradiancia TRAVADA retirada (declarado pela solarimetria em
      `leituras_travadas`) e refeito, mesmo fora dos ultimos REFAZ_DIAS — o PR publicado dele saiu com a irradiacao errada
      (23/09/2026: 79,92 % com a manha do M5 a 0,26 W/m2). Sem o campo (solarimetria antiga), nada muda. */
@@ -104,6 +107,30 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   console.log('irradiacao', primeiroIrr, 'a', ultimoIrr, '·', alvo.length, 'dias a calcular ·', velhos.size, 'ja publicados ·', alvoM.length, 'dias em meias horas'
     + ' · ' + [...travDias].filter((d) => d >= inicio && d <= ultimoIrr).length + ' com leitura travada retirada');
 
+  /* ── O PR POR ENTIDADE (PROMOVER pr-entidade): M1..M9, PPA e ML em pr_ufv.json. Acumulativo como o do conjunto: refaz o
+     que o dia refaz, o que ainda nao tem corrigido e o corte agora apurado, e preenche o historico em LOTES (mais recentes
+     primeiro). O corte da usina vem do executivo (`corte_diario_ufv`, janela movel de ~75 dias): o que sai da janela fica
+     no que ja foi publicado. */
+  const ENT = Object.keys(L.CIRC_UFV), gU = L.irradiacaoHorasUfv(irr.serie);
+  const placaMwp = Object.fromEntries(ENT.map((u) => [u, PLACA[u].cc_kwp / 1000]));
+  if (Math.abs(ENT.reduce((a, u) => a + placaMwp[u], 0) - L.P_CC_MWP) > 0.001) throw new Error('a placa por usina nao soma a P_CC do conjunto');
+  const corteU = new Map();
+  for (const x of (exe && exe.corte_diario_ufv) || []) if (x.cortado_mwh != null) corteU.set(x.dia + '|' + x.ufv, +x.cortado_mwh);
+  if (!corteU.size) throw new Error('executivo.json sem corte_diario_ufv: formato mudou?');
+  const velhosU = new Map();
+  for (const [e, v] of Object.entries((antU && antU.entidades) || {})) for (const d of v.dias || []) { const o = velhosU.get(d.dia) || {}; o[e] = d; velhosU.set(d.dia, o); }
+  const precisaU = (d) => { const v = velhosU.get(d); if (!v) return false;
+    return d >= limiteRefaz || travDias.has(d) || ENT.some((u) => !v[u] || v[u].pr_pct == null || (v[u].pr_corrigido_pct == null && corteU.has(d + '|' + u))); };
+  const alvoU = diasEntre(inicio, ultimoIrr).filter(precisaU)
+    .concat(diasEntre(inicio, ultimoIrr).filter((d) => !velhosU.has(d)).reverse().slice(0, LOTE_UFV)).sort();
+  const alvoUSet = new Set(alvoU);
+  for (const d of alvoU) if (!baixar.includes(d)) baixar.push(d);
+  baixar.sort();
+  console.log('pr por entidade:', alvoU.length, 'dias a calcular ·', velhosU.size, 'ja publicados ·', corteU.size, 'usina-dias com corte apurado');
+  const cortadoDe = (u, d) => corteU.has(d + '|' + u) ? corteU.get(d + '|' + u)
+    : (velhosU.get(d) && velhosU.get(d)[u] && velhosU.get(d)[u].impedida_mwh != null ? velhosU.get(d)[u].impedida_mwh : null);
+  const novosU = new Map();
+
   const novos = new Map(), novosM = new Map(), alvoMSet = new Set(alvoM);
   let i = 0, falhas = 0;
   async function trabalha() {
@@ -114,6 +141,12 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
       catch (e) { if (!/HTTP 404/.test(e.message)) { falhas++; throw e; } }
       if (alvoSet.has(dia)) novos.set(dia, L.prDia(dia, hist ? L.energiaHoras(hist) : new Map(), gH, op, apurados));
       if (alvoMSet.has(dia)) novosM.set(dia, L.prMeias(dia, hist ? L.energiaMeias(hist) : new Map(), sM, impM, novos.get(dia) || velhos.get(dia)));
+      if (alvoUSet.has(dia)) {
+        const eU = hist ? L.energiaHorasUfv(hist) : new Map(), o = {};
+        for (const u of ENT) o[u] = L.prDiaUfv(dia, eU.get(u) || new Map(), gU.get(u), placaMwp[u], cortadoDe(u, dia));
+        for (const [g, membros] of Object.entries(L.GRUPOS)) o[g] = L.prDiaGrupo(dia, membros.map((u) => o[u]));
+        novosU.set(dia, o);
+      }
     }
   }
   await Promise.all(Array.from({ length: 6 }, trabalha));
@@ -159,6 +192,28 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
     desde: diasM.length ? diasM[0].dia : null, ultimo_dia: diasM.length ? diasM[diasM.length - 1].dia : null,
     dias: diasM,
   };
+  /* o PR por entidade: dias e meses de cada usina e contrato */
+  const entidades = {};
+  for (const e of ENT.concat(Object.keys(L.GRUPOS))) {
+    const de = diasEntre(inicio, ultimoIrr).map((d) => (novosU.get(d) && novosU.get(d)[e]) || (velhosU.get(d) && velhosU.get(d)[e])).filter(Boolean);
+    entidades[e] = { dias: de, meses: L.prMesesEnt(de) };
+  }
+  const saidaU = {
+    gerado_em: saida.gerado_em, esquema: 1,
+    grandeza: 'Performance Ratio por usina e por contrato',
+    formula: saida.formula, formula_corrigido: 'PR corrigido = (energia injetada + energia impedida da usina) / (potencia CC da usina x irradiacao da estacao / 1 kW/m2)',
+    energia: 'dos circuitos de 34,5 kV de cada usina, por instante de 5 min, so a parte positiva: energia antes da transformacao (a soma das nove fica ~0,3 % acima da do 230 kV); o PR de uma usina nao se compara 1:1 com o do conjunto no 230 kV',
+    irradiacao: 'no plano dos modulos, da estacao da propria usina, por hora',
+    impedida: 'o corte diario reconciliado da usina, o mesmo do executivo; estimativa',
+    contrato: 'soma da energia das usinas / soma de (potencia CC x irradiacao) de cada uma; o dia do contrato so existe com todas as usinas',
+    placa_mwp: placaMwp, grupos: L.GRUPOS,
+    criterios: saida.criterios,
+    ultimo_dia: (entidades.M1.dias.slice(-1)[0] || {}).dia || null,
+    entidades,
+  };
+  const kbU = await grava('pr_ufv.json', saidaU);
+  console.log('pr_ufv.json', (kbU / 1024).toFixed(1), 'KB gz ·', entidades.M1.dias.length, 'dias ·', novosU.size, 'refeitos · set/26:',
+    Object.keys(entidades).map((e) => { const m = entidades[e].meses.find((x) => x.mes === '2026-09'); return e + ' ' + (m ? m.pr_pct + '/' + m.pr_corrigido_pct : '-'); }).join(' '));
   const kbM = await grava('pr_hora.json', saidaM);
   console.log('pr_hora.json', (kbM / 1024).toFixed(1), 'KB gz ·', diasM.length, 'dias ·', novosM.size, 'refeitos ·', fechados, 'fechados com o dia');
   const kb = await grava('pr.json', saida);

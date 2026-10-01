@@ -48,6 +48,11 @@ jobs:
       - name: Ensaio · o historico da projecao (regra)
         run: node scripts/ensaio-historico-projecao.js --lib
 
+      # O PR por usina e por contrato (energia dos circuitos, irradiacao da estacao da usina, placa CC dela): a REGRA,
+      # em casos forjados, antes de gerar.
+      - name: Ensaio · o PR por usina e por contrato (regra)
+        run: node scripts/ensaio-pr-ufv.js --lib
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -157,6 +162,12 @@ jobs:
       - name: Ensaio · o PR confere com o executivo e com o medidor
         if: always()
         run: node scripts/ensaio-pr.js
+
+      # ... e o PRODUTO pr_ufv.json: contratos e meses refeitos, o corte da usina igual ao do executivo, e a soma das nove
+      # usinas contra o 230 kV nos dias com as mesmas horas validas (entre 1,000 e 1,010).
+      - name: Ensaio · o PR por usina e por contrato (produto)
+        if: always()
+        run: node scripts/ensaio-pr-ufv.js --produto
 
       # O que a manchete de fato publicou para o mes aberto, por entidade e dias fechados, num arquivo que so cresce. No FIM
       # do job e com `if`: roda sempre que o executivo foi gravado, mesmo com um ensaio vermelho acima (a chave de um dia

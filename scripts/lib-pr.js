@@ -185,5 +185,107 @@ function prMeias(dia, eM, sM, impM, diaRow) {
   return o;
 }
 
+/* ── O PR POR ENTIDADE (01/10/2026, PROMOVER pr-entidade) ─────────────────────────────────────────────────────────────
+ * O mesmo PR, por usina e por contrato. Diferencas declaradas contra o do conjunto:
+ *   energia      a dos CIRCUITOS de 34,5 kV de cada usina (lib-horas CIRC), por instante de 5 min, so a parte POSITIVA,
+ *                hora so com os 12 instantes de TODOS os circuitos da usina. E energia antes da transformacao: a soma
+ *                das nove fica 0,32 a 0,47 % acima da do 230 kV (medido em 23 dias de ago-set/26) — o PR de uma usina
+ *                nao se compara 1:1 com o do conjunto.
+ *   irradiacao   a da estacao da propria usina (coluna Mx do irr_60min).
+ *   placa        potencia CC da usina (lib-placa, cc_kwp).
+ *   impedida     o corte DIARIO reconciliado por usina do executivo (`corte_diario_ufv.cortado_mwh`): a mesma energia que
+ *                o executivo atribui a cada usina, e que fecha com o corte do contrato.
+ * Cada linha leva `den_mwh` = placa x irradiacao: contrato e mes saem de soma da energia / soma do denominador, nunca de
+ * media de PR. O contrato so tem dia quando TODAS as usinas dele tem (senao o PR do contrato seria o de uma parte). */
+const { CIRC: CIRC_UFV, PPA: UFV_PPA, ML: UFV_ML } = require('./lib-horas.js');
+const GRUPOS = { PPA: UFV_PPA, ML: UFV_ML };
+
+function energiaHorasUfv(hist) {
+  const porPonto = new Map();
+  for (const s of (hist && hist.dados) || []) {
+    if (s.nomeGrandeza !== 'Demat') continue;
+    const m = new Map();
+    for (const v of s.valores || []) if (v.valor != null) m.set(v.data, +v.valor);
+    porPonto.set(s.pontoId, m);
+  }
+  const out = new Map();
+  for (const [u, pts] of Object.entries(CIRC_UFV)) {
+    const horas = new Map(), base = porPonto.get(pts[0]);
+    if (!base || pts.some((p) => !porPonto.has(p))) { out.set(u, horas); continue; }
+    for (const rot of base.keys()) {
+      if (pts.some((p) => !porPonto.get(p).has(rot))) continue;
+      const kw = pts.reduce((a, p) => a + Math.max(0, porPonto.get(p).get(rot)), 0), k = chaveHoraDoFim(rot);
+      const h = horas.get(k) || { inj_mwh: 0, n: 0 };
+      h.inj_mwh += kw * 5 / 60 / 1000; h.n += 1; horas.set(k, h);
+    }
+    for (const [k, h] of horas) if (h.n < 12) horas.delete(k);
+    out.set(u, horas);
+  }
+  return out;
+}
+
+function irradiacaoHorasUfv(serie) {
+  const out = new Map(Object.keys(CIRC_UFV).map((u) => [u, new Map()]));
+  for (const x of serie || []) for (const u of Object.keys(CIRC_UFV)) {
+    const v = x[u]; if (v != null && isFinite(v)) out.get(u).set(x.t.slice(0, 13), Math.max(0, v) / 1000);
+  }
+  return out;
+}
+
+/* cortado: MWh impedidos da usina no dia (null = nao apurado) */
+function prDiaUfv(dia, eH, gH, pccMwp, cortado) {
+  let E = 0, H = 0, validas = 0;
+  for (let h = 0; h < 24; h++) {
+    const k = dia + 'T' + String(h).padStart(2, '0'), e = eH.get(k), g = gH.get(k);
+    if (!e || g == null) continue;
+    validas++; E += e.inj_mwh; H += g;
+  }
+  const den = pccMwp * H;
+  const o = { dia, horas_validas: validas, inj_mwh: r(E, 3), den_mwh: r(den, 3), impedida_mwh: null, pr_pct: null, pr_corrigido_pct: null, nota: null, nota_corrigido: null };
+  if (validas < PISO_HORAS) { o.nota = 'dia incompleto: ' + validas + ' de 24 horas com energia e irradiacao'; return o; }
+  const pr = den > 0 ? 100 * E / den : null;
+  if (pr == null || pr > TETO_PR) { o.nota = 'PR acima de ' + TETO_PR + ' % ou sem irradiacao: dado inconsistente'; return o; }
+  o.pr_pct = r(pr, 2);
+  if (cortado == null) { o.nota_corrigido = 'corte da usina nao apurado neste dia'; return o; }
+  if (DIAS_EXCLUIDOS.has(dia)) { o.nota_corrigido = 'geracao publicada pelo operador defeituosa neste dia'; return o; }
+  const pc = 100 * (E + cortado) / den;
+  o.impedida_mwh = r(cortado, 3);
+  if (pc < FAIXA_CORRIGIDO[0] || pc > FAIXA_CORRIGIDO[1]) { o.nota_corrigido = 'PR corrigido fora de ' + FAIXA_CORRIGIDO.join('-') + ' %'; return o; }
+  o.pr_corrigido_pct = r(pc, 2);
+  return o;
+}
+
+/* o contrato no dia: so com todas as usinas validas; o corrigido, so com todas corrigidas */
+function prDiaGrupo(dia, linhas) {
+  const o = { dia, inj_mwh: null, den_mwh: null, impedida_mwh: null, pr_pct: null, pr_corrigido_pct: null, nota: null, nota_corrigido: null };
+  const sem = linhas.filter((x) => !x || x.pr_pct == null).length;
+  if (sem) { o.nota = 'usina sem PR no dia: ' + sem + ' de ' + linhas.length; return o; }
+  const E = linhas.reduce((a, x) => a + x.inj_mwh, 0), D = linhas.reduce((a, x) => a + x.den_mwh, 0);
+  Object.assign(o, { inj_mwh: r(E, 3), den_mwh: r(D, 3), pr_pct: D > 0 ? r(100 * E / D, 2) : null });
+  if (linhas.some((x) => x.pr_corrigido_pct == null)) { o.nota_corrigido = 'usina sem PR corrigido no dia'; return o; }
+  const C = linhas.reduce((a, x) => a + x.impedida_mwh, 0);
+  Object.assign(o, { impedida_mwh: r(C, 3), pr_corrigido_pct: D > 0 ? r(100 * (E + C) / D, 2) : null });
+  return o;
+}
+
+/* o mes da entidade: soma energia e denominador dos dias validos */
+function prMesesEnt(dias) {
+  const por = new Map();
+  for (const d of dias) {
+    const mes = d.dia.slice(0, 7), m = por.get(mes) || { mes, dias: 0, diasC: 0, E: 0, D: 0, EC: 0, DC: 0, C: 0 };
+    if (d.pr_pct != null) { m.dias++; m.E += d.inj_mwh; m.D += d.den_mwh; }
+    if (d.pr_corrigido_pct != null) { m.diasC++; m.EC += d.inj_mwh; m.DC += d.den_mwh; m.C += d.impedida_mwh; }
+    por.set(mes, m);
+  }
+  return [...por.values()].sort((a, b) => a.mes < b.mes ? -1 : 1).map((m) => {
+    const [a, mm] = m.mes.split('-').map(Number);
+    return { mes: m.mes, dias_no_mes: new Date(Date.UTC(a, mm, 0)).getUTCDate(), dias_validos: m.dias, dias_corrigido: m.diasC,
+      pr_pct: m.dias && m.D > 0 ? r(100 * m.E / m.D, 2) : null,
+      pr_corrigido_pct: m.diasC && m.DC > 0 ? r(100 * (m.EC + m.C) / m.DC, 2) : null,
+      inj_mwh: r(m.E, 1), den_mwh: r(m.D, 1), impedida_mwh: m.diasC ? r(m.C, 1) : null };
+  });
+}
+
 module.exports = { P_CC_MWP, DIAS_EXCLUIDOS, chaveHoraDoFim, energiaHoras, operadorHoras, irradiacaoHoras, prDia, prMeses, PISO_HORAS, PISO_LINHAS_OPERADOR, TETO_PR, FAIXA_CORRIGIDO,
-  PISO_IRR_MEIA, chaveMeiaDoFim, energiaMeias, amostrasIrr, impedidaMeias, prMeias };
+  PISO_IRR_MEIA, chaveMeiaDoFim, energiaMeias, amostrasIrr, impedidaMeias, prMeias,
+  CIRC_UFV, GRUPOS, energiaHorasUfv, irradiacaoHorasUfv, prDiaUfv, prDiaGrupo, prMesesEnt };
