@@ -490,6 +490,8 @@ async function writeOut(obj, nome, opts) {
   // por isso que a usina somava os 1.488 intervalos do mes contra os 471 do conjunto, e dai vinha 34%
   // do desvio auditado. Os dois arquivos tem os mesmos instantes, entao o cruzamento por ts fecha.
   const LIM_TS = new Set();
+  // o MOTIVO de cada meia hora limitada (PROMOVER motivo-entidade): a usina herda o motivo do conjunto na mesma meia hora
+  const RAZ_TS = new Map();
   for (const r of restr.consolidado) {
     const mes = String(r.ts).slice(0, 7); if (!/^\d{4}-\d{2}$/.test(mes)) continue;
     const m = M[mes] || (M[mes] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
@@ -510,6 +512,7 @@ async function writeOut(obj, nome, opts) {
     if (!excl) m.gerX += ger * H;
     if (lim > 0 && !excl) { const perda = Math.max(0, (gref - ger) * H);   // <- definição da casa
       LIM_TS.add(String(r.ts));
+      if (r.razao) RAZ_TS.set(String(r.ts), r.razao);
       dd.fru += perda; dd.horas_restr += H;
       m.fru += perda; m.int_restr++;
       // MOTIVO E ORIGEM POR DIA, na MESMA linha em que o mes os soma: mesma fonte, mesma formula e
@@ -612,6 +615,7 @@ async function writeOut(obj, nome, opts) {
   const RTC_M3_REPARO = "2026-07-12";   // reparo do RTC do c2 -> a estrutura do ONS vira nesta data
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   const corteDiarioUfv = [];  // o MESMO dia aberto por usina — campo novo, ao lado, nunca no lugar
+  const MOTIVO_UFV = [];      // mes -> usina/contrato -> MWh por motivo (PROMOVER motivo-entidade)
   // a referencia crua por usina so a partir de mar/26: antes disso o `ge` do ONS e inconsistente (o mesmo corte que
   // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
   const REF_DESDE = '2026-03-01';
@@ -629,6 +633,7 @@ async function writeOut(obj, nome, opts) {
     let gePL = 0, gvPL = 0, parLivre = 0;        // o mesmo par, so nos intervalos SEM limitacao
     const porDia = {};
     const porDiaUfv = {};       // dia -> usina -> { ge, gv } · a mesma conta do porDia, sem colapsar a usina
+    const razMes = {};          // usina -> motivo -> MWh: o deficit (ge - gv) das meias horas limitadas, pelo motivo do conjunto
     for (const r of C) {
       const u = String(r.u).replace('CEFMT', 'M');          // CEFMT1..9 == M1..M9 (confirmado pela assinatura de capacidade)
       const irr = num(r.irr); let g = num(r.ge); const v = num(r.gv); let rec = false;
@@ -712,6 +717,13 @@ async function writeOut(obj, nome, opts) {
         const pu = porDiaUfv[dia_] || (porDiaUfv[dia_] = {});
         const cu = pu[alvo] || (pu[alvo] = { ge: 0, gv: 0 });
         cu.ge += g * H; cu.gv += v * H;
+        // PROMOVER motivo-entidade: na meia hora limitada, o deficit da usina vai para o motivo do CONJUNTO naquela meia
+        // hora — o operador apura o motivo para o conjunto, e a limitacao atinge todas as usinas ao mesmo tempo. A mesma
+        // usina `alvo` do corte diario (o registro "M7" nas tres vidas). Com sinal: meia hora em que a referencia da
+        // usina fica abaixo da verificada desconta; o limite em zero e por usina, no mes e no dia, na publicacao.
+        const rz = RAZ_TS.get(String(r.ts));
+        if (rz) { const rm = razMes[alvo] || (razMes[alvo] = {}); rm[rz] = (rm[rz] || 0) + (g - v) * H;
+          const rdz = cu.raz || (cu.raz = {}); rdz[rz] = (rdz[rz] || 0) + (g - v) * H; }
       }
     }
     // ---- M3 × M7: desfaz a mistura de tag do ONS (estrutura descoberta com o usuário, 2026-07-17) ----
@@ -778,7 +790,8 @@ async function writeOut(obj, nome, opts) {
     Object.entries(porDiaUfv).sort().forEach(([dia, porU]) => {
       const linhas = Object.keys(porU).sort().map(ufv => { const c = porU[ufv];
         return { dia, mes, ufv, grupo: PPA.includes(ufv) ? 'PPA' : 'ML',
-          potencial_mwh: r2(c.ge), cortado_bruto_mwh: r2(Math.max(0, c.ge - c.gv)), _ge: c.ge, _gv: c.gv }; });
+          potencial_mwh: r2(c.ge), cortado_bruto_mwh: r2(Math.max(0, c.ge - c.gv)), _ge: c.ge, _gv: c.gv,
+          razoes_mwh: Object.fromEntries(Object.entries(c.raz || {}).map(([k, x]) => [k, r2(Math.max(0, x))])) }; });
       for (const g of ['PPA', 'ML']) {
         const L = linhas.filter(l => l.grupo === g); if (!L.length) continue;
         const alvo = Math.max(0, L.reduce((a, l) => a + l._ge - l._gv, 0));   // o MESMO clamp do agregado
@@ -803,6 +816,17 @@ async function writeOut(obj, nome, opts) {
         l.corte_pct = l.potencial_mwh > 0 ? r2(100 * l.cortado_mwh / l.potencial_mwh) : 0;
         corteDiarioUfv.push(l); });
     });
+    // o MES por usina e por contrato: o limite em zero e por usina e motivo; o contrato soma as usinas ja limitadas.
+    // So de REF_DESDE (mar/26) em diante: antes o potencial por usina do operador vem nulo ou quebrado, e a soma sairia ZERO
+    // — corte "zero" onde o certo e "nao apurado" (medido: set/25 a jan/26 em zero, fev/26 1,12 do conjunto).
+    if (mes >= REF_DESDE.slice(0, 7)) {
+    const razU = Object.fromEntries(Object.entries(razMes).map(([u, o]) => [u, Object.fromEntries(Object.entries(o).map(([k, x]) => [k, Math.max(0, x)]))]));
+    Object.keys(razU).sort().forEach(u => MOTIVO_UFV.push({ mes, ufv: u, razoes_mwh: Object.fromEntries(Object.entries(razU[u]).map(([k, x]) => [k, r2(x)])) }));
+    for (const [g, membros] of [['PPA', PPA], ['ML', ML]]) {
+      const soma = {}; membros.forEach(u => Object.entries(razU[u] || {}).forEach(([k, x]) => { soma[k] = (soma[k] || 0) + x; }));
+      if (Object.keys(soma).length) MOTIVO_UFV.push({ mes, ufv: g, razoes_mwh: Object.fromEntries(Object.entries(soma).map(([k, x]) => [k, r2(x)])) });
+    }
+    }
   }
   // 🔴 FECHAMENTO, e ele ABORTA sem gravar: a soma das usinas de cada grupo tem de reproduzir o
   // agregado do grupo, dia a dia, nas duas parcelas. Abrir uma conta que ja e publicada agregada so
@@ -1350,6 +1374,9 @@ async function writeOut(obj, nome, opts) {
     // divergem na primeira vez que alguem mexer num deles, e o painel mostraria uma abertura que
     // cobre mais dias que o total ao lado. O M7 so tem linha desde TAG_M7_OK (17/07/2026): antes o
     // registro dele era o circuito 2 do M3 e entra no M3 (ate 11/07) ou sai como duplicata (12–16/07).
+    // o motivo do corte por usina e por contrato, mes a mes (PROMOVER motivo-entidade): MWh por motivo, do deficit da usina nas
+    // meias horas limitadas, pelo motivo do conjunto na mesma meia hora
+    motivo_ufv: MOTIVO_UFV,
     corte_diario_ufv: (function () { const de = (corteDiario.slice(-75)[0] || {}).dia || '';
       return corteDiarioUfv.filter(x => x.dia >= de); })(),
     // a referencia do ONS contra a verificada, CRUA, por entidade e por dia, desde mar/26 (PROMOVER ref-ons)

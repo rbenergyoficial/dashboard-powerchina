@@ -91,6 +91,12 @@ jobs:
       - name: Ensaio · o corte por usina fecha com o corte por contrato
         run: node scripts/ensaio-corte-ufv.js
 
+      # O corte por MOTIVO aberto por usina e por contrato (o deficit da usina nas meias horas limitadas, pelo motivo do
+      # conjunto): contratos = soma das usinas, motivo so se o conjunto o registrou, nada antes de mar/26, ordem de grandeza
+      # contra o conjunto.
+      - name: Ensaio · o motivo do corte por usina e por contrato
+        run: node scripts/ensaio-motivo-ufv.js
+
       # A referencia do operador contra a verificada, crua, dia a dia. O campo existe para MOSTRAR um defeito da
       # fonte, entao tem de provar que e cru: cada usina contra o arquivo mensal do operador (o gerador ja fecha o
       # conjunto contra o arquivo do conjunto), e os agregados contra as suas partes.
