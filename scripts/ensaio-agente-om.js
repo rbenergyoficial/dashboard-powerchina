@@ -116,6 +116,30 @@ function julga(R) {
       mau.push('corte do ano: vantagem ' + C0.vantagem_pp + ' pp contra Nordeste ' + C0.nordeste_pct + ' - Mauriti ' + C0.corte_pct);
     if (!(K.ultimos_dias || []).length || !(K.meses || []).length) mau.push('VACUO: corte sem dias ou sem meses');
   }
+  /* TEMPO REAL: identidades dentro do bloco e contra o "agora" do mesmo resumo */
+  const T = R.tempo_real;
+  if (!T) mau.push('tempo real: bloco ausente');
+  else {
+    const md = T.medidores;
+    if (md.ok + md.fora.length !== md.total) mau.push('tempo real: ' + md.ok + ' medidores em dia + ' + md.fora.length + ' fora nao somam ' + md.total);
+    const CAP = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };
+    T.rendimento.por_usina.forEach((r) => {
+      if (!CAP[r.ufv]) { mau.push('tempo real: rendimento de usina desconhecida ' + r.ufv); return; }
+      /* mwh com 1 casa e mwh_por_mw com 3: folga de meio decimo sobre a capacidade mais meio milesimo */
+      if (Math.abs(r.mwh / CAP[r.ufv] - r.mwh_por_mw) > 0.0005 + 0.05 / CAP[r.ufv] + EPS) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh_por_mw + ' MWh/MW contra ' + r.mwh + ' / ' + CAP[r.ufv]);
+      const a = ((R.agora || {}).por_entidade || {})[r.ufv];
+      /* os dois com 1 casa, de somas diferentes do mesmo medidor: dois arredondamentos de meio decimo (medido: 0,1 no M6) */
+      if (a && a.energia_hoje_mwh != null && Math.abs(a.energia_hoje_mwh - r.mwh) > 0.1 + 1e-6) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh + ' MWh contra ' + a.energia_hoje_mwh + ' do agora');
+    });
+    Object.entries(T.must.por_parque || {}).forEach(([p, x]) => {
+      if (x.agora_mw != null && x.pico_hoje_mw != null && x.pico_hoje_mw + EPS < x.agora_mw) mau.push('tempo real: MUST ' + p + ' pico ' + x.pico_hoje_mw + ' abaixo do agora ' + x.agora_mw);
+      if (!(T.must.contratos_mw || {})[p]) mau.push('tempo real: MUST ' + p + ' sem contratado');
+    });
+    const o = T.operador.ultima_ordem;
+    if (o && (o.limite_mw > CAP_COMPLEXO + 0.01 || (!o.limitado && o.limite_mw < CAP_COMPLEXO - 0.01))) mau.push('tempo real: ultima ordem ' + o.limite_mw + ' MW incoerente com limitado=' + o.limitado);
+    T.fontes.selos.forEach((s) => { if (s.estado === 'sem estado') mau.push('tempo real: selo "' + s.item + '" sem estado conhecido'); });
+    if (!T.rendimento.por_usina.length || !T.fontes.selos.length) mau.push('VACUO: tempo real sem rendimento ou sem selos');
+  }
   if (julgados < 12) mau.push('VACUO: so ' + julgados + ' percentuais julgados');
   return mau;
 }
@@ -157,6 +181,14 @@ function julga(R) {
   plantio('vantagem sobre o Nordeste com o sinal trocado', (Y) => {
     const c = Y.corte.ano.por_entidade.Complexo; if (!c || !c.vantagem_pp) return false; c.vantagem_pp = -c.vantagem_pp; return true;
   }, /vantagem/);
+  plantio('medidor fora escondido', (Y) => { Y.tempo_real.medidores.ok -= 1; return true; }, /medidores em dia/);
+  plantio('rendimento trocado entre usinas', (Y) => {
+    const r = Y.tempo_real.rendimento.por_usina; const a = r.find((x) => x.ufv === 'M2'), b = r.find((x) => x.ufv === 'M9');
+    if (!a || !b || Math.abs(a.mwh_por_mw - b.mwh_por_mw) < 0.05) return false; const t = a.mwh_por_mw; a.mwh_por_mw = b.mwh_por_mw; b.mwh_por_mw = t; return true;
+  }, /rendimento M[29] /);
+  plantio('pico do MUST abaixo do instante', (Y) => {
+    const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.agora_mw == null) return false; x.pico_hoje_mw = x.agora_mw - 1; return true;
+  }, /MUST Complexo pico/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);
 
   if (falhas.length) { console.log(falhas.map((f) => '  RECUSA: ' + f).join('\n')); process.exit(1); }

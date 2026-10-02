@@ -68,6 +68,13 @@ const LEGENDA = {
     + '(ultimos_dias). motivos: ENE = razao energetica (sobra de energia no sistema), CNF = confiabilidade da rede, REL = '
     + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
     + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
+  tempo_real: 'medidores: dos 24 medidores de faturamento, quantos chegaram em dia e quais estao fora (idade em minutos). '
+    + 'rendimento: energia de hoje por usina e por MW instalado (compara usinas de tamanhos diferentes). operador: registro '
+    + 'da mesa do controlador de potencia; ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca registrada '
+    + '(limite igual a 343,77 MW = sem limitacao); o registro chega da planilha da mesa, nao e instantaneo. must: demanda no '
+    + 'ponto de conexao no ultimo instante de hoje e o maior valor de hoje, contra o contratado (acima de 100 % do contratado '
+    + 'gera penalidade; o pico de 5 min passa da outorga por transitorio de medicao). fontes: o selo de frescor de cada '
+    + 'fonte de dado (em dia, atencao, atrasada). A irradiancia nao e em tempo real: a estacao chega por export diario.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
     + 'defeito. M1 e a usina que a planilha comercial chama de Mauriti 10.',
@@ -176,6 +183,46 @@ function monta(V, X) {
   };
 }
 
+/* ---- TEMPO REAL AMPLIADO (02/10/2026): o que as telas "Ao vivo" e "Estado das fontes" mostram ----
+   medidores     portal_vivo.saude: quantos dos 24 medidores estao em dia e QUAIS nao estao;
+   rendimento    portal_vivo.rendimento: MWh e MWh por MW instalado de cada usina hoje;
+   operador      ppc_restricao (registro da mesa do controlador de potencia): o dia de hoje e a ULTIMA ordem registrada;
+   must          must_5min: o ultimo instante de hoje e o maior valor de hoje por parque, contra o contratado;
+   fontes        fontes_saude: o selo de frescor de cada fonte, com o estado pela cor que o gerador dos selos ja decidiu.
+   🔴 Unica conta do bloco: o MAXIMO de hoje do MUST (mecanico, sobre as linhas do dia). Irradiancia NAO entra: a estacao
+      chega por export diario (D-1), e chamar isso de "agora" seria mentir sobre a idade do dado. */
+const ESTADO_COR = { '#2FBF71': 'em dia', '#FF8A3D': 'atencao', '#E5484D': 'atrasada', '#8B93A1': 'informativo' };
+const GRUPO_SELO = { badges_trafo: 'transformadores', badges_oleo: 'oleo dos transformadores', badges_ons: 'operador (ONS)',
+  badges_way2: 'medidores', badges_inversores: 'inversores', badges_solarimetria: 'estacao solarimetrica', badges_historico: 'historico do medidor' };
+function montaTempoReal(V, P, MU, F) {
+  const s = V.saude || {};
+  const medidores = { ok: s.ok, total: s.total, idade_min: s.idade_min, ancora: s.ancora,
+    fora: (s.medidores || []).filter((m) => m.estado !== 'ok').map((m) => ({ nome: m.nome, grupo: m.grupo, idade_min: m.idade, estado: m.estado })) };
+  const rendimento = { ate: V.rendimento_ate || V.hora, por_usina: (V.rendimento || []).map((r) => ({ ufv: r.ufv, mwh: r.mwh, mwh_por_mw: r.mwh_mw })) };
+  const evs = P.eventos || [], ult = evs[evs.length - 1] || null, hojeP = (P.dias || []).find((d) => d.dia === V.dia) || null;
+  const operador = { registro_gerado: P.gerado_em, hoje: hojeP && { dia: hojeP.dia, ordens: hojeP.eventos, ordens_com_limite: hojeP.restritos,
+      primeira: hojeP.primeiro, ultima: hojeP.ultimo, menor_limite_mw: hojeP.pot_min, horas_sob_limite: hojeP.horas_restricao,
+      termina_limitado: hojeP.restricao_aberta === 1, motivos: hojeP.motivo_cods },
+    ultima_ordem: ult && { quando: ult.ts, limite_mw: ult.pot, limitado: ult.restr === 1, motivo: ult.motivo } };
+  const linhasHoje = (MU.serie || []).filter((r) => String(r.t).slice(0, 10) === V.dia);
+  const must = { contratos_mw: MU.contratos, instante: null, por_parque: {} };
+  if (linhasHoje.length) {
+    const u = linhasHoje[linhasHoje.length - 1];
+    must.instante = String(u.t).slice(11, 16);
+    for (const p of MU.parques || []) {
+      let pico = null;
+      for (const r of linhasHoje) if (r[p] != null && (!pico || r[p] > pico.v)) pico = { v: r[p], h: String(r.t).slice(11, 16) };
+      must.por_parque[p] = { agora_mw: u[p], pico_hoje_mw: pico ? pico.v : null, pico_hora: pico ? pico.h : null };
+    }
+  }
+  const fontes = [];
+  for (const [k, lista] of Object.entries(F || {})) {
+    if (!k.startsWith('badges_')) continue;
+    (lista || []).forEach((b) => fontes.push({ grupo: GRUPO_SELO[k] || k.slice(7), item: b.l, valor: b.v, unidade: b.u || '', estado: ESTADO_COR[b.c] || 'sem estado' }));
+  }
+  return { medidores, rendimento, operador, must, fontes: { gerado: F && F.gerado_em, selos: fontes } };
+}
+
 /* guardas: o resumo incompleto nao e gravado (melhor o assistente ler o anterior que um resumo com buraco) */
 function guarda(R) {
   const mau = [];
@@ -188,6 +235,14 @@ function guarda(R) {
   if (!R.corte || R.corte.ultimos_dias.length !== DIAS_CORTE) mau.push('corte: ' + (R.corte ? R.corte.ultimos_dias.length : 0) + ' dias em vez de ' + DIAS_CORTE);
   else R.corte.ultimos_dias.forEach((d) => ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'].forEach((u) => { if (!d.por_usina[u]) mau.push('corte ' + d.dia + ': sem ' + u); }));
   if (R.corte) faltam(R.corte.ano.por_entidade, 'corte do ano');
+  const T = R.tempo_real;
+  if (!T) mau.push('tempo real: bloco ausente');
+  else {
+    if (T.medidores.total !== 24) mau.push('tempo real: ' + T.medidores.total + ' medidores em vez de 24');
+    if (T.rendimento.por_usina.length !== 9) mau.push('tempo real: rendimento de ' + T.rendimento.por_usina.length + ' usinas');
+    if (!T.operador.ultima_ordem) mau.push('tempo real: sem ordem da mesa');
+    if (!T.fontes.selos.length) mau.push('tempo real: sem selos de frescor');
+  }
   const kb = Buffer.byteLength(JSON.stringify(R)) / 1024;
   if (kb > TETO_KB) mau.push('tamanho ' + kb.toFixed(1) + ' KB acima do teto de ' + TETO_KB);
   return { mau, kb };
@@ -204,8 +259,10 @@ async function grava(R) {
 }
 
 async function main() {
-  const [V, X] = await Promise.all([puxa(BASE + 'portal_vivo.json'), puxa(BASE + 'executivo.json')]);
+  const [V, X, P, MU, F] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json', 'fontes_saude.json']
+    .map((n) => puxa(BASE + n)));
   const R = monta(V, X);
+  R.tempo_real = montaTempoReal(V, P, MU, F);
   const { mau, kb } = guarda(R);
   if (mau.length) { console.error('agente_om: NAO gravado\n  ' + mau.join('\n  ')); process.exit(1); }
   await grava(R);
@@ -213,5 +270,5 @@ async function main() {
     + ' · fechados ' + R.meses_fechados.map((m) => m.lbl).join(', ') + ' · ano ' + R.ano.ano + ' ate ' + R.ano.meses_fechados_ate);
 }
 
-module.exports = { monta, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
+module.exports = { monta, montaTempoReal, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
