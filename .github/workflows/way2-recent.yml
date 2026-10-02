@@ -87,6 +87,20 @@ jobs:
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
         if: always()
         run: node scripts/ensaio-manchete-noite.js --produto
+      # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
+      # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
+      # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com always():
+      # vermelho aqui nao tira do job nada que venha antes, e o vigia abaixo roda de qualquer jeito.
+      - name: Resumo do assistente de voz (agente_om.json)
+        if: always()
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-agente-om.js
+      # Sobre o que subiu: atingido = energia / meta com folga do arredondamento, meta rateada abaixo da do mes, capacidades
+      # fechando 343,77 MW, 12 entidades, mes em curso fora dos fechados; cinco defeitos plantados reprovam cada um.
+      - name: Ensaio · o resumo do assistente diz o que a tela diz
+        if: always()
+        run: node scripts/ensaio-agente-om.js
       # 🔴 O VIGIA DE CADENCIA SAIU DAQUI, e a saida E a correcao (13/09/2026).
       # Ele existe para perceber que um workflow DEIXOU DE RODAR — e morava dentro deste, que e
       # um dos vigiados. Quando uma run presa em `queued` fez o relogio pular o `way2-recent` a
