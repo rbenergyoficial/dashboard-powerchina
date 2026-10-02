@@ -25,7 +25,10 @@ const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
 const OUT_BLOB = process.env.OUT_BLOB || 'agente_om.json';
 const ENTIDADES = ['Complexo', 'PPA', 'ML', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const MESES_FECHADOS = 6;
-const TETO_KB = 25;   /* acima disso a resposta pesa no contexto do assistente; melhor abortar e cortar de proposito */
+/* o assistente do portal baixa o resumo a cada pergunta: acima disso ele deixa de ser leve; melhor abortar e cortar de
+   proposito (era 25 KB quando o leitor era um modelo de linguagem; o corte do ONS, em 02/10/2026, levou a ~30 KB) */
+const TETO_KB = 45;
+const DIAS_CORTE = 7;   /* ultimos dias com corte apurado (o operador publica com ~1 dia de atraso) */
 
 function puxa(url) {
   const https = require('https');
@@ -59,6 +62,12 @@ const LEGENDA = {
   meses_fechados: 'Meses ja encerrados: energia liquida, meta contratual do mes e percentual atingido.',
   ano: 'Acumulado do ano so com os meses JA FECHADOS (o mes em curso nao entra). meses_na_meta conta quantos meses bateram a '
     + 'meta.',
+  corte: 'Energia que a usina deixou de gerar por limitacao do operador nacional (ONS). cortado_mwh e a energia impedida; '
+    + 'corte_pct e essa energia em % do potencial (o que teria gerado sem a limitacao); horas_restricao sao as horas sob '
+    + 'limitacao no mes (no mes so vao cortado_mwh e potencial_mwh; o percentual do dia vai pronto). O operador publica com atraso de cerca de um dia, entao o mes em curso so tem os dias ja publicados '
+    + '(ultimos_dias). motivos: ENE = razao energetica (sobra de energia no sistema), CNF = confiabilidade da rede, REL = '
+    + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
+    + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
     + 'defeito. M1 e a usina que a planilha comercial chama de Mauriti 10.',
@@ -115,6 +124,46 @@ function monta(V, X) {
       meses_na_meta: y.bateram, meses_com_meta: y.meses_com_meta };
   }
 
+  /* ---- CORTE DO OPERADOR (ONS): so selecao, como o resto ---- */
+  const CDU = X.corte_diario_ufv || [];
+  const diasC = [...new Set(CDU.map((x) => x.dia))].sort().slice(-DIAS_CORTE);
+  const ultimosDias = diasC.map((dia) => {
+    const por = {};
+    CDU.filter((x) => x.dia === dia).forEach((x) => { por[x.ufv] = { potencial_mwh: x.potencial_mwh, cortado_mwh: x.cortado_mwh, corte_pct: x.corte_pct }; });
+    return { dia, por_usina: por };
+  });
+  const MU = X.motivo_ufv || [], SC = X.serie || [];
+  const corteMeses = fechados.map((mes) => {
+    const por = {};
+    for (const e of ENTIDADES) {
+      const s = S.find((x) => x.ufv === e && x.mes === mes && x.parcial === 0);
+      if (!s) continue;
+      /* 🔴 SEM o `corte_pct` do mes: medido em 02/10/2026, no Complexo de abr a jul/26 ele nao confere com o cortado e o
+         potencial da MESMA linha (abr: 23,28 % publicado, 22,29 % pelo par em MWh) — o cortado foi editado depois e o
+         percentual ficou para tras. Ate o lote proprio no executivo, o assistente fala o par em MWh, que fecha. */
+      const o = { potencial_mwh: s.potencial_mwh, cortado_mwh: s.cortado_mwh, horas_restricao: s.horas_restricao };
+      if (e === 'Complexo') {
+        const c = SC.find((x) => x.mes === mes);
+        if (c && c.razoes) o.motivos_pct = Object.fromEntries(Object.entries(c.razoes).map(([k, v]) => [k, v.pct]));
+      } else {
+        const mu = MU.find((x) => x.ufv === e && x.mes === mes);
+        if (mu && mu.razoes_mwh) o.motivos_mwh = mu.razoes_mwh;
+      }
+      por[e] = o;
+    }
+    return { mes, lbl: (S.find((x) => x.mes === mes) || {}).lbl, por_entidade: por };
+  });
+  const corteAno = {};
+  for (const e of ENTIDADES) {
+    const y = (X.ytd_ufv || []).find((x) => x.ufv === e);
+    if (!y) continue;
+    corteAno[e] = { cortado_mwh: y.cortado_mwh, meses_com_corte: y.meses_com_corte };
+    if (e === 'Complexo') Object.assign(corteAno[e], {
+      janela: y.corte_janela, corte_pct: y.corte_conj_pct, nordeste_pct: y.corte_ne_pct, abaiara_pct: y.corte_abaiara_pct,
+      vantagem_pp: y.corte_vantagem_pp, horas_restricao: y.corte_horas,
+      motivos_pct: { ENE: y.corte_ene_pct, CNF: y.corte_cnf_pct, REL: y.corte_rel_pct } });
+  }
+
   return {
     gerado: new Date().toISOString(),
     fontes: { ao_vivo: V.gerado, executivo: X.atualizado },
@@ -123,6 +172,7 @@ function monta(V, X) {
     mes_em_curso: { mes: mesAtual, lbl, fechado, dias_corridos: dc, dias_do_mes: dm, por_entidade: cursoPor },
     meses_fechados: mesesFechados,
     ano: { ano, meses_fechados_ate: ate, por_entidade: anoPor },
+    corte: { ultimos_dias: ultimosDias, meses: corteMeses, ano: { ano, por_entidade: corteAno } },
   };
 }
 
@@ -135,6 +185,9 @@ function guarda(R) {
   faltam(R.ano.por_entidade, 'ano');
   if (R.meses_fechados.length !== MESES_FECHADOS) mau.push('meses fechados: ' + R.meses_fechados.length + ' em vez de ' + MESES_FECHADOS);
   R.meses_fechados.forEach((m) => faltam(m.por_entidade, 'mes ' + m.mes));
+  if (!R.corte || R.corte.ultimos_dias.length !== DIAS_CORTE) mau.push('corte: ' + (R.corte ? R.corte.ultimos_dias.length : 0) + ' dias em vez de ' + DIAS_CORTE);
+  else R.corte.ultimos_dias.forEach((d) => ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'].forEach((u) => { if (!d.por_usina[u]) mau.push('corte ' + d.dia + ': sem ' + u); }));
+  if (R.corte) faltam(R.corte.ano.por_entidade, 'corte do ano');
   const kb = Buffer.byteLength(JSON.stringify(R)) / 1024;
   if (kb > TETO_KB) mau.push('tamanho ' + kb.toFixed(1) + ' KB acima do teto de ' + TETO_KB);
   return { mau, kb };
@@ -160,5 +213,5 @@ async function main() {
     + ' · fechados ' + R.meses_fechados.map((m) => m.lbl).join(', ') + ' · ano ' + R.ano.ano + ' ate ' + R.ano.meses_fechados_ate);
 }
 
-module.exports = { monta, guarda, ENTIDADES, MESES_FECHADOS };
+module.exports = { monta, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });

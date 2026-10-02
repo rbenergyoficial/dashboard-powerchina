@@ -92,6 +92,30 @@ function julga(R) {
     if (!(Math.abs(su - CAP_COMPLEXO) <= 0.001)) mau.push('agora: as usinas somam ' + su.toFixed(3) + ' MW de capacidade, nao ' + CAP_COMPLEXO);
     if (!(Math.abs(cap('PPA') + cap('ML') - CAP_COMPLEXO) <= 0.001)) mau.push('agora: PPA + ML somam ' + (cap('PPA') + cap('ML')).toFixed(3) + ' MW, nao ' + CAP_COMPLEXO);
   }
+  /* CORTE: corte_pct = 100 x cortado / potencial (dia e mes); as usinas somam o conjunto no mes; vantagem = Nordeste - Mauriti */
+  const K = R.corte;
+  if (!K) mau.push('corte: bloco ausente');
+  else {
+    (K.ultimos_dias || []).forEach((d) => Object.entries(d.por_usina || {}).forEach(([u, x]) =>
+      pct('corte ' + d.dia + ' ' + u, x.cortado_mwh, x.potencial_mwh, x.corte_pct)));
+    (K.meses || []).forEach((m) => {
+      /* o mes vai sem percentual (ver o gerador): o que se exige e que ele NAO volte sem a guarda que o justifique */
+      Object.entries(m.por_entidade || {}).forEach(([e, x]) => {
+        if ('corte_pct' in x) mau.push('corte ' + m.mes + ' ' + e + ': percentual do mes publicado de novo (no Complexo ele nao fecha com o par em MWh)');
+        if (x.cortado_mwh != null && x.potencial_mwh != null && x.cortado_mwh > x.potencial_mwh + 0.01) mau.push('corte ' + m.mes + ' ' + e + ': cortado acima do potencial');
+      });
+      const P = m.por_entidade || {};
+      if (P.Complexo && P.Complexo.cortado_mwh != null && USINAS.every((u) => P[u] && P[u].cortado_mwh != null)) {
+        const s = USINAS.reduce((a, u) => a + P[u].cortado_mwh, 0);
+        if (Math.abs(s - P.Complexo.cortado_mwh) > 0.011 * USINAS.length) mau.push('corte ' + m.mes + ': usinas somam ' + s.toFixed(2) + ' MWh contra ' + P.Complexo.cortado_mwh + ' do conjunto');
+      }
+    });
+    const C0 = ((K.ano || {}).por_entidade || {}).Complexo;
+    if (C0 && C0.nordeste_pct != null && C0.corte_pct != null && C0.vantagem_pp != null
+      && Math.abs((C0.nordeste_pct - C0.corte_pct) - C0.vantagem_pp) > 0.011)
+      mau.push('corte do ano: vantagem ' + C0.vantagem_pp + ' pp contra Nordeste ' + C0.nordeste_pct + ' - Mauriti ' + C0.corte_pct);
+    if (!(K.ultimos_dias || []).length || !(K.meses || []).length) mau.push('VACUO: corte sem dias ou sem meses');
+  }
   if (julgados < 12) mau.push('VACUO: so ' + julgados + ' percentuais julgados');
   return mau;
 }
@@ -126,6 +150,13 @@ function julga(R) {
   plantio('mes em curso dentro dos fechados', (Y) => {
     const x = copia(Y.meses_fechados[Y.meses_fechados.length - 1]); x.mes = Y.mes_em_curso.mes; Y.meses_fechados.push(x); return true;
   }, /nao e anterior ao mes em curso/);
+  plantio('corte de um dia trocado entre usinas', (Y) => {
+    const d = Y.corte.ultimos_dias.find((q) => q.por_usina.M5 && q.por_usina.M1 && q.por_usina.M5.cortado_mwh > 1 && Math.abs(q.por_usina.M5.corte_pct - q.por_usina.M1.corte_pct) > 1);
+    if (!d) return false; const t = d.por_usina.M5.corte_pct; d.por_usina.M5.corte_pct = d.por_usina.M1.corte_pct; d.por_usina.M1.corte_pct = t; return true;
+  }, /corte \d{4}-\d{2}-\d{2} M[15]: atingido/);
+  plantio('vantagem sobre o Nordeste com o sinal trocado', (Y) => {
+    const c = Y.corte.ano.por_entidade.Complexo; if (!c || !c.vantagem_pp) return false; c.vantagem_pp = -c.vantagem_pp; return true;
+  }, /vantagem/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);
 
   if (falhas.length) { console.log(falhas.map((f) => '  RECUSA: ' + f).join('\n')); process.exit(1); }
