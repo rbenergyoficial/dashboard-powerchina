@@ -24,6 +24,7 @@ const CONTAINER = 'dados';
 const HIST_PREFIX = 'hist/';
 const DAILY_BLOB = 'way2_daily.json';
 const OUTORGA_MW = 343.77;                       // capacidade instalada do complexo (FC)
+const SLOTS_COMPLETO = 280;                      // dia completo: ~24 h dos 288 registros de 5 min
 
 const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medicao/pontos' };
 const IDS = [6196, 6197, 6198, 6199, 6200, 6201, 6202, 6203, 6204, 6205, 6206, 6207, 6208,
@@ -145,6 +146,17 @@ function rollupDia(j, day) {
   }
   const ufv_liq_mwh = {}; for (const u in ufvLiq) ufv_liq_mwh[u] = r(ufvLiq[u], 3);
 
+  // COBERTURA DA MEDIÇÃO POR USINA (PROMOVER med-entidade): registros de 5 min em que TODOS os circuitos da usina têm
+  // valor. O contrato (PPA, ML) conta o instante em que todos os circuitos de todas as suas usinas têm valor: a
+  // interseção, e não a menor das usinas, porque um furo em cada usina em horas diferentes deixa o contrato sem leitura
+  // nas duas horas. Mesmo critério de dia completo do conjunto (SLOTS_COMPLETO).
+  const GRUPOS = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
+  const cobre = (pids) => { let n = 0; for (const t of tset) if (pids.every(pid => t in smap[pid])) n++; return n; };
+  const ufv_slots = {};
+  for (const u in UFV_CIRC) ufv_slots[u] = cobre(UFV_CIRC[u]);
+  for (const g in GRUPOS) ufv_slots[g] = cobre([].concat(...GRUPOS[g].map(u => UFV_CIRC[u])));
+  const ufv_completo = {}; for (const u in ufv_slots) ufv_completo[u] = ufv_slots[u] >= SLOTS_COMPLETO;
+
   return {
     dia: day,
     ene_ger_mwh: r(eneGer, 3),
@@ -158,7 +170,9 @@ function rollupDia(j, day) {
     media_mw: r(horas > 0 ? eneGer / horas : 0, 3),
     fc_pct: r(horas > 0 ? eneGer / (OUTORGA_MW * horas) * 100 : 0, 2),
     slots: nn,
-    completo: nn >= 280,                          // ~24h de dados
+    completo: nn >= SLOTS_COMPLETO,               // ~24h de dados
+    ufv_slots,                                     // registros de 5 min com todos os circuitos da usina (ou do contrato)
+    ufv_completo,
   };
 }
 
@@ -179,7 +193,7 @@ async function subirJson(container, nome, obj) {
 // executivo importa ela p/ montar a barra do dia corrente sem duplicar a equacao: se o rateio
 // mudar, muda nos dois lugares de uma vez. Por isso a IIFE abaixo so roda quando este arquivo
 // e o ponto de entrada — importado, ele apenas exporta.
-module.exports = { rollupDia, valores };
+module.exports = { rollupDia, valores, SLOTS_COMPLETO };
 if (require.main !== module) return;
 
 (async () => {

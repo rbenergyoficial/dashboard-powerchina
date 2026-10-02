@@ -36,6 +36,9 @@ jobs:
         with:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
+      # PROMOVER med-entidade: o rollup conta a cobertura por usina num dia sintetico ANTES de reescrever o diario.
+      - name: Ensaio · cobertura da medicao por usina (lib)
+        run: node scripts/ensaio-med-ufv.js --lib
       # O rollup e reescrito INTEIRO pelo passo seguinte, e o container nao tem versionamento nem
       # soft-delete confirmado. O backup roda na MESMA execucao, imediatamente antes — backup de
       # ontem nao protege a reescrita de hoje. Se ele falhar, o job para e o rollup nao e tocado.
@@ -52,3 +55,7 @@ jobs:
           FORCAR: ${{ github.event.inputs.forcar || 'false' }}
           PARAR_APOS_VAZIOS: ${{ github.event.inputs.parar || '7' }}
         run: node scripts/gen-way2-hist.js
+      # PROMOVER med-entidade: a cobertura da medicao por usina no blob recem-gravado, com o snapshot do dia mais
+      # recente recontado por codigo proprio (segunda rota).
+      - name: Ensaio · cobertura da medicao por usina (blob publicado)
+        run: node scripts/ensaio-med-ufv.js --produto
