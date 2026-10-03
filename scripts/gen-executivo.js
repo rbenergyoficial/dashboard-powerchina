@@ -1281,8 +1281,23 @@ async function writeOut(obj, nome, opts) {
     // (RO-AO.BR.13 5.2.2.5), e isso foi medido em 17.376 patamares do SAGER. Entao o Complexo somado aqui tem de bater,
     // dia a dia, com o `gref` do arquivo do CONJUNTO — que o gerador ja le. Se nao bater, uma usina sumiu ou foi lida
     // errada, e o campo nao sai. Folga: 0,03 MWh/h por patamar (o maximo medido) x 48 x 0,5 h = 0,72 MWh no dia.
-    const grefDia = {};
-    for (const r of restr.consolidado) { const dd = String(r.ts).slice(0, 10); if (dd >= REF_DESDE) grefDia[dd] = (grefDia[dd] || 0) + num(r.gref) * H; }
+    // ⚠️ PATAMAR SEM PUBLICACAO NO CONJUNTO (PROMOVER ref-buraco-conjunto, 03/10/2026): em 01/10/2026 09:00 o arquivo do
+    // conjunto trouxe `gref` 0,0 e `disp` 0,0 com 245 MW gerados, e as nove usinas trouxeram o patamar normal (63,97 MW,
+    // entre 56,7 e 65,7 dos vizinhos). `disp` 0 ja e ausencia de publicacao para a disponibilidade (ver acima); com o
+    // `gref` zerado junto, o patamar nao tem o que conferir, e a guarda derrubava o executivo inteiro por ele. So esse
+    // padrao exato (os dois zerados e geracao positiva) e conferido pela soma das usinas; o log conta quantos foram, e
+    // qualquer outra diferenca segue derrubando. No corte ele nao pesa: max(0, gref - ger) ja da zero nele.
+    const grefDia = {}, buracos = [];
+    for (const r of restr.consolidado) { const dd = String(r.ts).slice(0, 10); if (dd < REF_DESDE) continue;
+      let g = num(r.gref);
+      if (g === 0 && num(r.disp) === 0 && num(r.ger) > 0 && refHora[dd]) {
+        const k = SLOT(r.ts);
+        g = PPA.concat(ML).reduce((a, u) => a + num(((refHora[dd][u] || {}).ge || [])[k]), 0);
+        buracos.push(String(r.ts).slice(0, 16));
+      }
+      grefDia[dd] = (grefDia[dd] || 0) + g * H; }
+    if (buracos.length) console.log('ref_dia_ufv: ' + buracos.length + ' patamar(es) sem publicacao do conjunto (gref e disp zerados), conferido(s) pela soma das usinas: '
+      + buracos.slice(0, 10).join(', ') + (buracos.length > 10 ? ' …' : ''));
     const ruins = refDiaUfv.filter(x => x.ufv === 'Complexo' && grefDia[x.dia] != null && Math.abs(x.ref_mwh - grefDia[x.dia]) > 0.75);
     if (ruins.length) throw new Error('ref_dia_ufv: a referencia do Complexo, somada das usinas, nao fecha com a do arquivo do conjunto em '
       + ruins.length + ' dia(s) — ex.: ' + ruins.slice(0, 3).map(x => x.dia + ' ' + x.ref_mwh + ' x ' + r2(grefDia[x.dia])).join(' · '));
