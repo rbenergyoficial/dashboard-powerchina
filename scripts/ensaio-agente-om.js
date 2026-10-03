@@ -226,6 +226,7 @@ function julga(R) {
     const Y = copia(R);
     const ok = muda(Y);
     if (ok === 'pula') { console.log('  plantio "' + nome + '": nao se aplica hoje (ultimo dia do mes: as duas metas coincidem)'); return; }
+    if (typeof ok === 'string' && ok.indexOf('pula: ') === 0) { console.log('  plantio "' + nome + '": nao se aplica agora (' + ok.slice(6) + ')'); return; }
     if (!ok) { falhas.push('plantio "' + nome + '" nao achou onde plantar'); return; }
     if (JSON.stringify(Y) === JSON.stringify(R)) { falhas.push('plantio "' + nome + '" nao mudou nada'); return; }
     const novos = julga(Y).concat(guarda(Y).mau).filter((m) => !base.includes(m));
@@ -271,10 +272,15 @@ function julga(R) {
     const c = Y.corte.ano.por_entidade.Complexo; if (!c || !c.vantagem_pp) return false; c.vantagem_pp = -c.vantagem_pp; return true;
   }, /vantagem/);
   plantio('medidor fora escondido', (Y) => { Y.tempo_real.medidores.ok -= 1; return true; }, /medidores em dia/);
+  /* o PAR de maior diferenca no rendimento de hoje, e nao M2 x M9 fixos: as 16:30 de 03/10/2026 os dois estavam a 0,02 MWh/MW
+     um do outro e o plantio recusou o job. De madrugada todas estao em zero: ai o caso nao se aplica, e o ensaio diz por que */
   plantio('rendimento trocado entre usinas', (Y) => {
-    const r = Y.tempo_real.rendimento.por_usina; const a = r.find((x) => x.ufv === 'M2'), b = r.find((x) => x.ufv === 'M9');
-    if (!a || !b || Math.abs(a.mwh_por_mw - b.mwh_por_mw) < 0.05) return false; const t = a.mwh_por_mw; a.mwh_por_mw = b.mwh_por_mw; b.mwh_por_mw = t; return true;
-  }, /rendimento M[29] /);
+    const r = Y.tempo_real.rendimento.por_usina.filter((x) => x.mwh_por_mw != null).slice().sort((p, q) => p.mwh_por_mw - q.mwh_por_mw);
+    if (r.length < 2) return false;
+    const a = r[0], b = r[r.length - 1];
+    if (b.mwh_por_mw - a.mwh_por_mw < 0.05) return 'pula: rendimento de hoje igual em todas as usinas (' + a.mwh_por_mw + ' a ' + b.mwh_por_mw + ' MWh/MW), madrugada';
+    const t = a.mwh_por_mw; a.mwh_por_mw = b.mwh_por_mw; b.mwh_por_mw = t; return true;
+  }, /rendimento M\d /);
   /* plantios que NAO dependem do estado da hora: pico x instante e carga x potencia valem com qualquer leitura */
   plantio('pico do MUST abaixo do instante', (Y) => {
     const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.pico_hoje_mw == null) return false; x.agora_mw = x.pico_hoje_mw + 1; return true;
