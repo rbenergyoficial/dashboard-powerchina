@@ -2293,7 +2293,11 @@ async function writeOut(obj, nome, opts) {
           liquida_gwh: r2(liqAcum), meta_gwh: temMeta.length ? r2(metaAcum) : null,
           liquida_mwh: r2(somaN('liquida_mwh')),
           meta_mwh: temMeta.length ? r2(somaN('meta_mwh')) : null,
-          atingido_pct: metaAcum > 0 ? r2(100 * liqAcum / metaAcum) : null,
+          // pelas somas em MWh (PROMOVER ating-ano-mwh, 03/10/2026): somar os GWh de cada mes, ja arredondados a 10 MWh,
+          // deixava o atingido do ano ate 0,08 pp fora do MWh (M7 57,68 x 57,757 %). Sem MWh em algum mes, o GWh de antes.
+          atingido_pct: (() => { const okM = A.every(x => x.liquida_mwh != null || x.liquida_gwh == null) && temMeta.every(x => x.meta_mwh != null);
+            const mM = temMeta.reduce((a, x) => a + (x.meta_mwh || 0), 0);
+            return okM ? (mM > 0 ? r2(100 * somaN('liquida_mwh') / mM) : null) : (metaAcum > 0 ? r2(100 * liqAcum / metaAcum) : null); })(),
           meses_com_meta: temMeta.length,
           bateram: temMeta.filter(x => x.atingido_pct != null && x.atingido_pct >= 100).length,
           cortado_gwh: comCorte.length ? r2(comCorte.reduce((a, x) => a + x.cortado_gwh, 0)) : null,
@@ -2340,12 +2344,15 @@ async function writeOut(obj, nome, opts) {
               && Math.abs(x.liquida_gwh - x.meta_gwh) > 0.005);
             const mF = F.reduce((a, x) => a + x.meta_gwh, 0);
             const lF = F.reduce((a, x) => a + x.liquida_gwh, 0);
+            // o percentual pelas somas em MWh, como o atingido do ano (PROMOVER ating-ano-mwh)
+            const okF = F.every(x => x.meta_mwh != null && x.liquida_mwh != null);
+            const mFm = F.reduce((a, x) => a + (x.meta_mwh || 0), 0), lFm = F.reduce((a, x) => a + (x.liquida_mwh || 0), 0);
             return { meses_meta_firme: F.length,
               meses_meta_igual: temMeta.length - F.length,
               lbl_meta_firme: F.map(x => x.lbl).join(', ') || null,
               liquida_firme_gwh: F.length ? r2(lF) : null,
               meta_firme_gwh: F.length ? r2(mF) : null,
-              atingido_firme_pct: mF > 0 ? r2(100 * lF / mF) : null };
+              atingido_firme_pct: okF ? (mFm > 0 ? r2(100 * lFm / mFm) : null) : (mF > 0 ? r2(100 * lF / mF) : null) };
           })(),
           // ---- KPIs DE CONJUNTO PARA A ABERTURA DO SUMARIO ----
           // Por que aqui e so no Complexo: disponibilidade e corte NAO existem por usina. O ONS
@@ -2579,9 +2586,14 @@ async function writeOut(obj, nome, opts) {
         if (x.liquida_gwh == null) return;
         // o ano soma meses ja arredondados nas duas unidades: a folga e meio centesimo de GWh por mes
         if (x.liquida_mwh == null || Math.abs(x.liquida_mwh / 1000 - x.liquida_gwh) > 0.005 * (x.meses + 1)) mau.push(x.ufv + ' ' + x.ano + ': ' + x.liquida_mwh + ' MWh contra ' + x.liquida_gwh + ' GWh');
+        // o atingido do ano e a razao das somas em MWh publicadas (PROMOVER ating-ano-mwh): folga do percentual a 2 casas e
+        // dos dois MWh a centesimos
+        if (x.atingido_pct != null && x.meta_mwh > 0 && x.liquida_mwh != null
+          && Math.abs(x.atingido_pct - 100 * x.liquida_mwh / x.meta_mwh) > 0.0051 + 0.5 * (1 / x.meta_mwh + Math.abs(x.liquida_mwh) / (x.meta_mwh * x.meta_mwh)))
+          mau.push(x.ufv + ' ' + x.ano + ': atingido do ano ' + x.atingido_pct + ' % contra 100 x ' + x.liquida_mwh + ' / ' + x.meta_mwh);
         if (x.meta_gwh != null && (x.meta_mwh == null || Math.abs(x.meta_mwh / 1000 - x.meta_gwh) > 0.005 * (x.meses + 1))) mau.push(x.ufv + ' ' + x.ano + ': meta ' + x.meta_mwh + ' MWh contra ' + x.meta_gwh + ' GWh');
       });
-      if (mau.length) throw new Error('liquida_mwh NAO fecha com liquida_gwh:\n  ' + mau.join('\n  '));
+      if (mau.length) throw new Error('energia/meta em MWh NAO fecham com o GWh (ou o atingido do ano com o MWh):\n  ' + mau.join('\n  '));
     }
     // ---- corte, potencial, entregue, resto e razoes em MWh (PROMOVER mwh-gerador, 25/09/2026) ----
     // A regra mora em lib-par-mwh.js, que o ensaio tambem usa: par com o GWh onde os dois nascem do mesmo cru,
