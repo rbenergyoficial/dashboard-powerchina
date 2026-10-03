@@ -70,15 +70,14 @@ function julga(R) {
   });
   const fe = (R.meses_fechados || []).map((m) => m.mes);
   if (fe.some((m, i) => i && m <= fe[i - 1])) mau.push('meses fechados fora de ordem: ' + fe.join(', '));
-  /* o atingido do ANO sai do executivo em GWh: 100 x soma(liquida_gwh do mes) / soma(meta_gwh do mes), cada mes com 2 casas
-     (10 MWh). Contra a energia em MWh a folga e a desses n arredondamentos de meio centesimo de GWh em cada soma (medido em
-     01/10/2026: M7 57,68 % publicado contra 57,757 % refeito do MWh, folga derivada 0,28 pp). */
+  /* o atingido do ANO e a razao das somas em MWh desde 03/10/2026 (PROMOVER ating-ano-mwh). Antes saia das somas em GWh, cada
+     mes a 10 MWh, e a folga aqui era a de n arredondamentos de meio centesimo de GWh (M7 57,68 x 57,757 %, folga 0,28 pp).
+     Agora a folga e a do percentual a 2 casas e dos dois MWh a centesimos. */
   Object.entries((R.ano || {}).por_entidade || {}).forEach(([e, x]) => {
     if (x.liquida_mwh == null || !(x.meta_mwh > 0) || x.atingido_pct == null) return;
     julgados++;
-    const Lg = x.liquida_mwh / 1000, Mg = x.meta_mwh / 1000, n = x.meses_com_meta || x.meses || 1;
-    const tol = 0.005 + 100 * n * 0.005 * (1 / Mg + Math.abs(Lg) / (Mg * Mg)) + EPS;
-    const esp = 100 * Lg / Mg;
+    const tol = folgaPct(x.liquida_mwh, x.meta_mwh);
+    const esp = 100 * x.liquida_mwh / x.meta_mwh;
     if (Math.abs(esp - x.atingido_pct) > tol) mau.push('ano ' + e + ': atingido ' + x.atingido_pct + ' % contra 100 x ' + x.liquida_mwh + ' / ' + x.meta_mwh + ' = ' + esp.toFixed(3) + ' %');
   });
   if (R.ano && R.mes_em_curso && R.mes_em_curso.fechado !== true && R.ano.meses_fechados_ate && R.ano.meses_fechados_ate === R.mes_em_curso.lbl)
