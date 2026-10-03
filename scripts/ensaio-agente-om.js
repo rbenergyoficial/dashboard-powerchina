@@ -162,6 +162,11 @@ function julga(R) {
     Object.entries(AT.transformadores.por_trafo || {}).forEach(([k, x]) => {
       if (ref > 0 && x.s_max_mva != null && Math.abs(100 * x.s_max_mva / ref - x.carga_max_pct) > 0.005 + 100 * 0.005 / ref + EPS)
         mau.push('ativos: ' + k + ' carga ' + x.carga_max_pct + ' % contra 100 x ' + x.s_max_mva + ' / ' + ref);
+      /* fisica: imagem termica do enrolamento = topo do oleo + gradiente; publicado abaixo do oleo e afirmar o impossivel */
+      if (x.t_oleo_max_c != null && x.t_enrolamento_max_c != null && x.t_enrolamento_max_c + EPS < x.t_oleo_max_c)
+        mau.push('ativos: ' + k + ' enrolamento ' + x.t_enrolamento_max_c + ' °C publicado abaixo do oleo ' + x.t_oleo_max_c + ' °C');
+      if (x.temperatura_em_verificacao && (x.t_oleo_max_c != null || x.t_enrolamento_max_c != null))
+        mau.push('ativos: ' + k + ' em verificacao e ainda publicando temperatura');
     });
     const ol = AT.oleo;
     if (ol.pior_uso_pct != null && ol.pior_margem_pct != null && Math.abs(ol.pior_uso_pct + ol.pior_margem_pct - 100) > 0.05 + EPS) mau.push('ativos: oleo uso ' + ol.pior_uso_pct + ' + margem ' + ol.pior_margem_pct + ' nao fecha 100');
@@ -223,6 +228,14 @@ function julga(R) {
   plantio('carga de transformador descolada da potencia', (Y) => {
     const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T1']; if (!a || a.carga_max_pct == null) return false; a.carga_max_pct = Math.round((a.carga_max_pct + 5) * 100) / 100; return true;
   }, /04T1 carga/);
+  plantio('enrolamento publicado abaixo do oleo', (Y) => {
+    const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T2']; if (!a) return false;
+    delete a.temperatura_em_verificacao; a.t_oleo_max_c = 78.3; a.t_enrolamento_max_c = 59.46; return true;
+  }, /enrolamento .* abaixo do oleo/);
+  plantio('em verificacao e ainda publicando temperatura', (Y) => {
+    const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T2']; if (!a) return false;
+    a.temperatura_em_verificacao = true; a.t_oleo_max_c = 60; return true;
+  }, /em verificacao e ainda publicando/);
   plantio('trocas termicas inflada', (Y) => { if (!Y.ativos) return false; Y.ativos.trocas.termicas += 10; return true; }, /termicas/);
   plantio('oleo conforme com laudo nao conforme', (Y) => { if (!Y.ativos || Y.ativos.oleo.conforme !== true) return false; Y.ativos.oleo.nao_conformes = 1; return true; }, /oleo conforme/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);

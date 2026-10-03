@@ -80,7 +80,9 @@ const LEGENDA = {
     + 'eletrocentro (razao 1,00 = igual aos pares); sinal precoce, antes da falha. trocas: substituicoes de inversor registradas '
     + 'na planilha (termicas = capacitor estufado, carbonizado, superaquecimento); MTBF da frota em anos; estoque de inversores '
     + 'disponiveis. alarmes: export de alarmes do supervisorio, que vai so ate o mes ate_mes; alarmes de rede nao sao defeito do '
-    + 'inversor. transformadores: carga maxima do dia contra a potencia ONAF2 da placa; temperatura so onde o canal existe. oleo: '
+    + 'inversor. transformadores: carga maxima do dia contra a potencia ONAF2 da placa; temperatura so onde o canal existe; '
+    + 'temperatura_em_verificacao = o enrolamento leu abaixo do oleo, o que nao e fisico, e os canais estao em verificacao em campo '
+    + '(nenhuma das duas temperaturas e publicada como fato). oleo: '
     + 'laudos da ultima campanha contra a ABNT NBR 10576; pior_uso e quanto do limite o pior ensaio consome.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
@@ -263,8 +265,16 @@ function montaAtivos(A, P, I, T, O) {
   const trafos = {};
   (T.trafos || []).forEach((k) => {
     const o = { s_max_mva: ts[k + '_s_max'], carga_max_pct: ts[k + '_carga_pct_max'], p_max_mw: ts[k + '_p_max'] };
-    if (ts[k + '_t_oleo_max'] != null) o.t_oleo_max_c = ts[k + '_t_oleo_max'];
-    if (ts[k + '_t_enrol_max'] != null) o.t_enrolamento_max_c = ts[k + '_t_enrol_max'];
+    const tO = ts[k + '_t_oleo_max'], tE = ts[k + '_t_enrol_max'];
+    /* a imagem termica do enrolamento e o topo do oleo MAIS o gradiente: enrolamento abaixo do oleo nao e fisico. No 04T2
+       e assim todo dia desde 21/09 (AnIn30/AnIn32 trocados entre o export e a lista de pontos, ou o canal do oleo lendo
+       errado; a conferir em campo). Enquanto for assim, nenhuma das duas sai como fato: o resumo diz "em verificacao".
+       A regra le o dado, entao as temperaturas voltam sozinhas quando os canais forem corrigidos. */
+    if (tO != null && tE != null && tE < tO) o.temperatura_em_verificacao = true;
+    else {
+      if (tO != null) o.t_oleo_max_c = tO;
+      if (tE != null) o.t_enrolamento_max_c = tE;
+    }
     trafos[k] = o;
   });
   const transformadores = { dia: ts.dia, referencia_mva: onaf2, referencia: 'ONAF2', por_trafo: trafos };
