@@ -229,9 +229,13 @@ function montaTempoReal(V, P, MU, F) {
   /* so as linhas com leitura: a serie traz os intervalos de 5 min ainda VAZIOS do fim (so os campos _c), e o "ultimo
      instante" era um desses: "as 08:40 a demanda e —" (achado em 03/10/2026) */
   const linhasHoje = (MU.serie || []).filter((r) => String(r.t).slice(0, 10) === V.dia && (MU.parques || []).some((p) => r[p] != null));
+  /* o INSTANTE e a ultima linha com leitura do COMPLEXO (o ponto do contrato), nao a ultima com leitura de qualquer parque:
+     com um medidor do complexo atrasado, a ultima linha trazia os parques e o Complexo vazio (16:50 de 03/10/2026, o
+     way2-recent ficou vermelho). O pico de cada parque continua sobre todas as leituras dele. */
+  const comCx = (MU.parques || []).includes('Complexo') ? linhasHoje.filter((r) => r.Complexo != null) : linhasHoje;
   const must = { contratos_mw: MU.contratos, instante: null, por_parque: {} };
-  if (linhasHoje.length) {
-    const u = linhasHoje[linhasHoje.length - 1];
+  if (comCx.length) {
+    const u = comCx[comCx.length - 1];
     must.instante = String(u.t).slice(11, 16);
     for (const p of MU.parques || []) {
       let pico = null;
