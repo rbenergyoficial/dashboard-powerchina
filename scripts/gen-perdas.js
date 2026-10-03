@@ -818,11 +818,14 @@ async function grava(nome, obj) {
     // o contador do lado CA, para a comparacao com o medidor (energia absoluta)
     // 🔴 a SUBIDA do contador de vida (lib-contador-dia.js). O diario guarda o valor de ontem ate o inversor acordar:
     //    com o maior valor dele, o contador do conjunto de 26/09 saiu igual ao de 25/09 em todas as usinas.
-    let e_conta = 0, comConta = 0;
+    let e_conta = 0, comConta = 0, semVida = 0;
     for (const o of d.inv.values()) {
       const e = energiaDoDia(o.serie.e_vida || [], d.instantes, o.serie.e_conta);
-      if (e != null) { e_conta += e; comConta++; }
+      if (e != null) { e_conta += e; comConta++; } else if ((o.serie.e_conta || []).some((x) => x != null)) semVida++;
     }
+    // ⚠️ sem contador de vida o inversor sai da soma: o diario sozinho publicaria a energia de ontem. Dizer, para a razao
+    //    medidor/contador nao subir calada
+    if (semVida) console.log('    ' + a.dia + ' ' + a.ufv + ': ' + semVida + ' inversor(es) com contador diario e SEM contador de vida: fora do e_conta');
     if (!diario.has(a.dia)) diario.set(a.dia, {});
     diario.get(a.dia)[a.ufv] = { e_cc, e_ca, e_conta: e_conta / 1000, n_inv: totalInv,
       n_conta: comConta, slots: medidos.length, slots_totais: nLin, cob_inst_pct, n_inv_min };

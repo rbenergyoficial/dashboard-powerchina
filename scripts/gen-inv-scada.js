@@ -260,7 +260,7 @@ function leUsinaDia(buf) {
   for (const o of inv.values()) {
     if (o._vida) {
       o.kwh = energiaDoDia(o._vida, inst, o._diaria);
-      const p = passosDoDia(o._vida, inst);
+      const p = passosDoDia(o._vida, inst, o._diaria);
       o.passos = p ? p.map((x) => ({ t: inst[x.i], e: x.e })) : [];
     } else if (o._diaria) semVida++;
     delete o._vida; delete o._diaria;

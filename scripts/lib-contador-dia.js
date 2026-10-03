@@ -13,14 +13,15 @@
  * A REGRA: o dia e a SUBIDA do contador de vida (`ENERGIA TOTAL GERADA`), que nao zera, somada degrau a degrau contra a
  *    ultima leitura ACEITA:
  *    · queda que VOLTA (alguma leitura posterior chega ao aceito) e preenchimento do export: pula;
- *    · queda SEM VOLTA e inversor TROCADO: o contador novo comeca em zero. O fundo da descida (a ultima leitura antes de
- *      voltar a subir) e a energia do inversor novo desde que ligou, e entra no dia se couber no teto desde o sol; os
- *      pontos ANTES do fundo sao a rampa que o export desenha ate ele, e nao entram;
+ *    · queda SEM VOLTA cujo fundo e IGUAL ao diario do mesmo instante e inversor TROCADO: o contador novo comeca em
+ *      zero, e o fundo (a energia do inversor novo desde que ligou) entra no dia se couber no teto desde o sol. Qualquer
+ *      outra queda sem volta (a rampa que o export desenha ate o fundo; a queda de 0,1 kWh as 18:30 de um contador
+ *      grande, 29 vezes no bruto) so rebaseia;
  *    · subida acima do teto (CAP_KW x horas desde o aceito) e o aceito que era preenchimento (zero antes do primeiro
  *      valor real): rebaseia sem somar.
  *    Inversor que so entra na coleta depois do sol (M9/TS1, 18/09, a partir das 14:00) nao tem a manha no contador de
- *    vida; ali entra o contador DIARIO do primeiro instante, se ele for de hoje: ate o teto desde o sol, e acompanhando
- *    a subida do contador de vida dali em diante.
+ *    vida; ali entra o contador DIARIO do primeiro instante, se ele for de hoje: ate o teto desde o sol, e subindo antes
+ *    da primeira queda (o valor de ontem fica parado ate zerar).
  *
  * MEDIDO no bruto de 30/08 a 29/09 (33.427 inversor-dias, as duas leituras do mesmo inversor):
  *    · a subida do contador de vida e o maior valor depois da zeragem do contador diario concordam a 1 % em 33.412;
@@ -35,10 +36,16 @@ const MEIA_HORA = 0.5;
 // 'AAAA-MM-DD HH:MM:SS' ou 'HH:MM[:SS]' -> horas decimais
 const horas = (t) => { const m = String(t == null ? '' : t).match(/(\d{2}):(\d{2})(?::\d{2})?\s*$/); return m ? Number(m[1]) + Number(m[2]) / 60 : NaN; };
 const valido = (v) => typeof v === 'number' && Number.isFinite(v);
-const tetoDesde = (h0, h1) => CAP_KW * Math.max(h1 - h0, MEIA_HORA) * 1.02 + 0.01;
+// ARRED: os contadores vem com duas casas; a diferenca de duas leituras erra ate 2 x 0,005 kWh
+const ARRED = 0.01;
+// teto de energia entre duas leituras: o SG350HX nao passa de 352 kW. Medido no bruto de 30/08 a 29/09, o maior degrau
+// aceito em 1,47 milhao foi 345,4 kW medios (M7/TS1/INV08, 10/09 11:00): o teto nao corta medicao.
+const tetoDesde = (h0, h1) => CAP_KW * Math.max(h1 - h0, MEIA_HORA) + ARRED;
 
-// os degraus de energia do dia pelo contador de vida: [{ i, e }] (i = indice do instante), ou null sem leitura positiva
-function passosDoDia(vida, instantes) {
+// os degraus de energia do dia pelo contador de vida: [{ i, e }] (i = indice do instante), ou null sem leitura positiva.
+// `diaria` (alinhada) e o que reconhece a TROCA: nos 14 casos do bruto o fundo da descida do contador de vida e igual ao
+// diario do mesmo instante (o inversor novo comeca os dois juntos). Sem `diaria`, queda sem volta so rebaseia.
+function passosDoDia(vida, instantes, diaria) {
   const pts = [];
   for (let i = 0; i < vida.length; i++) if (valido(vida[i])) pts.push(i);
   if (!pts.some((i) => vida[i] > 0)) return null;
@@ -48,12 +55,17 @@ function passosDoDia(vida, instantes) {
     const i = pts[n], v = vida[i], h = horas(instantes[i]);
     if (acc == null) { acc = v; hAcc = h; continue; }
     if (v < acc) {
+      // inversor TROCADO: o contador de vida cai ate o DIARIO do mesmo instante (o novo comeca os dois juntos, desde
+      // zero) e cabe no teto desde o sol. Vem ANTES da volta: um inversor trocado ontem tem contador pequeno, e o novo
+      // pode passar de um ponto da rampa no mesmo dia. O zero do preenchimento (os dois em 0) nao e troca.
+      const d = diaria ? diaria[i] : null;
+      if (v > 0 && valido(d) && Math.abs(d - v) <= ARRED && v <= tetoDesde(SOL_H, h)) {
+        passos.push({ i, e: v }); acc = v; hAcc = h; continue;
+      }
       let volta = false;
       for (let m = n + 1; m < pts.length; m++) if (vida[pts[m]] >= acc) { volta = true; break; }
       if (volta) continue;                                         // preenchimento: o contador volta
-      const desce = n + 1 < pts.length && vida[pts[n + 1]] < v;    // ainda na rampa ate o fundo
-      if (!desce && h > SOL_H && v <= tetoDesde(SOL_H, h)) passos.push({ i, e: v });   // contador novo desde zero
-      acc = v; hAcc = h; continue;
+      acc = v; hAcc = h; continue;   // sem volta e sem ser troca (rampa ate o fundo, 0,1 kWh as 18:30): so rebaseia
     }
     const d = v - acc;
     if (d > tetoDesde(hAcc, h)) { acc = v; hAcc = h; continue; }   // salto impossivel: o aceito era preenchimento
@@ -63,9 +75,9 @@ function passosDoDia(vida, instantes) {
   return passos;
 }
 
-// energia do dia (kWh). `diaria` (opcional, alinhada) cobre o inversor que entrou na coleta depois do sol.
+// energia do dia (kWh). `diaria` (alinhada) reconhece a troca e cobre o inversor que entrou na coleta depois do sol.
 function energiaDoDia(vida, instantes, diaria) {
-  const passos = passosDoDia(vida, instantes);
+  const passos = passosDoDia(vida, instantes, diaria);
   if (passos == null) return null;
   let e = 0;
   for (const p of passos) e += p.e;
@@ -73,13 +85,21 @@ function energiaDoDia(vida, instantes, diaria) {
     let i0 = -1;
     for (let i = 0; i < vida.length; i++) if (valido(vida[i])) { i0 = i; break; }
     const h0 = horas(instantes[i0]), d0 = diaria[i0];
-    if (h0 >= SOL_H + 1 && valido(d0) && d0 > 0 && d0 <= tetoDesde(SOL_H, h0)) {
-      let dMax = d0;
-      for (let i = i0; i < diaria.length; i++) if (valido(diaria[i]) && diaria[i] > dMax) dMax = diaria[i];
-      if (Math.abs((dMax - d0) - e) <= Math.max(1, 0.02 * e)) e += d0;   // o diario e de hoje: acompanha o de vida
+    // 🔴 o diario do primeiro instante so e de HOJE se cabe no teto desde o sol (um diario que nao zerasse traria ontem
+    //    junto) e SOBE antes da primeira queda. Parado no valor de ontem ate zerar, a subida antes da queda e zero e nada
+    //    entra, por menor que seja a subida do contador de vida; de hoje, ele sobe com o sol, e um desarme depois nao
+    //    apaga a manha. Cada condicao tem o seu caso no ensaio-contador-dia.
+    if (valido(d0) && d0 > 0 && d0 <= tetoDesde(SOL_H, h0)) {
+      let dMax = d0, ant = d0;
+      for (let i = i0 + 1; i < diaria.length; i++) {
+        if (!valido(diaria[i])) continue;
+        if (diaria[i] < ant - ARRED) break;                      // primeira queda: zeragem ou desarme
+        ant = diaria[i]; if (diaria[i] > dMax) dMax = diaria[i];
+      }
+      if (dMax - d0 > ARRED) e += d0;
     }
   }
   return e;
 }
 
-module.exports = { passosDoDia, energiaDoDia, CAP_KW, SOL_H };
+module.exports = { passosDoDia, energiaDoDia, CAP_KW, SOL_H, ARRED };
