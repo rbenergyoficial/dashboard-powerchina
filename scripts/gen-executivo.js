@@ -1429,6 +1429,9 @@ async function writeOut(obj, nome, opts) {
     // o card mostra "· complexo" em vez de fingir que o número é da usina escolhida.
     serie_ufv: (() => {
       const out = [];
+      // o percentual do corte de uma linha: pelo par em MWh quando existe (resolucao de 0,01 MWh), senao pelo par em GWh
+      const pctPar = l => (l.potencial_mwh > 0 && l.cortado_mwh != null) ? r2(100 * l.cortado_mwh / l.potencial_mwh)
+        : ((l.potencial_gwh > 0 && l.cortado_gwh != null) ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null);
       const w2Mes = m => daily.dias.filter(x => String(x.dia).slice(0, 7) === m);
       meses.forEach(m => {
         const S = serie.find(x => x.mes === m); if (!S) return;
@@ -1545,21 +1548,12 @@ async function writeOut(obj, nome, opts) {
         const recOk = comCorte.length === linhasUfv.length && somaUfv > 0 && alvoCorte > 0;
         const fatorRec = recOk ? alvoCorte / somaUfv : 1;
         if (recOk) {
-          comCorte.forEach(l => {
-            l.cortado_bruto_gwh = l.cortado_gwh;
-            l.cortado_gwh = r2(l.cortado_gwh * fatorRec);
-            l.corte_pct = l.potencial_gwh > 0 ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null;
-            l.outras_gwh = r2(Math.max(0, l.potencial_gwh - l.entregue_gwh - l.cortado_gwh)); });
-          // sobra de arredondamento vai para a usina de maior corte, p/ fechar ao centavo
-          const dif = r2(alvoCorte - comCorte.reduce((a, l) => a + l.cortado_gwh, 0));
-          if (dif !== 0) { const maior = comCorte.slice().sort((a, b) => b.cortado_gwh - a.cortado_gwh)[0];
-            maior.cortado_gwh = r2(maior.cortado_gwh + dif); }
-          // O MESMO ajuste em MWh, sobre a energia CRUA e contra o total do conjunto em MWh (PROMOVER
-          // mwh-gerador). Nao se deriva do GWh ja ajustado: ele parte de brutos arredondados a 10 MWh, e a
-          // soma das usinas em MWh deixaria de fechar com o conjunto justamente na casa que o campo existe
-          // para mostrar. O resto (`outras_mwh`) e refeito DEPOIS da sobra, para as tres parcelas fecharem.
+          comCorte.forEach(l => { l.cortado_bruto_gwh = l.cortado_gwh; });
+          // O ajuste em MWh, sobre a energia CRUA e contra o total do conjunto em MWh (PROMOVER mwh-gerador). O resto
+          // (`outras_mwh`) e refeito DEPOIS da sobra, para as tres parcelas fecharem.
           const alvoM = S.frustrada_mwh, somaM = comCorte.reduce((a, l) => a + (l.cortado_mwh || 0), 0);
-          if (alvoM > 0 && somaM > 0) {
+          const temM = alvoM > 0 && somaM > 0 && comCorte.every(l => l.cortado_mwh != null && l.potencial_mwh != null);
+          if (temM) {
             const fM = alvoM / somaM;
             comCorte.forEach(l => { l.cortado_bruto_mwh = l.cortado_mwh; l.cortado_mwh = r2(l.cortado_mwh * fM); });
             const difM = r2(alvoM - comCorte.reduce((a, l) => a + l.cortado_mwh, 0));
@@ -1567,6 +1561,20 @@ async function writeOut(obj, nome, opts) {
               maiorM.cortado_mwh = r2(maiorM.cortado_mwh + difM); }
             comCorte.forEach(l => { l.outras_mwh = r2(Math.max(0, l.potencial_mwh - l.entregue_mwh - l.cortado_mwh)); });
           }
+          // 🔴 O GWh SAI DO MWh JA RECONCILIADO, e o percentual tambem (PROMOVER corte-ufv-mes, 03/10/2026). Antes o GWh se
+          // reconciliava a partir dos brutos ARREDONDADOS a 10 MWh, o percentual saia desse GWh e a sobra do arredondamento
+          // entrava no cortado da maior usina DEPOIS do percentual: o M9 de jul/26 publicava 40,24 % com o par em MWh dando
+          // 40,68 (potencial de 1,69 GWh, onde 10 MWh valem 0,6 pp), e o M1 ficava ate 0,11 pp fora do proprio par em GWh.
+          // Agora o percentual e o do par em MWh, e o GWh e esse MWh arredondado, SEM sobra: a soma que fecha ao centavo e
+          // a em MWh (com a sobra dela acima). Em GWh a soma das usinas fica dentro da cadeia de arredondamento (0,005 por
+          // usina), e a guarda abaixo usa essa folga. Com a sobra em GWh, ate 13,5 MWh caiam numa usina so (M1 jun/26:
+          // 0,16 pp entre o par em GWh e o percentual), e o grupo dela herdava.
+          comCorte.forEach(l => { l.cortado_gwh = temM ? r2(l.cortado_mwh / 1000) : r2(l.cortado_bruto_gwh * fatorRec); });
+          if (!temM) { const dif = r2(alvoCorte - comCorte.reduce((a, l) => a + l.cortado_gwh, 0));
+            if (dif !== 0) { const maior = comCorte.slice().sort((a, b) => b.cortado_gwh - a.cortado_gwh)[0];
+              maior.cortado_gwh = r2(maior.cortado_gwh + dif); } }
+          comCorte.forEach(l => { l.corte_pct = pctPar(l);
+            l.outras_gwh = r2(Math.max(0, l.potencial_gwh - l.entregue_gwh - l.cortado_gwh)); });
         }
         linhasUfv.forEach(l => { l.corte_reconciliado = recOk ? 1 : 0;
           l.corte_reconc_fator = recOk ? Math.round(fatorRec * 1e6) / 1e6 : null;
@@ -1576,10 +1584,19 @@ async function writeOut(obj, nome, opts) {
         // GUARDA DE FECHAMENTO: e ela que impede a regressao. Sem isso estamos a um refactor de
         // repetir o bug — duas contas paralelas que voltam a divergir sem ninguem perceber.
         if (recOk) {
+          // em MWh fecha ao centavo; em GWh, pela cadeia de arredondamento (cada usina e o total a 0,005 GWh), porque o GWh
+          // e o MWh de cada usina arredondado, sem sobra (PROMOVER corte-ufv-mes). Sem o par em MWh, a regra antiga.
+          const comM = S.frustrada_mwh > 0 && comCorte.every(l => l.cortado_bruto_mwh != null);
+          const confM = comCorte.reduce((a, l) => a + (l.cortado_mwh || 0), 0);
+          if (comM && Math.abs(confM - S.frustrada_mwh) > 0.011) {
+            throw new Error('FECHAMENTO QUEBROU em ' + m + ': soma das usinas ' + r2(confM)
+              + ' MWh contra corte do conjunto ' + r2(S.frustrada_mwh) + ' MWh (tolerancia 0,01)');
+          }
           const conf = comCorte.reduce((a, l) => a + l.cortado_gwh, 0);
-          if (Math.abs(conf - alvoCorte) > 0.011) {
+          const tolG = comM ? 0.005 * (comCorte.length + 1) + 1e-9 : 0.011;
+          if (Math.abs(conf - alvoCorte) > tolG) {
             throw new Error('FECHAMENTO QUEBROU em ' + m + ': soma das usinas ' + r2(conf)
-              + ' GWh contra corte do conjunto ' + r2(alvoCorte) + ' GWh (tolerancia 0,01)');
+              + ' GWh contra corte do conjunto ' + r2(alvoCorte) + ' GWh (tolerancia ' + r2(tolG) + ')');
           }
         }
         linhasUfv.forEach(l => out.push(l));
@@ -1649,13 +1666,15 @@ async function writeOut(obj, nome, opts) {
           // punha no grupo ML um potencial que nao existia em M1, M7 nem M9.
           const membros = linhasUfv.filter(l => us.includes(l.ufv));
           const semCorte = membros.some(l => l.cortado_gwh == null);
-          lg.cortado_gwh = semCorte ? null : r2(membros.reduce((a, l) => a + l.cortado_gwh, 0));
-          lg.corte_pct = (lg.cortado_gwh != null && lg.potencial_gwh > 0)
-            ? r2(100 * lg.cortado_gwh / lg.potencial_gwh) : null;
+          // em GWh, a soma em MWh arredondada uma vez (PROMOVER corte-ufv-mes): somar os GWh ja arredondados das usinas
+          // acumulava 0,005 por membro (PPA jul/26 9,40 contra 9.409,17 MWh)
+          lg.cortado_gwh = semCorte ? null : (membros.every(l => l.cortado_mwh != null)
+            ? r2(membros.reduce((a, l) => a + l.cortado_mwh, 0) / 1000) : r2(membros.reduce((a, l) => a + l.cortado_gwh, 0)));
           lg.outras_gwh = lg.cortado_gwh == null ? null
             : r2(Math.max(0, lg.potencial_gwh - lg.entregue_gwh - lg.cortado_gwh));
           // em MWh, pela mesma regra: a soma das usinas do grupo (PROMOVER mwh-gerador)
           lg.cortado_mwh = semCorte ? null : r2(membros.reduce((a, l) => a + l.cortado_mwh, 0));
+          lg.corte_pct = lg.cortado_gwh == null ? null : pctPar(lg);   // pelo par em MWh (PROMOVER corte-ufv-mes)
           lg.outras_mwh = lg.cortado_mwh == null || lg.potencial_mwh == null ? null
             : r2(Math.max(0, lg.potencial_mwh - lg.entregue_mwh - lg.cortado_mwh));
           lg.corte_reconciliado = recOk ? 1 : 0;
@@ -1717,15 +1736,34 @@ async function writeOut(obj, nome, opts) {
             // a mesma reparticao em MWh, sobre o total do conjunto em MWh (PROMOVER mwh-gerador)
             M.cortado_mwh = cx.cortado_mwh == null ? null : r2(cx.cortado_mwh * shML);
             P.cortado_mwh = cx.cortado_mwh == null ? null : r2(cx.cortado_mwh - M.cortado_mwh);
+            // o GWh e o MWh arredondado, como nas usinas (PROMOVER corte-ufv-mes): por diferenca de dois GWh ja arredondados
+            // o PPA de set/25 saia 0,01 GWh contra 4,23 MWh
+            if (cx.cortado_mwh != null) { M.cortado_gwh = r2(M.cortado_mwh / 1000); P.cortado_gwh = r2(P.cortado_mwh / 1000); }
             P.outras_mwh = null; M.outras_mwh = null;
             [P, M].forEach(l => { l.corte_estimado = 1; l.corte_reconciliado = 1;
               l.corte_ml_share = Math.round(shML * 1e4) / 1e4;
-              l.corte_pct = l.potencial_gwh > 0 ? r2(100 * l.cortado_gwh / l.potencial_gwh) : null;
+              l.corte_pct = pctPar(l);   // pelo par em MWh (PROMOVER corte-ufv-mes)
               l.outras_gwh = null;
               l.corte_reconc_nota = nota; });
             cx.corte_reparticao_estimada = 1; });
         }
       }
+      // GUARDA (PROMOVER corte-ufv-mes): todo percentual de corte publicado e o do par da PROPRIA linha (MWh quando ha),
+      // com a folga do arredondamento do percentual. Fica fora so o Complexo antes de mar/26, que tem outra base
+      // declarada (`corte_base`). Uma edicao do cortado depois do percentual, como a sobra de antes, derruba aqui.
+      // folga: o percentual a 2 casas mais o arredondamento do par (0,005 em cada termo), quando o percentual saiu da
+      // energia crua e nao do par ja arredondado (mes sem reconciliacao)
+      { const par = l => { const mw = l.potencial_mwh > 0 && l.cortado_mwh != null;
+          return mw ? [l.cortado_mwh, l.potencial_mwh] : [l.cortado_gwh, l.potencial_gwh]; };
+        const folga = ([E, D]) => 0.0051 + 100 * 0.005 * (1 / D + Math.abs(E) / (D * D));
+        const ruins = out.filter(l => l.corte_pct != null && !(l.ufv === 'Complexo' && l.mes < '2026-03')
+          && pctPar(l) != null && Math.abs(l.corte_pct - 100 * par(l)[0] / par(l)[1]) > folga(par(l)));
+        if (ruins.length) throw new Error('CORTE_PCT nao fecha com o par da propria linha em ' + ruins.length + ' linha(s) — ex.: '
+          + ruins.slice(0, 3).map(l => l.ufv + ' ' + l.mes + ' ' + l.corte_pct + ' x ' + pctPar(l)).join(' · '));
+        // e o cortado em GWh e o MWh arredondado: mais que meio centesimo de GWh entre os dois e conta paralela
+        const pares = out.filter(l => l.cortado_gwh != null && l.cortado_mwh != null && Math.abs(l.cortado_gwh * 1000 - l.cortado_mwh) > 5.0001);
+        if (pares.length) throw new Error('CORTADO GWh x MWh: ' + pares.length + ' linha(s) com o GWh fora do MWh arredondado — ex.: '
+          + pares.slice(0, 3).map(l => l.ufv + ' ' + l.mes + ' ' + l.cortado_gwh + ' GWh x ' + l.cortado_mwh + ' MWh').join(' · ')); }
       return out; })(),
     // TODOS OS MESES, não só o corrente: o painel filtra por [ufv e mes], e o mês vem do seletor de
     // tempo do Grafana. Publicando só o mês atual, escolher "mês anterior" trocava o RÓTULO mas não os
