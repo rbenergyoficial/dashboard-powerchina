@@ -99,9 +99,13 @@ function julga(R) {
     (K.ultimos_dias || []).forEach((d) => Object.entries(d.por_usina || {}).forEach(([u, x]) =>
       pct('corte ' + d.dia + ' ' + u, x.cortado_mwh, x.potencial_mwh, x.corte_pct)));
     (K.meses || []).forEach((m) => {
-      /* o mes vai sem percentual (ver o gerador): o que se exige e que ele NAO volte sem a guarda que o justifique */
+      /* o percentual do mes vai SO no Complexo, e tem de fechar com o par em MWh da propria linha (ver o gerador); nas
+         usinas e nos contratos ele ainda nao fecha, entao nao pode aparecer */
       Object.entries(m.por_entidade || {}).forEach(([e, x]) => {
-        if ('corte_pct' in x) mau.push('corte ' + m.mes + ' ' + e + ': percentual do mes publicado de novo (no Complexo ele nao fecha com o par em MWh)');
+        if (e === 'Complexo') {
+          if (x.potencial_mwh > 0 && x.cortado_mwh != null && !(x.corte_pct != null)) mau.push('corte ' + m.mes + ' Complexo: sem o percentual do mes');
+          pct('corte ' + m.mes + ' Complexo', x.cortado_mwh, x.potencial_mwh, x.corte_pct);
+        } else if ('corte_pct' in x) mau.push('corte ' + m.mes + ' ' + e + ': percentual do mes publicado (nas usinas e contratos ele nao fecha com o par em MWh)');
         if (x.cortado_mwh != null && x.potencial_mwh != null && x.cortado_mwh > x.potencial_mwh + 0.01) mau.push('corte ' + m.mes + ' ' + e + ': cortado acima do potencial');
       });
       const P = m.por_entidade || {};
@@ -245,6 +249,21 @@ function julga(R) {
     const d = Y.corte.ultimos_dias.find((q) => q.por_usina.M5 && q.por_usina.M1 && q.por_usina.M5.cortado_mwh > 1 && Math.abs(q.por_usina.M5.corte_pct - q.por_usina.M1.corte_pct) > 1);
     if (!d) return false; const t = d.por_usina.M5.corte_pct; d.por_usina.M5.corte_pct = d.por_usina.M1.corte_pct; d.por_usina.M1.corte_pct = t; return true;
   }, /corte \d{4}-\d{2}-\d{2} M[15]: atingido/);
+  /* o percentual do Complexo no mes (PROMOVER agente-corte-complexo): a base antiga do potencial (com o M7 estimado,
+     ~3 GWh a mais) dava outro numero; o percentual publicado numa usina; o percentual do Complexo sumido */
+  const mesComCorte = (Y) => (Y.corte.meses || []).find((m) => m.por_entidade.Complexo && m.por_entidade.Complexo.potencial_mwh > 0
+    && m.por_entidade.Complexo.cortado_mwh > 1000);
+  plantio('percentual do Complexo no mes sobre o potencial de outra base', (Y) => {
+    const m = mesComCorte(Y); if (!m) return false; const x = m.por_entidade.Complexo;
+    x.corte_pct = Math.round(10000 * x.cortado_mwh / (x.potencial_mwh + 3000)) / 100; return true;
+  }, /corte \d{4}-\d{2} Complexo/);
+  plantio('percentual do mes publicado numa usina', (Y) => {
+    const m = mesComCorte(Y); if (!m || !m.por_entidade.M9) return false; const x = m.por_entidade.M9;
+    x.corte_pct = x.potencial_mwh > 0 ? Math.round(10000 * x.cortado_mwh / x.potencial_mwh) / 100 : 0; return true;
+  }, /M9: percentual do mes publicado/);
+  plantio('percentual do Complexo no mes sumido', (Y) => {
+    const m = mesComCorte(Y); if (!m) return false; delete m.por_entidade.Complexo.corte_pct; return true;
+  }, /Complexo: sem o percentual do mes/);
   plantio('vantagem sobre o Nordeste com o sinal trocado', (Y) => {
     const c = Y.corte.ano.por_entidade.Complexo; if (!c || !c.vantagem_pp) return false; c.vantagem_pp = -c.vantagem_pp; return true;
   }, /vantagem/);

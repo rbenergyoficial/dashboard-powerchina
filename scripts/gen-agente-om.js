@@ -64,7 +64,9 @@ const LEGENDA = {
     + 'meta.',
   corte: 'Energia que a usina deixou de gerar por limitacao do operador nacional (ONS). cortado_mwh e a energia impedida; '
     + 'corte_pct e essa energia em % do potencial (o que teria gerado sem a limitacao); horas_restricao sao as horas sob '
-    + 'limitacao no mes (no mes so vao cortado_mwh e potencial_mwh; o percentual do dia vai pronto). O operador publica com atraso de cerca de um dia, entao o mes em curso so tem os dias ja publicados '
+    + 'limitacao no mes (no mes, o percentual vai pronto so no Complexo; nas usinas e contratos vao cortado_mwh e '
+    + 'potencial_mwh; o percentual do dia vai pronto). Ate jul/26 o potencial do Complexo no mes e o do conjunto no '
+    + 'operador, sem o M7, que ele so passou a registrar em 17/07/2026: por isso fica abaixo da soma das usinas. O operador publica com atraso de cerca de um dia, entao o mes em curso so tem os dias ja publicados '
     + '(ultimos_dias). motivos: ENE = razao energetica (sobra de energia no sistema), CNF = confiabilidade da rede, REL = '
     + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
     + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
@@ -161,11 +163,13 @@ function monta(V, X) {
     for (const e of ENTIDADES) {
       const s = S.find((x) => x.ufv === e && x.mes === mes && x.parcial === 0);
       if (!s) continue;
-      /* 🔴 SEM o `corte_pct` do mes: medido em 02/10/2026, no Complexo de abr a jul/26 ele nao confere com o cortado e o
-         potencial da MESMA linha (abr: 23,28 % publicado, 22,29 % pelo par em MWh) — o cortado foi editado depois e o
-         percentual ficou para tras. Ate o lote proprio no executivo, o assistente fala o par em MWh, que fecha. */
+      /* O `corte_pct` do mes vai SO no Complexo. Medido em 02/10/2026, ele nao fechava com o par em MWh da linha (abr/26
+         23,28 x 22,29): o potencial do Complexo misturava bases e foi corrigido no executivo em 03/10 (`eac9bce`, com guarda
+         no gerador). 🔴 Nas usinas e nos contratos o percentual do mes AINDA nao fecha com o par em MWh (M9 jul/26: 0,44 pp;
+         a sobra do arredondamento entra no cortado depois do percentual): ali o assistente segue falando o par. */
       const o = { potencial_mwh: s.potencial_mwh, cortado_mwh: s.cortado_mwh, horas_restricao: s.horas_restricao };
       if (e === 'Complexo') {
+        o.corte_pct = s.corte_pct;   /* o `potencial_escopo` da linha fica no executivo: a legenda diz o mesmo uma vez so */
         const c = SC.find((x) => x.mes === mes);
         if (c && c.razoes) o.motivos_pct = Object.fromEntries(Object.entries(c.razoes).map(([k, v]) => [k, v.pct]));
       } else {
