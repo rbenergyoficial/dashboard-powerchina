@@ -26,11 +26,13 @@ fs.mkdirSync(ENT); fs.mkdirSync(SAI);
 // gerador: UFV_MRT02_TS1_INV01_MRT02 TS1 INV01 ENERGIA DIÁRIA GERADA
 function csv(pref, dia, kwhPorInv) {
   const invs = Object.keys(kwhPorInv);
-  const cols = ['Tempo'].concat(invs.map((i) =>
-    'UFV_' + pref + '_TS1_' + i + '_' + pref + ' TS1 ' + i + ' ENERGIA DIÁRIA GERADA'));
-  const linha = (h, f) => [dia + ' ' + h].concat(invs.map((i) => String(kwhPorInv[i] * f))).join(';');
-  // contador diario: o gerador toma o MAIOR valor do dia, entao a primeira leitura vem menor
-  return cols.join(';') + '\n' + linha('08:00:00', 0.4) + '\n' + linha('17:00:00', 1) + '\n';
+  const cols = ['Tempo'].concat(...invs.map((i) => ['ENERGIA DIÁRIA GERADA', 'ENERGIA TOTAL GERADA'].map((g) =>
+    'UFV_' + pref + '_TS1_' + i + '_' + pref + ' TS1 ' + i + ' ' + g)));
+  // os dois contadores: o diario e o de VIDA. A energia do dia e a SUBIDA do de vida (lib-contador-dia.js), entao o
+  // dia comeca de madrugada com o de vida no valor de ontem e o diario em zero
+  const VIDA0 = 800000;
+  const linha = (h, f) => [dia + ' ' + h].concat(...invs.map((i) => [String(kwhPorInv[i] * f), String(VIDA0 + kwhPorInv[i] * f)])).join(';');
+  return cols.join(';') + '\n' + linha('00:30:00', 0) + '\n' + linha('08:00:00', 0.4) + '\n' + linha('17:00:00', 1) + '\n';
 }
 // seis inversores por transformador (acima do minimo de pares) e um fraco declarado
 // ⚠️ com ruido por inversor, para a frota nao ficar identica: frota identica e caso legitimo, mas

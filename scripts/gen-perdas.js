@@ -66,6 +66,7 @@ const https = require('https');
 const { disponibilidade, completaDisponibilidade, janelaContrato, dispContrato } = require('./lib-disponibilidade.js');
 const { casaCru } = require('./lib-inversor-cru.js');
 const STR = require('./lib-strings.js');
+const { energiaDoDia } = require('./lib-contador-dia.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -222,7 +223,7 @@ const GRANDEZAS = {
   freq: 'FREQUÊNCIA DA REDE',
   fp: 'FATOR DE POTÊNCIA TOTAL',
   horas: 'TEMPO DE OPERAÇÃO DIÁRIA',
-  e_vida: 'ENERGIA TOTAL GERADA',        // so para achar o carimbo sem registro (ver carimbosSemRegistro)
+  e_vida: 'ENERGIA TOTAL GERADA',        // o carimbo sem registro (carimbosSemRegistro) e a energia do dia (e_conta)
 };
 
 // 🔴 O CARIMBO SEM REGISTRO se reconhece pelo CONTADOR DE VIDA, e nao pela tensao ou pela potencia.
@@ -815,10 +816,12 @@ async function grava(nome, obj) {
     const cob_inst_pct = comGer.length ? (soma(comGer.map((i) => nPar[i])) / (comGer.length * totalInv)) * 100 : null;
     const n_inv_min = comGer.length ? Math.min(...comGer.map((i) => nPar[i])) : null;
     // o contador do lado CA, para a comparacao com o medidor (energia absoluta)
+    // 🔴 a SUBIDA do contador de vida (lib-contador-dia.js). O diario guarda o valor de ontem ate o inversor acordar:
+    //    com o maior valor dele, o contador do conjunto de 26/09 saiu igual ao de 25/09 em todas as usinas.
     let e_conta = 0, comConta = 0;
     for (const o of d.inv.values()) {
-      const v = (o.serie.e_conta || []).filter((x) => x != null);
-      if (v.length) { e_conta += Math.max(...v); comConta++; }
+      const e = energiaDoDia(o.serie.e_vida || [], d.instantes, o.serie.e_conta);
+      if (e != null) { e_conta += e; comConta++; }
     }
     if (!diario.has(a.dia)) diario.set(a.dia, {});
     diario.get(a.dia)[a.ufv] = { e_cc, e_ca, e_conta: e_conta / 1000, n_inv: totalInv,

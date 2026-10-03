@@ -43,6 +43,10 @@ jobs:
       # que alimentar a funcao com a janela inteira do perdas_inv nao move nenhum valor publicado.
       - name: Ensaio da disponibilidade retroativa
         run: node scripts/ensaio-disp-retroativa.js
+      # O contador do conjunto (`e_conta`) soma a energia do dia de cada inversor; com o maior valor do dia, 26/09 saiu
+      # igual a 25/09 em todas as usinas. A regra mora em lib-contador-dia.js, a mesma do gen-inv-scada; o trecho e executado.
+      - name: Ensaio · a energia do dia pela subida do contador de vida (sem rede)
+        run: node scripts/ensaio-contador-dia.js perdas
       - name: Gerar perdas_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

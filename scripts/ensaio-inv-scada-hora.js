@@ -49,17 +49,21 @@ function energiaSlot(inv, i) {
   return base;
 }
 function csv(pref, dia) {
-  const cols = ['Tempo'].concat(INVS.map((i) =>
-    'UFV_' + pref + '_TS1_' + i + '_' + pref + ' TS1 ' + i + ' ENERGIA DIÁRIA GERADA'));
+  // os dois contadores por inversor: o diario e o de VIDA. A energia de cada meia hora e o degrau do de vida
+  // (lib-contador-dia.js), que parte do valor de ontem
+  const cols = ['Tempo'].concat(...INVS.map((i) => ['ENERGIA DIÁRIA GERADA', 'ENERGIA TOTAL GERADA'].map((g) =>
+    'UFV_' + pref + '_TS1_' + i + '_' + pref + ' TS1 ' + i + ' ' + g)));
+  const VIDA0 = 800000;
   const acum = Object.fromEntries(INVS.map((i) => [i, 0]));
+  const par = (inv) => { const a = Math.round(acum[inv] * 100) / 100; return [String(a), String(Math.round((VIDA0 + a) * 100) / 100)]; };
   const linhas = [];
   // a primeira leitura do dia e o contador ZERADO, as 05:30 — sem ela a primeira meia hora nao
   // teria com o que ser diferenciada
-  linhas.push([dia + ' 05:30:00'].concat(INVS.map(() => '0')).join(';'));
+  linhas.push([dia + ' 05:30:00'].concat(...INVS.map(par)).join(';'));
   SLOTS.forEach((s, i) => {
     INVS.forEach((inv) => { acum[inv] += energiaSlot(inv, i); });
     const hh = String(s.h).padStart(2, '0') + ':' + String(s.m).padStart(2, '0') + ':00';
-    linhas.push([dia + ' ' + hh].concat(INVS.map((inv) => String(Math.round(acum[inv] * 100) / 100))).join(';'));
+    linhas.push([dia + ' ' + hh].concat(...INVS.map(par)).join(';'));
   });
   return cols.join(';') + '\n' + linhas.join('\n') + '\n';
 }

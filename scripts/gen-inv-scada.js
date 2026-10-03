@@ -25,8 +25,9 @@
  *   Entao a regra aqui e OUTRA: para cada (TS, inversor, grandeza) escolhe-se a coluna que
  *   REALMENTE tem valores naquele dia. Auto-corrige se o layout do export mudar de novo.
  *
- * A CONTA: `ENERGIA DIÁRIA GERADA` e contador diario acumulado (medido: 0 -> 1,45 -> 141 -> 733,8
- *   e estabiliza a noite). A energia do dia e o MAIOR valor do dia, nao a soma.
+ * A CONTA: a energia do dia e a SUBIDA do contador de vida (`ENERGIA TOTAL GERADA`), somada degrau a degrau
+ *   (lib-contador-dia.js, 03/10/2026). O contador diario (`ENERGIA DIÁRIA GERADA`) guarda o valor de ontem ate o
+ *   inversor acordar e zera de novo no religamento; o maior valor dele publicou a energia de 25/09 em 26/09.
  *   razao = energia do inversor / MEDIANA dos pares do mesmo TS no mesmo dia.
  *
  * ⚠️ O par e o TS, nao a usina: mesmo transformador, mesmo arranjo, mesma sombra e mesma sujeira.
@@ -77,12 +78,16 @@ const JANELA_HORA = Number(process.env.JANELA_HORA || 30);   // dias de detalhe 
 //    pagarem por ele. Mesma separacao do historico bruto.
 const HORA_BLOB = process.env.HORA_BLOB || 'inv_scada_hora.json';
 const GRANDEZA = 'ENERGIA DIÁRIA GERADA';
+// 🔴 a energia do dia sai do contador de VIDA, que nao zera; o diario so cobre a manha de quem entra na coleta depois do
+//    sol (lib-contador-dia.js, 03/10/2026)
+const VIDA = 'ENERGIA TOTAL GERADA';
 // grandezas de SAUDE que acompanham o inversor no ranking. Nao entram na razao — servem para quem
 // abrir a linha entender se a queda tem cara de sujeira, de temperatura ou de isolamento.
 const SAUDE = ['TEMPERATURA INTERNA', 'RESISTÊNCIA DE ISOLAÇÃO', 'TENSÃO NEGATIVA À TERRA'];
 
 const zlib = require('zlib');
 const { casaCru } = require('./lib-inversor-cru.js');
+const { passosDoDia, energiaDoDia } = require('./lib-contador-dia.js');
 const norm = (s) => String(s == null ? '' : s).trim();
 const num = (v) => { const s = norm(v).replace(',', '.'); if (!s) return null; const n = Number(s); return isFinite(n) ? n : null; };
 const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
@@ -226,7 +231,7 @@ function leUsinaDia(buf) {
     const m = norm(c).match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
     if (!m) { if (vistas.length < 3 && /^UFV_.*INV\d/.test(norm(c))) vistas.push(norm(c).slice(0, 80)); return; }
     const g = m[4];
-    if (g !== GRANDEZA && !SAUDE.includes(g)) return;
+    if (g !== GRANDEZA && g !== VIDA && !SAUDE.includes(g)) return;
     const k = m[2] + '|' + m[3] + '|' + g;
     (cand.get(k) || cand.set(k, []).get(k)).push(i);
   });
@@ -244,13 +249,24 @@ function leUsinaDia(buf) {
     const vals = linhas.map((l) => num(l[melhor])).filter((v) => v != null);
     const kk = ts + '|' + iv;
     const o = inv.get(kk) || inv.set(kk, { ts, inv: iv, kwh: null, saude: {} }).get(kk);
-    if (g === GRANDEZA) {
-      o.kwh = Math.max(...vals);                            // contador diario: o dia e o MAIOR valor
-      // a curva do contador fica ALINHADA ao carimbo — `vals` perde o instante ao filtrar nulo, e
-      // sem instante nao ha meia hora a diferenciar
-      o.curva = linhas.map((l) => ({ t: l[0], v: num(l[melhor]) })).filter((p) => p.v != null);
-    } else o.saude[g] = r2(vals[vals.length - 1]);          // saude: a ultima leitura do dia
+    // os dois contadores ficam ALINHADOS ao carimbo — `vals` perde o instante ao filtrar nulo
+    if (g === GRANDEZA) o._diaria = linhas.map((l) => num(l[melhor]));
+    else if (g === VIDA) o._vida = linhas.map((l) => num(l[melhor]));
+    else o.saude[g] = r2(vals[vals.length - 1]);          // saude: a ultima leitura do dia
   }
+  // a energia do dia e a SUBIDA do contador de vida; os degraus aceitos sao a energia de cada meia hora
+  const inst = linhas.map((l) => l[0]);
+  let semVida = 0;
+  for (const o of inv.values()) {
+    if (o._vida) {
+      o.kwh = energiaDoDia(o._vida, inst, o._diaria);
+      const p = passosDoDia(o._vida, inst);
+      o.passos = p ? p.map((x) => ({ t: inst[x.i], e: x.e })) : [];
+    } else if (o._diaria) semVida++;
+    delete o._vida; delete o._diaria;
+  }
+  // ⚠️ sem contador de vida o inversor sai do dia: o diario sozinho publicaria a energia de ontem
+  if (semVida) console.log('    ' + semVida + ' inversor(es) com contador diario e SEM contador de vida: fora do dia');
   // ⚠️ A falha tem de DIZER O QUE VIU. Sem isto, "nenhum inversor com energia" manda adivinhar
   // entre layout mudado, grandeza renomeada e regex errado — e foi o regex, das tres vezes.
   const achados = [...inv.values()].filter((x) => x.kwh != null);
@@ -267,13 +283,9 @@ function intraDia(reg) {
   // 1 · a energia de cada meia hora, por inversor
   const porInv = [];
   for (const x of reg.inversores) {
-    if (!x.curva || x.curva.length < 2) continue;
-    const passos = [];
-    for (let i = 1; i < x.curva.length; i++) {
-      const d = x.curva[i].v - x.curva[i - 1].v;
-      // ⚠️ o contador ACUMULA no dia: degrau negativo e zeragem ou releitura, nao energia negativa
-      if (d >= 0) passos.push({ t: x.curva[i].t, e: d });
-    }
+    // os degraus aceitos do contador de vida (lib-contador-dia.js): preenchimento do export e rampa ate o
+    // contador de um inversor trocado nao viram energia de meia hora nenhuma
+    const passos = x.passos || [];
     if (passos.length) porInv.push({ ts: x.ts, inv: x.inv, passos });
   }
   // 2 · agrupa por instante
@@ -459,7 +471,7 @@ function comparaComPares(reg) {
 
   const escopo = {
     pergunta: 'Qual inversor rende abaixo dos pares do mesmo transformador, antes de falhar.',
-    grandeza: GRANDEZA + ' (contador diario, kWh) — a energia do dia e o maior valor do dia',
+    grandeza: VIDA + ' (contador de vida, kWh) — a energia do dia e a subida do contador no dia',
     par: 'mediana dos inversores do mesmo TS no mesmo dia; TS com menos de ' + MIN_PARES
       + ' reportando cai para a mediana da usina',
     janela_dias: JANELA, dias_cobertos: diasFull.length,
