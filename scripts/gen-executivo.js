@@ -1748,6 +1748,17 @@ async function writeOut(obj, nome, opts) {
             cx.corte_reparticao_estimada = 1; });
         }
       }
+      // 🔴 REFERENCIA ABAIXO DO VERIFICADO (PROMOVER referencia-abaixo, 03/10/2026): quando entregue + cortado passam do
+      // potencial, o resto (`outras`) e cortado em zero e o excedente sumia — em ago/26 a cascata do Complexo somava 100,52 %
+      // do potencial sem dizer por que. O excedente e a referencia do operador ABAIXO da verificada fora da limitacao (a
+      // referencia deprimida da NT-0037) e, por usina, a reparticao do corte do conjunto acima do deficit dela. Vai num campo
+      // proprio, >= 0 (decisao do humano: perda negativa confunde o leitor): potencial = entregue + cortado + outras -
+      // referencia_abaixo. So de mar/26 em diante; antes disso a referencia do operador e declarada quebrada.
+      out.forEach(l => {
+        if (l.mes < '2026-03' || l.potencial_mwh == null || l.entregue_mwh == null || l.cortado_mwh == null) return;
+        const x = r2(Math.max(0, l.entregue_mwh + l.cortado_mwh - l.potencial_mwh));
+        l.referencia_abaixo_mwh = x; l.referencia_abaixo_gwh = r2(x / 1000);
+      });
       // GUARDA (PROMOVER corte-ufv-mes): todo percentual de corte publicado e o do par da PROPRIA linha (MWh quando ha),
       // com a folga do arredondamento do percentual. Fica fora so o Complexo antes de mar/26, que tem outra base
       // declarada (`corte_base`). Uma edicao do cortado depois do percentual, como a sobra de antes, derruba aqui.
@@ -1763,7 +1774,14 @@ async function writeOut(obj, nome, opts) {
         // e o cortado em GWh e o MWh arredondado: mais que meio centesimo de GWh entre os dois e conta paralela
         const pares = out.filter(l => l.cortado_gwh != null && l.cortado_mwh != null && Math.abs(l.cortado_gwh * 1000 - l.cortado_mwh) > 5.0001);
         if (pares.length) throw new Error('CORTADO GWh x MWh: ' + pares.length + ' linha(s) com o GWh fora do MWh arredondado — ex.: '
-          + pares.slice(0, 3).map(l => l.ufv + ' ' + l.mes + ' ' + l.cortado_gwh + ' GWh x ' + l.cortado_mwh + ' MWh').join(' · ')); }
+          + pares.slice(0, 3).map(l => l.ufv + ' ' + l.mes + ' ' + l.cortado_gwh + ' GWh x ' + l.cortado_mwh + ' MWh').join(' · '));
+        // a decomposicao fecha em MWh: potencial = entregue + cortado + outras - referencia_abaixo (PROMOVER referencia-abaixo);
+        // so uma das duas ultimas e maior que zero. Folga: quatro termos a centesimos
+        const abertas = out.filter(l => l.referencia_abaixo_mwh != null && l.outras_mwh != null
+          && (Math.abs(l.entregue_mwh + l.cortado_mwh + l.outras_mwh - l.referencia_abaixo_mwh - l.potencial_mwh) > 0.021
+            || (l.outras_mwh > 0 && l.referencia_abaixo_mwh > 0)));
+        if (abertas.length) throw new Error('DECOMPOSICAO nao fecha (potencial = entregue + cortado + outras - referencia abaixo) em '
+          + abertas.length + ' linha(s) — ex.: ' + abertas.slice(0, 3).map(l => l.ufv + ' ' + l.mes).join(' · ')); }
       return out; })(),
     // TODOS OS MESES, não só o corrente: o painel filtra por [ufv e mes], e o mês vem do seletor de
     // tempo do Grafana. Publicando só o mês atual, escolher "mês anterior" trocava o RÓTULO mas não os
@@ -2493,6 +2511,10 @@ async function writeOut(obj, nome, opts) {
         { mes: mSel, ufv: u, etapa: 'Entregue', gwh: cur.entregue_gwh, pct: pot > 0 ? r2(100 * cur.entregue_gwh / pot) : 0 },
         { mes: mSel, ufv: u, etapa: 'Cortado pelo ONS', gwh: cur.cortado_gwh, pct: pot > 0 ? r2(100 * cur.cortado_gwh / pot) : 0 },
         { mes: mSel, ufv: u, etapa: 'Outras perdas', gwh: cur.outras_gwh, pct: pot > 0 ? r2(100 * cur.outras_gwh / pot) : 0 });
+      // o excedente sobre o potencial (PROMOVER referencia-abaixo): a quarta etapa sai em TODO mes, nula antes de mar/26, porque o
+      // painel consulta etapa por etapa e consulta sem linha vira erro "no results found" na tela
+      out.cascata_ufv.push({ mes: mSel, ufv: u, etapa: 'Referência abaixo do verificado', gwh: cur.referencia_abaixo_gwh == null ? null : cur.referencia_abaixo_gwh,
+        pct: cur.referencia_abaixo_gwh != null && pot > 0 ? r2(100 * cur.referencia_abaixo_gwh / pot) : 0 });
     }); });
 
     // lista de meses p/ o seletor do painel (mais novo primeiro)
