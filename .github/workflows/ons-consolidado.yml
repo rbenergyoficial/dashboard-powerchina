@@ -34,6 +34,11 @@ jobs:
           OUT_BLOB: corte_gemeo.json
         run: node scripts/gen-corte-gemeo.js
 
+      # DEPOIS do gemeo, sobre o que subiu: o `corte_mwh` (MWh com centesimos) fecha com o GWh e nao tem a
+      # resolucao do GWh x 1000. O campo nasceu em 25/09/2026 sem ensaio nenhum.
+      - name: Ensaio · o corte do gemeo em MWh fecha com o GWh e tem resolucao propria
+        run: node scripts/ensaio-gemeo-mwh.js
+
       # A auditoria do registro da mesa entra DEPOIS do consolidado, pelo mesmo motivo do corte por
       # gemeo: ela le o `ons_restricao_all.json` que o primeiro passo acabou de gravar. Na ordem
       # invertida ela conferiria o registro de hoje contra o dado aberto de ontem e chamaria a

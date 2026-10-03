@@ -17,12 +17,44 @@
  *   PROPORCAO · cada usina recebe o ajuste na proporcao do proprio bruto; so a de maior corte leva a sobra.
  *   ANO       · o acumulado e a soma dos meses.
  *   RAZOES    · cada razao e origem do mes fecha com a sua irma em GWh.
+ *   RESOLUCAO · o MWh nao pode ser o GWh x 1000 (o defeito que o lote existe para evitar): o par fecha com desvio
+ *               zero nesse caso, entao so a RESOLUCAO o denuncia. Ver `resolucao` abaixo.
+ *
+ * Tolerancias derivadas da cadeia de arredondamento (revisao de 26/09/2026, medidas no produto publicado):
+ *   ARRED = 0,005 MWh, meio centesimo, o erro de UM arredondamento de 2 casas;
+ *   resto refeito do PUBLICADO (usina reconciliada, grupo, Complexo): parcelas ja de 2 casas, erro de UM
+ *     arredondamento, ARRED (medido: 0,000);
+ *   resto que sai do CRU (usina nao reconciliada, gen-executivo `outras_mwh: r2(max(0, ge - gv - corte))`): tres
+ *     parcelas arredondadas mais o arredondamento do proprio resto, 4 x ARRED = 0,02 (medido: 0,0100, que a antiga
+ *     folga de 0,011 cobria com 0,001 de margem);
+ *   proporcao da usina que NAO leva a sobra: so o proprio arredondamento, ARRED (medido: 0,00499); a que leva a
+ *     sobra absorve o das outras n - 1 e o proprio, ARRED x (n + 1) (medido: 0,0101, com n = 9).
  */
 const { TOL_PAR } = require('./lib-tol-unidade.js');
 
 const USINAS = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+const EPS = 1e-9;           // ruido de ponto flutuante, nao folga
+const ARRED = 0.005;        // um arredondamento de 2 casas
 const FECHA = 0.011;        // soma de valores de 2 casas com a sobra ja distribuida: meio centesimo por lado
-const PROP = 0.05;          // a sobra de arredondamento vai inteira para UMA usina: ate meio centesimo por usina
+const FECHA_PUB = ARRED + EPS;
+const FECHA_CRU = 4 * ARRED + EPS;
+const PROP = ARRED + EPS;   // usina que nao leva a sobra
+const propMaior = (n) => ARRED * (n + 1) + EPS;
+
+/**
+ * RESOLUCAO. Um valor em MWh com 2 casas que nasceu da energia medida cai num multiplo exato de 10 MWh por acaso
+ * uma vez em mil; o GWh x 1000 cai SEMPRE (medido no produto de 26/09/2026: zero de 50 razoes e origens, zero de
+ * 156 potenciais). Entre as duas taxas, mais da metade de uma familia em multiplo de 10 separa o derivado do medido
+ * com folga absurda (com n >= 10, a chance de o medido passar da metade e da ordem de 1e-15). Abaixo de 10 valores
+ * nao se julga, e quem chama tem de saber disso: devolve tambem quantos valores foram julgados.
+ */
+function resolucao(vals, rotulo, mau) {
+  const v = vals.filter((x) => x != null && x !== 0);
+  if (v.length < 10) return 0;
+  const m10 = v.filter((x) => Math.round(x * 100) % 1000 === 0).length;
+  if (m10 > v.length / 2) mau.push(rotulo + ': ' + m10 + ' de ' + v.length + ' valores em MWh sao multiplo exato de 10 — resolucao do GWh x 1000, nao da energia medida');
+  return v.length;
+}
 
 function conferePares(out) {
   const mau = [];
@@ -40,7 +72,9 @@ function conferePares(out) {
     if (x.cortado_bruto_gwh != null) par(x, 'cortado_bruto_gwh', 'cortado_bruto_mwh', 'corte bruto', TOL_PAR);
     if (x.outras_mwh != null && x.potencial_mwh != null && x.entregue_mwh != null && x.cortado_mwh != null) {
       const r = Math.max(0, x.potencial_mwh - x.entregue_mwh - x.cortado_mwh);
-      if (Math.abs(r - x.outras_mwh) > FECHA) mau.push(x.ufv + ' ' + x.mes + ': resto ' + x.outras_mwh + ' MWh nao fecha (potencial - entregue - corte = ' + r.toFixed(2) + ')');
+      // o resto so e refeito do publicado quando a reconciliacao em MWh rodou (ela grava cortado_bruto_mwh)
+      const doCru = USINAS.includes(x.ufv) && x.cortado_bruto_mwh == null;
+      if (Math.abs(r - x.outras_mwh) > (doCru ? FECHA_CRU : FECHA_PUB)) mau.push(x.ufv + ' ' + x.mes + ': resto ' + x.outras_mwh + ' MWh nao fecha (potencial - entregue - corte = ' + r.toFixed(2) + ')');
     }
   });
   const meses = [...new Set(S.map(x => x.mes))];
@@ -52,8 +86,11 @@ function conferePares(out) {
       if (Math.abs(s - cx.cortado_mwh) > FECHA) mau.push(m + ': usinas somam ' + s.toFixed(2) + ' MWh de corte contra ' + cx.cortado_mwh + ' do conjunto');
       const bru = us.filter(x => x.cortado_bruto_mwh > 0);
       const sb = bru.reduce((a, x) => a + x.cortado_bruto_mwh, 0);
+      // so a usina de MAIOR corte leva a sobra (gen-executivo); as outras erram no maximo um arredondamento
+      const maior = bru.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
       if (sb > 0) bru.forEach(x => { const esp = x.cortado_bruto_mwh * cx.cortado_mwh / sb;
-        if (Math.abs(esp - x.cortado_mwh) > PROP) mau.push(m + ' ' + x.ufv + ': corte ' + x.cortado_mwh + ' MWh fora da proporcao do bruto (' + esp.toFixed(2) + ')'); });
+        const tol = x === maior ? propMaior(bru.length) : PROP;
+        if (Math.abs(esp - x.cortado_mwh) > tol) mau.push(m + ' ' + x.ufv + ': corte ' + x.cortado_mwh + ' MWh fora da proporcao do bruto (' + esp.toFixed(2) + ')'); });
     }
     [['PPA', ['M2', 'M3', 'M4', 'M5', 'M6', 'M8']], ['ML', ['M1', 'M7', 'M9']]].forEach(([g, mem]) => {
       const lg = d(g); if (!lg || lg.cortado_mwh == null || lg.corte_estimado) return;
@@ -81,7 +118,14 @@ function conferePares(out) {
       if (o.mwh == null || Math.abs(o.mwh / 1000 - o.gwh) > TOL_PAR) mau.push(s.mes + ' ' + k + ' ' + c + ': ' + o.mwh + ' MWh contra ' + o.gwh + ' GWh');
     }));
   });
+  // RESOLUCAO, familia a familia (o par acima nao a ve: o GWh x 1000 fecha com desvio zero)
+  const rz = [];
+  (out.serie || []).forEach(s => ['razoes', 'origens'].forEach(k => Object.values(s[k] || {}).forEach(o => rz.push(o.mwh))));
+  resolucao(rz, 'razoes e origens do mes', mau);
+  resolucao((out.serie || []).map(s => s.frustrada_mwh), 'frustrada do mes', mau);
+  ['potencial_mwh', 'entregue_mwh', 'cortado_mwh'].forEach(k => resolucao(S.map(x => x[k]), 'serie_ufv ' + k, mau));
+  resolucao((out.ytd_ufv || []).map(y => y.cortado_mwh), 'ytd_ufv cortado_mwh', mau);
   return mau;
 }
 
-module.exports = { conferePares, FECHA, PROP };
+module.exports = { conferePares, resolucao, FECHA, FECHA_CRU, FECHA_PUB, PROP, propMaior };

@@ -1,0 +1,63 @@
+name: Ensaios de logica (a cada push em scripts/)
+
+# Ensaios que julgam a REGRA de um vigia, de uma guarda ou da intake, e nao o dado do dia. Ate
+# 26/09/2026 estes ensaios nao rodavam em workflow nenhum e dependiam de alguem lembrar de rodar.
+#
+# ⚠️ FORA, por enquanto: o `ensaio-liquidada.js`. Ele deriva o teto do residuo dos dias do blob do MES e
+#    exige 5 dias aceitos; no comeco de todo mes o blob tem menos e o ensaio estoura (03/10/2026:
+#    "Cannot read properties of null"). Ligado aqui, ficaria vermelho nos primeiros dias de cada mes.
+#    Entra quando ler a janela de mais de um mes.
+#
+# Por que num workflow proprio, e nao nos workflows de dado: e no PUSH que um ensaio de logica pode
+# reprovar (e quando o codigo muda); e ha ensaio que le blob publico, entao num job de 5 ou 15 min um
+# estranhamento do dado travaria a publicacao. Nenhum usa segredo: o GitHub e o canal de alerta sao
+# SIMULADOS dentro dos ensaios, e os geradores rodam com saida local.
+#
+# ⚠️ Cada passo roda com `if: always()`: um ensaio vermelho nao esconde o resultado dos outros.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/ensaios.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ensaios-logica
+  cancel-in-progress: true
+
+jobs:
+  ensaiar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      # os geradores julgados importam o cliente do Azure no topo, mesmo sem usa-lo no modo local
+      - run: npm i @azure/storage-blob@12
+
+      - name: Ensaio · canal de alerta abre, comenta, fecha e deduplica (lib-alerta)
+        if: always()
+        run: node scripts/ensaio-lib-alerta.js
+
+      - name: Ensaio · os quatro eventos do vigia da Way2 deduplicam e fecham
+        if: always()
+        run: node scripts/ensaio-way2-watchdog-canal.js
+
+      - name: Ensaio · o vigia da intake do SCADA reprova quando deve
+        if: always()
+        run: node scripts/ensaio-scada-intake-watchdog.js
+
+      - name: Ensaio · a intake do scada-raw reprova o nome sem prefixo
+        if: always()
+        run: node scripts/ensaio-scada-intake.js
+
+      # ⚠️ Este le o must_5min.json publicado e roda o vigia com LOCAL_OUT. Ele sai 0 quando os quatro
+      #    cenarios RODAM; o texto do alerta de cada um fica no log para leitura. Nao e asserção.
+      - name: Ensaio · o vigia de MUST nos quatro cenarios (recortes reais de 23/08/2026)
+        if: always()
+        run: node scripts/ensaio-must-watchdog.js
