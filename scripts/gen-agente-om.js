@@ -73,7 +73,7 @@ const LEGENDA = {
     + 'da mesa do controlador de potencia; ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca registrada '
     + '(limite igual a 343,77 MW = sem limitacao); o registro chega da planilha da mesa, nao e instantaneo. must: demanda no '
     + 'ponto de conexao no ultimo instante de hoje e o maior valor de hoje, contra o contratado (acima de 100 % do contratado '
-    + 'gera penalidade; o pico de 5 min passa da outorga por transitorio de medicao). fontes: o selo de frescor de cada '
+    + 'gera penalidade). fontes: o selo de frescor de cada '
     + 'fonte de dado (em dia, atencao, atrasada). A irradiancia nao e em tempo real: a estacao chega por export diario.',
   ativos: 'inversores_dia: ultimo dia fechado; parados = menos da metade da janela de sol, parciais = entre 50 % e 90 %; '
     + 'disponibilidade em %. abaixo_dos_pares: inversores cuja energia diaria fica abaixo da mediana dos vizinhos do mesmo '

@@ -205,6 +205,9 @@ function julga(R) {
     if (refeitos < 20) mau.push('VACUO: so ' + refeitos + ' PR refeitos');
   }
   if (julgados < 12) mau.push('VACUO: so ' + julgados + ' percentuais julgados');
+  /* a legenda e texto publico: ultrapassagem do MUST nao e "transitorio de medicao" (afirmacao sem fonte que minimiza a
+     ultrapassagem; saiu do assistente na v3 e da legenda em 03/10/2026) */
+  if (/transit[oó]ri|transient/i.test(JSON.stringify(R.legenda || {}))) mau.push('legenda: chama a ultrapassagem do MUST de transitorio');
   return mau;
 }
 
@@ -268,6 +271,7 @@ function julga(R) {
     const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T2']; if (!a) return false;
     a.temperatura_em_verificacao = true; a.t_oleo_max_c = 60; return true;
   }, /em verificacao e ainda publicando/);
+  plantio('legenda que chama a ultrapassagem de transitorio', (Y) => { if (!Y.legenda) return false; Y.legenda.tempo_real += ' o pico de 5 min passa da outorga por transitorio de medicao'; return true; }, /legenda: chama/);
   plantio('PR do conjunto inflado', (Y) => {
     const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.filter((q) => q.pr_pct != null).slice(-2)[0]; if (!m) return false;
     m.pr_pct = Math.round((m.pr_pct + 3) * 100) / 100; return true;
