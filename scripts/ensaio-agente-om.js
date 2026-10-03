@@ -131,6 +131,8 @@ function julga(R) {
       /* os dois com 1 casa, de somas diferentes do mesmo medidor: dois arredondamentos de meio decimo (medido: 0,1 no M6) */
       if (a && a.energia_hoje_mwh != null && Math.abs(a.energia_hoje_mwh - r.mwh) > 0.1 + 1e-6) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh + ' MWh contra ' + a.energia_hoje_mwh + ' do agora');
     });
+    /* o instante publicado tem de ter leitura do conjunto (o intervalo vazio do fim da serie nao e "agora") */
+    if (T.must.instante && T.must.por_parque.Complexo && T.must.por_parque.Complexo.agora_mw == null) mau.push('tempo real: MUST no instante ' + T.must.instante + ' sem leitura do Complexo');
     Object.entries(T.must.por_parque || {}).forEach(([p, x]) => {
       if (x.agora_mw != null && x.pico_hoje_mw != null && x.pico_hoje_mw + EPS < x.agora_mw) mau.push('tempo real: MUST ' + p + ' pico ' + x.pico_hoje_mw + ' abaixo do agora ' + x.agora_mw);
       if (!(T.must.contratos_mw || {})[p]) mau.push('tempo real: MUST ' + p + ' sem contratado');
@@ -139,6 +141,31 @@ function julga(R) {
     if (o && (o.limite_mw > CAP_COMPLEXO + 0.01 || (!o.limitado && o.limite_mw < CAP_COMPLEXO - 0.01))) mau.push('tempo real: ultima ordem ' + o.limite_mw + ' MW incoerente com limitado=' + o.limitado);
     T.fontes.selos.forEach((s) => { if (s.estado === 'sem estado') mau.push('tempo real: selo "' + s.item + '" sem estado conhecido'); });
     if (!T.rendimento.por_usina.length || !T.fontes.selos.length) mau.push('VACUO: tempo real sem rendimento ou sem selos');
+  }
+  /* ATIVOS: identidades de cada familia */
+  const AT = R.ativos;
+  if (!AT) mau.push('ativos: bloco ausente');
+  else {
+    Object.entries(AT.inversores_dia.por_usina || {}).forEach(([u, x]) => {
+      if (x.parados + x.parciais > x.inversores) mau.push('ativos: ' + u + ' com ' + (x.parados + x.parciais) + ' parados/parciais em ' + x.inversores + ' inversores');
+      if (x.disp_pct > 100 + EPS) mau.push('ativos: disponibilidade do ' + u + ' acima de 100 %');
+    });
+    AT.abaixo_dos_pares.lista.forEach((r) => { if (r.razao_min > r.razao_mediana + EPS) mau.push('ativos: ' + r.inversor + ' com razao minima ' + r.razao_min + ' acima da mediana ' + r.razao_mediana); });
+    const tr = AT.trocas;
+    if (tr.termicas > tr.total) mau.push('ativos: ' + tr.termicas + ' trocas termicas em ' + tr.total);
+    if (tr.total > 0 && Math.abs(100 * tr.termicas / tr.total - tr.termicas_pct) > 0.05 + EPS) mau.push('ativos: termicas ' + tr.termicas_pct + ' % contra 100 x ' + tr.termicas + ' / ' + tr.total);
+    const sm = (tr.modos || []).reduce((a, m) => a + m.n, 0);
+    if (sm > tr.total) mau.push('ativos: modos de falha somam ' + sm + ' em ' + tr.total + ' trocas');
+    const al = AT.alarmes;
+    if ((al.falha_inversor || 0) + (al.rede || 0) + (al.aviso || 0) > al.eventos) mau.push('ativos: classes de alarme somam mais que os ' + al.eventos + ' eventos');
+    const ref = AT.transformadores.referencia_mva;
+    Object.entries(AT.transformadores.por_trafo || {}).forEach(([k, x]) => {
+      if (ref > 0 && x.s_max_mva != null && Math.abs(100 * x.s_max_mva / ref - x.carga_max_pct) > 0.005 + 100 * 0.005 / ref + EPS)
+        mau.push('ativos: ' + k + ' carga ' + x.carga_max_pct + ' % contra 100 x ' + x.s_max_mva + ' / ' + ref);
+    });
+    const ol = AT.oleo;
+    if (ol.pior_uso_pct != null && ol.pior_margem_pct != null && Math.abs(ol.pior_uso_pct + ol.pior_margem_pct - 100) > 0.05 + EPS) mau.push('ativos: oleo uso ' + ol.pior_uso_pct + ' + margem ' + ol.pior_margem_pct + ' nao fecha 100');
+    if (ol.conforme === true && ol.nao_conformes > 0) mau.push('ativos: oleo conforme com ' + ol.nao_conformes + ' laudos nao conformes');
   }
   if (julgados < 12) mau.push('VACUO: so ' + julgados + ' percentuais julgados');
   return mau;
@@ -186,9 +213,18 @@ function julga(R) {
     const r = Y.tempo_real.rendimento.por_usina; const a = r.find((x) => x.ufv === 'M2'), b = r.find((x) => x.ufv === 'M9');
     if (!a || !b || Math.abs(a.mwh_por_mw - b.mwh_por_mw) < 0.05) return false; const t = a.mwh_por_mw; a.mwh_por_mw = b.mwh_por_mw; b.mwh_por_mw = t; return true;
   }, /rendimento M[29] /);
+  /* plantios que NAO dependem do estado da hora: pico x instante e carga x potencia valem com qualquer leitura */
   plantio('pico do MUST abaixo do instante', (Y) => {
-    const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.agora_mw == null) return false; x.pico_hoje_mw = x.agora_mw - 1; return true;
+    const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.pico_hoje_mw == null) return false; x.agora_mw = x.pico_hoje_mw + 1; return true;
   }, /MUST Complexo pico/);
+  plantio('MUST no intervalo vazio do fim da serie', (Y) => {
+    const x = Y.tempo_real.must.por_parque.Complexo; if (!x || !Y.tempo_real.must.instante) return false; x.agora_mw = null; return true;
+  }, /sem leitura do Complexo/);
+  plantio('carga de transformador descolada da potencia', (Y) => {
+    const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T1']; if (!a || a.carga_max_pct == null) return false; a.carga_max_pct = Math.round((a.carga_max_pct + 5) * 100) / 100; return true;
+  }, /04T1 carga/);
+  plantio('trocas termicas inflada', (Y) => { if (!Y.ativos) return false; Y.ativos.trocas.termicas += 10; return true; }, /termicas/);
+  plantio('oleo conforme com laudo nao conforme', (Y) => { if (!Y.ativos || Y.ativos.oleo.conforme !== true) return false; Y.ativos.oleo.nao_conformes = 1; return true; }, /oleo conforme/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);
 
   if (falhas.length) { console.log(falhas.map((f) => '  RECUSA: ' + f).join('\n')); process.exit(1); }

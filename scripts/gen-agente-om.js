@@ -68,13 +68,20 @@ const LEGENDA = {
     + '(ultimos_dias). motivos: ENE = razao energetica (sobra de energia no sistema), CNF = confiabilidade da rede, REL = '
     + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
     + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
-  tempo_real: 'medidores: dos 24 medidores de faturamento, quantos chegaram em dia e quais estao fora (idade em minutos). '
+  tempo_real: 'medidores: dos 24 medidores (2 de 230 kV e 22 de circuito de 34,5 kV), quantos chegaram em dia e quais estao fora (idade em minutos). '
     + 'rendimento: energia de hoje por usina e por MW instalado (compara usinas de tamanhos diferentes). operador: registro '
     + 'da mesa do controlador de potencia; ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca registrada '
     + '(limite igual a 343,77 MW = sem limitacao); o registro chega da planilha da mesa, nao e instantaneo. must: demanda no '
     + 'ponto de conexao no ultimo instante de hoje e o maior valor de hoje, contra o contratado (acima de 100 % do contratado '
     + 'gera penalidade; o pico de 5 min passa da outorga por transitorio de medicao). fontes: o selo de frescor de cada '
     + 'fonte de dado (em dia, atencao, atrasada). A irradiancia nao e em tempo real: a estacao chega por export diario.',
+  ativos: 'inversores_dia: ultimo dia fechado; parados = menos da metade da janela de sol, parciais = entre 50 % e 90 %; '
+    + 'disponibilidade em %. abaixo_dos_pares: inversores cuja energia diaria fica abaixo da mediana dos vizinhos do mesmo '
+    + 'eletrocentro (razao 1,00 = igual aos pares); sinal precoce, antes da falha. trocas: substituicoes de inversor registradas '
+    + 'na planilha (termicas = capacitor estufado, carbonizado, superaquecimento); MTBF da frota em anos; estoque de inversores '
+    + 'disponiveis. alarmes: export de alarmes do supervisorio, que vai so ate o mes ate_mes; alarmes de rede nao sao defeito do '
+    + 'inversor. transformadores: carga maxima do dia contra a potencia ONAF2 da placa; temperatura so onde o canal existe. oleo: '
+    + 'laudos da ultima campanha contra a ABNT NBR 10576; pior_uso e quanto do limite o pior ensaio consome.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
     + 'defeito. M1 e a usina que a planilha comercial chama de Mauriti 10.',
@@ -204,7 +211,9 @@ function montaTempoReal(V, P, MU, F) {
       primeira: hojeP.primeiro, ultima: hojeP.ultimo, menor_limite_mw: hojeP.pot_min, horas_sob_limite: hojeP.horas_restricao,
       termina_limitado: hojeP.restricao_aberta === 1, motivos: hojeP.motivo_cods },
     ultima_ordem: ult && { quando: ult.ts, limite_mw: ult.pot, limitado: ult.restr === 1, motivo: ult.motivo } };
-  const linhasHoje = (MU.serie || []).filter((r) => String(r.t).slice(0, 10) === V.dia);
+  /* so as linhas com leitura: a serie traz os intervalos de 5 min ainda VAZIOS do fim (so os campos _c), e o "ultimo
+     instante" era um desses: "as 08:40 a demanda e —" (achado em 03/10/2026) */
+  const linhasHoje = (MU.serie || []).filter((r) => String(r.t).slice(0, 10) === V.dia && (MU.parques || []).some((p) => r[p] != null));
   const must = { contratos_mw: MU.contratos, instante: null, por_parque: {} };
   if (linhasHoje.length) {
     const u = linhasHoje[linhasHoje.length - 1];
@@ -221,6 +230,49 @@ function montaTempoReal(V, P, MU, F) {
     (lista || []).forEach((b) => fontes.push({ grupo: GRUPO_SELO[k] || k.slice(7), item: b.l, valor: b.v, unidade: b.u || '', estado: ESTADO_COR[b.c] || 'sem estado' }));
   }
   return { medidores, rendimento, operador, must, fontes: { gerado: F && F.gerado_em, selos: fontes } };
+}
+
+/* ---- ATIVOS E SAUDE (02/10/2026): o que as telas Inversores, Confiabilidade, Transformadores e Oleo mostram ----
+   inversores_dia  perdas_diario (ultimo dia fechado): parados, parciais e disponibilidade por usina e do conjunto;
+   abaixo_dos_pares inv_scada.ranking: os inversores que rendem abaixo da mediana do proprio eletrocentro, ANTES de falhar;
+   trocas          portal_ativos.p1 (planilha de substituicoes): total, termicas, modos, pior parque, MTBF, reposicao, estoque;
+   alarmes         portal_ativos.p2 (export de alarmes do supervisorio): classes, maior emissor; com a data ate onde vai;
+   transformadores trafo_diario (ultimo dia): carga maxima contra ONAF2, temperaturas que existirem;
+   oleo            oleo.manchete: conformidade dos laudos, pior ensaio, gases-chave a acompanhar.
+   Tudo selecao; o emoji dos modos de falha sai do texto (o assistente le em voz alta). */
+const USINAS9 = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+const semEmoji = (s) => String(s == null ? '' : s).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]️?/gu, '').trim();
+function montaAtivos(A, P, I, T, O) {
+  const s = (P.serie || [])[(P.serie || []).length - 1] || {};
+  const porUsina = {};
+  USINAS9.forEach((u) => { porUsina[u] = { inversores: s[u + '_n_inv'], parados: s[u + '_inv_parados'], parciais: s[u + '_inv_parciais'], disp_pct: s[u + '_disp_pct'] }; });
+  const inversores_dia = { dia: s.dia, disp_conjunto_pct: s.CX_disp_pct, disp_contrato_pct: s.CX_disp_contrato_pct, por_usina: porUsina };
+  const esc = I.escopo || {};
+  const abaixo = { de: esc.de, ate: esc.ate, lista: (I.ranking || []).slice(0, 10).map((r) => ({ inversor: r.chave, razao_mediana: r.razao_mediana, razao_min: r.razao_min, dias: r.dias })) };
+  const p1 = A.p1 || {}, p2 = A.p2 || {}, est = (A.escopo || {}).estoque || {}, F = A.fontes || {};
+  const trocas = { total: p1.total, termicas: p1.termico, termicas_pct: p1.termico_pct, desde_dias: p1.janela_dias, ultima: F.substituicoes_ultima,
+    modos: (p1.por_modo || []).map((m) => ({ modo: semEmoji(m.modo), n: m.n, termico: !!m.termico })),
+    pior_parque: p1.pior_parque && { parque: p1.pior_parque.parque, trocas: p1.pior_parque.n, por_100_inversores: p1.pior_parque.taxa_100 },
+    mtbf_anos: p1.mtbf_anos, consumo_mensal: p1.consumo_mensal, reposicao_mesmo_dia_pct: (p1.reposicao || {}).pct_mesmo_dia, reposicao_max_dias: (p1.reposicao || {}).max_dias,
+    estoque: { novos: est.novo, reparados: est.reparado, total: est.total, cobertura_meses: est.cobertura_meses } };
+  const alarmes = { ate_mes: F.alarmes_ultimo_mes, eventos: p2.eventos, falha_inversor: p2.falha_inversor, rede: p2.rede, aviso: p2.aviso, rede_pct: p2.rede_pct,
+    classes: (p2.por_classe || []).map((c) => ({ classe: c.classe, n: c.n, pct: c.pct })), maior_emissor: p2.bad_actor && { inversor: p2.bad_actor.inv, alarmes: p2.bad_actor.n },
+    mtba_dias: p2.mtba_dias };
+  const ts = (T.serie || [])[(T.serie || []).length - 1] || {};
+  const onaf2 = ((T.placa || {}).potencia_at_mva || {}).onaf2;
+  const trafos = {};
+  (T.trafos || []).forEach((k) => {
+    const o = { s_max_mva: ts[k + '_s_max'], carga_max_pct: ts[k + '_carga_pct_max'], p_max_mw: ts[k + '_p_max'] };
+    if (ts[k + '_t_oleo_max'] != null) o.t_oleo_max_c = ts[k + '_t_oleo_max'];
+    if (ts[k + '_t_enrol_max'] != null) o.t_enrolamento_max_c = ts[k + '_t_enrol_max'];
+    trafos[k] = o;
+  });
+  const transformadores = { dia: ts.dia, referencia_mva: onaf2, referencia: 'ONAF2', por_trafo: trafos };
+  const m = O.manchete || {};
+  const oleo = { campanha: O.camp_atual_rot, campanhas: m.campanhas, laudos: m.laudos, conforme: m.conforme, nao_conformes: O.nao_conformes, texto: m.texto,
+    pior_ensaio: m.pior_ensaio, pior_uso_pct: m.pior_uso, pior_margem_pct: m.pior_margem, pior_unidade: m.pior_unidade,
+    gases_a_acompanhar: (O.gases_chave || []).map((x) => ({ unidade: x.unidade, gas: x.gas, ppm: x.ppm, indica: x.indica })) };
+  return { inversores_dia, abaixo_dos_pares: abaixo, trocas, alarmes, transformadores, oleo };
 }
 
 /* guardas: o resumo incompleto nao e gravado (melhor o assistente ler o anterior que um resumo com buraco) */
@@ -243,6 +295,15 @@ function guarda(R) {
     if (!T.operador.ultima_ordem) mau.push('tempo real: sem ordem da mesa');
     if (!T.fontes.selos.length) mau.push('tempo real: sem selos de frescor');
   }
+  const AT = R.ativos;
+  if (!AT) mau.push('ativos: bloco ausente');
+  else {
+    USINAS9.forEach((u) => { if (!AT.inversores_dia.por_usina[u] || AT.inversores_dia.por_usina[u].parados == null) mau.push('ativos: sem o dia de inversores do ' + u); });
+    if (!AT.abaixo_dos_pares.lista.length) mau.push('ativos: lista dos abaixo dos pares vazia');
+    if (!AT.trocas.total) mau.push('ativos: sem trocas');
+    if (Object.keys(AT.transformadores.por_trafo).length !== 2) mau.push('ativos: transformadores ' + Object.keys(AT.transformadores.por_trafo).length + ' em vez de 2');
+    if (AT.oleo.laudos == null) mau.push('ativos: sem laudos de oleo');
+  }
   const kb = Buffer.byteLength(JSON.stringify(R)) / 1024;
   if (kb > TETO_KB) mau.push('tamanho ' + kb.toFixed(1) + ' KB acima do teto de ' + TETO_KB);
   return { mau, kb };
@@ -259,10 +320,11 @@ async function grava(R) {
 }
 
 async function main() {
-  const [V, X, P, MU, F] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json', 'fontes_saude.json']
-    .map((n) => puxa(BASE + n)));
+  const [V, X, P, MU, F, AT, PD, IS, TD, OL] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json',
+    'fontes_saude.json', 'portal_ativos.json', 'perdas_diario.json', 'inv_scada.json', 'trafo_diario.json', 'oleo.json'].map((n) => puxa(BASE + n)));
   const R = monta(V, X);
   R.tempo_real = montaTempoReal(V, P, MU, F);
+  R.ativos = montaAtivos(AT, PD, IS, TD, OL);
   const { mau, kb } = guarda(R);
   if (mau.length) { console.error('agente_om: NAO gravado\n  ' + mau.join('\n  ')); process.exit(1); }
   await grava(R);
@@ -270,5 +332,5 @@ async function main() {
     + ' · fechados ' + R.meses_fechados.map((m) => m.lbl).join(', ') + ' · ano ' + R.ano.ano + ' ate ' + R.ano.meses_fechados_ate);
 }
 
-module.exports = { monta, montaTempoReal, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
+module.exports = { monta, montaTempoReal, montaAtivos, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
