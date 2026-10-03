@@ -99,13 +99,11 @@ function julga(R) {
     (K.ultimos_dias || []).forEach((d) => Object.entries(d.por_usina || {}).forEach(([u, x]) =>
       pct('corte ' + d.dia + ' ' + u, x.cortado_mwh, x.potencial_mwh, x.corte_pct)));
     (K.meses || []).forEach((m) => {
-      /* o percentual do mes vai SO no Complexo, e tem de fechar com o par em MWh da propria linha (ver o gerador); nas
-         usinas e nos contratos ele ainda nao fecha, entao nao pode aparecer */
+      /* o percentual do mes vai em toda entidade com o par, e tem de fechar com o par em MWh da propria linha (o executivo
+         ja para se nao fechar; aqui se confere o que chegou ao resumo) */
       Object.entries(m.por_entidade || {}).forEach(([e, x]) => {
-        if (e === 'Complexo') {
-          if (x.potencial_mwh > 0 && x.cortado_mwh != null && !(x.corte_pct != null)) mau.push('corte ' + m.mes + ' Complexo: sem o percentual do mes');
-          pct('corte ' + m.mes + ' Complexo', x.cortado_mwh, x.potencial_mwh, x.corte_pct);
-        } else if ('corte_pct' in x) mau.push('corte ' + m.mes + ' ' + e + ': percentual do mes publicado (nas usinas e contratos ele nao fecha com o par em MWh)');
+        if (x.potencial_mwh > 0 && x.cortado_mwh != null && !(x.corte_pct != null)) mau.push('corte ' + m.mes + ' ' + e + ': sem o percentual do mes');
+        pct('corte ' + m.mes + ' ' + e, x.cortado_mwh, x.potencial_mwh, x.corte_pct);
         if (x.cortado_mwh != null && x.potencial_mwh != null && x.cortado_mwh > x.potencial_mwh + 0.01) mau.push('corte ' + m.mes + ' ' + e + ': cortado acima do potencial');
       });
       const P = m.por_entidade || {};
@@ -257,10 +255,15 @@ function julga(R) {
     const m = mesComCorte(Y); if (!m) return false; const x = m.por_entidade.Complexo;
     x.corte_pct = Math.round(10000 * x.cortado_mwh / (x.potencial_mwh + 3000)) / 100; return true;
   }, /corte \d{4}-\d{2} Complexo/);
-  plantio('percentual do mes publicado numa usina', (Y) => {
-    const m = mesComCorte(Y); if (!m || !m.por_entidade.M9) return false; const x = m.por_entidade.M9;
-    x.corte_pct = x.potencial_mwh > 0 ? Math.round(10000 * x.cortado_mwh / x.potencial_mwh) / 100 : 0; return true;
-  }, /M9: percentual do mes publicado/);
+  /* nas usinas (PROMOVER agente-corte-ufv): o percentual do mes trocado entre duas usinas, e o de uma usina apagado */
+  plantio('percentual do mes trocado entre M9 e M5', (Y) => {
+    const m = mesComCorte(Y); if (!m || !m.por_entidade.M9 || !m.por_entidade.M5) return false;
+    const a = m.por_entidade.M9, b = m.por_entidade.M5; if (Math.abs(a.corte_pct - b.corte_pct) < 1) return false;
+    const t = a.corte_pct; a.corte_pct = b.corte_pct; b.corte_pct = t; return true;
+  }, /corte \d{4}-\d{2} M(9|5):/);
+  plantio('percentual do mes de uma usina apagado', (Y) => {
+    const m = mesComCorte(Y); if (!m || !m.por_entidade.M1) return false; delete m.por_entidade.M1.corte_pct; return true;
+  }, /M1: sem o percentual do mes/);
   plantio('percentual do Complexo no mes sumido', (Y) => {
     const m = mesComCorte(Y); if (!m) return false; delete m.por_entidade.Complexo.corte_pct; return true;
   }, /Complexo: sem o percentual do mes/);

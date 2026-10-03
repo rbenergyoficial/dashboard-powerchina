@@ -26,8 +26,10 @@ const OUT_BLOB = process.env.OUT_BLOB || 'agente_om.json';
 const ENTIDADES = ['Complexo', 'PPA', 'ML', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const MESES_FECHADOS = 6;
 /* o assistente do portal baixa o resumo a cada pergunta: acima disso ele deixa de ser leve; melhor abortar e cortar de
-   proposito (era 25 KB quando o leitor era um modelo de linguagem; o corte do ONS, em 02/10/2026, levou a ~30 KB) */
-const TETO_KB = 45;
+   proposito (era 25 KB quando o leitor era um modelo de linguagem; o corte do ONS, em 02/10/2026, levou a ~30 KB).
+   50 KB desde 03/10/2026 (PROMOVER agente-corte-ufv): o percentual do mes nas 11 entidades levou o resumo a 44,97 KB, sem
+   folga para a variacao do tempo real. O leitor e o motor de regras do portal (sem modelo de linguagem), com cache de 60 s. */
+const TETO_KB = 50;
 const DIAS_CORTE = 7;   /* ultimos dias com corte apurado (o operador publica com ~1 dia de atraso) */
 
 function puxa(url) {
@@ -64,8 +66,7 @@ const LEGENDA = {
     + 'meta.',
   corte: 'Energia que a usina deixou de gerar por limitacao do operador nacional (ONS). cortado_mwh e a energia impedida; '
     + 'corte_pct e essa energia em % do potencial (o que teria gerado sem a limitacao); horas_restricao sao as horas sob '
-    + 'limitacao no mes (no mes, o percentual vai pronto so no Complexo; nas usinas e contratos vao cortado_mwh e '
-    + 'potencial_mwh; o percentual do dia vai pronto). Ate jul/26 o potencial do Complexo no mes e o do conjunto no '
+    + 'limitacao no mes (o percentual vai pronto no dia e no mes). Ate jul/26 o potencial do Complexo no mes e o do conjunto no '
     + 'operador, sem o M7, que ele so passou a registrar em 17/07/2026: por isso fica abaixo da soma das usinas. O operador publica com atraso de cerca de um dia, entao o mes em curso so tem os dias ja publicados '
     + '(ultimos_dias). motivos: ENE = razao energetica (sobra de energia no sistema), CNF = confiabilidade da rede, REL = '
     + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
@@ -163,13 +164,12 @@ function monta(V, X) {
     for (const e of ENTIDADES) {
       const s = S.find((x) => x.ufv === e && x.mes === mes && x.parcial === 0);
       if (!s) continue;
-      /* O `corte_pct` do mes vai SO no Complexo. Medido em 02/10/2026, ele nao fechava com o par em MWh da linha (abr/26
-         23,28 x 22,29): o potencial do Complexo misturava bases e foi corrigido no executivo em 03/10 (`eac9bce`, com guarda
-         no gerador). 🔴 Nas usinas e nos contratos o percentual do mes AINDA nao fecha com o par em MWh (M9 jul/26: 0,44 pp;
-         a sobra do arredondamento entra no cortado depois do percentual): ali o assistente segue falando o par. */
-      const o = { potencial_mwh: s.potencial_mwh, cortado_mwh: s.cortado_mwh, horas_restricao: s.horas_restricao };
+      /* O `corte_pct` do mes vai em todas as entidades. Ate 03/10/2026 ele nao fechava com o par em MWh da linha: no Complexo
+         o potencial misturava bases (corrigido em `eac9bce`), nas usinas e contratos o percentual saia do par em GWh e a
+         sobra do arredondamento entrava depois dele (corrigido em `2a1efa5`). O executivo agora para se algum percentual nao
+         fechar com o par da propria linha. O `potencial_escopo` do Complexo fica no executivo: a legenda diz o mesmo. */
+      const o = { potencial_mwh: s.potencial_mwh, cortado_mwh: s.cortado_mwh, corte_pct: s.corte_pct, horas_restricao: s.horas_restricao };
       if (e === 'Complexo') {
-        o.corte_pct = s.corte_pct;   /* o `potencial_escopo` da linha fica no executivo: a legenda diz o mesmo uma vez so */
         const c = SC.find((x) => x.mes === mes);
         if (c && c.razoes) o.motivos_pct = Object.fromEntries(Object.entries(c.razoes).map(([k, v]) => [k, v.pct]));
       } else {
@@ -346,7 +346,7 @@ function guarda(R) {
    disponibilidade    executivo.serie (declarada ao operador, so o conjunto) e executivo.serie_ufv.disp_inv_pct (contadores
                       dos inversores, por usina e grupo).
    Tudo selecao. O PR GARANTIDO do contrato de O&M nao entra: ele nao vai para o blob publico (fica na pagina do portal). */
-const MESES_PR = 7, MESES_PR_ENT = 3;   /* teto do resumo (45 KB): 3 meses por entidade bastam para "o mes passado" e o em curso */
+const MESES_PR = 7, MESES_PR_ENT = 3;   /* teto do resumo (TETO_KB): 3 meses por entidade bastam para "o mes passado" e o em curso */
 const ENT_DESEMPENHO = USINAS9.concat(['PPA', 'ML']);
 const LBL_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const lblDe = (mes) => LBL_MES[Number(mes.slice(5, 7)) - 1] + '/' + mes.slice(2, 4);
