@@ -167,6 +167,41 @@ function leEventos(XLSX, fonte) {
 }
 
 /**
+ * A FUSAO das copias da planilha com o que ja estava publicado. Devolve { eventos, novos, removidos }.
+ *
+ * `base` e o publicado (o historico acumulado); `copias` sao as copias da planilha em ordem
+ * cronologica, cada uma uma lista de eventos de `leEventos`.
+ *
+ * 🔴 A COPIA MAIS NOVA MANDA NOS DIAS QUE ELA COBRE, E ISSO INCLUI APAGAR. Ate 03/10/2026 a fusao era
+ *    por carimbo e nunca tirava nada: quando a mesa corrigia uma linha, o carimbo velho ficava no ar
+ *    ao lado do novo. Em 26/09 a mesa reescreveu 19 linhas (uma delas com a HORA digitada na coluna de
+ *    potencia, "0,55 MW as 12:58"), e o publicado seguiu com as 19 antigas misturadas as novas: a
+ *    auditoria contra o ONS acusou a mediana do dia em 25 MW por uma semana depois da correcao.
+ *
+ * ⚠️ O PRIMEIRO DIA DE CADA COPIA SE FUNDE POR CARIMBO, nao e substituido: um arquivo novo pode comecar
+ *    no meio de um dia, e a manha que so a copia anterior tem nao pode sumir. Os dias ANTES do primeiro
+ *    dia da copia tambem ficam: e o historico que o arquivo vigente pode nao trazer mais.
+ * ⚠️ Copia sem evento nenhum nao apaga nada (arquivo vazio ou aba trocada nao e correcao).
+ */
+function fundeCopias(base, copias) {
+  const diaDe = (e) => e.dia || String(e.ts).slice(0, 10);
+  const m = new Map();
+  for (const e of base) m.set(e.ts, e);
+  const antes = new Set(m.keys());
+  for (const ev of copias) {
+    if (!ev.length) continue;
+    const dias = ev.map(diaDe).sort();
+    const de = dias[0], ate = dias[dias.length - 1];
+    for (const [ts, e] of m) { const d = diaDe(e); if (d > de && d <= ate) m.delete(ts); }
+    for (const e of ev) m.set(e.ts, e);
+  }
+  const eventos = [...m.values()].sort((a, b) => a.ms - b.ms);
+  return { eventos,
+    novos: eventos.filter((e) => !antes.has(e.ts)).length,
+    removidos: [...antes].filter((ts) => !m.has(ts)).sort() };
+}
+
+/**
  * A DURACAO sob restricao, dia a dia, pelo degrau da planilha — devolvida em MINUTOS.
  *
  * 🔴 O QUE ISTO E, E O QUE NAO E. Este numero sai do REGISTRO DA MESA, e por isso existe no
@@ -235,4 +270,4 @@ function integraliza(ev) {
   return slots;
 }
 
-module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, integraliza, duracaoRestricao, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };
+module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, fundeCopias, integraliza, duracaoRestricao, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };

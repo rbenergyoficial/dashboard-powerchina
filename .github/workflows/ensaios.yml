@@ -67,3 +67,9 @@ jobs:
       - name: Ensaio · a guarda da EneatLiquida reprova liquidacao incompleta (logica)
         if: always()
         run: node scripts/ensaio-liquidada.js
+
+      # A fusao do registro da mesa (lib-ppc.js · fundeCopias): a copia mais nova manda nos dias que cobre, inclusive
+      # para apagar linha corrigida; o historico antes do arquivo e a manha do primeiro dia ficam. So dados plantados.
+      - name: Ensaio · a fusao das copias da planilha da mesa tira a linha corrigida
+        if: always()
+        run: node scripts/ensaio-ppc-funde.js

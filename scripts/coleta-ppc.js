@@ -15,10 +15,12 @@
  *    o blob para de receber versao nova — e quem denuncia isso e a idade do dado na propria
  *    auditoria, nao este script.
  *
- * 🔴 CASA POR PREFIXO, NUNCA POR NOME EXATO. O arquivo se chama `Mauriti_Historico_PPC   <data>`,
+ * 🔴 CASA POR PREFIXO, NUNCA POR NOME EXATO. O arquivo se chamou `Mauriti_Historico_PPC   <data>`,
  *    com a data embutida e tres espacos no meio, e a mesa troca esse nome sem avisar — trocou no
  *    dia em que este coletor foi escrito, entre uma medicao e a seguinte. Um coletor ancorado no
  *    nome de ontem pararia em SILENCIO, que foi o que custou 19 dias de solarimetria parada.
+ *    Em 03/10/2026 virou `Mauriti_Historico_Curtailment.xlsx`, e o prefixo antigo (`…_PPC`) parou
+ *    a ponte: o prefixo e so a parte comum, `Mauriti_Historico`.
  *
  * 🔴 O CARIMBO E UM PREPEND NUMERICO E MONOTONICO (`AAAAMMDDHHMMSS_`), o mesmo contrato do
  *    `gen-scada-intake`. Renomear o arquivo em vez de prefixar apagaria a marca que a mesa
@@ -46,7 +48,7 @@ const crypto = require('crypto');
 
 const PASTA = process.env.PPC_PASTA || '';
 const CONTAINER = process.env.RAW_CONTAINER || 'ppc-raw';
-const PREFIXO = /mauriti_historico_ppc/i;
+const PREFIXO = /mauriti_historico/i;
 const SECO = /^(1|true|sim)$/i.test(process.env.SECO || '');
 const ESTADO = process.env.PPC_ESTADO
   || path.join(process.env.LOCALAPPDATA || process.env.TMPDIR || '.', 'coleta-ppc-estado.json');

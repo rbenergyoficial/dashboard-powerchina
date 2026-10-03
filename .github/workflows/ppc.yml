@@ -28,6 +28,10 @@ jobs:
       # ("do primeiro ao ultimo lancamento restrito"), que erra em 97 dos 115 dias.
       - name: Ensaio da duracao sob restricao
         run: node scripts/ensaio-ppc-duracao.js
+      # A fusao das copias com o publicado: a copia mais nova manda nos dias que cobre, e linha que a
+      # mesa corrigiu sai do ar. So dados plantados; reprova a fusao antiga, que nunca apagava.
+      - name: Ensaio da fusao das copias da planilha
+        run: node scripts/ensaio-ppc-funde.js
       # 🔴 O container `ppc-raw` e alimentado por um coletor que roda FORA daqui, na maquina onde a
       # pasta esta sincronizada. Se ele parar, este job continua rodando e republicando o que ja
       # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao

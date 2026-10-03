@@ -10,8 +10,10 @@
  *   LOCAL_DIR=<pasta>       le de uma pasta local — e o modo EXERCITAVEL, e o que o ensaio usa
  *
  * 🔴 LE TODOS OS ARQUIVOS QUE CASAM O PREFIXO, E FUNDE — nunca um nome exato.
- *    O arquivo se chama `Mauriti_Historico_PPC   <data>.xlsx`, com a data embutida e tres espacos
- *    no meio. Quando a mesa abrir um arquivo novo, o nome muda; um coletor ancorado no nome de
+ *    O arquivo se chamou `Mauriti_Historico_PPC   <data>.xlsx` (data embutida, tres espacos no
+ *    meio) e, em 03/10/2026, `Mauriti_Historico_Curtailment.xlsx`: o prefixo e so a parte comum,
+ *    e o container guarda as copias dos dois nomes. Quando a mesa abrir um arquivo novo, o nome
+ *    muda; um coletor ancorado no nome de
  *    hoje pararia em silencio, que e exatamente o que custou 19 dias de solarimetria parada
  *    (`IRR` x `IIRR` x `IRR_GERAL`). Fundir tambem preserva o passado quando o arquivo vigente
  *    passa a cobrir so o periodo novo.
@@ -35,7 +37,7 @@ const RAW_CONTAINER = process.env.RAW_CONTAINER || 'ppc-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const LOCAL_DIR = process.env.LOCAL_DIR || '';
 const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
-const PREFIXO = /mauriti_historico_ppc/i;                 // por PREFIXO, nunca por nome exato
+const PREFIXO = /mauriti_historico/i;                     // por PREFIXO, nunca por nome exato
 const JANELA_DIAS = Number(process.env.PPC_JANELA || 730);
 
 async function puxa(url) {
@@ -122,8 +124,8 @@ async function grava(nome, obj) {
   if (!arqs.length) throw new Error('nenhum arquivo casando o prefixo em ' + (LOCAL_DIR || RAW_CONTAINER)
     + '. Publicar vazio apagaria o registro — abortando.');
 
-  // funde na ordem cronologica: o arquivo mais novo ganha na colisao de carimbo
-  const porTs = new Map();
+  // le na ordem cronologica; a fusao (a copia mais nova manda nos dias que cobre) e do lib
+  const copias = [];
   let defeitos = [];
   let lidos = 0;
   for (const a of arqs) {
@@ -131,7 +133,7 @@ async function grava(nome, obj) {
     const { ev, def, vazias } = P.leEventos(XLSX, buf);
     lidos += 1;
     console.log('  ' + a.nome + ': ' + ev.length + ' eventos · ' + def.length + ' defeito(s) · ' + vazias + ' linha(s) vazia(s)');
-    for (const e of ev) porTs.set(e.ts, e);
+    copias.push(ev);
     /* 🔴 DEFEITO E ESTADO DA PLANILHA, NAO HISTORIA: vale so o da copia MAIS NOVA.
        O coletor sobe uma copia a cada mudanca e cada copia traz o registro inteiro. Somar os
        defeitos de todas multiplicava os permanentes (37 copias em 16/09/2026 = 11.734 defeitos
@@ -143,14 +145,14 @@ async function grava(nome, obj) {
     defeitos = def.map((d) => Object.assign({ arquivo: a.nome }, d));
   }
 
-  // e com o que ja estava publicado: o historico nao mora so no arquivo vigente
-  const antes = await leAnterior('ppc_restricao.json');
-  const m = new Map();
-  for (const e of antes) m.set(e.ts, e);
-  let novos = 0;
-  for (const [ts, e] of porTs) { if (!m.has(ts)) novos += 1; m.set(ts, e); }
+  // e com o que ja estava publicado: o historico nao mora so no arquivo vigente, mas linha que a mesa
+  // corrigiu sai do ar (fundeCopias)
+  const F = P.fundeCopias(await leAnterior('ppc_restricao.json'), copias);
+  const novos = F.novos;
+  if (F.removidos.length) console.log('  ' + F.removidos.length + ' evento(s) publicado(s) que a copia mais nova nao traz mais (corrigidos pela mesa): '
+    + F.removidos.slice(0, 30).join(', ') + (F.removidos.length > 30 ? ' …' : ''));
 
-  let eventos = [...m.values()].sort((a, b) => a.ms - b.ms);
+  let eventos = F.eventos;
   const dias = [...new Set(eventos.map((e) => e.dia || String(e.ts).slice(0, 10)))].sort();
   const corte = dias.slice(-JANELA_DIAS)[0];
   eventos = eventos.filter((e) => (e.dia || String(e.ts).slice(0, 10)) >= corte);
