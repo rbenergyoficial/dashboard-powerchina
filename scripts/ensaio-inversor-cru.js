@@ -8,7 +8,7 @@
  * PRODUTO · a identidade que denunciava o buraco: medidor / soma dos contadores dos inversores. Com o M9 lido pela
  *           metade (23 de 33) ela passava de 140 %, o que e fisicamente impossivel; com os crus, cai na faixa das
  *           outras usinas (corrigidas pela cobertura) NO MESMO DIA. So o dia com o M9 COMPLETO e julgado; e as
- *           linhas por inversor do M9 TS1 INV13..22 tem de ter eficiencia e pico possiveis.
+ *           linhas por inversor do M9 TS1 INV13..22 tem de ter pico possivel e eficiencia como a dos nomeados (ver abaixo).
  * PLANTIO · o mesmo julgamento sobre um dia forjado com a razao do M9 em 141 % tem de reprovar.
  *
  *   node scripts/ensaio-inversor-cru.js            (le os blobs publicos; LOCAL_DIR=<pasta> le uma rodada local)
@@ -78,18 +78,49 @@ function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zl
     exige(j.ok, `${r.dia}: medidor/contadores do M9 ${(100 * j.m9).toFixed(1)} % fora da faixa das outras usinas `
       + `(${(100 * j.lo).toFixed(1)} a ${(100 * j.hi).toFixed(1)} %)`);
   }
-  const L = I.serie.filter((r) => r.ufv === 'M9' && r.ts === 'TS1' && /^INV(1[3-9]|2[0-2])$/.test(r.inv));
+  const ehCru = (r) => r.ufv === 'M9' && r.ts === 'TS1' && /^INV(1[3-9]|2[0-2])$/.test(r.inv);
+  const L = I.serie.filter(ehCru);
+  /* 🔴 A EFICIENCIA DO DIA NAO TEM TETO FIXO (03/10/2026). O ensaio exigia ef <= 1,02 e reprovou o M9/TS1/INV15 de 02/10
+     (1,0214), dia nublado. O ef e a razao de amostras INSTANTANEAS de CA e CC, que nao sao simultaneas: passa de 100 %
+     em ~1 % dos dias-inversor da frota inteira (memoria `project_eficiencia_inversor_acima_100`). Medido no perdas_inv de
+     03/10: 151 de 66.507 dias de inversores de coluna NOMEADA acima de 1,02 (max 1,1449), 11 deles no proprio 02/10.
+     O que um mapa errado faz e outra coisa, e e isso que se julga:
+       · no DIA, o excesso tem de vir dos instantes impossiveis (CA > CC): ef - ef_imp <= 1 (nos nomeados, max 0,9911;
+         no INV15 de 02/10, 0,9888);
+       · na JANELA, a mediana de cada inversor cru cai na faixa das medianas dos 1.145 nomeados (0,9608 a 0,9872 em
+         03/10): CA lendo o registro da CC daria 1,000 todo dia, e nenhum dia sozinho denuncia isso. */
+  const efOk = (r) => r.ef >= 0.9 && r.ef - (r.ef_imp || 0) <= 1;
+  const medianas = (linhas) => {
+    const por = new Map();
+    for (const r of linhas) if (r.e_ca > 0.1 && typeof r.ef === 'number') {
+      const k = r.ufv + '/' + r.ts + '/' + r.inv; (por.get(k) || por.set(k, []).get(k)).push(r.ef); }
+    return new Map([...por].map(([k, v]) => { v.sort((x, y) => x - y); return [k, v[v.length >> 1]]; }));
+  };
+  const fNom = [...medianas(I.serie.filter((r) => !ehCru(r))).values()];
+  const faixa = { lo: Math.min(...fNom), hi: Math.max(...fNom), n: fNom.length };
+  const mCru = medianas(L);
+  exige(faixa.n >= 1000, `faixa da frota com ${faixa.n} inversores nomeados: pouco para julgar`);
+  const medianaOk = (m) => m >= faixa.lo && m <= faixa.hi;
+  for (const [k, m] of mCru) exige(medianaOk(m), `${k}: eficiencia mediana ${m} fora da faixa dos nomeados `
+    + `(${faixa.lo} a ${faixa.hi})`);
   for (const r of L) {
-    if (r.e_ca > 0.1) exige(r.ef >= 0.9 && r.ef <= 1.02, `${r.dia} M9/TS1/${r.inv}: eficiencia ${r.ef}`);
+    if (r.e_ca > 0.1) exige(efOk(r), `${r.dia} M9/TS1/${r.inv}: eficiencia ${r.ef}, ${r.ef_imp || 0} dela de instantes impossiveis`);
     if (r.p_ca_max != null) exige(r.p_ca_max <= 353.5, `${r.dia} M9/TS1/${r.inv}: pico ${r.p_ca_max} kW acima do teto`);
     if (r.str_n != null) exige(r.str_n <= 22, `${r.dia} M9/TS1/${r.inv}: ${r.str_n} strings`);
   }
+  console.log(`  eficiencia: ${mCru.size} inversores crus com mediana dentro da faixa dos ${faixa.n} nomeados (${faixa.lo} a ${faixa.hi})`);
   if (!julgados) console.log('  (o produto ainda nao tem dia com o M9 completo: a parte do produto nao julgou nada — rodada anterior ao lote)');
   else console.log(`  produto: ${julgados} dia(s) com o M9 completo, medidor/contadores dentro da faixa das outras usinas · ${L.length} linhas do TS1 INV13..22`);
   // ── PLANTIO ────────────────────────────────────────────────────────────────────────────────────────
   const forjado = Object.assign({}, D.serie.find((r) => julgaDia(r)) || {}, { M9_razao_med_conta: 1.41 });
   const jf = julgaDia(forjado);
   exige(jf && !jf.ok, 'plantio: um dia com o M9 a 141 % nao reprovou — o julgamento nao mede nada');
+  // o dia: o INV15 de 02/10 passa (excesso dos instantes impossiveis); 1,05 sem instante impossivel nao passa
+  exige(efOk({ ef: 1.0214, ef_imp: 0.0326 }), 'plantio: o INV15 de 02/10 (1,0214, 0,0326 de instantes impossiveis) reprovou');
+  exige(!efOk({ ef: 1.05, ef_imp: 0 }), 'plantio: eficiencia 1,05 sem instante impossivel passou');
+  // a janela: CA lendo o registro da CC (1,000 todo dia) cai fora da faixa dos nomeados
+  const espelho = medianas(L.map((r) => Object.assign({}, r, { inv: 'INV99', ef: 1 })));
+  exige(espelho.size === 1 && [...espelho.values()].every((m) => !medianaOk(m)), 'plantio: um inversor com eficiencia 1,000 todo dia ficou dentro da faixa');
   if (falhas.length) { console.log(falhas.map((f) => '  RECUSA: ' + f).join('\n')); process.exit(1); }
   console.log('ensaio-inversor-cru: regra, produto e plantio OK');
 })().catch((e) => { console.error(e); process.exit(1); });
