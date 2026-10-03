@@ -172,6 +172,38 @@ function julga(R) {
     if (ol.pior_uso_pct != null && ol.pior_margem_pct != null && Math.abs(ol.pior_uso_pct + ol.pior_margem_pct - 100) > 0.05 + EPS) mau.push('ativos: oleo uso ' + ol.pior_uso_pct + ' + margem ' + ol.pior_margem_pct + ' nao fecha 100');
     if (ol.conforme === true && ol.nao_conformes > 0) mau.push('ativos: oleo conforme com ' + ol.nao_conformes + ' laudos nao conformes');
   }
+  /* DESEMPENHO: o PR e refeito pela energia e pela irradiacao publicadas no proprio mes (a conta nao e circular: o
+     resumo copia o pr_pct do pr.json e a energia/irradiacao do mesmo mes, e a razao entre elas tem de fechar) */
+  const DS = R.desempenho;
+  if (!DS) mau.push('desempenho: bloco ausente');
+  else {
+    const pcc = DS.pr.p_cc_mwp;
+    let refeitos = 0;
+    DS.pr.meses.forEach((m) => {
+      if (m.dias_validos > m.dias_no_mes) mau.push('desempenho: ' + m.mes + ' com ' + m.dias_validos + ' dias validos em ' + m.dias_no_mes);
+      if (m.pr_pct != null && m.pr_corrigido_pct != null && m.pr_corrigido_pct + EPS < m.pr_pct) mau.push('desempenho: ' + m.mes + ' PR corrigido ' + m.pr_corrigido_pct + ' abaixo do bruto ' + m.pr_pct);
+      if (m.pr_pct != null && pcc > 0 && m.h_kwh_m2 > 0 && m.inj_mwh > 0) {
+        const pr = 100 * m.inj_mwh / (pcc * m.h_kwh_m2);   /* MWh / (MWp x kWh/m2 / 1 kW/m2) */
+        /* pr com 2 casas, energia com 1, irradiacao com 2: folga dos tres arredondamentos */
+        if (Math.abs(pr - m.pr_pct) > 0.005 + pr * (0.05 / m.inj_mwh + 0.005 / m.h_kwh_m2) + EPS) mau.push('desempenho: conjunto ' + m.mes + ' PR ' + m.pr_pct + ' contra 100 x ' + m.inj_mwh + ' / (' + pcc + ' x ' + m.h_kwh_m2 + ') = ' + pr.toFixed(3));
+        refeitos++;
+      }
+    });
+    Object.entries(DS.pr.por_entidade).forEach(([e, L]) => L.forEach((m) => {
+      if (m.pr_pct != null && m.pr_corrigido_pct != null && m.pr_corrigido_pct + EPS < m.pr_pct) mau.push('desempenho: ' + e + ' ' + m.mes + ' PR corrigido ' + m.pr_corrigido_pct + ' abaixo do bruto ' + m.pr_pct);
+      if (m.pr_pct != null && m.den_mwh > 0 && m.inj_mwh > 0) {
+        const pr = 100 * m.inj_mwh / m.den_mwh;
+        if (Math.abs(pr - m.pr_pct) > 0.005 + pr * (0.05 / m.inj_mwh + 0.05 / m.den_mwh) + EPS) mau.push('desempenho: ' + e + ' ' + m.mes + ' PR ' + m.pr_pct + ' contra 100 x ' + m.inj_mwh + ' / ' + m.den_mwh + ' = ' + pr.toFixed(3));
+        refeitos++;
+      }
+    }));
+    DS.disponibilidade.meses.forEach((m) => { if (m.declarada_pct != null && m.declarada_pct > 100 + EPS) mau.push('desempenho: disponibilidade declarada de ' + m.mes + ' acima de 100 %'); });
+    Object.entries(DS.disponibilidade.inversores).forEach(([e, L]) => L.forEach((m) => {
+      if (m.pct > 100 + EPS) mau.push('desempenho: disponibilidade dos inversores do ' + e + ' em ' + m.mes + ' acima de 100 %');
+      if (m.dias > 31) mau.push('desempenho: ' + e + ' ' + m.mes + ' com ' + m.dias + ' dias');
+    }));
+    if (refeitos < 20) mau.push('VACUO: so ' + refeitos + ' PR refeitos');
+  }
   if (julgados < 12) mau.push('VACUO: so ' + julgados + ' percentuais julgados');
   return mau;
 }
@@ -236,7 +268,23 @@ function julga(R) {
     const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T2']; if (!a) return false;
     a.temperatura_em_verificacao = true; a.t_oleo_max_c = 60; return true;
   }, /em verificacao e ainda publicando/);
-  plantio('trocas termicas inflada', (Y) => { if (!Y.ativos) return false; Y.ativos.trocas.termicas += 10; return true; }, /termicas/);
+  plantio('PR do conjunto inflado', (Y) => {
+    const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.filter((q) => q.pr_pct != null).slice(-2)[0]; if (!m) return false;
+    m.pr_pct = Math.round((m.pr_pct + 3) * 100) / 100; return true;
+  }, /desempenho: conjunto .* PR/);
+  plantio('PR trocado entre M1 e M5', (Y) => {
+    const E = ((Y.desempenho || {}).pr || {}).por_entidade || {}, a = (E.M1 || []).slice(-2)[0], b = (E.M5 || []).slice(-2)[0];
+    if (!a || !b || a.pr_pct == null || b.pr_pct == null || Math.abs(a.pr_pct - b.pr_pct) < 1) return false;
+    const t = a.pr_pct; a.pr_pct = b.pr_pct; b.pr_pct = t; return true;
+  }, /desempenho: M[15] .* PR /);
+  plantio('PR corrigido abaixo do bruto', (Y) => {
+    const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.find((q) => q.pr_pct != null && q.pr_corrigido_pct != null); if (!m) return false;
+    m.pr_corrigido_pct = Math.round((m.pr_pct - 2) * 100) / 100; return true;
+  }, /corrigido .* abaixo do bruto/);
+  plantio('disponibilidade dos inversores acima de 100', (Y) => {
+    const L = (((Y.desempenho || {}).disponibilidade || {}).inversores || {}).M5; if (!L || !L.length) return false; L[0].pct = 100.6; return true;
+  }, /disponibilidade dos inversores do M5/);
+  plantio('trocas termicas inflada',(Y) => { if (!Y.ativos) return false; Y.ativos.trocas.termicas += 10; return true; }, /termicas/);
   plantio('oleo conforme com laudo nao conforme', (Y) => { if (!Y.ativos || Y.ativos.oleo.conforme !== true) return false; Y.ativos.oleo.nao_conformes = 1; return true; }, /oleo conforme/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);
 

@@ -84,6 +84,13 @@ const LEGENDA = {
     + 'temperatura_em_verificacao = o enrolamento leu abaixo do oleo, o que nao e fisico, e os canais estao em verificacao em campo '
     + '(nenhuma das duas temperaturas e publicada como fato). oleo: '
     + 'laudos da ultima campanha contra a ABNT NBR 10576; pior_uso e quanto do limite o pior ensaio consome.',
+  desempenho: 'pr: Performance Ratio = energia injetada / (potencia CC de placa x irradiacao no plano / 1 kW/m2), sem correcao '
+    + 'de temperatura. pr_pct tem o CORTE DENTRO: usina cortada parece usina ruim, e o ML e cortado primeiro de proposito; '
+    + 'pr_corrigido_pct devolve a energia impedida pelo operador (estimativa; so nos meses em que ela e apurada). O conjunto e '
+    + 'medido no 230 kV; usina e contrato nos circuitos de 34,5 kV, com a estacao da propria usina: o PR de uma usina nao se '
+    + 'compara 1:1 com o do conjunto. dias_validos = dias com energia e irradiacao (a irradiacao chega um dia depois). '
+    + 'disponibilidade: declarada_pct = a disponibilidade do CONJUNTO declarada ao operador nacional; inversores = tempo de '
+    + 'operacao de cada inversor sobre a janela de sol, medido no supervisorio, por usina e grupo.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
     + 'defeito. M1 e a usina que a planilha comercial chama de Mauriti 10.',
@@ -305,6 +312,14 @@ function guarda(R) {
     if (!T.operador.ultima_ordem) mau.push('tempo real: sem ordem da mesa');
     if (!T.fontes.selos.length) mau.push('tempo real: sem selos de frescor');
   }
+  const DS = R.desempenho;
+  if (!DS) mau.push('desempenho: bloco ausente');
+  else {
+    if (!DS.pr.meses.length || !DS.pr.meses.some((m) => m.pr_pct != null)) mau.push('desempenho: PR do conjunto sem mes');
+    ENT_DESEMPENHO.forEach((e) => { if (!(DS.pr.por_entidade[e] || []).length) mau.push('desempenho: PR sem ' + e); });
+    if (!DS.disponibilidade.meses.length) mau.push('desempenho: disponibilidade declarada sem mes');
+    USINAS9.forEach((u) => { if (!(DS.disponibilidade.inversores[u] || []).length) mau.push('desempenho: disponibilidade dos inversores sem ' + u); });
+  }
   const AT = R.ativos;
   if (!AT) mau.push('ativos: bloco ausente');
   else {
@@ -319,6 +334,40 @@ function guarda(R) {
   return { mau, kb };
 }
 
+/* ---- DESEMPENHO (03/10/2026): o que a tela de Performance e a de Disponibilidade mostram ----
+   pr.meses           pr.json (conjunto no 230 kV): os ultimos MESES_PR meses, PR com o corte dentro e corrigido pelo corte,
+                      com a energia e a irradiacao do mes (o ensaio refaz o PR por elas: a conta nao e circular);
+   pr.por_entidade    pr_ufv.json (usinas e contratos, circuitos de 34,5 kV): os ultimos MESES_PR_ENT meses, com energia e
+                      denominador (placa x irradiacao da estacao da usina);
+   disponibilidade    executivo.serie (declarada ao operador, so o conjunto) e executivo.serie_ufv.disp_inv_pct (contadores
+                      dos inversores, por usina e grupo).
+   Tudo selecao. O PR GARANTIDO do contrato de O&M nao entra: ele nao vai para o blob publico (fica na pagina do portal). */
+const MESES_PR = 7, MESES_PR_ENT = 3;   /* teto do resumo (45 KB): 3 meses por entidade bastam para "o mes passado" e o em curso */
+const ENT_DESEMPENHO = USINAS9.concat(['PPA', 'ML']);
+const LBL_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const lblDe = (mes) => LBL_MES[Number(mes.slice(5, 7)) - 1] + '/' + mes.slice(2, 4);
+function montaDesempenho(PR, PU, X) {
+  const pm = (PR.meses || []).slice(-MESES_PR).map((m) => ({ mes: m.mes, lbl: lblDe(m.mes), pr_pct: m.pr_pct, pr_corrigido_pct: m.pr_corrigido_pct,
+    dias_validos: m.dias_validos, dias_no_mes: m.dias_no_mes, inj_mwh: m.inj_mwh, h_kwh_m2: m.h_kwh_m2 }));
+  const ud = (PR.dias || []).filter((d) => d.pr_pct != null).slice(-1)[0];
+  const porEnt = {};
+  ENT_DESEMPENHO.forEach((e) => {
+    const E = (PU.entidades || {})[e]; if (!E) return;
+    porEnt[e] = (E.meses || []).slice(-MESES_PR_ENT).map((m) => ({ mes: m.mes, pr_pct: m.pr_pct, pr_corrigido_pct: m.pr_corrigido_pct,
+      dias_validos: m.dias_validos, inj_mwh: m.inj_mwh, den_mwh: m.den_mwh }));
+  });
+  const S = (X.serie || []).slice(-MESES_PR);
+  const inv = {};
+  ['Complexo'].concat(ENT_DESEMPENHO).forEach((e) => {
+    const L = (X.serie_ufv || []).filter((r) => r.ufv === e && r.disp_inv_pct != null).slice(-MESES_PR_ENT);
+    if (L.length) inv[e] = L.map((r) => ({ mes: r.mes, pct: r.disp_inv_pct, dias: r.disp_inv_dias }));
+  });
+  return {
+    pr: { p_cc_mwp: PR.p_cc_mwp, ultimo_dia: ud ? { dia: ud.dia, pr_pct: ud.pr_pct, pr_corrigido_pct: ud.pr_corrigido_pct } : null, meses: pm, por_entidade: porEnt },
+    disponibilidade: { meses: S.map((s) => ({ mes: s.mes, lbl: s.lbl, declarada_pct: s.disp_pct })), inversores: inv },
+  };
+}
+
 async function grava(R) {
   const corpo = Buffer.from(JSON.stringify(R));
   if (LOCAL_OUT_DIR) { require('fs').writeFileSync(require('path').join(LOCAL_OUT_DIR, OUT_BLOB), corpo); return; }
@@ -330,11 +379,12 @@ async function grava(R) {
 }
 
 async function main() {
-  const [V, X, P, MU, F, AT, PD, IS, TD, OL] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json',
-    'fontes_saude.json', 'portal_ativos.json', 'perdas_diario.json', 'inv_scada.json', 'trafo_diario.json', 'oleo.json'].map((n) => puxa(BASE + n)));
+  const [V, X, P, MU, F, AT, PD, IS, TD, OL, PR, PU] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json',
+    'fontes_saude.json', 'portal_ativos.json', 'perdas_diario.json', 'inv_scada.json', 'trafo_diario.json', 'oleo.json', 'pr.json', 'pr_ufv.json'].map((n) => puxa(BASE + n)));
   const R = monta(V, X);
   R.tempo_real = montaTempoReal(V, P, MU, F);
   R.ativos = montaAtivos(AT, PD, IS, TD, OL);
+  R.desempenho = montaDesempenho(PR, PU, X);
   const { mau, kb } = guarda(R);
   if (mau.length) { console.error('agente_om: NAO gravado\n  ' + mau.join('\n  ')); process.exit(1); }
   await grava(R);
@@ -342,5 +392,5 @@ async function main() {
     + ' · fechados ' + R.meses_fechados.map((m) => m.lbl).join(', ') + ' · ano ' + R.ano.ano + ' ate ' + R.ano.meses_fechados_ate);
 }
 
-module.exports = { monta, montaTempoReal, montaAtivos, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
+module.exports = { monta, montaTempoReal, montaAtivos, montaDesempenho, guarda, ENTIDADES, MESES_FECHADOS, DIAS_CORTE };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
