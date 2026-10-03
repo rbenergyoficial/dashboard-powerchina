@@ -29,6 +29,8 @@ const { instanteAoVivo } = require('./lib-aovivo.js');
 // a tolerancia do par MWh x GWh, DERIVADA da cadeia de arredondamento (e maior no rateio)
 const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
 const { conferePares } = require('./lib-par-mwh.js');
+// a guarda da energia liquidada (teto do residuo numa janela de dias, nao so no mes): uma escrita, o ensaio usa a mesma
+const GL = require('./lib-guarda-liquida.js');
 // os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
 // porque o remendo de 5 min refaz a MESMA conta quando a energia de hoje cresce
 const { r2, fmt, camposDoMes, camposMwh } = require('./lib-manchete.js');
@@ -434,37 +436,53 @@ async function writeOut(obj, nome, opts) {
     // Ja o residual `EneatRec - liquidada` e o proprio consumo auxiliar, e ele quase nao varia:
     // medido em ago/26, 11,0 a 22,4 MWh em dias de 347 a 2.916 MWh de geracao. Liquidacao
     // parcial sai em centenas ou milhares de MWh — duas familias com um fator de 50 entre elas.
-    // O teto sai dos proprios dias aceitos (3x o maior residuo ja visto), nao de numero a mao.
-    const pares = daily.dias.filter(x => !x.parcial && Object.keys(L[x.dia] || {}).length >= 9
-        && Object.keys(R[x.dia] || {}).length >= 9 && somaU(R[x.dia]) > 100)
-      .map(x => ({ rec: somaU(R[x.dia]), res: somaU(R[x.dia]) - somaU(L[x.dia]) }));
-    const bons = pares.filter(q => q.res > 0 && q.res < q.rec * 0.5).map(q => q.res);
-    const TETO_RES = bons.length >= 5 ? 3 * Math.max.apply(null, bons) : null;
+    // A regra (3 x a MEDIANA da janela, SEM o dia julgado) e a janela de dias guardados moram em lib-guarda-liquida.js
+    // desde 03/10/2026: ver o cabecalho de la para o porque (o dia julgado entrava no proprio teto; "3x o maior" era
+    // catraca; no comeco do mes a guarda caia em silencio no sinal).
+    /* a JANELA: residuos dos dias aceitos COM teto nas rodadas anteriores, em blob proprio. So o 404 e ausencia; com
+       outra falha, ou com formato estranho, a guarda decide com o mes e o blob NAO e regravado (apagaria a janela). */
+    let guardados = [], podeGravarGuarda = true, cheiaDesde = null;
+    try {
+      const gb = await getJSON(BASE + 'guarda_liquida.json');
+      if (GL.formatoValido(gb && gb.residuos)) { guardados = gb.residuos; cheiaDesde = gb.janela_cheia_desde || null; }
+      else { podeGravarGuarda = false; console.log('guarda_liquida.json com formato estranho — teto so do mes e janela NAO regravada'); }
+    } catch (e) { if (!/^404 /.test(e.message)) { podeGravarGuarda = false; console.log('guarda_liquida.json ilegivel (' + e.message + ') — teto so do mes e janela NAO regravada'); } }
+    const hojeISO = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);   /* dia de Brasilia */
+    const J = GL.julgaDias(daily.dias.map(x => ({ dia: x.dia, parcial: x.parcial, liq: L[x.dia], rec: somaU(R[x.dia]) })), guardados, hojeISO);
 
-    let n = 0; const ig = [];
+    let n = 0, soSinal = 0; const ig = [];
+    const porDiaJ = Object.fromEntries(J.decisoes.map(d => [d.dia, d]));
     daily.dias.forEach(x => {
-      const l = L[x.dia]; if (!l) return;
-      if (x.parcial) { ig.push(x.dia + ' (dia em curso)'); return; }
-      const us = Object.keys(l);
-      if (us.length < 9) { ig.push(x.dia + ' (nao liquidado)'); return; }
-      const tot = us.reduce((a, u) => a + l[u], 0);
-      const rec = somaU(R[x.dia]);
-      if (TETO_RES != null && rec > 100) {
-        const res = rec - tot;
-        if (!(res > -1 && res <= TETO_RES)) {
-          ig.push(x.dia + ' (liquidacao incompleta: faltam ' + res.toFixed(0) + ' MWh de ' + rec.toFixed(0) + ')');
-          return;
-        }
-      } else if (tot <= 0) { ig.push(x.dia + ' (nao liquidado)'); return; }
-      x.ufv_liq_mwh = Object.fromEntries(us.map(u => [u, r2(l[u])]));
-      x.ene_liq_mwh = r2(tot);
+      const d = porDiaJ[x.dia]; if (!d) return;
+      if (!d.aceito) {
+        ig.push(x.dia + (d.motivo === 'liquidacao incompleta' ? ' (liquidacao incompleta: faltam ' + (d.rec - d.tot).toFixed(0) + ' MWh de ' + d.rec.toFixed(0) + ')' : ' (' + d.motivo + ')'));
+        return;
+      }
+      if (d.so_sinal) soSinal++;
+      const l = L[x.dia];
+      x.ufv_liq_mwh = Object.fromEntries(Object.keys(l).map(u => [u, r2(l[u])]));
+      x.ene_liq_mwh = r2(d.tot);
       x.liq_fonte = 'EneatLiquida';
       n++;
     });
+    const tetos = J.decisoes.filter(d => d.teto != null).map(d => d.teto);
     console.log('energia liquida OFICIAL (EneatLiquida) em ' + n + ' dias'
-      + (TETO_RES != null ? ' · guarda: falta acima de ' + TETO_RES.toFixed(0)
-         + ' MWh contra o EneatRec e dia incompleto' : ' · sem EneatRec, guarda so no sinal')
+      + (tetos.length ? ' · guarda: teto ' + Math.min.apply(null, tetos).toFixed(0) + '–' + Math.max.apply(null, tetos).toFixed(0) + ' MWh contra o EneatRec' : '')
+      + (soSinal ? ' · ⚠️ ' + soSinal + ' dia(s) aceito(s) SO PELO SINAL: janela abaixo de ' + GL.MIN_DIAS + ' dias (dia meio liquidado passaria)' : '')
       + (ig.length ? ' · fora: ' + ig.join(', ') : ''));
+    if (podeGravarGuarda) {
+      /* gravacao com tratamento proprio: a falha aqui nao pode cair no catch da leitura do mes, que diz outra coisa */
+      try {
+        const nova = GL.atualiza(guardados, J.aceitosComTeto, hojeISO);
+        const T0 = GL.teto([], nova, hojeISO, null);
+        /* janela_cheia_desde: o primeiro dia em que a janela teve MIN_DIAS dias. Antes dele e partida (o ensaio do produto
+           declara BOOTSTRAP); depois dele, janela curta de novo e defeito */
+        if (!cheiaDesde && nova.length >= GL.MIN_DIAS) cheiaDesde = hojeISO;
+        const b = await writeOut({ gerado_em: new Date().toISOString(), janela_dias: GL.JANELA_DIAS, min_dias: GL.MIN_DIAS, fator: GL.FATOR,
+          mediana_mwh: T0.mediana == null ? null : r2(T0.mediana), dias: nova.length, janela_cheia_desde: cheiaDesde, residuos: nova }, 'guarda_liquida.json');
+        console.log('guarda_liquida.json: ' + nova.length + ' dias na janela · ' + b + ' bytes');
+      } catch (e) { console.log('⚠️ guarda_liquida.json NAO gravado (' + e.message + '): a janela nao foi renovada nesta rodada'); }
+    }
 
     // ---- O DIA EM CURSO NA MESMA ESCALA DOS DIAS FECHADOS ----
     // O rollup integra a potencia do medidor do complexo e fica ~0,44% ACIMA da liquidada:

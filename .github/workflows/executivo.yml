@@ -69,6 +69,14 @@ jobs:
           OUT_BLOB: executivo.json
         run: node scripts/gen-executivo.js
 
+      # A guarda da energia liquidada sobre o PRODUTO: a janela que o gerador acabou de gravar (guarda_liquida.json)
+      # tem formato certo, so residuo de dia completo, mediana igual a refeita pela lib; enquanto a janela nunca encheu
+      # (partida) o ensaio DECLARA que a guarda esta so no sinal; depois disso, janela curta ou dia aceito so pelo sinal
+      # reprova. A logica e julgada em casos plantados no ensaios.yml.
+      - name: Ensaio · a janela da guarda da liquidada (produto)
+        if: always()
+        run: node scripts/ensaio-liquidada-produto.js
+
       # Segunda rota sobre o PRODUTO publicado: os dois geradores ja abortam sem gravar quando a soma
       # dos dias nao reproduz o mes, mas eles conferem os acumuladores CRUS, em memoria. Aqui se
       # confere o que o painel de fato le, ja arredondado — e o ensaio prova que reprova, plantando

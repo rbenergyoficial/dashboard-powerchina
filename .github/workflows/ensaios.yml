@@ -3,10 +3,9 @@ name: Ensaios de logica (a cada push em scripts/)
 # Ensaios que julgam a REGRA de um vigia, de uma guarda ou da intake, e nao o dado do dia. Ate
 # 26/09/2026 estes ensaios nao rodavam em workflow nenhum e dependiam de alguem lembrar de rodar.
 #
-# ⚠️ FORA, por enquanto: o `ensaio-liquidada.js`. Ele deriva o teto do residuo dos dias do blob do MES e
-#    exige 5 dias aceitos; no comeco de todo mes o blob tem menos e o ensaio estoura (03/10/2026:
-#    "Cannot read properties of null"). Ligado aqui, ficaria vermelho nos primeiros dias de cada mes.
-#    Entra quando ler a janela de mais de um mes.
+# O `ensaio-liquidada.js` ficou fora no primeiro lote (estourava no comeco do mes) e entrou em 03/10/2026, ja so com
+# casos plantados: a guarda da liquidada e julgada aqui como LOGICA, verde em qualquer dia; o estado da janela publicada
+# e julgado depois do gerador, no executivo.yml (ensaio-liquidada-produto.js).
 #
 # Por que num workflow proprio, e nao nos workflows de dado: e no PUSH que um ensaio de logica pode
 # reprovar (e quando o codigo muda); e ha ensaio que le blob publico, entao num job de 5 ou 15 min um
@@ -61,3 +60,10 @@ jobs:
       - name: Ensaio · o vigia de MUST nos quatro cenarios (recortes reais de 23/08/2026)
         if: always()
         run: node scripts/ensaio-must-watchdog.js
+
+      # A guarda da EneatLiquida (lib-guarda-liquida.js) pela mesma funcao que o gen-executivo usa: o dia julgado nao
+      # entra no proprio teto, sem catraca, comeco de mes decidido pela janela guardada, aceito pelo sinal nao vai para a
+      # janela. So dados plantados.
+      - name: Ensaio · a guarda da EneatLiquida reprova liquidacao incompleta (logica)
+        if: always()
+        run: node scripts/ensaio-liquidada.js
