@@ -130,8 +130,16 @@ function julga(R) {
       /* mwh com 1 casa e mwh_por_mw com 3: folga de meio decimo sobre a capacidade mais meio milesimo */
       if (Math.abs(r.mwh / CAP[r.ufv] - r.mwh_por_mw) > 0.0005 + 0.05 / CAP[r.ufv] + EPS) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh_por_mw + ' MWh/MW contra ' + r.mwh + ' / ' + CAP[r.ufv]);
       const a = ((R.agora || {}).por_entidade || {})[r.ufv];
-      /* os dois com 1 casa, de somas diferentes do mesmo medidor: dois arredondamentos de meio decimo (medido: 0,1 no M6) */
-      if (a && a.energia_hoje_mwh != null && Math.abs(a.energia_hoje_mwh - r.mwh) > 0.1 + 1e-6) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh + ' MWh contra ' + a.energia_hoje_mwh + ' do agora');
+      /* os dois com 1 casa, de somas diferentes do mesmo medidor: dois arredondamentos de meio decimo (medido: 0,1 no M6).
+         IGUAIS so no mesmo horizonte: o rendimento vai ate o ultimo instante que TODOS os circuitos mediram, e o agora da
+         usina ate o ultimo dela. Com um medidor atrasado (16:40 x 16:50 em 03/10/2026, o way2-recent ficou vermelho por
+         isso) o rendimento cobre menos instantes e so nao pode passar do agora. */
+      if (a && a.energia_hoje_mwh != null) {
+        const mesmo = a.hora == null || a.hora === T.rendimento.ate;
+        if (mesmo ? Math.abs(a.energia_hoje_mwh - r.mwh) > 0.1 + 1e-6 : r.mwh > a.energia_hoje_mwh + 0.1 + 1e-6)
+          mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh + ' MWh contra ' + a.energia_hoje_mwh + ' do agora'
+            + (mesmo ? '' : ' (ate ' + T.rendimento.ate + ' x ' + a.hora + ': o rendimento cobre menos instantes e passou do agora)'));
+      }
     });
     /* o instante publicado tem de ter leitura do conjunto (o intervalo vazio do fim da serie nao e "agora") */
     if (T.must.instante && T.must.por_parque.Complexo && T.must.por_parque.Complexo.agora_mw == null) mau.push('tempo real: MUST no instante ' + T.must.instante + ' sem leitura do Complexo');
@@ -244,10 +252,25 @@ function julga(R) {
   plantio('mes em curso dentro dos fechados', (Y) => {
     const x = copia(Y.meses_fechados[Y.meses_fechados.length - 1]); x.mes = Y.mes_em_curso.mes; Y.meses_fechados.push(x); return true;
   }, /nao e anterior ao mes em curso/);
-  plantio('corte de um dia trocado entre usinas', (Y) => {
-    const d = Y.corte.ultimos_dias.find((q) => q.por_usina.M5 && q.por_usina.M1 && q.por_usina.M5.cortado_mwh > 1 && Math.abs(q.por_usina.M5.corte_pct - q.por_usina.M1.corte_pct) > 1);
-    if (!d) return false; const t = d.por_usina.M5.corte_pct; d.por_usina.M5.corte_pct = d.por_usina.M1.corte_pct; d.por_usina.M1.corte_pct = t; return true;
-  }, /corte \d{4}-\d{2}-\d{2} M[15]: atingido/);
+  /* TROCA ENTRE USINAS pelo PAR DE MAIOR DIFERENCA, nunca por um par fixo (PROMOVER ensaio-par-extremo, 03/10/2026): o par
+     fixo depende do dado do momento, e o do rendimento (M2 x M9) recusou o way2-recent as 16:30 de 03/10 por estarem a
+     0,02 MWh/MW. `grupos` e uma lista de [rotulo, {usina: objeto}]; troca o campo `f` entre o menor e o maior valor do grupo
+     com a maior amplitude. Se nem esse par passa de `minimo`, o caso nao se aplica agora e o ensaio diz por que. */
+  const trocaExtremos = (grupos, f, minimo, unidade) => {
+    let melhor = null;
+    for (const [rot, por] of grupos) {
+      const v = Object.entries(por || {}).filter(([u, x]) => /^M\d$/.test(u) && x && x[f] != null).sort((p, q) => p[1][f] - q[1][f]);
+      if (v.length < 2) continue;
+      const amp = v[v.length - 1][1][f] - v[0][1][f];
+      if (!melhor || amp > melhor.amp) melhor = { rot, amp, a: v[0][1], b: v[v.length - 1][1] };
+    }
+    if (!melhor) return false;
+    if (melhor.amp < minimo) return 'pula: a maior diferenca entre usinas e ' + melhor.amp.toFixed(3) + ' ' + unidade + ', abaixo de ' + minimo;
+    const t = melhor.a[f]; melhor.a[f] = melhor.b[f]; melhor.b[f] = t; return true;
+  };
+  plantio('corte de um dia trocado entre usinas', (Y) => trocaExtremos(Y.corte.ultimos_dias.map((q) =>
+    [q.dia, Object.fromEntries(Object.entries(q.por_usina).filter(([, x]) => x.cortado_mwh > 1))]), 'corte_pct', 1, 'pp'),
+  /corte \d{4}-\d{2}-\d{2} M\d: atingido/);
   /* o percentual do Complexo no mes (PROMOVER agente-corte-complexo): a base antiga do potencial (com o M7 estimado,
      ~3 GWh a mais) dava outro numero; o percentual publicado numa usina; o percentual do Complexo sumido */
   const mesComCorte = (Y) => (Y.corte.meses || []).find((m) => m.por_entidade.Complexo && m.por_entidade.Complexo.potencial_mwh > 0
@@ -257,11 +280,8 @@ function julga(R) {
     x.corte_pct = Math.round(10000 * x.cortado_mwh / (x.potencial_mwh + 3000)) / 100; return true;
   }, /corte \d{4}-\d{2} Complexo/);
   /* nas usinas (PROMOVER agente-corte-ufv): o percentual do mes trocado entre duas usinas, e o de uma usina apagado */
-  plantio('percentual do mes trocado entre M9 e M5', (Y) => {
-    const m = mesComCorte(Y); if (!m || !m.por_entidade.M9 || !m.por_entidade.M5) return false;
-    const a = m.por_entidade.M9, b = m.por_entidade.M5; if (Math.abs(a.corte_pct - b.corte_pct) < 1) return false;
-    const t = a.corte_pct; a.corte_pct = b.corte_pct; b.corte_pct = t; return true;
-  }, /corte \d{4}-\d{2} M(9|5):/);
+  plantio('percentual do mes trocado entre usinas', (Y) => trocaExtremos((Y.corte.meses || []).map((m) => [m.mes, m.por_entidade]), 'corte_pct', 1, 'pp'),
+    /corte \d{4}-\d{2} M\d:/);
   plantio('percentual do mes de uma usina apagado', (Y) => {
     const m = mesComCorte(Y); if (!m || !m.por_entidade.M1) return false; delete m.por_entidade.M1.corte_pct; return true;
   }, /M1: sem o percentual do mes/);
@@ -274,13 +294,15 @@ function julga(R) {
   plantio('medidor fora escondido', (Y) => { Y.tempo_real.medidores.ok -= 1; return true; }, /medidores em dia/);
   /* o PAR de maior diferenca no rendimento de hoje, e nao M2 x M9 fixos: as 16:30 de 03/10/2026 os dois estavam a 0,02 MWh/MW
      um do outro e o plantio recusou o job. De madrugada todas estao em zero: ai o caso nao se aplica, e o ensaio diz por que */
-  plantio('rendimento trocado entre usinas', (Y) => {
-    const r = Y.tempo_real.rendimento.por_usina.filter((x) => x.mwh_por_mw != null).slice().sort((p, q) => p.mwh_por_mw - q.mwh_por_mw);
-    if (r.length < 2) return false;
-    const a = r[0], b = r[r.length - 1];
-    if (b.mwh_por_mw - a.mwh_por_mw < 0.05) return 'pula: rendimento de hoje igual em todas as usinas (' + a.mwh_por_mw + ' a ' + b.mwh_por_mw + ' MWh/MW), madrugada';
-    const t = a.mwh_por_mw; a.mwh_por_mw = b.mwh_por_mw; b.mwh_por_mw = t; return true;
-  }, /rendimento M\d /);
+  /* rendimento contra o agora (PROMOVER ensaio-par-extremo): no mesmo horizonte tem de ser igual; atrasado, nao pode passar */
+  const infla = (Y, mesmo) => { const T = Y.tempo_real.rendimento, r = T.por_usina.find((x) => x.ufv === 'M5'), a = Y.agora.por_entidade.M5;
+    if (!r || !a || !T.ate) return false; a.hora = mesmo ? T.ate : '23:59';
+    r.mwh = Math.round((a.energia_hoje_mwh + 2) * 10) / 10; r.mwh_por_mw = Math.round(1000 * r.mwh / 49.11) / 1000; return true; };
+  plantio('rendimento diferente do agora no mesmo horizonte', (Y) => infla(Y, true), /rendimento M5 [\d.]+ MWh contra [\d.]+ do agora$/);
+  plantio('rendimento atrasado passando do agora', (Y) => infla(Y, false), /rendimento M5 .* passou do agora/);
+  plantio('rendimento trocado entre usinas', (Y) => trocaExtremos([['hoje',
+    Object.fromEntries(Y.tempo_real.rendimento.por_usina.map((x) => [x.ufv, x]))]], 'mwh_por_mw', 0.05, 'MWh/MW (madrugada?)'),
+  /rendimento M\d /);
   /* plantios que NAO dependem do estado da hora: pico x instante e carga x potencia valem com qualquer leitura */
   plantio('pico do MUST abaixo do instante', (Y) => {
     const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.pico_hoje_mw == null) return false; x.agora_mw = x.pico_hoje_mw + 1; return true;
@@ -304,11 +326,11 @@ function julga(R) {
     const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.filter((q) => q.pr_pct != null).slice(-2)[0]; if (!m) return false;
     m.pr_pct = Math.round((m.pr_pct + 3) * 100) / 100; return true;
   }, /desempenho: conjunto .* PR/);
-  plantio('PR trocado entre M1 e M5', (Y) => {
-    const E = ((Y.desempenho || {}).pr || {}).por_entidade || {}, a = (E.M1 || []).slice(-2)[0], b = (E.M5 || []).slice(-2)[0];
-    if (!a || !b || a.pr_pct == null || b.pr_pct == null || Math.abs(a.pr_pct - b.pr_pct) < 1) return false;
-    const t = a.pr_pct; a.pr_pct = b.pr_pct; b.pr_pct = t; return true;
-  }, /desempenho: M[15] .* PR /);
+  /* o mes de cada usina e o PENULTIMO da lista (o ultimo pode ser o em curso), como antes; o par e o de maior diferenca */
+  plantio('PR trocado entre usinas', (Y) => {
+    const E = ((Y.desempenho || {}).pr || {}).por_entidade || {};
+    return trocaExtremos([['penultimo mes', Object.fromEntries(Object.entries(E).map(([u, L]) => [u, (L || []).slice(-2)[0]]))]], 'pr_pct', 1, 'pp');
+  }, /desempenho: M\d .* PR /);
   plantio('PR corrigido abaixo do bruto', (Y) => {
     const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.find((q) => q.pr_pct != null && q.pr_corrigido_pct != null); if (!m) return false;
     m.pr_corrigido_pct = Math.round((m.pr_pct - 2) * 100) / 100; return true;

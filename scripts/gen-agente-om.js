@@ -106,7 +106,9 @@ function monta(V, X) {
   for (const e of ENTIDADES.slice(1)) {
     const k = (V.kpis || {})[e];
     if (!k) continue;
-    agoraPor[e] = { cap_mw: k.cap_mw, agora_mw: k.agora_mw, pico_mw: k.pico_mw, pico_hora: k.pico_hora,
+    /* `hora` da entidade (o ultimo instante que ELA mediu): o rendimento de `tempo_real` vai so ate o ultimo instante
+       que TODOS os circuitos mediram, e com um medidor atrasado os dois horizontes diferem (16:40 x 16:50 em 03/10/2026) */
+    agoraPor[e] = { cap_mw: k.cap_mw, hora: k.hora, agora_mw: k.agora_mw, pico_mw: k.pico_mw, pico_hora: k.pico_hora,
       pct_cap: k.pct_cap, energia_hoje_mwh: k.energia_mwh, fc_pct: k.fc_pct };
   }
 
