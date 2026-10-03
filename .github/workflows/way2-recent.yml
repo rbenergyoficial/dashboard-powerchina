@@ -41,6 +41,13 @@ jobs:
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
         run: node scripts/gen-way2-eletrico.js
 
+      # Os 22 circuitos do portal_vivo (curva so com os instantes medidos, retrato num instante so, tensao de LINHA, Q em MVAr,
+      # reativa de 230 kV com os dois trafos): a REGRA se julga ANTES de gravar, em casos forjados com valores a mao e onze
+      # defeitos plantados (lib quebrada nao chega ao blob — e, como o ensaio da manchete, segura o passo inteiro); o PRODUTO,
+      # no fim do job, refeito do way2_eletrico.json da MESMA rodada com codigo proprio (nao circular).
+      - name: Ensaio · circuitos do portal_vivo (regra)
+        run: node scripts/ensaio-portal-vivo-circuitos.js --lib
+
       - name: Snapshot hoje + way2_recent.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -87,6 +94,9 @@ jobs:
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
         if: always()
         run: node scripts/ensaio-manchete-noite.js --produto
+      - name: Ensaio · circuitos do portal_vivo (produto)
+        if: always()
+        run: node scripts/ensaio-portal-vivo-circuitos.js --produto
       # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
       # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
       # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com always():

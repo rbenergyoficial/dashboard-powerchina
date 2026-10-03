@@ -54,6 +54,36 @@ function serie(elet, ponto, grandeza = 'Demat') {
   return m;
 }
 
+// 🔴 O RETRATO ELETRICO de um ponto de medicao no ULTIMO instante em que ele mediu potencia ativa (PROMOVER
+// portal-vivo-circuitos). Tudo no MESMO instante: P, Q, as tres tensoes e as tres correntes. Instante sem a grandeza fica
+// nulo — nunca o valor de outro instante, que poria no mesmo retrato uma tensao de 14:50 e uma potencia de 15:00.
+// Unidades do dado bruto: Demat kW, Demre kVAr, Tensao em V FASE-NEUTRO (19,9 kV no 34,5 kV), Corrente em A.
+// A tensao publicada e a de LINHA (media das tres fases x raiz de 3), a grandeza da placa (34,5 kV, 230 kV).
+// Desequilibrio de tensao: maior desvio de uma fase em relacao a media das tres, em % da media.
+const GRANDEZAS = ['Demat', 'Demre', 'TensaoA', 'TensaoB', 'TensaoC', 'CorrenteA', 'CorrenteB', 'CorrenteC'];
+function serieCrua(elet, ponto, grandeza) {
+  const s = (elet.dados || []).find(x => x.pontoId === ponto && x.nomeGrandeza === grandeza);
+  const m = new Map();
+  for (const v of (s && s.valores) || []) if (v && v.valor != null) m.set(v.data.slice(11, 16), v.valor);
+  return m;
+}
+function retrato(elet, pid) {
+  const g = {};
+  for (const n of GRANDEZAS) g[n] = serieCrua(elet, pid, n);
+  const hs = [...g.Demat.keys()].sort();
+  if (!hs.length) return null;
+  const h = hs[hs.length - 1];
+  const p = g.Demat.get(h) / 1000, q = g.Demre.has(h) ? g.Demre.get(h) / 1000 : null;
+  const tres = (ns) => { const v = ns.map(n => g[n].get(h)); return v.every(x => x != null) ? v : null; };
+  const vf = tres(['TensaoA', 'TensaoB', 'TensaoC']), ia = tres(['CorrenteA', 'CorrenteB', 'CorrenteC']);
+  const med = (v) => v.reduce((a, b) => a + b, 0) / v.length;
+  const s = q == null ? null : Math.hypot(p, q);
+  return { h, p_mw: r(p, 3), q_mvar: r(q, 3), fp: s ? r(Math.abs(p) / s, 3) : null,
+    v_kv: vf ? r(med(vf) * Math.sqrt(3) / 1000, 2) : null,
+    v_deseq_pct: vf ? r(100 * Math.max(...vf.map(v => Math.abs(v - med(vf)))) / med(vf), 2) : null,
+    i_a: ia ? r(med(ia), 1) : null };
+}
+
 function monta(elet, saude) {
   const dia = (elet.dataInicio || '').slice(0, 10);
   const comp = serie(elet, COMPLEXO);
@@ -72,7 +102,7 @@ function monta(elet, saude) {
 
   // Rendimento por usina, na janela COMUM aos 22 circuitos. Sem a janela comum a comparacao mede
   // cobertura em vez de geracao: uma usina cujos circuitos pararam antes pareceria pior.
-  let rend = null, rendAte = null, curvas = null, kpis = null;
+  let rend = null, rendAte = null, curvas = null, kpis = null, circuitos = null;
   const CIRC = mapaCircuitos();
   if (CIRC) {
     const sc = {};
@@ -104,6 +134,15 @@ function monta(elet, saude) {
         pct_cap: r(100 * pk[1] / cap, 1), energia_mwh: r(en, 1),
         fc_pct: r(100 * en / (cap * c.length * 5 / 60), 1), media_mw: r(en / (c.length * 5 / 60), 1) };
     }
+    // 🔴 OS 22 CIRCUITOS, um a um (PROMOVER portal-vivo-circuitos): a curva do dia de cada um, cada instante que ELE
+    //    mediu (nao a grade do complexo: um circuito que parou nao ganha zeros, fica sem ponto), e o retrato eletrico do
+    //    ultimo instante. O nome segue o MEDIDORES do gen-way2-recent ("M1 · C1"): a ordem do circuito dentro da usina.
+    //    Custo medido antes de publicar: ~90 KB crus, ~25 KB no gzip.
+    circuitos = [];
+    for (const [u, ps] of Object.entries(CIRC)) ps.forEach((p, i) => {
+      circuitos.push({ pid: p, u, nome: u + ' · C' + (i + 1),
+        pts: [...sc[p].keys()].sort().map(h => [h, r(sc[p].get(h), 2)]), agora: retrato(elet, p) });
+    });
     const todos = Object.values(sc);
     const comuns = horas.filter(h => todos.every(m => m.has(h)));
     if (comuns.length) {
@@ -131,9 +170,15 @@ function monta(elet, saude) {
     // por entidade: M1..M9, PPA, ML (o Complexo e `curva`/os campos acima); null onde o mapa nao leu
     curvas, kpis,
     rendimento: rend, rendimento_ate: rendAte,
+    // os 22 circuitos e o retrato eletrico dos dois trafos e do medidor do complexo (PROMOVER portal-vivo-circuitos);
+    // a reativa de 230 kV do dia, so onde os DOIS trafos mediram (a mesma regra da `alta`)
+    circuitos,
+    eletrico: { tr1: retrato(elet, TRAFOS[0]), tr2: retrato(elet, TRAFOS[1]), complexo: retrato(elet, COMPLEXO) },
+    alta_q: (() => { const a = serieCrua(elet, TRAFOS[0], 'Demre'), b = serieCrua(elet, TRAFOS[1], 'Demre');
+      return horas.filter(h => a.has(h) && b.has(h)).map(h => [h, r((a.get(h) + b.get(h)) / 1000, 3)]); })(),
     saude: saude ? { ok: saude.resumo && saude.resumo.ok, total: saude.resumo && saude.resumo.total,
       idade_min: saude.idade_min, ancora: saude.ancora, medidores: med } : null
   };
 }
 
-module.exports = { monta, mapaCircuitos, COMPLEXO, TRAFOS, OUTORGA, CAP };
+module.exports = { monta, mapaCircuitos, retrato, COMPLEXO, TRAFOS, OUTORGA, CAP };
