@@ -1594,6 +1594,18 @@ async function writeOut(obj, nome, opts) {
           const geL = Object.values(I.porUfv).reduce((a, x) => a + (x.geL || 0), 0);
           const gvL = Object.values(I.porUfv).reduce((a, x) => a + (x.gvL || 0), 0);
           const l = linha('Complexo', ge, gv, geP, gvP, pN, pK, liq, mtm ? mtm.garantido_total : null, geL, gvL);
+          // 🔴 O POTENCIAL DO COMPLEXO E O DO CONJUNTO NO OPERADOR, a mesma base do corte e do percentual
+          // (PROMOVER corte-complexo-mes, 03/10/2026). A soma do `porUfv` traz o potencial ESTIMADO do M7
+          // nos meses em que o operador nao tinha registro dele (ate a correcao da tag, 17/07/2026), e a
+          // geracao do M7 nao entra no entregue desta linha: o potencial do M7 inteiro (~3 GWh/mes) caia em
+          // `outras_gwh`, e cortado/potencial dava outro numero que o `corte_pct` (abr/26 22,29 x 23,28).
+          // A referencia do conjunto e a soma dos registros por usina (I.ge = gref do conjunto, conferido
+          // mes a mes), entao numerador e denominador ficam no mesmo escopo. Antes de mar/26 o percentual e
+          // outro (`corte_base`) e a linha segue como estava.
+          if (m >= '2026-03' && !S.sem_ons && I.ge > 0) {
+            l.potencial_gwh = r2(I.ge / 1000); l.potencial_mwh = r2(I.ge);
+            if (Math.abs(ge - I.ge) > 0.5) l.potencial_escopo = 'conjunto no operador: ate 17/07/2026 o operador nao tinha registro proprio do M7, e o potencial e a geracao dele ficam fora desta linha (a linha do M7 traz o potencial estimado)';
+          }
           // no complexo o corte vem da fórmula da casa (nível da subestação), não da soma dos ge−gv
           l.cortado_gwh = S.frustrada_gwh;
           l.corte_pct = (m < '2026-03') ? S.frustrada_pct : S.corte_pct_pot;
@@ -1609,6 +1621,13 @@ async function writeOut(obj, nome, opts) {
           l.outras_mwh = l.cortado_mwh == null || l.potencial_mwh == null ? null
             : r2(Math.max(0, l.potencial_mwh - l.entregue_mwh - l.cortado_mwh));
           if (m < '2026-03') l.corte_base = 'cortado / (gerado + cortado) — nao usa a geracao estimada do ONS, que e inconsistente antes de mar/26';
+          // GUARDA: de mar/26 em diante o percentual e a razao da PROPRIA linha. Folga = o arredondamento do
+          // percentual (0,005) mais o dos dois MWh a centesimos, que nao passa de 1e-4 pp nesta escala
+          if (m >= '2026-03' && l.corte_pct != null && l.potencial_mwh > 0 && l.cortado_mwh != null
+            && Math.abs(l.corte_pct - 100 * l.cortado_mwh / l.potencial_mwh) > 0.0051) {
+            throw new Error('COMPLEXO ' + m + ': corte_pct ' + l.corte_pct + ' nao fecha com cortado/potencial da linha ('
+              + r2(100 * l.cortado_mwh / l.potencial_mwh) + '): numerador e denominador em bases diferentes');
+          }
           out.push(l); }
         // ---- grupos PPA e ML como se fossem "usinas" ----
         // O PPA é o compromisso contratual e o ML é quem absorve o corte: as duas perguntas mais
