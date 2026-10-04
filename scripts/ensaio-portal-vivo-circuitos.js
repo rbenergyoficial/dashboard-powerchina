@@ -233,4 +233,6 @@ async function main() {
   }
   console.error('uso: --lib | --produto'); process.exit(2);
 }
-main().catch(e => { console.error(e.stack || e); process.exit(1); });
+// a conferencia serve tambem ao gerador dos arquivos de cada dia (gen-portal-dia.js): ele nao grava o que nao passa nela
+module.exports = { confere };
+if (require.main === module) main().catch(e => { console.error(e.stack || e); process.exit(1); });

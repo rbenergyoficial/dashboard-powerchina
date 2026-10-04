@@ -1,0 +1,77 @@
+name: Portal · os arquivos de cada dia (Ao vivo em outros periodos)
+
+# Grava, para cada dia fechado, os dois arquivos leves do Ao vivo (hist/portal_vivo_DIA.json e hist/portal_eletrico_DIA.json)
+# e o indice hist/portal_dias.json, montados pelas mesmas libs do Ao vivo e conferidos contra a fonte antes de gravar
+# (scripts/gen-portal-dia.js). De madrugada, FECHA o dia anterior: refaz o dia pela API da Way2 e, se vier mais completo,
+# substitui o snapshot do historico — o furo da virada (os ultimos ~15-20 min de todo dia, que o snapshot perdia).
+# A CARGA (os dois anos do historico) e por disparo, por intervalo de datas.
+on:
+  schedule:
+    # 03:10 a 05:40 UTC = 00:10 a 02:40 em Mauriti; varias tentativas porque o agendador do GitHub falha e a Way2 atrasa
+    - cron: '10,40 3-5 * * *'
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'fecha (ontem) | carga (intervalo)'
+        type: choice
+        options: [fecha, carga]
+        default: fecha
+      de:
+        description: 'carga: primeiro dia (AAAA-MM-DD)'
+        required: false
+        default: ''
+      ate:
+        description: 'carga: ultimo dia (vazio = ontem)'
+        required: false
+        default: ''
+      forcar:
+        description: 'carga: regravar os dias que ja existem (1)'
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: portal-dia
+  cancel-in-progress: false
+jobs:
+  dia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm i @azure/storage-blob@12
+      # A regra antes de gravar qualquer coisa: troca so com mais leituras, dia reprovado sem arquivo, precisa, carga e indice.
+      - name: Ensaio · os arquivos de cada dia (regra)
+        run: node scripts/ensaio-portal-dia.js
+      - name: Ontem ja esta fechado?
+        id: precisa
+        if: ${{ github.event_name == 'schedule' || inputs.modo == 'fecha' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          MODO: precisa
+        run: node scripts/gen-portal-dia.js
+      - name: Ontem refeito pela API (arquivo local, nao toca no ar)
+        if: ${{ steps.precisa.outputs.precisa == 'true' }}
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+        run: DIA=$(TZ=America/Fortaleza date -d yesterday +%F) LOCAL_OUT=ontem_api.json node scripts/gen-way2-eletrico.js
+      # always(): com a API fora, o dia ganha o arquivo do historico que existe (sem o fim do dia, que a proxima tentativa completa)
+      - name: Fechar ontem (o furo da virada) e gravar os arquivos do dia
+        if: ${{ always() && steps.precisa.outputs.precisa == 'true' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          MODO: fecha
+          LOCAL_ELET: ontem_api.json
+        run: node scripts/gen-portal-dia.js
+      - name: Carga do historico
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.modo == 'carga' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          MODO: carga
+          DE: ${{ inputs.de }}
+          ATE: ${{ inputs.ate }}
+          FORCAR: ${{ inputs.forcar }}
+        run: node scripts/gen-portal-dia.js
