@@ -307,6 +307,49 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       unidade: 'e kWh (subida do contador de vida); p kW; t °C; iso kΩ; ef %; v V; h_op min; lim_pct % dos instantes gerando;'
         + ' t0/t1 primeira e ultima amostra do dia; parcial = o logger nao viu a janela de geracao nas duas pontas', serie: L });
   }
+  /* -------- SAUDE DO INVERSOR (lote 3): o sg_inv_dia passa do teto de ~1.100 KB que a pagina baixa (M1: 1.325 KB). Aqui
+     sai o recorte que a pagina de saude usa, por usina (73 a 333 KB gzipado com o historico inteiro), e um resumo do
+     conjunto por usina e dia. Familia, tipo (alarme/falha) e origem (rede/equipamento) de cada codigo: lib-sungrow,
+     tabela 8.1 do manual do SG350HX. Grandeza fisica (temperatura, eficiencia, isolamento, limitacao) so do dia INTEIRO;
+     evento conta em qualquer dia (um codigo registrado e um codigo registrado) -------- */
+  const msBrt = (d) => Date.parse(d + 'T00:00:00-03:00');
+  const mediana = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+  const evDe = (falha) => { const ev = {}; for (const [c, n] of Object.entries(falha || {})) { const f = S.familia(c).fam; ev[f] = (ev[f] || 0) + n; } return ev; };
+  const FAM = Object.fromEntries(S.FAIXAS.map(([fam, tipo, origem]) => [fam, { tipo, origem }]));
+  const usinaDia = [], famDia = [];
+  for (const [u, L] of Object.entries(porU)) {
+    const linhas = L.map((x) => { const r = { d: x.d, ms: msBrt(x.d), ts: x.ts, inv: x.inv, p: x.parcial == null ? null : (x.parcial ? 1 : 0), e: x.e,
+      tm: x.t_max, ef: x.ef_med, iso: x.iso_min, lim: x.lim_pct, ini: x.ini, fim: x.fim };
+      if (Object.keys(x.falha || {}).length) { r.f = x.falha; r.ev = evDe(x.falha); }
+      return r; });
+    pesos['sg_saude_' + u + '.json'] = await escreve('sg_saude_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1,
+      unidade: 'e kWh; tm °C (temperatura interna maxima); ef % (eficiencia mediana gerando); iso kΩ (isolamento minimo gerando);'
+        + ' lim % dos instantes gerando com potencia limitada; ini/fim primeira e ultima amostra gerando; p 1 = dia parcial do logger;'
+        + ' f codigo de falha -> amostras de 5 min; ev familia -> amostras (sg_saude.json, familias)', serie: linhas });
+    const porD = new Map();
+    for (const r of linhas) (porD.get(r.d) || porD.set(r.d, []).get(r.d)).push(r);
+    for (const [d, R] of porD) {
+      const inteiros = R.filter((r) => r.p === 0);
+      const temTipo = (r, k, v) => r.ev && Object.keys(r.ev).some((f) => FAM[f] && FAM[f][k] === v);
+      usinaDia.push({ d, ms: msBrt(d), ufv: u, n_inv: inteiros.length, n_ev: R.filter((r) => r.ev).length,
+        n_alarme: R.filter((r) => temTipo(r, 'tipo', 'alarme')).length, n_falha: R.filter((r) => temTipo(r, 'tipo', 'falha')).length,
+        n_rede: R.filter((r) => temTipo(r, 'origem', 'rede')).length, n_equip: R.filter((r) => temTipo(r, 'origem', 'equipamento')).length,
+        lim_med: mediana(inteiros.map((r) => r.lim)), tm_max: inteiros.length ? Math.max(...inteiros.map((r) => r.tm).filter((x) => x != null), -99) : null,
+        tm_med: mediana(inteiros.map((r) => r.tm)), ef_med: mediana(inteiros.map((r) => r.ef)),
+        iso_min: inteiros.some((r) => r.iso != null) ? Math.min(...inteiros.map((r) => r.iso).filter((x) => x != null)) : null });
+      const ud = usinaDia[usinaDia.length - 1]; if (ud.tm_max === -99) ud.tm_max = null;
+      const pf = {};
+      for (const r of R) for (const [f, n] of Object.entries(r.ev || {})) { const o = pf[f] || (pf[f] = { n_inv: 0, amostras: 0 }); o.n_inv += 1; o.amostras += n; }
+      for (const [f, o] of Object.entries(pf)) famDia.push({ d, ms: msBrt(d), ufv: u, fam: f, tipo: (FAM[f] || {}).tipo || null,
+        origem: (FAM[f] || {}).origem || null, n_inv: o.n_inv, amostras: o.amostras });
+    }
+  }
+  const ordDU = (x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.ufv < y.ufv ? -1 : x.ufv > y.ufv ? 1 : (x.fam || '') < (y.fam || '') ? -1 : 1);
+  usinaDia.sort(ordDU); famDia.sort(ordDU);
+  pesos['sg_saude.json'] = await escreve('sg_saude.json', { gerado_em: agora, esquema: 1,
+    fonte: 'familias, tipo e origem: manual do usuario do SG350HX, secao 8.1 (p. 105 a 113)',
+    familias: S.FAIXAS.map(([fam, tipo, origem, fx]) => ({ fam, tipo, origem, codigos: fx.map(([a, b]) => (a === b ? String(a) : a + '-' + b)).join(', ') })),
+    usina_dia: usinaDia, familia_dia: famDia });
   /* -------- o TS de cada LOGGER: a potencia dele a cada 5 min e a SOMA dos inversores que ele le, no mesmo carimbo.
      Contra o TS certo bate em quase todo instante; contra o vizinho erra por kW a cada instante (os TS de uma usina geram
      quase igual no dia, entao a energia do dia nao separa). Folga: 22 arredondamentos de 0,05 kW, ou 0,2 % ------- */

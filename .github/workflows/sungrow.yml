@@ -21,8 +21,9 @@ jobs:
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
-      # inteiro, busca funda e sua memoria, migracao de esquema e idempotencia, com 13 plantios. Sem rede: julga a regra
-      # antes de gerar. A primeira rodada depois do esquema 2 rele todos os zips (perto de 40 min; timeout 240).
+      # inteiro, busca funda e sua memoria, migracao de esquema, saude do inversor e o dicionario de codigos contra o
+      # manual, com 31 plantios. Sem rede: julga a regra antes de gerar. A primeira rodada depois do esquema 2 rele todos
+      # os zips (perto de 40 min; timeout 240).
       - name: Ensaio do logger Sungrow (sem rede)
         run: node scripts/ensaio-sungrow.js
       # a energia do dia sai da lib-contador-dia, a mesma do gen-inv-scada e do gen-perdas

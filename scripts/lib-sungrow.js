@@ -136,6 +136,60 @@ function diaPid(serie) {
   return out;
 }
 
+/* ------------------------------------------------------------ codigos de falha ------------------------------------- */
+/* 🔴 O DICIONARIO E A TABELA DO FABRICANTE, nao uma leitura nossa: manual do usuario do SG350HX, secao 8.1 ("Codigo de
+   falha / Nome da falha / Medidas corretivas"), p. 105 a 113. Duas classificacoes saem do proprio texto do manual:
+   - tipo: 'alarme' quando o nome comeca com "Alarme" (o inversor pode continuar operando); senao 'falha' (o inversor
+     para e desconecta o rele CA, tabela 7-2);
+   - origem: 'rede' nos codigos cuja medida corretiva comeca por "o inversor e reconectado a rede depois que ela retorna
+     ao estado normal" (sobre e subtensao, sobre e subfrequencia, ilhamento, rede anormal, desequilibrio); senao
+     'equipamento'.
+   As chaves (`fam`) sao neutras; o nome de tela sai da consulta do painel. Codigo fora da tabela: 'fora_manual'.
+   ⚠️ O MANUAL SE SOBREPOE EM UM CODIGO: o 208 esta escrito por extenso em "Conexao reversa" (28, 29, 208, 212, 448-479) e
+   cai dentro da faixa 200-211 de "Falha do sistema". Vale a citacao por extenso, que vem primeiro nesta lista.
+   Nas familias por string, o manual da a string de cada codigo (532 = string 1) */
+const FAIXAS = [
+  ['sobretensao_rede', 'falha', 'rede', [[2, 3], [14, 15]]],
+  ['subtensao_rede', 'falha', 'rede', [[4, 5]]],
+  ['sobrefrequencia_rede', 'falha', 'rede', [[8, 8]]],
+  ['subfrequencia_rede', 'falha', 'rede', [[9, 9]]],
+  ['ilhamento', 'falha', 'rede', [[10, 10]]],
+  ['fuga_corrente', 'falha', 'equipamento', [[12, 12]]],
+  ['rede_anormal', 'falha', 'rede', [[13, 13]]],
+  ['desequilibrio_rede', 'falha', 'rede', [[17, 17]]],
+  ['conexao_reversa', 'falha', 'equipamento', [[28, 29], [208, 208], [212, 212], [448, 479]]],
+  ['reversa_fv', 'alarme', 'equipamento', [[532, 547], [564, 579]], (c) => (c <= 547 ? c - 531 : c - 547)],
+  ['entrada_anormal', 'alarme', 'equipamento', [[548, 563], [580, 595]], (c) => (c <= 563 ? c - 547 : c - 563)],
+  ['temperatura_alta', 'falha', 'equipamento', [[37, 37]]],
+  ['temperatura_baixa', 'falha', 'equipamento', [[43, 43]]],
+  ['isolacao_baixa', 'falha', 'equipamento', [[39, 39]]],
+  ['cabo_aterramento', 'falha', 'equipamento', [[106, 106]]],
+  ['arco_eletrico', 'falha', 'equipamento', [[88, 88]]],
+  ['medidor_reverso', 'alarme', 'equipamento', [[84, 84]]],
+  ['medidor_comunicacao', 'alarme', 'equipamento', [[514, 514]]],
+  ['conflito_rede', 'falha', 'equipamento', [[323, 323]]],
+  ['comunicacao_paralela', 'alarme', 'equipamento', [[75, 75]]],
+  ['falha_sistema', 'falha', 'equipamento', [[7, 7], [11, 11], [16, 16], [19, 25], [30, 34], [36, 36], [38, 38], [40, 42], [44, 50],
+    [52, 58], [60, 69], [85, 85], [87, 87], [92, 93], [100, 105], [107, 114], [116, 124], [200, 211], [248, 255], [300, 322],
+    [324, 328], [401, 412], [600, 603], [605, 605], [608, 608], [612, 612], [616, 616], [620, 620], [622, 624], [800, 800],
+    [802, 802], [804, 804], [807, 807], [1096, 1122]]],
+  ['alarme_sistema', 'alarme', 'equipamento', [[59, 59], [70, 74], [76, 83], [89, 89], [216, 218], [220, 232], [432, 434],
+    [500, 513], [515, 518], [635, 638], [900, 901], [910, 911], [996, 996]]],
+  ['mppt_reversa', 'falha', 'equipamento', [[264, 283]]],
+  ['boost_sobretensao_alarme', 'alarme', 'equipamento', [[332, 363]]],
+  ['boost_sobretensao', 'falha', 'equipamento', [[364, 395]]],
+  ['corrente_reversa', 'falha', 'equipamento', [[1548, 1579]]],
+  ['aterramento_fv', 'falha', 'equipamento', [[1632, 1655]]],
+  ['hardware_sistema', 'falha', 'equipamento', [[1616, 1616]]],
+];
+function familia(cod) {
+  const c = Number(cod);
+  for (const [fam, tipo, origem, fx, str] of FAIXAS) {
+    if (fx.some(([a, b]) => c >= a && c <= b)) return { fam, tipo, origem, ...(str ? { string: str(c) } : {}) };
+  }
+  return { fam: 'fora_manual', tipo: null, origem: null };
+}
+
 /* ------------------------------------------------------------ estacao ---------------------------------------------- */
 function diaEstacao(cab, linhas, onde) {
   const o = (nome, k) => col(cab, nome, k || 0);
@@ -163,4 +217,4 @@ function diaEstacao(cab, linhas, onde) {
   return out;
 }
 
-module.exports = { le, tipo, col, num, diaInversor, seriePid, diaPid, diaEstacao, PID_COLS, energiaDoDia, passosDoDia };
+module.exports = { le, tipo, col, num, diaInversor, seriePid, diaPid, diaEstacao, PID_COLS, energiaDoDia, passosDoDia, FAIXAS, familia };
