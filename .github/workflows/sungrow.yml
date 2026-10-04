@@ -1,0 +1,37 @@
+name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min)
+on:
+  schedule:
+    - cron: '17 13 * * *' # 10:17 BRT — depois do export do SCADA (~03:00 BRT) e do inv-scada.yml; o lote do logger chega de dia
+  workflow_dispatch:
+    inputs:
+      refazer:
+        description: 'reler todos os zips do sungrow-raw (1 = sim; a primeira carga leva perto de 1 h)'
+        required: false
+        default: ''
+concurrency:
+  group: gen-sungrow
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, conferencia e idempotencia, com
+      # dois plantios (identificar pela pasta, logger pela pasta). Sem rede: julga a regra antes de gerar.
+      - name: Ensaio do logger Sungrow (sem rede)
+        run: node scripts/ensaio-sungrow.js
+      # a energia do dia sai da lib-contador-dia, a mesma do gen-inv-scada e do gen-perdas
+      - name: Ensaio · a energia do dia pela subida do contador de vida (sem rede)
+        run: node scripts/ensaio-contador-dia.js perdas
+      - name: Gerar sg_*.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW: sungrow-raw
+          SCADA_RAW: scada-raw
+          OUT: dados
+          REFAZER: ${{ github.event.inputs.refazer }}
+        run: node scripts/gen-sungrow.js

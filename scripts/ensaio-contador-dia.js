@@ -52,10 +52,14 @@ const ESPERADO = {
   troca_manha: [358.11, 1563.80],     // M6/TS6/INV05 17/09: o novo entra as 09:30
   entra_a_tarde: [532.30],            // M9/TS1/INV05 18/09: a coleta comeca as 14:00
   queda_fim_da_tarde: [1554.60],      // M2/TS3/INV03 05/09: os dois contadores descem 0,1 kWh as 18:30 e ficam
+  // logger Sungrow, 5 min: o contador de vida PARA de 11:45 a 12:35 gerando 201 kW e volta com +186,5 kWh. O esperado e
+  // o export do SCADA no mesmo inversor e dia (2181,9) — a outra fonte, nao o contador que a regra usa
+  congelado_e_salto: [2181.90],
 };
 // casos que nao discriminam na ENERGIA e provam outra coisa: a queda que volta, o DETALHE (conferencia da manha abaixo);
-// a queda das 18:30, que nao e troca (a queda sem volta mais comum do bruto, 29 de 43), as guardas da troca (forjados)
-const SO_REGRESSAO = ['queda_que_volta', 'queda_fim_da_tarde'];
+// a queda das 18:30, que nao e troca (a queda sem volta mais comum do bruto, 29 de 43), as guardas da troca (forjados);
+// o congelado e salto, a hora do teto (o plantio que deixa a leitura parada mover a hora reprova so ele)
+const SO_REGRESSAO = ['queda_que_volta', 'queda_fim_da_tarde', 'congelado_e_salto'];
 let discrMaior = 0, discrQueda = 0;
 for (const [nome, segs] of Object.entries(ESPERADO)) {
   const c = CASOS[nome];

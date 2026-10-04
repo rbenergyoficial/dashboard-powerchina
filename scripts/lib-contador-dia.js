@@ -68,8 +68,14 @@ function passosDoDia(vida, instantes, diaria) {
       acc = v; hAcc = h; continue;   // sem volta e sem ser troca (rampa ate o fundo, 0,1 kWh as 18:30): so rebaseia
     }
     const d = v - acc;
+    /* 🔴 LEITURA PARADA NAO MOVE A HORA DO TETO (03/10/2026). No logger Sungrow, M8/TS1/INV01..11 em 25/09: o contador
+       ficou parado de 11:45 a 12:35 com o inversor gerando 201 kW e voltou as 12:40 com +186,5 kWh. Contando as leituras
+       paradas como aceitas, o salto parecia de 5 minutos (teto 29 kWh) e era descartado: 186,7 kWh a menos em onze
+       inversores. O teto se mede desde a ultima vez que o contador MUDOU */
+    // o degrau ZERO entra no detalhe: inversor parado com os pares gerando e informacao
+    if (d === 0) { passos.push({ i, e: 0 }); continue; }
     if (d > tetoDesde(hAcc, h)) { acc = v; hAcc = h; continue; }   // salto impossivel: o aceito era preenchimento
-    passos.push({ i, e: d });   // degrau ZERO entra: inversor parado com os pares gerando e informacao do detalhe
+    passos.push({ i, e: d });
     acc = v; hAcc = h;
   }
   return passos;
