@@ -35,7 +35,7 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 2;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao
+const ESQ_HIST = 3;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro
 const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1 (nomenclatura das usinas)
@@ -150,7 +150,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const lidosAnt = REFAZER || migra ? null : await leAnterior('sg_lidos.json');
   const identAnt = await leAnterior('sg_ident.json');
   const H = hist || { esquema: ESQ_HIST, inv: {}, pid: {}, est: {}, pid5: {} };
-  H.pinv = H.pinv || {}; H.pest = H.pest || {};            // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
+  H.pinv = H.pinv || {}; H.pest = H.pest || {}; H.pt5 = H.pt5 || {};            // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
   const P_DIAS = 3;
   /* 🔴 O CORTE E FEITO DURANTE A LEITURA, nao no fim (03/10/2026): na carga inteira (824 zips, seis meses) guardar a
      potencia de 5 min de todo dia e cortar depois levou o processo a 3,4 GB e o coletor de lixo a dominar o tempo. O
@@ -201,7 +201,13 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         if (ds5.length > DIAS_5MIN) { const c5 = ds5[ds5.length - DIAS_5MIN]; for (const t of Object.keys(s5)) if (t.slice(0, 10) < c5) delete s5[t]; }
       } else if (t === 'estacao') {
         const o = H.est[m[1]] || (H.est[m[1]] = { ufv: u, pasta: tsPasta, dias: {} });
-        const dl = S.diaEstacao(cab, linhas, onde); guardaP(H.pest, m[1], dl); junta(o.dias, dl);
+        const dl = S.diaEstacao(cab, linhas, onde); guardaP(H.pest, m[1], dl);
+        // a temperatura de 5 min do barramento de BT (PT 1, PT 2) e a potencia do eletrocentro no mesmo carimbo
+        const s5 = H.pt5[m[1]] || (H.pt5[m[1]] = {});
+        for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) s5[x.d + ' ' + h] = a; }
+        const dp5 = [...new Set(Object.keys(s5).map((t) => t.slice(0, 10)))].sort();
+        if (dp5.length > DIAS_5MIN) { const c5 = dp5[dp5.length - DIAS_5MIN]; for (const t of Object.keys(s5)) if (t.slice(0, 10) < c5) delete s5[t]; }
+        junta(o.dias, dl);
       }
     }
     lidos.set(z.nome, z.bytes);
@@ -411,8 +417,23 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   for (const [sn, o] of Object.entries(H.est)) { const a = tsDoLogger[sn];
     for (const x of Object.values(o.dias)) estRows.push({ ...x, ufv: o.ufv, ts: a.ts, ts_por: a.por, logger: sn, chave: o.ufv + '/' + a.ts }); }
   estRows.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.chave < y.chave ? -1 : 1));
-  pesos['sg_ts_dia.json'] = await escreve('sg_ts_dia.json', { gerado_em: agora, esquema: 1,
-    unidade: 'p_max kW; sp_min kW (setpoint do arranjo); taxa_min ‰; pt °C', serie: estRows });
+  pesos['sg_ts_dia.json'] = await escreve('sg_ts_dia.json', { gerado_em: agora, esquema: 2,
+    unidade: 'p_max kW; sp_min kW (setpoint do arranjo); taxa_min ‰; pt1/pt2 °C (PT100 do barramento de BT do eletrocentro: _max, _min, _h hora do maximo,'
+      + ' n_pt amostras validas; zero e 32767 sao sem leitura)', serie: estRows });
+  /* -------- a temperatura PT100 de 5 min de cada eletrocentro (ultimos DIAS_5MIN dias), com a potencia do logger no
+     mesmo carimbo: a curva de aquecimento contra a carga. Um arquivo por usina, como o PID -------- */
+  const pt5 = {};
+  for (const [sn, s] of Object.entries(H.pt5)) {
+    const o = H.est[sn]; if (!o) continue;
+    const ch = o.ufv + '/' + tsDoLogger[sn].ts;
+    for (const [t, v] of Object.entries(s)) (pt5[o.ufv] || (pt5[o.ufv] = [])).push({ t, ms: Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3,
+      chave: ch, pt1: v[0], pt2: v[1], p: v[2] });
+  }
+  for (const [u, L] of Object.entries(pt5)) {
+    L.sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : x.chave < y.chave ? -1 : 1));
+    pesos['sg_pt_5min_' + u + '.json'] = await escreve('sg_pt_5min_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1, janela_dias: DIAS_5MIN,
+      unidade: 'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro)', serie: L });
+  }
 
   /* -------- conferencia: energia do dia, logger x export do SCADA, mesmo inversor e dia -------- */
   let invSc = null;

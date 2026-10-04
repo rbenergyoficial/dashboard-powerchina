@@ -16,6 +16,8 @@
  *     Lote 3a (04/10/2026): a saude do inversor (sg_saude_<usina> e sg_saude) com grandezas variando por inversor, um
  *     dia MISTO (um inversor parcial mais quente e de isolamento mais baixo), tipo e origem descasados nos codigos, evento
  *     em dia parcial e dois codigos da mesma familia no mesmo dia.
+ *     PT100 do eletrocentro (04/10/2026): temperatura seguindo a carga, zero solto e sensor ausente; resumo do dia e serie de
+ *     5 min no TS do logger; migracao do esquema 2 fiel; plantios no gerador e na LIB.
  * 4 · plantios no gerador, cada um rodando o CENARIO inteiro (cinco rodadas): identificar pela PASTA, logger pela PASTA,
  *     presumir o dia inteiro, ver a janela so numa ponta (partida ou parada), tratar o inversor parado como parcial, tratar
  *     a linha sem t0/t1 como inteira, tirar a busca funda, tirar o teto ou a parada da busca, nunca repetir ou sempre
@@ -237,8 +239,11 @@ fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '01.10 A 03.10.zip'), 
 const EST_COLS = ['Horário', 'Utilização da CPU', 'Valor da amostra PT 1', 'Valor da amostra PT 2', 'Potência ativa total',
   'Valor de potência FV ativa definida', 'Taxa de potência ativa', 'Quantidade de inversores', 'Número de dispositivos conectados à rede', 'Máx. potência ativa nominal total'];
 const est = [];
-for (const d of DIAS) HH.forEach((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92);
-  est.push([d + ' ' + h + ':00', 20, 40, 41, p, 7040, 1000, 2, 2, 704].join(', ')); });
+/* as temperaturas PT100 seguem a carga: PT 1 = 30 + P/20000 °C, PT 2 = 31 + P/18000 °C (P em W); um ZERO solto no PT 1 as
+   04:10 (sem leitura, nao temperatura) e o PT 2 sem sensor (32767) em 28/09 */
+const PT1 = (p) => Math.round((30 + p / 20000) * 10) / 10, PT2 = (p) => Math.round((31 + p / 18000) * 10) / 10;
+DIAS.forEach((d, di) => HH.forEach((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92);
+  est.push([d + ' ' + h + ':00', 20, k === 50 ? 0 : PT1(p), di === 0 ? 32767 : PT2(p), p, 7040, 1000, 2, 2, 704].join(', ')); }));
 const PID_H = ['Horário', ...Object.values(S.PID_COLS)];
 const pid = []; for (const d of DIAS) HH.forEach((h, k) => pid.push([d + ' ' + h + ':00', 75, k > 240 ? 300 : 0, k > 240 ? 2 : 0, 45, 0, 0, 85].join(', ')));
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', 'PID 100', '28.09 A 30.09.zip'), zip([
@@ -291,6 +296,14 @@ function cenario(gen) {
     R.okSemPos = I.sem_posicao.length === 1 && I.sem_posicao[0].sn === NUNCA && I.busca[NUNCA] === '2026-09-25' && Object.keys(I.busca).length === 1;
     R.okPid = P.length === 3 && P.every((x) => x.chave === 'M1/TS6/6' && x.ts_por === 'potencia') && T.every((x) => x.ts === 'TS6');
     R.txt.pid = [...new Set(P.map((x) => x.chave + ' (' + x.ts_por + ')'))].join(' ');
+    // a temperatura do eletrocentro: o resumo do dia e a serie de 5 min, no TS do logger (TS6), sem o zero e sem o sentinela
+    const pMax = Math.max(...HH.map((h, k) => perfil(k, 0.95) + perfil(k, 0.92))), t29 = T.find((x) => x.d === '2026-09-29') || {}, t28 = T.find((x) => x.d === '2026-09-28') || {};
+    const PT = le('sg_pt_5min_M1.json').serie, pt12 = PT.find((x) => x.t === '2026-09-29 12:00') || {};
+    R.okPt = t29.pt1_max === PT1(pMax) && t29.pt1_h === '12:00' && t29.pt1_min === 30 && t29.n_pt1 === 287 && t29.pt2_max === PT2(pMax) && t29.pt2_min === 31
+      && t28.pt2_max === null && t28.pt2_min === null && t28.n_pt2 === 0 && t28.pt1_min === 30
+      && PT.length === 863 && PT.every((x) => x.chave === 'M1/TS6') && pt12.pt1 === PT1(pMax) && pt12.pt2 === PT2(pMax) && pt12.p === pMax / 1000
+      && pt12.ms === Date.parse('2026-09-29T12:00:00-03:00') && !PT.some((x) => x.pt1 === 0 || x.pt2 === 32767);
+    R.txt.pt = '29/09 PT1 ' + t29.pt1_max + ' as ' + t29.pt1_h + ' min ' + t29.pt1_min + ' n ' + t29.n_pt1 + ' · PT2 ' + t29.pt2_max + ' · 28/09 PT2 ' + t28.pt2_max + ' · 5 min ' + PT.length + ' linhas, ' + pt12.chave;
     const p29 = P.find((x) => x.d === '2026-09-29');
     R.okPidCampos = !!p29 && p29.v_max === 300 && !('min_saida' in p29) && !('ini_saida' in p29) && !('fim_saida' in p29);
     // a conferencia: os dias inteiros fecham em 1; os parciais do logger ficam FORA (n 0, razao nula), contados em n_parcial
@@ -340,13 +353,12 @@ function cenario(gen) {
     log = roda(gen);
     R.okIdem = /novos ou mudados: 0/.test(log) && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     R.okNaoRepete = lidosFundo(log) === 0;
-    // 3 · migracao por MARCA, com o esquema 1 FIEL: linhas sem t0/t1 e o PID com os minutos com tensao
-    const h = le('sg_hist.json'); h.esquema = 1;
-    for (const o of Object.values(h.inv)) for (const x of Object.values(o.dias)) { delete x.t0; delete x.t1; }
-    for (const o of Object.values(h.pid)) for (const x of Object.values(o.dias)) Object.assign(x, { min_saida: 0, ini_saida: null, fim_saida: null });
+    // 3 · migracao por MARCA, com o esquema 2 FIEL (o que esta no ar): o eletrocentro sem os campos novos do PT100 e sem a serie de 5 min
+    const h = le('sg_hist.json'); h.esquema = 2; delete h.pt5;
+    for (const o of Object.values(h.est)) for (const x of Object.values(o.dias)) for (const k of ['pt1_h', 'pt2_h', 'pt1_min', 'pt2_min', 'n_pt1', 'n_pt2']) delete x[k];
     grava('sg_hist.json', h);
     log = roda(gen);
-    R.okMigra = /esquema 1 -> 2: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
+    R.okMigra = /esquema 2 -> 3: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
       && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     // 4 · dia novo do inversor sem posicao: a busca VOLTA (1 export do M6) e a memoria anda para o dia novo
     fs.writeFileSync(novo, zipNunca('2026-09-26'));
@@ -370,6 +382,7 @@ ok(R.okId, 'cada inversor na posicao do contador de vida, inclusive os dois do T
 ok(R.okBusca1, 'busca funda: ' + R.txt.busca1 + ' exports lidos (esperado 3: o teto pula o de 27/09 e a busca para no primeiro casamento)');
 ok(R.okSemPos, 'sem posicao: so o numero de serie que o SCADA nao tem, com a busca lembrada pelo ultimo dia do logger (25/09)');
 ok(R.okPid, 'o logger e o PID da pasta do TS5 vao para o TS6, pela potencia: ' + R.txt.pid);
+ok(R.okPt, 'temperatura PT100 do eletrocentro: maximo, hora, minimo sem o zero solto, sensor ausente nulo, e a serie de 5 min no TS do logger com a potencia: ' + R.txt.pt);
 ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 2)');
 ok(R.okConf, 'conferencia (folga ' + TOL_R.toFixed(6) + '): dias inteiros com razao 1; 01, 02 e 03/10 fora (n_parcial 2, razao nula): ' + R.txt.conf);
 ok(R.okInv, 'sg_inv_dia_M1: 24 inversor-dias, parcial exatamente nos 7 (01 a 03/10 no TS5 e o 505 em 29/09: ' + R.txt.inv + '), energia dos inteiros a ' + TOL_E.toFixed(2) + ' kWh do SCADA');
@@ -379,7 +392,7 @@ ok(R.okSaudeResumo, 'sg_saude: alarme x falha e rede x equipamento contados em s
 ok(R.okParado, 'o inversor parado o dia inteiro, lido inteiro, num dia em que a usina gerou: parcial = false');
 ok(R.okIdem, 'segunda rodada: nenhum zip novo, produtos identicos');
 ok(R.okNaoRepete, 'segunda rodada: a busca funda nao se repete (nenhum dado novo do inversor sem posicao)');
-ok(R.okMigra, 'historico de esquema 1 FIEL (sem t0/t1, PID com minutos): relido inteiro, produtos identicos');
+ok(R.okMigra, 'historico de esquema 2 FIEL (eletrocentro sem os campos do PT100, sem a serie de 5 min): relido inteiro, produtos identicos');
 ok(R.okBuscaVolta, 'dia novo do inversor sem posicao: a busca volta (1 export) e a memoria anda para 26/09');
 ok(R.okNula, 'linha sem t0/t1: parcial nula, fora da conferencia (29/09 com 3 + 1) e fora dos inteiros do resumo da saude');
 
@@ -393,6 +406,18 @@ function planta(nome, de, para, chave) {
   let r2;
   try { r2 = cenario(g); } finally { fs.unlinkSync(g); }
   ok(!r2.erro && r2[chave] === false, 'plantio "' + nome + '" reprova em ' + chave + (r2.erro ? ' (estourou: ' + r2.erro + ')' : ''));
+}
+// o plantio na LIB: uma copia da lib mudada e um gerador que a le no lugar da original
+const srcLib = fs.readFileSync(path.join(__dirname, 'lib-sungrow.js'), 'utf8');
+function plantaLib(nome, de, para, chave) {
+  if (srcLib.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou na lib'); return; }
+  const lib = path.join(__dirname, '_plantio_lib_sungrow.js'), g = path.join(__dirname, '_plantio_sungrow.js');
+  const req = "require('./lib-sungrow.js')";
+  if (src.split(req).length !== 2) { ok(false, 'plantio ' + nome + ': o gerador nao le a lib 1x'); return; }
+  fs.writeFileSync(lib, srcLib.split(de).join(para)); fs.writeFileSync(g, src.split(req).join("require('./_plantio_lib_sungrow.js')"));
+  let r2;
+  try { r2 = cenario(g); } finally { fs.unlinkSync(g); fs.unlinkSync(lib); }
+  ok(!r2.erro && r2[chave] === false, 'plantio na lib "' + nome + '" reprova em ' + chave + (r2.erro ? ' (estourou: ' + r2.erro + ')' : ''));
 }
 planta('identificar pela pasta', "if (hits.length === 1) { const a = ident[sn];",
   "if (hits.length === 1) { hits[0] = o.ufv + '/' + o.pasta + '/' + hits[0].split('/')[2]; } if (hits.length === 1) { const a = ident[sn];", 'okId');
@@ -415,6 +440,8 @@ planta('eficiencia pelo maximo', 'ef_med: mediana(inteiros.map((r) => r.ef))', '
 planta('familia sobrescreve em vez de somar', 'ev[f] = (ev[f] || 0) + n;', 'ev[f] = n;', 'okSaudeLinhas');
 planta('parcial nulo vira inteiro na saude', 'p: x.parcial == null ? null : (x.parcial ? 1 : 0)', 'p: x.parcial ? 1 : 0', 'okNula');
 planta('isolamento com a limitacao', 'iso: x.iso_min, lim: x.lim_pct', 'iso: x.lim_pct, lim: x.lim_pct', 'okSaudeCampos');
+planta('temperatura de 5 min pela pasta', "const ch = o.ufv + '/' + tsDoLogger[sn].ts;", "const ch = o.ufv + '/' + o.pasta;", 'okPt');
+plantaLib('zero do PT100 como temperatura', 'return x != null && x > 0 ? x : null;', 'return x != null ? x : null;', 'okPt');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');
 planta('busca que nao para no casamento', 'if (!faltam.length) break;', '', 'okBusca1');

@@ -205,14 +205,28 @@ function diaEstacao(cab, linhas, onde) {
        (cai a noite quando eles desligam, e fica zerado de madrugada), e os TS de uma usina geram quase igual (M1: TS5 e
        TS6 a 0,4 %). Quem prova e a POTENCIA de 5 min: o logger registra a soma dos inversores que le, no mesmo carimbo */
     const pp = {}; L.forEach((v) => { const x = num(v[c.p]); if (x != null) pp[hhmm(v)] = Math.round(x / 100) / 10; });
-    out.push({ d, n: L.length, _p: pp, p_max: r(Math.max(...P, 0), 1), qtd: Math.max(...g(c.qtd, 1), 0),
+    /* 🔴 AS DUAS TEMPERATURAS PT100 do eletrocentro ("Valor da amostra PT 1/2"), °C: a temperatura do BARRAMENTO DO LADO DE
+       BAIXA TENSAO do eletrocentro (informado pela operacao em 04/10/2026; o registro do fabricante nao diz o ponto).
+       Medido (27 a 30/09, 24 eletrocentros): 31 °C de madrugada, sobem com a corrente e chegam ao pico ~1h30 depois do
+       pico de potencia. Nao e o oleo do transformador: os 95/100 °C do manual do eletrocentro nao valem para eles. As
+       tres colunas de temperatura de ENROLAMENTO do mesmo registro
+       ficam em 0 em todos (sem medicao). 32767 = sensor ausente (M1/TS3, M5/TS8, M8/TS7, M9/TS2 no PT 2): nulo.
+       🔴 ZERO E "SEM LEITURA", nunca temperatura (M8/TS5, M8/TS6 e M1/TS8 gravam 0,0 em instantes soltos; o
+       barramento em Mauriti nao chega a 0 °C) — mesma regra da isolacao */
+    const pt = (i, v) => { const x = i < 0 ? null : num(v[i]); return x != null && x > 0 ? x : null; };
+    const p1 = L.map((v) => pt(c.pt1, v)), p2 = L.map((v) => pt(c.pt2, v));
+    const pico = (a) => { let m = null, h = null; a.forEach((x, i) => { if (x != null && (m == null || x > m)) { m = x; h = hhmm(L[i]); } }); return [m == null ? null : r(m, 1), h]; };
+    const vale = (a) => { const v = a.filter((x) => x != null); return v.length ? r(Math.min(...v), 1) : null; };
+    const [m1, h1] = pico(p1), [m2, h2] = pico(p2);
+    const pt5 = {}; L.forEach((v, i) => { if (p1[i] != null || p2[i] != null) pt5[hhmm(v)] = [p1[i] == null ? null : r(p1[i], 1), p2[i] == null ? null : r(p2[i], 1), pp[hhmm(v)] == null ? null : pp[hhmm(v)]]; });
+    out.push({ d, n: L.length, _p: pp, _pt: pt5, p_max: r(Math.max(...P, 0), 1), qtd: Math.max(...g(c.qtd, 1), 0),
       rede_min: g(c.rede, 1).length ? Math.min(...L.filter((v, i) => (num(v[c.p]) || 0) > 1000).map((v) => num(v[c.rede])).filter((x) => x != null), 999) : null,
       sp_min: g(c.sp, 0.1).length ? r(Math.min(...g(c.sp, 0.1)), 1) : null, taxa_min: g(c.taxa, 0.1).length ? r(Math.min(...g(c.taxa, 0.1)), 1) : null,
-      pt1_max: r(Math.max(...g(c.pt1, 1), -99), 1), pt2_max: r(Math.max(...g(c.pt2, 1), -99), 1),
+      pt1_max: m1, pt2_max: m2, pt1_h: h1, pt2_h: h2, pt1_min: vale(p1), pt2_min: vale(p2),
+      n_pt1: p1.filter((x) => x != null).length, n_pt2: p2.filter((x) => x != null).length,
       nom: r(med(g(c.nom, 1)), 1) });
     const x = out[out.length - 1];
     if (x.rede_min === 999) x.rede_min = null;
-    for (const k of ['pt1_max', 'pt2_max']) if (x[k] === -99) x[k] = null;
   }
   return out;
 }
