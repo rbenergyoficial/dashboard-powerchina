@@ -35,8 +35,9 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 4;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
+const ESQ_HIST = 5;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
                                                             // 4: PT100 de 5 min por eletrocentro com o historico inteiro (so relendo se constroi)
+                                                            // 5: eletrocentro de 5 min (potencia, capacidade, inversores na rede) e horas fora
 const DIAS_PT = 365;                                        // a serie de 5 min do PT100 por eletrocentro guarda um ano
 const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -162,6 +163,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     for (const x of linhas) { const p = x._p; delete x._p; if (p && (!s[x.d] || Object.keys(p).length > Object.keys(s[x.d]).length)) s[x.d] = p; }
     corta(s, P_DIAS); };
   const ptRodada = {};                                     // PT100 de 5 min de TUDO o que esta rodada leu, por logger
+  const etcRodada = {};                                    // e o eletrocentro de 5 min (potencia, capacidade, rede), idem
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
   const novos = raw.filter((z) => lidos.get(z.nome) !== z.bytes);
@@ -210,6 +212,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         // e a MESMA serie, sem corte, para o arquivo por eletrocentro (so o que esta rodada leu; o resto vem do arquivo publicado)
         const sr = ptRodada[m[1]] || (ptRodada[m[1]] = {});
         for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) { s5[x.d + ' ' + h] = a; sr[x.d + ' ' + h] = a; } }
+        const se = etcRodada[m[1]] || (etcRodada[m[1]] = {});
+        for (const x of dl) { const v = x._etc; delete x._etc; if (v) for (const [h, a] of Object.entries(v)) se[x.d + ' ' + h] = a; }
         const dp5 = [...new Set(Object.keys(s5).map((t) => t.slice(0, 10)))].sort();
         if (dp5.length > DIAS_5MIN) { const c5 = dp5[dp5.length - DIAS_5MIN]; for (const t of Object.keys(s5)) if (t.slice(0, 10) < c5) delete s5[t]; }
         junta(o.dias, dl);
@@ -423,7 +427,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     for (const x of Object.values(o.dias)) estRows.push({ ...x, ufv: o.ufv, ts: a.ts, ts_por: a.por, logger: sn, chave: o.ufv + '/' + a.ts }); }
   estRows.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.chave < y.chave ? -1 : 1));
   pesos['sg_ts_dia.json'] = await escreve('sg_ts_dia.json', { gerado_em: agora, esquema: 2,
-    unidade: 'p_max kW; sp_min kW (setpoint do arranjo); taxa_min ‰; pt1/pt2 °C (PT100 do barramento de BT do eletrocentro: _max, _min, _h hora do maximo,'
+    unidade: 'p_max kW; sp_min kW e taxa_min ‰ (valores de CONFIGURACAO do logger, constantes; nao sao o despacho); inv_h_fora horas-inversor'
+      + ' fora da rede com o eletrocentro gerando (n_ger5 amostras gerando, n_fora quantas com a rede legivel); pt1/pt2 °C (PT100 do barramento de BT do eletrocentro: _max, _min, _h hora do maximo,'
       + ' n_pt amostras validas; zero e 32767 sao sem leitura)', serie: estRows });
   /* -------- a temperatura PT100 de 5 min de cada eletrocentro (ultimos DIAS_5MIN dias), com a potencia do logger no
      mesmo carimbo: a curva de aquecimento contra a carga. Um arquivo por usina, como o PID -------- */
@@ -445,32 +450,40 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
      guarda DIAS_5MIN dias do 5 min (memoria e peso), entao o que a rodada leu e FUNDIDO no arquivo publicado do
      eletrocentro (a rodada nova ganha no mesmo instante). Arquivo ausente (404) = primeira vez; outra falha de leitura
      aborta (regravar sem ele apagaria o acumulado). O historico inteiro so se constroi relendo os zips: ESQ_HIST 4 -------- */
-  const porEtc = {};
-  for (const [sn, s] of Object.entries(ptRodada)) {
-    const o = H.est[sn]; if (!o || !tsDoLogger[sn]) continue;
-    const k = o.ufv + '_' + tsDoLogger[sn].ts;
-    const m = porEtc[k] || (porEtc[k] = new Map());
-    for (const [t, v] of Object.entries(s)) m.set(t, v);
-  }
   // todo eletrocentro com logger tem arquivo, mesmo vazio: URL que nao resolve deixa o painel em erro, nao vazio
   const etcs = new Set(Object.keys(H.est).filter((sn) => tsDoLogger[sn]).map((sn) => H.est[sn].ufv + '_' + tsDoLogger[sn].ts));
-  let ptEscritos = 0, ptLinhas = 0;
-  for (const k of [...etcs].sort()) {
-    const novo = porEtc[k] || new Map();
-    const ant = await leAnterior('sg_pt_' + k + '.json');
-    if (!novo.size && ant) continue;                       // nada novo deste eletrocentro: o publicado continua valendo
-    const tudo = new Map(((ant && ant.serie) || []).map((r) => [r.t, [r.pt1, r.pt2, r.p]]));
-    for (const [t, v] of novo) tudo.set(t, v);
-    const ts = [...tudo.keys()].sort();
-    const corte = ts.length ? new Date(Date.parse(ts[ts.length - 1].slice(0, 10) + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5).toISOString().slice(0, 10) : '';
-    const serie = ts.filter((t) => t.slice(0, 10) >= corte).map((t) => { const v = tudo.get(t);
-      return { t, ms: Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3, pt1: v[0], pt2: v[1], p: v[2] }; });
-    const [u, tsx] = k.split('_');
-    pesos['sg_pt_' + k + '.json'] = await escreve('sg_pt_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_PT,
-      unidade: 'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro); ms epoch do instante (BRT)', serie });
-    ptEscritos += 1; ptLinhas += serie.length;
-  }
-  console.log('  PT100 por eletrocentro: ' + ptEscritos + ' arquivo(s) gravado(s), ' + ptLinhas + ' linhas');
+  const porEletrocentro = async (pref, rodada, campos, unidade, rotulo) => {
+    const porEtc = {};
+    for (const [sn, s] of Object.entries(rodada)) {
+      const o = H.est[sn]; if (!o || !tsDoLogger[sn]) continue;
+      const k = o.ufv + '_' + tsDoLogger[sn].ts;
+      const m = porEtc[k] || (porEtc[k] = new Map());
+      for (const [t, v] of Object.entries(s)) m.set(t, v);
+    }
+    let escritos = 0, linhas = 0;
+    for (const k of [...etcs].sort()) {
+      const novo = porEtc[k] || new Map();
+      const ant = await leAnterior(pref + k + '.json');
+      if (!novo.size && ant) continue;                     // nada novo deste eletrocentro: o publicado continua valendo
+      const tudo = new Map(((ant && ant.serie) || []).map((r) => [r.t, campos.map((c) => r[c])]));
+      for (const [t, v] of novo) tudo.set(t, v);
+      const ts = [...tudo.keys()].sort();
+      const corte = ts.length ? new Date(Date.parse(ts[ts.length - 1].slice(0, 10) + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5).toISOString().slice(0, 10) : '';
+      const serie = ts.filter((t) => t.slice(0, 10) >= corte).map((t) => { const v = tudo.get(t);
+        const l = { t, ms: Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3 }; campos.forEach((c, i) => { l[c] = v[i]; }); return l; });
+      const [u, tsx] = k.split('_');
+      pesos[pref + k + '.json'] = await escreve(pref + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_PT, unidade, serie });
+      escritos += 1; linhas += serie.length;
+    }
+    console.log('  ' + rotulo + ' por eletrocentro: ' + escritos + ' arquivo(s) gravado(s), ' + linhas + ' linhas');
+  };
+  await porEletrocentro('sg_pt_', ptRodada, ['pt1', 'pt2', 'p'],
+    'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro); ms epoch do instante (BRT)', 'PT100');
+  /* -------- o ELETROCENTRO de 5 min, com o historico (DIAS_PT): potencia, capacidade em operacao (a soma do nominal dos
+     inversores ligados), inversores na rede e quantidade. Mesmo acumulo do PT100; a noite (tudo zero) nao entra -------- */
+  await porEletrocentro('sg_etc_', etcRodada, ['p', 'cap', 'rede', 'qtd'],
+    'p kW (potencia do eletrocentro); cap kW (soma do nominal dos inversores em operacao); rede inversores conectados a rede;'
+      + ' qtd inversores do eletrocentro; ms epoch do instante (BRT)', 'eletrocentro');
 
   /* -------- conferencia: energia do dia, logger x export do SCADA, mesmo inversor e dia -------- */
   let invSc = null;

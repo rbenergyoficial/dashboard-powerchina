@@ -1,4 +1,4 @@
-name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min)
+name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min) e sp_ts_*.json (setpoint por eletrocentro)
 on:
   schedule:
     - cron: '17 13 * * *' # 10:17 BRT — depois do export do SCADA (~03:00 BRT) e do inv-scada.yml; o lote do logger chega de dia
@@ -22,13 +22,16 @@ jobs:
       - run: npm i @azure/storage-blob@12
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
       # inteiro, busca funda e sua memoria, migracao de esquema, saude do inversor e o dicionario de codigos contra o
-      # manual, com 31 plantios. Sem rede: julga a regra antes de gerar. A primeira rodada depois do esquema 2 rele todos
-      # os zips (perto de 40 min; timeout 240).
+      # manual, o eletrocentro de 5 min e as horas fora da rede, com plantios. Sem rede: julga a regra antes de gerar. A
+      # primeira rodada depois de um esquema novo do historico rele todos os zips (perto de 40 min; timeout 240).
       - name: Ensaio do logger Sungrow (sem rede)
         run: node scripts/ensaio-sungrow.js
       # a energia do dia sai da lib-contador-dia, a mesma do gen-inv-scada e do gen-perdas
       - name: Ensaio · a energia do dia pela subida do contador de vida (sem rede)
         run: node scripts/ensaio-contador-dia.js perdas
+      # a soma por eletrocentro da potencia e do setpoint de despacho (SCADA, 30 min): carimbo sem leitura nulo, acumulo, contrato da fonte e leitura do blob, com plantios
+      - name: Ensaio · potencia e setpoint por eletrocentro (sem rede)
+        run: node scripts/ensaio-ts-setpoint.js
       - name: Gerar sg_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -37,3 +40,10 @@ jobs:
           OUT: dados
           REFAZER: ${{ github.event.inputs.refazer }}
         run: node scripts/gen-sungrow.js
+      # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora, gen-perdas) guarda 7 dias,
+      # entao um dia sem rodar nao perde nada
+      - name: Gerar sp_ts_<usina>_<ts>.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          OUT: dados
+        run: node scripts/gen-ts-setpoint.js

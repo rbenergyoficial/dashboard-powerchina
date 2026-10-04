@@ -219,12 +219,28 @@ function diaEstacao(cab, linhas, onde) {
     const vale = (a) => { const v = a.filter((x) => x != null); return v.length ? r(Math.min(...v), 1) : null; };
     const [m1, h1] = pico(p1), [m2, h2] = pico(p2);
     const pt5 = {}; L.forEach((v, i) => { if (p1[i] != null || p2[i] != null) pt5[hhmm(v)] = [p1[i] == null ? null : r(p1[i], 1), p2[i] == null ? null : r(p2[i], 1), pp[hhmm(v)] == null ? null : pp[hhmm(v)]]; });
-    out.push({ d, n: L.length, _p: pp, _pt: pt5, p_max: r(Math.max(...P, 0), 1), qtd: Math.max(...g(c.qtd, 1), 0),
+    /* 🔴 O ELETROCENTRO DE 5 MIN: potencia, CAPACIDADE EM OPERACAO, inversores na rede e quantidade de inversores.
+       "Máx. potência ativa nominal total" (kW) e a soma do nominal dos inversores LIGADOS, nao a placa: medido em 180 dias
+       dos 24 loggers (04/10/2026), 7744 = 22 x 352 com todos, 7392 com um fora, 0 de noite; no M5/TS8, 3520 = 11 x 320
+       (o teto do TS). ⚠️ O "Valor de potência FV ativa definida" (sp_min) NAO e o despacho: e o mesmo numero nos 180 dias
+       de cada logger (77440 = 7744 kW no M5 e no M8; 36259, 15940 no M6). O setpoint de despacho e por inversor e so
+       existe no export do SCADA (gen-ts-setpoint.js). A noite (tudo zero) fica fora: so pesa */
+    const et5 = {}; L.forEach((v) => { const a = [pp[hhmm(v)] == null ? null : pp[hhmm(v)], num(v[c.nom]), num(v[c.rede]), num(v[c.qtd])];
+      if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a; });   // a quantidade nunca e zero: fica fora do teste
+    /* horas-inversor FORA DA REDE durante a geracao (potencia do eletrocentro > 1 kW): (quantidade - na rede) x 5 min. A
+       noite todos saem da rede, e nao e falta. Amostra sem leitura da quantidade ou da rede NAO entra (nem como zero); dia
+       sem nenhuma amostra julgada sai NULO, nunca "zero horas fora". Rede acima da quantidade conta zero, nao abate */
+    const fora = L.filter((v) => (num(v[c.p]) || 0) > 1000).map((v) => { const q = num(v[c.qtd]), n = num(v[c.rede]);
+      return q == null || n == null ? null : Math.max(0, q - n); });
+    const julgadas = fora.filter((x) => x != null);
+    out.push({ d, n: L.length, _p: pp, _pt: pt5, _etc: et5, p_max: r(Math.max(...P, 0), 1), qtd: Math.max(...g(c.qtd, 1), 0),
       rede_min: g(c.rede, 1).length ? Math.min(...L.filter((v, i) => (num(v[c.p]) || 0) > 1000).map((v) => num(v[c.rede])).filter((x) => x != null), 999) : null,
       sp_min: g(c.sp, 0.1).length ? r(Math.min(...g(c.sp, 0.1)), 1) : null, taxa_min: g(c.taxa, 0.1).length ? r(Math.min(...g(c.taxa, 0.1)), 1) : null,
       pt1_max: m1, pt2_max: m2, pt1_h: h1, pt2_h: h2, pt1_min: vale(p1), pt2_min: vale(p2),
       n_pt1: p1.filter((x) => x != null).length, n_pt2: p2.filter((x) => x != null).length,
-      nom: r(med(g(c.nom, 1)), 1) });
+      nom: r(med(g(c.nom, 1)), 1), inv_h_fora: julgadas.length ? r(julgadas.reduce((s, x) => s + x, 0) / 12, 2) : null,
+      // a COBERTURA das horas fora: amostras gerando, e quantas delas tinham a quantidade e a rede legiveis
+      n_ger5: fora.length, n_fora: julgadas.length });
     const x = out[out.length - 1];
     if (x.rede_min === 999) x.rede_min = null;
   }

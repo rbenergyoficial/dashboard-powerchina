@@ -242,12 +242,34 @@ const est = [];
 /* as temperaturas PT100 seguem a carga: PT 1 = 30 + P/20000 °C, PT 2 = 31 + P/18000 °C (P em W); um ZERO solto no PT 1 as
    04:10 (sem leitura, nao temperatura) e o PT 2 sem sensor (32767) em 28/09 */
 const PT1 = (p) => Math.round((30 + p / 20000) * 10) / 10, PT2 = (p) => Math.round((31 + p / 18000) * 10) / 10;
-DIAS.forEach((d, di) => HH.forEach((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92);
-  est.push([d + ' ' + h + ':00', 20, k === 50 ? 0 : PT1(p), di === 0 ? 32767 : PT2(p), p, 7040, 1000, 2, 2, 704].join(', ')); }));
+/* o eletrocentro (quantidade, rede, capacidade): de noite (potencia zero) nenhum inversor na rede e capacidade zero, como
+   no logger real. Em 29/09:
+     12:30 a 13:25 (indices 150 a 161, doze amostras gerando) UM inversor fora: capacidade 352, rede 1 -> 1 hora-inversor fora
+     06:05 (indice 73, 267 W, abaixo do piso de 1 kW) um inversor fora: NAO conta
+     15:00 (indice 180) rede 3 com quantidade 2: conta zero, nao abate
+     14:10 e 14:15 (170, 171) potencia ZERO com os inversores na rede: a amostra fica no arquivo (o evento que ele mostra)
+     14:20 e 14:25 (172, 173) potencia zero, capacidade zero e rede 2: fica pela rede
+     14:30 e 14:35 (174, 175) potencia zero, rede ZERO e capacidade 704 (inversores ligados sem rede): fica pela capacidade
+   Em 28/09 a rede SEM LEITURA (65535) a partir das 15:00 (indice 180): as horas fora so julgam a manha, e o dia diz quantas
+   amostras julgou. Em 30/09 sem leitura o dia inteiro: horas fora nulas, nunca zero */
+const etcDe = (p, di, k) => {
+  if (di === 1 && k >= 170 && k < 172) return [2, 2, 704];
+  if (di === 1 && k >= 172 && k < 174) return [2, 2, 0];
+  if (di === 1 && k >= 174 && k < 176) return [2, 0, 704];
+  if (p <= 0) return [2, 0, 0];
+  if (di === 1 && ((k >= 150 && k < 162) || k === 73)) return [2, 1, 352];
+  if (di === 1 && k === 180) return [2, 3, 1056];
+  if (di === 0 && k >= 180) return [2, 65535, 704];
+  return [2, di === 2 ? 65535 : 2, 704]; };
+const pEst = (di, k) => (di === 1 && k >= 170 && k < 176 ? 0 : perfil(k, 0.95) + perfil(k, 0.92));
+const gerando = (di) => HH.map((h, k) => k).filter((k) => pEst(di, k) > 1000);   // as amostras que as horas fora julgam
+DIAS.forEach((d, di) => HH.forEach((h, k) => { const p = pEst(di, k);
+  est.push([d + ' ' + h + ':00', 20, k === 50 ? 0 : PT1(p), di === 0 ? 32767 : PT2(p), p, 7040, 1000, ...etcDe(p, di, k)].join(', ')); }));
 const PID_H = ['Horário', ...Object.values(S.PID_COLS)];
 const pid = []; for (const d of DIAS) HH.forEach((h, k) => pid.push([d + ' ' + h + ':00', 75, k > 240 ? 300 : 0, k > 240 ? 2 : 0, 45, 0, 0, 85].join(', ')));
 // um dia NOVO do logger do TS6 (01/10), so na rodada 4: o arquivo do PT100 por eletrocentro tem de ACUMULAR
-const estDia = (d) => HH.map((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92); return [d + ' ' + h + ':00', 20, PT1(p), PT2(p), p, 7040, 1000, 2, 2, 704].join(', '); });
+const estDia = (d) => HH.map((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92); return [d + ' ' + h + ':00', 20, PT1(p), PT2(p), p, 7040, 1000, ...etcDe(p, -1, k)].join(', '); });
+const N_GER = HH.filter((h, k) => perfil(k, 0.95) + perfil(k, 0.92) > 0).length;   // amostras de um dia com o eletrocentro gerando
 const ZIP_EST_NOVO = path.join(RAW, 'M10', 'TS05', 'PID 100', '01.10.zip');
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', 'PID 100', '28.09 A 30.09.zip'), zip([
   { nome: 'hiscsv/HIS_B0000000006_202609280000_202609302355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + est.join('\n') + '\n', metodo: 8 },
@@ -312,6 +334,25 @@ function cenario(gen) {
     const ET = leOu('sg_pt_M1_TS6.json').serie, et12 = ET.find((x) => x.t === '2026-09-29 12:00') || {};
     R.okPtEtc = ET.length === 863 && !fs.existsSync(path.join(OUT, 'sg_pt_M1_TS5.json')) && et12.pt1 === PT1(pMax) && et12.pt2 === PT2(pMax)
       && et12.p === pMax / 1000 && et12.ms === Date.parse('2026-09-29T12:00:00-03:00') && ET[0].t === '2026-09-28 00:00';
+    // o eletrocentro de 5 min: so o TS do logger, so as amostras com geracao, a hora com um inversor fora; e as horas fora no dia
+    const EC = leOu('sg_etc_M1_TS6.json').serie, ec = (t) => EC.find((x) => x.t === t) || {};
+    const p1230 = HH.map((h, k) => perfil(k, 0.95) + perfil(k, 0.92))[150];
+    // a regra do arquivo: fica a amostra com potencia, capacidade OU rede; so a noite (os tres zero) sai
+    R.okEtc = EC.length === DIAS.length * N_GER && !fs.existsSync(path.join(OUT, 'sg_etc_M1_TS5.json'))
+      && EC.every((x) => x.p > 0 || x.cap > 0 || x.rede > 0)
+      && ec('2026-09-29 12:30').cap === 352 && ec('2026-09-29 12:30').rede === 1 && ec('2026-09-29 12:30').qtd === 2 && ec('2026-09-29 12:30').p === Math.round(p1230 / 100) / 10
+      && ec('2026-09-29 12:30').ms === Date.parse('2026-09-29T12:30:00-03:00') && ec('2026-09-29 13:30').rede === 2 && ec('2026-09-28 12:30').cap === 704
+      && ec('2026-09-29 14:10').p === 0 && ec('2026-09-29 14:10').rede === 2 && ec('2026-09-29 14:20').cap === 0 && ec('2026-09-29 14:20').rede === 2
+      && ec('2026-09-29 14:30').p === 0 && ec('2026-09-29 14:30').rede === 0 && ec('2026-09-29 14:30').cap === 704
+      && ec('2026-09-30 12:00').rede === null && ec('2026-09-30 12:00').cap === 704
+      && t28.n_ger5 === gerando(0).length && t28.n_fora === gerando(0).filter((k) => k < 180).length && t28.n_fora < t28.n_ger5
+      && t29.n_fora === t29.n_ger5 && T.find((x) => x.d === '2026-09-30').n_fora === 0 && T.find((x) => x.d === '2026-09-30').n_ger5 > 0
+      && t29.inv_h_fora === 1 && t28.inv_h_fora === 0 && T.find((x) => x.d === '2026-09-30').inv_h_fora === null;
+    // os campos de trabalho (_p, _pt, _etc) nao vazam para o publico nem para o historico
+    R.okSemTrabalho = T.length > 0 && Object.keys(le('sg_hist.json').est).length > 0 && T.every((x) => !Object.keys(x).some((k) => k[0] === '_'))
+      && Object.values(le('sg_hist.json').est).every((o) => Object.values(o.dias).every((x) => !Object.keys(x).some((k) => k[0] === '_')));
+    R.txt.etc = EC.length + ' linhas (esperado ' + DIAS.length * N_GER + ') · 29/09 12:30 cap ' + ec('2026-09-29 12:30').cap + ' rede ' + ec('2026-09-29 12:30').rede
+      + ' · horas fora 28/09 ' + t28.inv_h_fora + ', 29/09 ' + t29.inv_h_fora + ', 30/09 ' + (T.find((x) => x.d === '2026-09-30') || {}).inv_h_fora;
     R.txt.pt = '29/09 PT1 ' + t29.pt1_max + ' as ' + t29.pt1_h + ' min ' + t29.pt1_min + ' n ' + t29.n_pt1 + ' · PT2 ' + t29.pt2_max + ' · 28/09 PT2 ' + t28.pt2_max + ' · 5 min ' + PT.length + ' linhas, ' + pt12.chave;
     const p29 = P.find((x) => x.d === '2026-09-29');
     R.okPidCampos = !!p29 && p29.v_max === 300 && !('min_saida' in p29) && !('ini_saida' in p29) && !('fim_saida' in p29);
@@ -362,18 +403,22 @@ function cenario(gen) {
     log = roda(gen);
     R.okIdem = /novos ou mudados: 0/.test(log) && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     R.okNaoRepete = lidosFundo(log) === 0;
-    // 3 · migracao por MARCA, com o esquema 3 FIEL (o que esta no ar): o historico igual e SEM os arquivos do PT100 por eletrocentro
-    const h = le('sg_hist.json'); h.esquema = 3;
-    for (const n of fs.readdirSync(OUT)) if (/^sg_pt_M\d+_TS\d+\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
+    // 3 · migracao por MARCA, com o esquema 4 FIEL (o que esta no ar): o historico sem as horas fora, e SEM os arquivos do
+    //     eletrocentro de 5 min (o do PT100 ja existe e fica)
+    const h = le('sg_hist.json'); h.esquema = 4;
+    for (const o of Object.values(h.est)) for (const x of Object.values(o.dias)) delete x.inv_h_fora;
+    for (const n of fs.readdirSync(OUT)) if (/^sg_etc_M\d+_TS\d+\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
     grava('sg_hist.json', h);
     log = roda(gen);
-    R.okMigra = /esquema 3 -> 4: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
+    R.okMigra = /esquema 4 -> 5: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
       && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     // 4 · dia novo do inversor sem posicao: a busca VOLTA (1 export do M6) e a memoria anda para o dia novo
     fs.writeFileSync(novo, zipNunca('2026-09-26'));
     fs.writeFileSync(ZIP_EST_NOVO, zip([{ nome: 'hiscsv/HIS_B0000000006_202610010000_202610012355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + estDia('2026-10-01').join('\n') + '\n', metodo: 8 }]));
     log = roda(gen);
     { const E2 = (fs.existsSync(path.join(OUT, 'sg_pt_M1_TS6.json')) ? le('sg_pt_M1_TS6.json') : { serie: [] }).serie; R.okPtAcumula = E2.length === 863 + 288 && E2[0].t === '2026-09-28 00:00' && E2.some((x) => x.t === '2026-10-01 12:00'); }
+    { const E3 = (fs.existsSync(path.join(OUT, 'sg_etc_M1_TS6.json')) ? le('sg_etc_M1_TS6.json') : { serie: [] }).serie;
+      R.okEtcAcumula = E3.length === (DIAS.length + 1) * N_GER && E3.some((x) => x.t === '2026-09-29 12:30' && x.rede === 1) && E3.some((x) => x.t === '2026-10-01 12:00'); }
     R.okBuscaVolta = lidosFundo(log) === 1 && le('sg_ident.json').busca[NUNCA] === '2026-09-26';
     // 5 · linha sem t0/t1 (nao apurada) sai parcial nula e fora da conferencia
     const h2 = le('sg_hist.json'); delete h2.inv[INVS[0].sn].dias['2026-09-29'].t0; grava('sg_hist.json', h2);
@@ -396,6 +441,9 @@ ok(R.okPid, 'o logger e o PID da pasta do TS5 vao para o TS6, pela potencia: ' +
 ok(R.okPt, 'temperatura PT100 do eletrocentro: maximo, hora, minimo sem o zero solto, sensor ausente nulo, e a serie de 5 min no TS do logger com a potencia: ' + R.txt.pt);
 ok(R.okPtEtc, 'PT100 por eletrocentro: um arquivo so do TS do logger (TS6), 863 linhas de 5 min, valores e instante iguais');
 ok(R.okPtAcumula, 'PT100 por eletrocentro ACUMULA: com o dia novo do logger, 863 + 288 linhas e os dias antigos mantidos');
+ok(R.okEtc, 'eletrocentro de 5 min: so o TS do logger, so com geracao, a capacidade e a rede da hora com um inversor fora, e as horas fora do dia: ' + R.txt.etc);
+ok(R.okSemTrabalho, 'os campos de trabalho de 5 min nao vazam para o resumo do dia publicado nem para o historico');
+ok(R.okEtcAcumula, 'eletrocentro de 5 min ACUMULA: com o dia novo do logger, os quatro dias de geracao, a hora do inversor fora mantida');
 ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 2)');
 ok(R.okConf, 'conferencia (folga ' + TOL_R.toFixed(6) + '): dias inteiros com razao 1; 01, 02 e 03/10 fora (n_parcial 2, razao nula): ' + R.txt.conf);
 ok(R.okInv, 'sg_inv_dia_M1: 24 inversor-dias, parcial exatamente nos 7 (01 a 03/10 no TS5 e o 505 em 29/09: ' + R.txt.inv + '), energia dos inteiros a ' + TOL_E.toFixed(2) + ' kWh do SCADA');
@@ -405,7 +453,7 @@ ok(R.okSaudeResumo, 'sg_saude: alarme x falha e rede x equipamento contados em s
 ok(R.okParado, 'o inversor parado o dia inteiro, lido inteiro, num dia em que a usina gerou: parcial = false');
 ok(R.okIdem, 'segunda rodada: nenhum zip novo, produtos identicos');
 ok(R.okNaoRepete, 'segunda rodada: a busca funda nao se repete (nenhum dado novo do inversor sem posicao)');
-ok(R.okMigra, 'historico de esquema 3 FIEL (sem os arquivos do PT100 por eletrocentro): relido inteiro, produtos identicos (os arquivos refeitos)');
+ok(R.okMigra, 'historico de esquema 4 FIEL (sem as horas fora e sem os arquivos do eletrocentro de 5 min): relido inteiro, produtos identicos (os arquivos refeitos)');
 ok(R.okBuscaVolta, 'dia novo do inversor sem posicao: a busca volta (1 export) e a memoria anda para 26/09');
 ok(R.okNula, 'linha sem t0/t1: parcial nula, fora da conferencia (29/09 com 3 + 1) e fora dos inteiros do resumo da saude');
 
@@ -455,6 +503,20 @@ planta('parcial nulo vira inteiro na saude', 'p: x.parcial == null ? null : (x.p
 planta('isolamento com a limitacao', 'iso: x.iso_min, lim: x.lim_pct', 'iso: x.lim_pct, lim: x.lim_pct', 'okSaudeCampos');
 planta('temperatura de 5 min pela pasta', "const ch = o.ufv + '/' + tsDoLogger[sn].ts;", "const ch = o.ufv + '/' + o.pasta;", 'okPt');
 plantaLib('zero do PT100 como temperatura', 'return x != null && x > 0 ? x : null;', 'return x != null ? x : null;', 'okPt');
+planta('eletrocentro pela pasta', "const k = o.ufv + '_' + tsDoLogger[sn].ts;\n      const m = porEtc[k]", "const k = o.ufv + '_' + o.pasta;\n      const m = porEtc[k]", 'okEtc');
+plantaLib('horas fora contando a noite', 'const fora = L.filter((v) => (num(v[c.p]) || 0) > 1000).map', 'const fora = L.map', 'okEtc');
+plantaLib('noite pela quantidade de inversores', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'if (a.some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'okEtc');
+plantaLib('noite no eletrocentro de 5 min', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'et5[hhmm(v)] = a;', 'okEtc');
+plantaLib('capacidade pela placa', 'num(v[c.nom]), num(v[c.rede])', 'num(v[c.qtd]) * 352, num(v[c.rede])', 'okEtc');
+plantaLib('eletrocentro so com potencia', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'if (a[0] != null && a[0] > 0) et5[hhmm(v)] = a;', 'okEtc');
+plantaLib('eletrocentro so com capacidade', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'if (a[1] != null && a[1] > 0) et5[hhmm(v)] = a;', 'okEtc');
+plantaLib('horas fora com piso zero', 'const fora = L.filter((v) => (num(v[c.p]) || 0) > 1000).map', 'const fora = L.filter((v) => (num(v[c.p]) || 0) > 0).map', 'okEtc');
+plantaLib('rede acima da quantidade abate', 'Math.max(0, q - n)', '(q - n)', 'okEtc');
+plantaLib('sem leitura da rede vira zero hora', 'return q == null || n == null ? null : Math.max(0, q - n); });',
+  'return q == null || n == null ? 0 : Math.max(0, q - n); });', 'okEtc');
+plantaLib('sem a capacidade no teste', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'if ([a[0], a[2]].some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'okEtc');
+plantaLib('cobertura conta toda amostra gerando', 'n_fora: julgadas.length', 'n_fora: fora.length', 'okEtc');
+planta('campo de trabalho do eletrocentro no historico', 'const v = x._etc; delete x._etc;', 'const v = x._etc;', 'okSemTrabalho');
 planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).map', 'const tudo = new Map(([]).map', 'okPtAcumula');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');
