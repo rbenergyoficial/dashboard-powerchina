@@ -50,7 +50,7 @@ function refRetrato(I, pid) {
   const okV = V.every(x => x != null), okA = A.every(x => x != null);
   const mV = okV ? (V[0] + V[1] + V[2]) / 3 : null;
   return { h, p_mw: p, q_mvar: q, fp: q == null || (p === 0 && q === 0) ? null : Math.abs(p) / Math.sqrt(p * p + q * q),
-    v_kv: okV ? mV * R3 / 1000 : null, v_deseq_pct: okV ? 100 * Math.max(...V.map(v => Math.abs(v - mV))) / mV : null,
+    v_kv: okV ? mV * R3 / 1000 : null, v_deseq_pct: okV && mV > 0 ? 100 * Math.max(...V.map(v => Math.abs(v - mV))) / mV : null,   // tensao zero (circuito desligado): desequilibrio indefinido, nulo como na lib
     i_a: okA ? (A[0] + A[1] + A[2]) / 3 : null };
 }
 const CASAS = { p_mw: 3, q_mvar: 3, fp: 3, v_kv: 2, v_deseq_pct: 2, i_a: 1 };
