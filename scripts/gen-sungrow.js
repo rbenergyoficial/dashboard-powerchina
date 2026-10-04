@@ -14,6 +14,8 @@
  * 🔴 INCREMENTAL. O historico tem 3,9 GB de zip e 38 GB de CSV; cada rodada le so os zips novos ou mudados (nome +
  *    tamanho, no manifesto `sg_lidos.json`) e funde no historico interno (`sg_hist.json`). REFAZER=1 relê tudo.
  *    No mesmo inversor-dia vindo de dois zips (a PowerChina renomeia e regrava os lotes), fica o de mais amostras.
+ * 🔴 DIA PARCIAL SE PROVA (esquema 2, 03/10/2026): cada inversor-dia diz se o logger viu a janela de geracao nas duas
+ *    pontas (`parcial`); a conferencia com o SCADA so compara o dia provado inteiro. O historico de esquema 1 e relido.
  * 🔴 SO O 404 E "PRIMEIRA RODADA". Falha ao ler o historico publicado aborta: regravar sem ele apagaria o acumulado.
  *
  * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1
@@ -33,6 +35,8 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
+const ESQ_HIST = 2;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao
+const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1 (nomenclatura das usinas)
 
@@ -93,10 +97,10 @@ async function escreve(nome, obj) {
 }
 
 /* ------------------------------------------------------------------ o SCADA, para identificar ------------------------- */
-// o contador de vida de cada POSICAO no fim de cada dia, dos ultimos exports por usina: Map(dia -> Map(pos -> kWh))
+// os exports do SCADA por usina, do mais novo para o mais velho, um por carimbo (o envio mais recente do carimbo)
 const CARIMBO = /M(\d{2})(?:_ATT(?:-\d+)?)?_(\d{8})_\d{6}\.csv$/i;
 const RE = /^UFV_(\w+?)_(TS\d+)_(INV\d+)_\1 \2 \3 (.+?)(_\d)?$/;
-async function vidaScada(K) {
+async function exportsScada() {
   let arqs = [];
   if (process.env.LOCAL_SCADA_DIR) {
     arqs = fs.readdirSync(process.env.LOCAL_SCADA_DIR).filter((n) => CARIMBO.test(n))
@@ -108,42 +112,44 @@ async function vidaScada(K) {
   const porU = new Map();
   for (const a of arqs) { const m = a.nome.split('/').pop().match(CARIMBO); const u = parque(m[1]);
     (porU.get(u) || porU.set(u, []).get(u)).push({ ...a, carimbo: m[2] }); }
-  const out = new Map();
   for (const [u, L] of porU) {
     L.sort((x, y) => (x.carimbo < y.carimbo ? 1 : x.carimbo > y.carimbo ? -1 : (x.nome < y.nome ? 1 : -1)));
     const vistos = new Set();
-    for (const a of L) {
-      if (vistos.size >= K) break;
-      if (vistos.has(a.carimbo)) continue;               // o envio mais recente do mesmo carimbo ja foi lido
-      vistos.add(a.carimbo);
-      const txt = (await a.ler()).toString('utf8').replace(/^\uFEFF/, '').replace(/\r/g, '');
-      const Ls = txt.split('\n'); const cab = Ls[0].split(';');
-      const rows = Ls.slice(1).filter((l) => /^\d{4}-\d\d-\d\d \d\d:\d\d/.test(l)).map((l) => l.split(';'));
-      if (!rows.length) continue;
-      const dia = rows[0][0].slice(0, 10);
-      const melhor = new Map();
-      cab.forEach((c, i) => {
-        const nc = c.trim(); const cr = casaCru(nc); const m = nc.match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
-        if (!m || m[4] !== 'ENERGIA TOTAL GERADA') return;
-        const pos = u + '/' + m[2] + '/' + m[3];
-        let ult = null, n = 0;
-        for (const r of rows) { const x = Number(String(r[i] || '').trim().replace(',', '.')); if (String(r[i] || '').trim() && Number.isFinite(x) && x > 0) { ult = x; n += 1; } }
-        if (ult != null && (!melhor.has(pos) || n > melhor.get(pos).n)) melhor.set(pos, { v: ult, n });
-      });
-      const md = out.get(dia) || out.set(dia, new Map()).get(dia);
-      for (const [pos, o] of melhor) md.set(pos, o.v);
-    }
+    porU.set(u, L.filter((a) => (vistos.has(a.carimbo) ? false : vistos.add(a.carimbo))));
   }
-  return out;
+  return porU;
 }
+// o contador de vida de cada POSICAO no fim do dia de UM export: { dia, mp: Map(pos -> kWh) }, ou null se vazio
+async function vidaDoExport(a, u) {
+  const txt = (await a.ler()).toString('utf8').replace(/^\uFEFF/, '').replace(/\r/g, '');
+  const Ls = txt.split('\n'); const cab = Ls[0].split(';');
+  const rows = Ls.slice(1).filter((l) => /^\d{4}-\d\d-\d\d \d\d:\d\d/.test(l)).map((l) => l.split(';'));
+  if (!rows.length) return null;
+  const melhor = new Map();
+  cab.forEach((c, i) => {
+    const nc = c.trim(); const cr = casaCru(nc); const m = nc.match(RE) || (cr && [null, null, cr.ts, cr.inv, cr.grandeza]);
+    if (!m || m[4] !== 'ENERGIA TOTAL GERADA') return;
+    const pos = u + '/' + m[2] + '/' + m[3];
+    let ult = null, n = 0;
+    for (const r of rows) { const x = Number(String(r[i] || '').trim().replace(',', '.')); if (String(r[i] || '').trim() && Number.isFinite(x) && x > 0) { ult = x; n += 1; } }
+    if (ult != null && (!melhor.has(pos) || n > melhor.get(pos).n)) melhor.set(pos, { v: ult, n });
+  });
+  return { dia: rows[0][0].slice(0, 10), mp: new Map([...melhor].map(([p, o]) => [p, o.v])) };
+}
+const juntaVida = (sc, r) => { if (!r) return; const md = sc.get(r.dia) || sc.set(r.dia, new Map()).get(r.dia); for (const [p, v] of r.mp) md.set(p, v); };
+const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 
 /* ------------------------------------------------------------------ principal ------------------------------------------ */
 (async () => {
   const t0 = Date.now();
-  const lidosAnt = REFAZER ? null : await leAnterior('sg_lidos.json');
-  const hist = REFAZER ? null : await leAnterior('sg_hist.json');
+  let hist = REFAZER ? null : await leAnterior('sg_hist.json');
+  /* 🔴 MIGRACAO POR MARCA: o historico de esquema 1 nao guarda a primeira e a ultima amostra do dia (t0, t1), sem as quais
+     o dia parcial nao se prova; e o PID ainda carrega os minutos com tensao. Esquema velho = reler todos os zips, uma vez */
+  const migra = !!hist && (hist.esquema || 1) < ESQ_HIST;
+  if (migra) { console.log('  historico esquema ' + (hist.esquema || 1) + ' -> ' + ESQ_HIST + ': relendo todos os zips'); hist = null; }
+  const lidosAnt = REFAZER || migra ? null : await leAnterior('sg_lidos.json');
   const identAnt = await leAnterior('sg_ident.json');
-  const H = hist || { esquema: 1, inv: {}, pid: {}, est: {}, pid5: {} };
+  const H = hist || { esquema: ESQ_HIST, inv: {}, pid: {}, est: {}, pid5: {} };
   H.pinv = H.pinv || {}; H.pest = H.pest || {};            // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
   const P_DIAS = 3;
   /* 🔴 O CORTE E FEITO DURANTE A LEITURA, nao no fim (03/10/2026): na carga inteira (824 zips, seis meses) guardar a
@@ -214,17 +220,45 @@ async function vidaScada(K) {
   }
 
   /* -------- identificacao: contador de vida do logger = ENERGIA TOTAL GERADA do SCADA no fim do mesmo dia -------- */
-  const sc = await vidaScada(4);
+  const exps = await exportsScada();
+  const sc = new Map();
+  for (const [u, L] of exps) for (const a of L.slice(0, K_EXPORTS)) juntaVida(sc, await vidaDoExport(a, u));
   const ident = { ...((identAnt && identAnt.ident) || {}) };
   let casados = 0, ambiguos = 0;
-  for (const [sn, o] of Object.entries(H.inv)) {
-    for (const [d, mp] of sc) {
+  const casa = (sn, o, scm) => {
+    for (const [d, mp] of scm) {
       const x = o.dias[d]; if (!x || x.vida == null) continue;
       const hits = [...mp].filter(([p, v]) => p.startsWith(o.ufv + '/') && Math.abs(v - x.vida) <= TOL_VIDA).map(([p]) => p);
-      if (hits.length === 1) { const a = ident[sn]; if (!a || a.d <= d) ident[sn] = { pos: hits[0], d, metodo: 'contador de vida' }; casados += 1; break; }
+      if (hits.length === 1) { const a = ident[sn]; if (!a || a.d <= d) ident[sn] = { pos: hits[0], d, metodo: 'contador de vida' }; casados += 1; return true; }
       if (hits.length > 1) ambiguos += 1;
     }
+    return false;
+  };
+  for (const [sn, o] of Object.entries(H.inv)) casa(sn, o, sc);
+  /* -------- BUSCA FUNDA, so para quem ficou sem posicao. O inversor que o logger parou de ler antes dos ultimos exports
+     (M5/TS4: o A23B1707347 tem logger ate 26/09) nunca casa na passada normal. Aqui se le export a export, do mais novo
+     para o mais velho, so os que podem conter um dia dele (carimbo ate 2 dias depois do ultimo dia do logger), e para no
+     primeiro casamento. A busca fica LEMBRADA pelo ultimo dia do logger: sem dado novo do inversor, nao se repete -------- */
+  const busca = { ...((identAnt && identAnt.busca) || {}) };
+  let lidosFundo = 0;
+  for (const [u, L] of exps) {
+    const ultimo = (sn) => Object.keys(H.inv[sn].dias).sort().pop();
+    const procurados = Object.keys(H.inv).filter((sn) => H.inv[sn].ufv === u && !ident[sn] && busca[sn] !== ultimo(sn));
+    let faltam = procurados;
+    if (!faltam.length) continue;
+    const teto = maisDias(faltam.map(ultimo).sort().pop(), 2).replace(/-/g, '');
+    for (const a of L.slice(K_EXPORTS)) {
+      if (!faltam.length) break;
+      if (a.carimbo > teto) continue;
+      const r = await vidaDoExport(a, u); lidosFundo += 1;
+      if (!r) continue;
+      const um = new Map([[r.dia, r.mp]]);
+      faltam = faltam.filter((sn) => !casa(sn, H.inv[sn], um));
+    }
+    for (const sn of procurados) if (!ident[sn]) busca[sn] = ultimo(sn);
   }
+  for (const sn of Object.keys(busca)) if (ident[sn] || !H.inv[sn]) delete busca[sn];
+  if (lidosFundo) console.log('  busca funda: ' + lidosFundo + ' export(s) mais velhos lidos');
   // uma posicao com DOIS numeros de serie e troca: cada um vale no seu periodo (o mais novo a partir do primeiro dia dele)
   const porPos = new Map();
   for (const [sn, a] of Object.entries(ident)) (porPos.get(a.pos) || porPos.set(a.pos, []).get(a.pos)).push(sn);
@@ -249,10 +283,29 @@ async function vidaScada(K) {
     }
   }
   const agora = new Date().toISOString();
+  /* 🔴 O DIA INTEIRO SE PROVA, NAO SE PRESUME. Um inversor-dia e completo quando o logger tem amostra ANTES da partida e
+     DEPOIS da parada: a janela de geracao foi vista nas duas pontas (t0 < ini e t1 > fim). Sem geracao no dia, a janela e
+     a da usina no mesmo dia (do primeiro ini ao ultimo fim); sem nenhuma, nada prova o dia inteiro. Nenhum numero
+     escolhido: o logger que parou as 16:05 (M9, 30/09) tem fim = t1 e sai parcial; o dia com uma amostra a 00:00 (01 e
+     02/10) tambem. Linha sem t0/t1 nao foi apurada (null) */
+  let nParc = 0;
+  for (const L of Object.values(porU)) {
+    const jan = new Map();
+    for (const x of L) if (x.ini) { const j = jan.get(x.d) || jan.set(x.d, { ini: x.ini, fim: x.fim }).get(x.d);
+      if (x.ini < j.ini) j.ini = x.ini; if (x.fim > j.fim) j.fim = x.fim; }
+    for (const x of L) {
+      if (x.t0 == null || x.t1 == null) { x.parcial = null; continue; }
+      const j = x.ini ? { ini: x.ini, fim: x.fim } : jan.get(x.d);
+      x.parcial = !j || !(x.t0 < j.ini && x.t1 > j.fim);
+      if (x.parcial) nParc += 1;
+    }
+  }
+  console.log('  inversor-dias parciais no logger: ' + nParc);
   for (const [u, L] of Object.entries(porU)) {
     L.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.chave < y.chave ? -1 : 1));
-    pesos['sg_inv_dia_' + u + '.json'] = await escreve('sg_inv_dia_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1,
-      unidade: 'e kWh (subida do contador de vida); p kW; t °C; iso kΩ; ef %; v V; h_op min; lim_pct % dos instantes gerando', serie: L });
+    pesos['sg_inv_dia_' + u + '.json'] = await escreve('sg_inv_dia_' + u + '.json', { gerado_em: agora, usina: u, esquema: 2,
+      unidade: 'e kWh (subida do contador de vida); p kW; t °C; iso kΩ; ef %; v V; h_op min; lim_pct % dos instantes gerando;'
+        + ' t0/t1 primeira e ultima amostra do dia; parcial = o logger nao viu a janela de geracao nas duas pontas', serie: L });
   }
   /* -------- o TS de cada LOGGER: a potencia dele a cada 5 min e a SOMA dos inversores que ele le, no mesmo carimbo.
      Contra o TS certo bate em quase todo instante; contra o vizinho erra por kW a cada instante (os TS de uma usina geram
@@ -298,8 +351,8 @@ async function vidaScada(K) {
   for (const [id, o] of Object.entries(H.pid)) { const a = tsPid(o);
     for (const x of Object.values(o.dias)) pidRows.push({ ...x, ufv: o.ufv, ts: a.ts, ts_por: a.por, pid: o.end, chave: o.ufv + '/' + a.ts + '/' + o.end }); }
   pidRows.sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.chave < y.chave ? -1 : 1));
-  pesos['sg_pid_dia.json'] = await escreve('sg_pid_dia.json', { gerado_em: agora, esquema: 1,
-    unidade: 'iso kΩ (impedancia de isolamento CA); v V e i mA de saida; t °C; min_saida minutos com tensao de saida', serie: pidRows });
+  pesos['sg_pid_dia.json'] = await escreve('sg_pid_dia.json', { gerado_em: agora, esquema: 2,
+    unidade: 'iso kΩ (impedancia de isolamento CA); v_max V e i_max mA de saida; t °C', serie: pidRows });
   const p5 = {};
   for (const [id, s] of Object.entries(H.pid5)) {
     const o = H.pid[id]; if (!o) continue;
@@ -323,26 +376,34 @@ async function vidaScada(K) {
   if (process.env.LOCAL_INV_SCADA) { let b = fs.readFileSync(process.env.LOCAL_INV_SCADA); if (b[0] === 0x1f) b = zlib.gunzipSync(b); invSc = JSON.parse(b.toString('utf8')); }
   else invSc = await puxa(BLOB + 'inv_scada_hist.json');
   const scK = new Map(((invSc && invSc.serie) || []).map((l) => [l.dia + '|' + l.ufv + '/' + l.ts + '/' + l.inv, l.kwh]));
+  /* so o inversor-dia que o logger provou INTEIRO entra na comparacao; o resto e contado em n_parcial. O lado do SCADA
+     nao tem marca de cobertura no historico (inv_scada_hist): dia parcial dele (30/07) continua aparecendo aqui, e e isso
+     que a conferencia existe para mostrar */
   const conf = new Map();
   for (const L of Object.values(porU)) for (const x of L) {
     const s = scK.get(x.d + '|' + x.chave);
     if (s == null || x.e == null || s <= 0) continue;
     const k = x.d + '|' + x.ufv;
-    const c = conf.get(k) || conf.set(k, { d: x.d, ufv: x.ufv, n: 0, e_logger: 0, e_scada: 0, rs: [] }).get(k);
+    const c = conf.get(k) || conf.set(k, { d: x.d, ufv: x.ufv, n: 0, n_parcial: 0, e_logger: 0, e_scada: 0, rs: [] }).get(k);
+    if (x.parcial !== false) { c.n_parcial += 1; continue; }
     c.n += 1; c.e_logger += x.e; c.e_scada += s; c.rs.push(x.e / s);
   }
-  const confRows = [...conf.values()].map((c) => { c.rs.sort((a, b) => a - b);
-    return { d: c.d, ufv: c.ufv, n: c.n, e_logger_mwh: Math.round(c.e_logger) / 1000, e_scada_mwh: Math.round(c.e_scada) / 1000,
-      razao: Math.round((c.e_logger / c.e_scada) * 10000) / 10000, dentro_1pct: Math.round(100 * c.rs.filter((x) => Math.abs(x - 1) <= 0.01).length / c.rs.length * 10) / 10 }; })
+  const confRows = [...conf.values()].map((c) => ({ d: c.d, ufv: c.ufv, n: c.n, n_parcial: c.n_parcial,
+    e_logger_mwh: c.n ? Math.round(c.e_logger) / 1000 : null, e_scada_mwh: c.n ? Math.round(c.e_scada) / 1000 : null,
+    razao: c.n ? Math.round((c.e_logger / c.e_scada) * 10000) / 10000 : null,
+    dentro_1pct: c.n ? Math.round(100 * c.rs.filter((x) => Math.abs(x - 1) <= 0.01).length / c.rs.length * 10) / 10 : null }))
     .sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : x.ufv < y.ufv ? -1 : 1));
-  pesos['sg_conf.json'] = await escreve('sg_conf.json', { gerado_em: agora, esquema: 1, serie: confRows });
+  pesos['sg_conf.json'] = await escreve('sg_conf.json', { gerado_em: agora, esquema: 2, serie: confRows });
 
-  pesos['sg_ident.json'] = await escreve('sg_ident.json', { gerado_em: agora, esquema: 1, ident, sem_posicao: semPos.map((sn) => ({ sn, ufv: H.inv[sn].ufv, pasta: H.inv[sn].pasta })) });
+  pesos['sg_ident.json'] = await escreve('sg_ident.json', { gerado_em: agora, esquema: 2, ident, busca,
+    sem_posicao: semPos.map((sn) => ({ sn, ufv: H.inv[sn].ufv, pasta: H.inv[sn].pasta, ultimo_dia: Object.keys(H.inv[sn].dias).sort().pop() })) });
   pesos['sg_hist.json'] = await escreve('sg_hist.json', H);
   pesos['sg_lidos.json'] = await escreve('sg_lidos.json', { gerado_em: agora, zips: Object.fromEntries(lidos) });
   for (const [k, v] of Object.entries(pesos)) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');
   const cf = confRows.filter((c) => c.n >= 10);
   if (cf.length) { const rz = cf.map((c) => c.razao).sort((a, b) => a - b);
-    console.log('  conferencia logger x SCADA: ' + cf.length + ' usina-dias · razao p01 ' + rz[Math.floor(rz.length * 0.01)] + ' p50 ' + rz[rz.length >> 1] + ' p99 ' + rz[Math.floor(rz.length * 0.99)]); }
+    console.log('  conferencia logger x SCADA: ' + cf.length + ' usina-dias · razao p01 ' + rz[Math.floor(rz.length * 0.01)] + ' p50 ' + rz[rz.length >> 1] + ' p99 ' + rz[Math.floor(rz.length * 0.99)]
+      + ' · inversor-dias fora por parcial: ' + confRows.reduce((s, c) => s + c.n_parcial, 0)
+      + ' · usina-dias fora de 1 %: ' + confRows.filter((c) => c.razao != null && Math.abs(c.razao - 1) > 0.01).map((c) => c.d + ' ' + c.ufv + ' ' + c.razao).join(', ')); }
   console.log('fim em ' + Math.round((Date.now() - t0) / 1000) + ' s');
 })().catch((e) => { console.error('ERRO ' + e.message); process.exit(1); });

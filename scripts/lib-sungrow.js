@@ -80,6 +80,7 @@ function diaInversor(cab, linhas, onde) {
     const vida = g(c.vida, 0.1).filter((x) => x != null);
     out.push({
       d, n: L.length,
+      t0: hhmm(L[0]), t1: hhmm(L[L.length - 1]),               // primeira e ultima amostra: provam (ou nao) o dia inteiro
       e: r(e, 2),                                               // kWh, a subida do contador de vida (lib-contador-dia)
       vida: vida.length ? r(vida[vida.length - 1], 1) : null,   // contador de vida no fim do dia: identifica o inversor
       p_max: r(Math.max(...P.filter((x) => x != null), 0), 2),
@@ -122,11 +123,12 @@ function diaPid(serie) {
   for (const [d, L] of m) {
     const vv = (k) => L.map((x) => x[k]).filter((x) => x != null);
     const iso = vv('iso').filter((x) => x > 0);
-    const at = L.filter((x) => (x.v || 0) > 0);                 // instantes com tensao de saida aplicada
+    /* 🔴 SEM "MINUTOS COM TENSAO" (esquema 2, 03/10/2026). A primeira versao contava toda amostra com v > 0, e a caixa
+       parada le 1 a 2 V: o M1/TS5/6 somou 66.035 minutos em 90 dias com maximo de 2 V. A recuperacao de PID poe 500 Vdc
+       entre string e terra (manual do usuario do SG350HX, cap. 2, p. 13-14, "por padrao"); um limiar entre os dois seria
+       escolhido, nao lido. Fica a tensao MAXIMA do dia, que e medida */
     out.push({ d, n: L.length, iso_min: iso.length ? Math.min(...iso) : null, iso_med: med(iso),
       v_max: Math.max(...vv('v'), 0), i_max: Math.max(...vv('i'), 0), t_max: Math.max(...vv('temp'), -99),
-      min_saida: at.length * 5,                                  // minutos com tensao de saida (amostra de 5 min)
-      ini_saida: at.length ? at[0].t.slice(11, 16) : null, fim_saida: at.length ? at[at.length - 1].t.slice(11, 16) : null,
       alarme: conta(L.map((x) => x.al).filter((x) => x)), falha: conta(L.map((x) => x.fa).filter((x) => x)),
       st: conta(L.map((x) => x.st)) });
     if (out[out.length - 1].t_max === -99) out[out.length - 1].t_max = null;
