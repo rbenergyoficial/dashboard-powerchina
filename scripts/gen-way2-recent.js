@@ -347,6 +347,28 @@ function gerarSaude(dados, agoraMs) {
       } else {
         console.log('portal_vivo.json NAO gerado — sem leitura do complexo no dia');
       }
+      // 5) portal_eletrico.json — as oito grandezas do DIA, medidor a medidor, na grade de 5 min (PROMOVER portal-eletrico).
+      // Arquivo a parte porque so a tela Ao vivo o baixa: ~85 KB no gzip com o dia inteiro, contra os 3,5 MB do eletrico.
+      // ⚠️ Num try: uma falha AQUI nao pode derrubar o passo, que segura o remendo do executivo logo depois. Ela nao fica
+      //    calada: o ensaio de produto, no fim do job e com always(), reprova o arquivo velho ou ausente.
+      let pe = null;
+      try { pe = require('./lib/portal-eletrico.js').monta(eletJson, require('./lib/portal-vivo.js').mapaCircuitos()); }
+      catch (e) { console.error('ERRO portal_eletrico.json NAO gerado: ' + e.message); }
+      // 🔴 a REGRA segura o blob aqui: o arquivo montado e conferido contra a MESMA fonte, pela referencia independente do
+      //    ensaio; com achado, nao grava (o ar fica com o anterior, e o ensaio de produto no fim do job o denuncia)
+      if (pe) {
+        const achados = [];
+        try { require('./ensaio-portal-eletrico.js').confere(pe, eletJson, achados, {}); } catch (e) { achados.push('a conferencia quebrou: ' + e.message); }
+        if (achados.length) { console.error('ERRO portal_eletrico.json NAO gravado — ' + achados.length + ' achado(s): ' + achados.slice(0, 3).join(' | ')); pe = null; }
+      }
+      if (pe) {
+        const gz = require('zlib').gzipSync(Buffer.from(JSON.stringify(pe), 'utf8'));
+        await container.getBlockBlobClient('portal_eletrico.json').upload(gz, gz.length, {
+          blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=60' } });
+        console.log(`portal_eletrico.json OK · ${pe.n} instantes ate ${pe.hora} · ${pe.medidores.length} series · ${(gz.length / 1024).toFixed(1)} KB`);
+      } else {
+        console.log('portal_eletrico.json NAO gerado — nenhum medidor com potencia ativa no dia');
+      }
     }
 
     const ruins = saude.medidores.filter(m => m.estado !== 'ok');

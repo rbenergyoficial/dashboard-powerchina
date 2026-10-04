@@ -217,6 +217,9 @@ async function main() {
     const elet = process.env.LOCAL_ELET ? local(process.env.LOCAL_ELET) : await getJSON(BASE + 'way2_eletrico.json?t=' + Date.now());
     const diaF = (elet.dataInicio || '').slice(0, 10);
     const hc = [...((indexa(elet).get(L.COMPLEXO) || new Map()).get('Demat') || new Map()).keys()].sort();
+    // de 00:00 a ~00:10 o coletor grava o dia novo sem leitura nenhuma e o gerador (certo) nao regrava: o produto e o de
+    // ontem. Isso e "nao se aplica", nao defeito — eram tres vermelhos falsos por noite (03:00Z a 03:10Z de 04/10/2026).
+    if (!hc.length) { console.log('nao se aplica: o dia ' + diaF + ' ainda nao tem leitura do complexo (o produto e o de ' + pv.dia + ')'); return; }
     if (diaF !== pv.dia || hc[hc.length - 1] !== pv.hora) {
       // no job os dois saem da mesma rodada; diferentes, a comparacao mediria a corrida e nao a lib
       console.error('REPROVADO: a fonte (' + diaF + ' ' + hc[hc.length - 1] + ') e o produto (' + pv.dia + ' ' + pv.hora + ') sao de instantes diferentes');

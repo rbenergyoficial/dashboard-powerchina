@@ -97,6 +97,17 @@ jobs:
       - name: Ensaio · circuitos do portal_vivo (produto)
         if: always()
         run: node scripts/ensaio-portal-vivo-circuitos.js --produto
+      # As oito grandezas do dia, medidor a medidor (portal_eletrico.json). Quem SEGURA o blob e o proprio gerador: ele confere o
+      # arquivo montado contra a mesma fonte, pela referencia deste ensaio, e nao grava com achado (sem parar o passo, que segura o
+      # remendo do executivo). Aqui, no fim e com always(): a REGRA em casos forjados (valores a mao, defeitos plantados com a
+      # mensagem certa, o dia novo sem leitura como "nao se aplica") e o PRODUTO no ar contra o way2_eletrico.json da rodada,
+      # inclusive a afirmacao do rotulo, no bruto: o ponto 6233 e a soma (media, na tensao) dos 22 circuitos.
+      - name: Ensaio · grandezas eletricas do dia (regra)
+        if: always()
+        run: node scripts/ensaio-portal-eletrico.js --lib
+      - name: Ensaio · grandezas eletricas do dia (produto)
+        if: always()
+        run: node scripts/ensaio-portal-eletrico.js --produto
       # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
       # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
       # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com always():
