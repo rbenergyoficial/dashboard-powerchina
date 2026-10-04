@@ -1,0 +1,31 @@
+name: Auditoria Way2 · quais grandezas, para quais medidores
+
+# SOMENTE LEITURA. Nao grava blob, nao toca em producao, nao tem cron.
+# Pergunta a Way2, um codigo por chamada, se ela aceita a grandeza, em quantos dos 25 medidores
+# (22 circuitos, dois trafos de 230 kV, o complexo) ela vem, se vem fresca, e se a aparente e o
+# fator de potencia batem com raiz(P^2 + Q^2) e P / S no mesmo instante.
+on:
+  workflow_dispatch:
+    inputs:
+      dia:
+        description: 'dia completo a auditar (AAAA-MM-DD; vazio = ontem)'
+        required: false
+        default: ''
+      extras:
+        description: 'codigos a mais, separados por virgula'
+        required: false
+        default: ''
+jobs:
+  audita:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Quais grandezas, para quais medidores
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DIA_ALVO: ${{ inputs.dia }}
+          EXTRAS: ${{ inputs.extras }}
+        run: node scripts/audita-way2-grandezas.js
