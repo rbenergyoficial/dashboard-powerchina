@@ -246,6 +246,9 @@ DIAS.forEach((d, di) => HH.forEach((h, k) => { const p = perfil(k, 0.95) + perfi
   est.push([d + ' ' + h + ':00', 20, k === 50 ? 0 : PT1(p), di === 0 ? 32767 : PT2(p), p, 7040, 1000, 2, 2, 704].join(', ')); }));
 const PID_H = ['Horário', ...Object.values(S.PID_COLS)];
 const pid = []; for (const d of DIAS) HH.forEach((h, k) => pid.push([d + ' ' + h + ':00', 75, k > 240 ? 300 : 0, k > 240 ? 2 : 0, 45, 0, 0, 85].join(', ')));
+// um dia NOVO do logger do TS6 (01/10), so na rodada 4: o arquivo do PT100 por eletrocentro tem de ACUMULAR
+const estDia = (d) => HH.map((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92); return [d + ' ' + h + ':00', 20, PT1(p), PT2(p), p, 7040, 1000, 2, 2, 704].join(', '); });
+const ZIP_EST_NOVO = path.join(RAW, 'M10', 'TS05', 'PID 100', '01.10.zip');
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', 'PID 100', '28.09 A 30.09.zip'), zip([
   { nome: 'hiscsv/HIS_B0000000006_202609280000_202609302355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + est.join('\n') + '\n', metodo: 8 },
   { nome: 'hiscsv/HIS_6_8510_202609280000_202609302355.csv', dados: '﻿' + PID_H.join(',') + '\n' + pid.join('\n') + '\n', metodo: 8 }]));
@@ -285,6 +288,7 @@ function cenario(gen) {
   for (const n of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, n));
   const novo = path.join(RAW, 'M06', 'TS01', '01 A 05', '26.09.zip');
   if (fs.existsSync(novo)) fs.unlinkSync(novo);
+  if (fs.existsSync(ZIP_EST_NOVO)) fs.unlinkSync(ZIP_EST_NOVO);
   try {
     // 1 · primeira rodada
     let log = roda(gen);
@@ -303,6 +307,11 @@ function cenario(gen) {
       && t28.pt2_max === null && t28.pt2_min === null && t28.n_pt2 === 0 && t28.pt1_min === 30
       && PT.length === 863 && PT.every((x) => x.chave === 'M1/TS6') && pt12.pt1 === PT1(pMax) && pt12.pt2 === PT2(pMax) && pt12.p === pMax / 1000
       && pt12.ms === Date.parse('2026-09-29T12:00:00-03:00') && !PT.some((x) => x.pt1 === 0 || x.pt2 === 32767);
+    // o arquivo POR ELETROCENTRO: so o TS do logger (TS6), com as mesmas linhas da serie de 5 min, e o ms do instante
+    const leOu = (n) => (fs.existsSync(path.join(OUT, n)) ? le(n) : { serie: [] });
+    const ET = leOu('sg_pt_M1_TS6.json').serie, et12 = ET.find((x) => x.t === '2026-09-29 12:00') || {};
+    R.okPtEtc = ET.length === 863 && !fs.existsSync(path.join(OUT, 'sg_pt_M1_TS5.json')) && et12.pt1 === PT1(pMax) && et12.pt2 === PT2(pMax)
+      && et12.p === pMax / 1000 && et12.ms === Date.parse('2026-09-29T12:00:00-03:00') && ET[0].t === '2026-09-28 00:00';
     R.txt.pt = '29/09 PT1 ' + t29.pt1_max + ' as ' + t29.pt1_h + ' min ' + t29.pt1_min + ' n ' + t29.n_pt1 + ' · PT2 ' + t29.pt2_max + ' · 28/09 PT2 ' + t28.pt2_max + ' · 5 min ' + PT.length + ' linhas, ' + pt12.chave;
     const p29 = P.find((x) => x.d === '2026-09-29');
     R.okPidCampos = !!p29 && p29.v_max === 300 && !('min_saida' in p29) && !('ini_saida' in p29) && !('fim_saida' in p29);
@@ -353,16 +362,18 @@ function cenario(gen) {
     log = roda(gen);
     R.okIdem = /novos ou mudados: 0/.test(log) && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     R.okNaoRepete = lidosFundo(log) === 0;
-    // 3 · migracao por MARCA, com o esquema 2 FIEL (o que esta no ar): o eletrocentro sem os campos novos do PT100 e sem a serie de 5 min
-    const h = le('sg_hist.json'); h.esquema = 2; delete h.pt5;
-    for (const o of Object.values(h.est)) for (const x of Object.values(o.dias)) for (const k of ['pt1_h', 'pt2_h', 'pt1_min', 'pt2_min', 'n_pt1', 'n_pt2']) delete x[k];
+    // 3 · migracao por MARCA, com o esquema 3 FIEL (o que esta no ar): o historico igual e SEM os arquivos do PT100 por eletrocentro
+    const h = le('sg_hist.json'); h.esquema = 3;
+    for (const n of fs.readdirSync(OUT)) if (/^sg_pt_M\d+_TS\d+\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
     grava('sg_hist.json', h);
     log = roda(gen);
-    R.okMigra = /esquema 2 -> 3: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
+    R.okMigra = /esquema 3 -> 4: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
       && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     // 4 · dia novo do inversor sem posicao: a busca VOLTA (1 export do M6) e a memoria anda para o dia novo
     fs.writeFileSync(novo, zipNunca('2026-09-26'));
+    fs.writeFileSync(ZIP_EST_NOVO, zip([{ nome: 'hiscsv/HIS_B0000000006_202610010000_202610012355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + estDia('2026-10-01').join('\n') + '\n', metodo: 8 }]));
     log = roda(gen);
+    { const E2 = (fs.existsSync(path.join(OUT, 'sg_pt_M1_TS6.json')) ? le('sg_pt_M1_TS6.json') : { serie: [] }).serie; R.okPtAcumula = E2.length === 863 + 288 && E2[0].t === '2026-09-28 00:00' && E2.some((x) => x.t === '2026-10-01 12:00'); }
     R.okBuscaVolta = lidosFundo(log) === 1 && le('sg_ident.json').busca[NUNCA] === '2026-09-26';
     // 5 · linha sem t0/t1 (nao apurada) sai parcial nula e fora da conferencia
     const h2 = le('sg_hist.json'); delete h2.inv[INVS[0].sn].dias['2026-09-29'].t0; grava('sg_hist.json', h2);
@@ -383,6 +394,8 @@ ok(R.okBusca1, 'busca funda: ' + R.txt.busca1 + ' exports lidos (esperado 3: o t
 ok(R.okSemPos, 'sem posicao: so o numero de serie que o SCADA nao tem, com a busca lembrada pelo ultimo dia do logger (25/09)');
 ok(R.okPid, 'o logger e o PID da pasta do TS5 vao para o TS6, pela potencia: ' + R.txt.pid);
 ok(R.okPt, 'temperatura PT100 do eletrocentro: maximo, hora, minimo sem o zero solto, sensor ausente nulo, e a serie de 5 min no TS do logger com a potencia: ' + R.txt.pt);
+ok(R.okPtEtc, 'PT100 por eletrocentro: um arquivo so do TS do logger (TS6), 863 linhas de 5 min, valores e instante iguais');
+ok(R.okPtAcumula, 'PT100 por eletrocentro ACUMULA: com o dia novo do logger, 863 + 288 linhas e os dias antigos mantidos');
 ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 2)');
 ok(R.okConf, 'conferencia (folga ' + TOL_R.toFixed(6) + '): dias inteiros com razao 1; 01, 02 e 03/10 fora (n_parcial 2, razao nula): ' + R.txt.conf);
 ok(R.okInv, 'sg_inv_dia_M1: 24 inversor-dias, parcial exatamente nos 7 (01 a 03/10 no TS5 e o 505 em 29/09: ' + R.txt.inv + '), energia dos inteiros a ' + TOL_E.toFixed(2) + ' kWh do SCADA');
@@ -392,7 +405,7 @@ ok(R.okSaudeResumo, 'sg_saude: alarme x falha e rede x equipamento contados em s
 ok(R.okParado, 'o inversor parado o dia inteiro, lido inteiro, num dia em que a usina gerou: parcial = false');
 ok(R.okIdem, 'segunda rodada: nenhum zip novo, produtos identicos');
 ok(R.okNaoRepete, 'segunda rodada: a busca funda nao se repete (nenhum dado novo do inversor sem posicao)');
-ok(R.okMigra, 'historico de esquema 2 FIEL (eletrocentro sem os campos do PT100, sem a serie de 5 min): relido inteiro, produtos identicos');
+ok(R.okMigra, 'historico de esquema 3 FIEL (sem os arquivos do PT100 por eletrocentro): relido inteiro, produtos identicos (os arquivos refeitos)');
 ok(R.okBuscaVolta, 'dia novo do inversor sem posicao: a busca volta (1 export) e a memoria anda para 26/09');
 ok(R.okNula, 'linha sem t0/t1: parcial nula, fora da conferencia (29/09 com 3 + 1) e fora dos inteiros do resumo da saude');
 
@@ -405,7 +418,7 @@ function planta(nome, de, para, chave) {
   fs.writeFileSync(g, src.split(de).join(para));
   let r2;
   try { r2 = cenario(g); } finally { fs.unlinkSync(g); }
-  ok(!r2.erro && r2[chave] === false, 'plantio "' + nome + '" reprova em ' + chave + (r2.erro ? ' (estourou: ' + r2.erro + ')' : ''));
+  ok(r2[chave] === false, 'plantio "' + nome + '" reprova em ' + chave + (r2.erro ? ' (e depois estourou: ' + r2.erro.slice(0, 80) + ')' : ''));
 }
 // o plantio na LIB: uma copia da lib mudada e um gerador que a le no lugar da original
 const srcLib = fs.readFileSync(path.join(__dirname, 'lib-sungrow.js'), 'utf8');
@@ -442,12 +455,14 @@ planta('parcial nulo vira inteiro na saude', 'p: x.parcial == null ? null : (x.p
 planta('isolamento com a limitacao', 'iso: x.iso_min, lim: x.lim_pct', 'iso: x.lim_pct, lim: x.lim_pct', 'okSaudeCampos');
 planta('temperatura de 5 min pela pasta', "const ch = o.ufv + '/' + tsDoLogger[sn].ts;", "const ch = o.ufv + '/' + o.pasta;", 'okPt');
 plantaLib('zero do PT100 como temperatura', 'return x != null && x > 0 ? x : null;', 'return x != null ? x : null;', 'okPt');
+planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).map', 'const tudo = new Map(([]).map', 'okPtAcumula');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');
 planta('busca que nao para no casamento', 'if (!faltam.length) break;', '', 'okBusca1');
 planta('busca nunca repetida', 'busca[sn] !== ultimo(sn)', '!(sn in busca)', 'okBuscaVolta');
 planta('busca sem memoria', ' && busca[sn] !== ultimo(sn)', '', 'okNaoRepete');
-planta('migra mantendo o historico', 'hist = null; }', 'hist.esquema = ESQ_HIST; }', 'okMigra');
+// na transicao 3 -> 4 o que importa e RELER os zips (o arquivo por eletrocentro so se constroi lendo); migrar sem reler tem de reprovar
+planta('migra sem reler os zips', 'const lidosAnt = REFAZER || migra ? null :', 'const lidosAnt = REFAZER ? null :', 'okMigra');
 
 console.log(falhas.length ? '\n' + falhas.length + ' FALHA(S)' : '\nensaio-sungrow: tudo ok');
 process.exit(falhas.length ? 1 : 0);

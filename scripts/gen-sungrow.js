@@ -35,7 +35,9 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 3;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro
+const ESQ_HIST = 4;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
+                                                            // 4: PT100 de 5 min por eletrocentro com o historico inteiro (so relendo se constroi)
+const DIAS_PT = 365;                                        // a serie de 5 min do PT100 por eletrocentro guarda um ano
 const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1 (nomenclatura das usinas)
@@ -159,6 +161,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const guardaP = (store, key, linhas) => { const s = store[key] || (store[key] = {});
     for (const x of linhas) { const p = x._p; delete x._p; if (p && (!s[x.d] || Object.keys(p).length > Object.keys(s[x.d]).length)) s[x.d] = p; }
     corta(s, P_DIAS); };
+  const ptRodada = {};                                     // PT100 de 5 min de TUDO o que esta rodada leu, por logger
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
   const novos = raw.filter((z) => lidos.get(z.nome) !== z.bytes);
@@ -204,7 +207,9 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         const dl = S.diaEstacao(cab, linhas, onde); guardaP(H.pest, m[1], dl);
         // a temperatura de 5 min do barramento de BT (PT 1, PT 2) e a potencia do eletrocentro no mesmo carimbo
         const s5 = H.pt5[m[1]] || (H.pt5[m[1]] = {});
-        for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) s5[x.d + ' ' + h] = a; }
+        // e a MESMA serie, sem corte, para o arquivo por eletrocentro (so o que esta rodada leu; o resto vem do arquivo publicado)
+        const sr = ptRodada[m[1]] || (ptRodada[m[1]] = {});
+        for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) { s5[x.d + ' ' + h] = a; sr[x.d + ' ' + h] = a; } }
         const dp5 = [...new Set(Object.keys(s5).map((t) => t.slice(0, 10)))].sort();
         if (dp5.length > DIAS_5MIN) { const c5 = dp5[dp5.length - DIAS_5MIN]; for (const t of Object.keys(s5)) if (t.slice(0, 10) < c5) delete s5[t]; }
         junta(o.dias, dl);
@@ -434,6 +439,38 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     pesos['sg_pt_5min_' + u + '.json'] = await escreve('sg_pt_5min_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1, janela_dias: DIAS_5MIN,
       unidade: 'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro)', serie: L });
   }
+  /* -------- o PT100 de 5 min POR ELETROCENTRO, com o historico (DIAS_PT), para o grafico que acompanha o filtro de periodo
+     da pagina (pedido de 04/10/2026). Seis meses das oito usinas num arquivo so passariam do teto de ~1.100 KB que a pagina
+     baixa; por eletrocentro sao ~400 KB e a pagina baixa so o da caixa escolhida. 🔴 ACUMULATIVO: o historico interno so
+     guarda DIAS_5MIN dias do 5 min (memoria e peso), entao o que a rodada leu e FUNDIDO no arquivo publicado do
+     eletrocentro (a rodada nova ganha no mesmo instante). Arquivo ausente (404) = primeira vez; outra falha de leitura
+     aborta (regravar sem ele apagaria o acumulado). O historico inteiro so se constroi relendo os zips: ESQ_HIST 4 -------- */
+  const porEtc = {};
+  for (const [sn, s] of Object.entries(ptRodada)) {
+    const o = H.est[sn]; if (!o || !tsDoLogger[sn]) continue;
+    const k = o.ufv + '_' + tsDoLogger[sn].ts;
+    const m = porEtc[k] || (porEtc[k] = new Map());
+    for (const [t, v] of Object.entries(s)) m.set(t, v);
+  }
+  // todo eletrocentro com logger tem arquivo, mesmo vazio: URL que nao resolve deixa o painel em erro, nao vazio
+  const etcs = new Set(Object.keys(H.est).filter((sn) => tsDoLogger[sn]).map((sn) => H.est[sn].ufv + '_' + tsDoLogger[sn].ts));
+  let ptEscritos = 0, ptLinhas = 0;
+  for (const k of [...etcs].sort()) {
+    const novo = porEtc[k] || new Map();
+    const ant = await leAnterior('sg_pt_' + k + '.json');
+    if (!novo.size && ant) continue;                       // nada novo deste eletrocentro: o publicado continua valendo
+    const tudo = new Map(((ant && ant.serie) || []).map((r) => [r.t, [r.pt1, r.pt2, r.p]]));
+    for (const [t, v] of novo) tudo.set(t, v);
+    const ts = [...tudo.keys()].sort();
+    const corte = ts.length ? new Date(Date.parse(ts[ts.length - 1].slice(0, 10) + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5).toISOString().slice(0, 10) : '';
+    const serie = ts.filter((t) => t.slice(0, 10) >= corte).map((t) => { const v = tudo.get(t);
+      return { t, ms: Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3, pt1: v[0], pt2: v[1], p: v[2] }; });
+    const [u, tsx] = k.split('_');
+    pesos['sg_pt_' + k + '.json'] = await escreve('sg_pt_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_PT,
+      unidade: 'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro); ms epoch do instante (BRT)', serie });
+    ptEscritos += 1; ptLinhas += serie.length;
+  }
+  console.log('  PT100 por eletrocentro: ' + ptEscritos + ' arquivo(s) gravado(s), ' + ptLinhas + ' linhas');
 
   /* -------- conferencia: energia do dia, logger x export do SCADA, mesmo inversor e dia -------- */
   let invSc = null;
