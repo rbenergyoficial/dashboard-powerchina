@@ -23,6 +23,8 @@ const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 const { horasDoDia } = require('./lib-horas.js');
 // a conta dos campos da manchete que se movem no dia — a MESMA que o executivo chama
 const { remendaManchete } = require('./lib-manchete.js');
+// a guarda do dia em curso: teto FISICO (343,77 MW x horas desde 05:00), PROMOVER executivo-teto-fisico
+const { guardaDia } = require('./lib-teto-dia.js');
 
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -75,7 +77,7 @@ function baixa(url) {
   if (!conn && !process.env.LOCAL_OUT) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
 
   if (process.env.LOCAL_OUT) {
-    console.log('[ensaio] ' + hoje + ' ate ' + linha.ate + ' · ' + linha.slots + ' slots');
+    console.log('[ensaio] ' + hoje + ' ate ' + linha.ate + ' · ' + linha.slots + ' slots · guarda: ' + (guardaDia(r2(val.Complexo), null, linha.ate) || 'passa'));
     Object.entries(val).forEach(([u, v]) => console.log('   ' + u.padEnd(9) + r2(v) + ' MWh'));
     // ⚠️ a camada horaria entra no ensaio TAMBEM: bloco so visto em producao nao esta testado
     const hs = horasDoDia(snap, hoje).horas;
@@ -112,17 +114,12 @@ function baixa(url) {
   });
   if (n !== 12) { console.log('esperava 12 entidades no dia, patchei ' + n + ' — abortando'); process.exit(1); }
 
-  // guarda: o dia em curso nunca pode passar do maior dia ja registrado no mes, e nunca
-  // pode ENCOLHER dentro do mesmo dia (o snapshot so cresce). Qualquer um dos dois e sinal
-  // de leitura torta, e publicar seria pior que ficar com o valor de antes.
-  const mes = hoje.slice(0, 7);
-  const outros = (j.serie_dia_ufv || [])
-    .filter((x) => x.ufv === 'Complexo' && x.dia.slice(0, 7) === mes && x.dia !== hoje && x.liq_mwh != null)
-    .map((x) => x.liq_mwh);
-  const teto = outros.length ? Math.max.apply(null, outros) * 1.25 : Infinity;
+  // guarda: o dia em curso nunca passa do teto FISICO (343,77 MW x horas desde 05:00 ate o ultimo instante) e nunca ENCOLHE
+  // dentro do mesmo dia (o snapshot so cresce). Qualquer um dos dois e leitura torta, e publicar seria pior que ficar com o
+  // valor de antes. (Era "o maior dia do mes x 1,25": no inicio de um mes com dias cortados, ele recusava um dia de sol — 05/10/2026.)
   const novo = r2(val.Complexo);
-  if (novo > teto) { console.log('dia em curso ' + novo + ' MWh acima do teto ' + Math.round(teto) + ' — abortando'); process.exit(1); }
-  if (antes != null && novo < antes - 1) { console.log('dia em curso ENCOLHEU (' + antes + ' -> ' + novo + ') — abortando'); process.exit(1); }
+  const motivo = guardaDia(novo, antes, linha.ate);
+  if (motivo) { console.log(motivo + ' — abortando'); process.exit(1); }
 
   // ---- a MANCHETE do mesmo dia ---------------------------------------------
   //

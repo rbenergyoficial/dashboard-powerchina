@@ -62,6 +62,8 @@ jobs:
       # linhas forjadas (lib quebrada nao chega ao blob); o PRODUTO, no fim do job.
       - name: Ensaio · o remendo nao conta o dia duas vezes (regra)
         run: node scripts/ensaio-manchete-noite.js --lib
+      - name: Ensaio · o teto fisico do dia em curso (regra)
+        run: node scripts/ensaio-teto-dia.js
       - name: Dia em curso no executivo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
