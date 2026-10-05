@@ -71,7 +71,8 @@ console.log('1 · lib-zip');
 const INV_COLS = ['Horário', 'Potência ativa nominal', 'Modo de potência limitada', 'Geração de energia ao longo do dia', 'Geração total',
   'Temperatura de ar interna', 'Potência CC total', 'Potência ativa total', 'Potência ativa total', 'Status de operação do inversor',
   'Código de falha', 'Impedância paralela em relação à terra', 'Tempo de operação diário', 'Tensão de pólo negativo / terra',
-  'Tensão do barramento', 'Tensão MPPT1', 'Estado de trabalho PID', 'Código de falha PID', 'Eficiência do inversor'];
+  'Tensão do barramento', 'Tensão MPPT1', 'Estado de trabalho PID', 'Código de falha PID', 'Eficiência do inversor',
+  ...Array.from({ length: 11 }, (_, k) => 'Tensão MPPT' + (k + 2)), ...Array.from({ length: 12 }, (_, k) => 'Corrente MPPT' + (k + 1))];
 const DIAS = ['2026-09-28', '2026-09-29', '2026-09-30'];
 const HH = []; for (let m = 0; m < 1440; m += 5) HH.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
 const perfil = (k, f) => { const h = k / 12; return h < 6 || h > 18 ? 0 : Math.round(300000 * f * Math.sin(Math.PI * (h - 6) / 12) ** 2); };  // W
@@ -89,12 +90,52 @@ function csvInversor(vida0, f, ordem, dias, corte, cod, q) {
         'Geração de energia ao longo do dia': Math.round(dia * 10), 'Geração total': Math.round(vida * 10), 'Temperatura de ar interna': q.t || 450,
         'Potência CC total': Math.round(p * 1.015), 'Potência ativa total': p, 'Status de operação do inversor': p ? 4 : 0, 'Código de falha': (cod && cod[d] && cod[d][k]) || 0,
         'Impedância paralela em relação à terra': q.iso || 500, 'Tempo de operação diário': p ? 1 : 0, 'Tensão de pólo negativo / terra': -7000,
-        'Tensão do barramento': 13000, 'Tensão MPPT1': 13000, 'Estado de trabalho PID': 0, 'Código de falha PID': 0, 'Eficiência do inversor': q.ef || 9870 };
+        'Tensão do barramento': 13000, 'Estado de trabalho PID': 0, 'Código de falha PID': 0, 'Eficiência do inversor': q.ef || 9870 };
+      /* os MPPT: 1300 V (0,1 V) e a corrente da potencia dividida por 11 (0,1 A); o MPPT12 sem string (443 V e 0 A, como no
+         logger real); `q.mppt` {k: fator} tira tensao de um MPPT, `q.mpptI` {k: fator} tira corrente; durante a LIMITACAO
+         o MPPT5 sobe 10 % (o rastreador fora do ponto de maxima potencia), e isso nao pode entrar na razao */
+      const lim = v['Modo de potência limitada'] === 1;
+      for (let m = 1; m <= 12; m += 1) {
+        const fv = ((q.mppt || {})[m] || 1) * (lim && m === 5 ? 1.1 : 1), fi = (q.mpptI || {})[m] || 1;
+        v['Tensão MPPT' + m] = m === 12 ? 4430 : Math.round(13000 * fv);
+        v['Corrente MPPT' + m] = m === 12 ? 0 : Math.round((p / 1300 / 11) * 10 * fi); }
       linhas.push(ordem.map((c, i) => (c === 'Potência ativa total' && ordem.indexOf(c) !== i ? 0 : v[c])).join(', ')); }); }
   return '﻿' + ordem.join(',') + '\n' + linhas.join('\n') + '\n';
 }
 
+/* a tensao dos MPPT na LIB, direto na mpptDoDia, com as fronteiras (achados do revisor, 05/10/2026). Dia A, 20 instantes a
+   200 kW sem limitacao: MPPT3 a 0,966; MPPT2 a 12000 nos 3 PRIMEIROS (mediana 1, primeiro valor 0,923); MPPT12 com o
+   residuo real de 0,3 A (3 em 0,1 A) e o MPPT10 com 30 exatos: os dois NULOS (piso estrito de 3 A); o MPPT11 com 31: entra;
+   o MPPT9 acima do piso em 5 instantes (nulo) e o MPPT8 em 6 (razao). Mais 3 instantes com UM so MPPT acima do piso (nao
+   contam) e 2 limitados com o MPPT4 a 15000 (nao contam). Dia B com 5 instantes: nulo; dia C com 6: entra. Sem a coluna
+   "Corrente MPPT7": estoura com o nome */
+function casosMppt(SL) {
+  const cab = ['Horário', 'Potência ativa total', 'Modo de potência limitada', ...Array.from({ length: 12 }, (_, k) => 'Tensão MPPT' + (k + 1)),
+    ...Array.from({ length: 12 }, (_, k) => 'Corrente MPPT' + (k + 1))];
+  const linha = (d, k, p, lim, V, I) => [d + ' 12:' + String(k).padStart(2, '0') + ':00', p, lim, ...V, ...I].map(String);
+  const A = [];
+  for (let k = 0; k < 20; k += 1) {
+    const V = Array(12).fill(13000), I = Array(12).fill(100);
+    V[2] = 12558; if (k < 3) V[1] = 12000; V[11] = 4430; I[11] = 3; I[9] = 30; I[10] = 31; if (k >= 5) I[8] = 0; if (k >= 6) I[7] = 0;
+    A.push(linha('2026-09-29', k, 200000, 0, V, I));
+  }
+  for (let k = 20; k < 23; k += 1) { const I = Array(12).fill(0); I[0] = 100; A.push(linha('2026-09-29', k, 200000, 0, Array(12).fill(13000), I)); }
+  // e 2 instantes com EXATAMENTE dois MPPT acima do piso: contam (n 22)
+  for (let k = 25; k < 27; k += 1) { const I = Array(12).fill(0); I[0] = 100; I[1] = 100; A.push(linha('2026-09-29', k, 200000, 0, Array(12).fill(13000), I)); }
+  for (let k = 23; k < 25; k += 1) { const V = Array(12).fill(13000); V[3] = 15000; A.push(linha('2026-09-29', k, 200000, 1, V, Array(12).fill(100))); }
+  const dia = (n) => Array.from({ length: n }, (_, k) => linha('2026-09-30', k, 200000, 0, Array(12).fill(13000), Array(12).fill(100)));
+  const a = SL.mpptDoDia(cab, A, 'A') || { r: [], i: [] }, b = SL.mpptDoDia(cab, dia(5), 'B'), c = SL.mpptDoDia(cab, dia(6), 'C');
+  let estourou = false;
+  try { SL.mpptDoDia(cab.filter((x) => x !== 'Corrente MPPT7'), A.map((l) => l.filter((x, i) => cab[i] !== 'Corrente MPPT7')), 'z.csv'); }
+  catch (e) { estourou = /z\.csv: coluna "Corrente MPPT7" ausente/.test(e.message); }
+  const ok = a.n === 22 && a.v === 1300 && a.r[0] === 1 && a.r[1] === 1 && a.r[2] === 0.966 && a.r[3] === 1 && a.r[7] === 1 && a.r[8] === null
+    && a.r[9] === null && a.r[10] === 1 && a.r[11] === null && a.i[10] === 0.31 && a.i[2] === 1 && b === null && !!c && c.n === 6 && estourou;
+  return { ok, txt: 'n ' + a.n + ' · MPPT2 ' + a.r[1] + ' · MPPT3 ' + a.r[2] + ' · MPPT8/9 ' + a.r[7] + '/' + a.r[8] + ' · MPPT10/11/12 ' + a.r[9] + '/' + a.r[10] + '/' + a.r[11]
+    + ' (i11 ' + a.i[10] + ') · dia de 5 ' + (b === null ? 'nulo' : 'ENTROU') + ', de 6 ' + (c ? c.n : 'nulo') + ' · coluna faltando ' + (estourou ? 'estoura' : 'NAO estoura') };
+}
+
 console.log('\n2 · lib-sungrow');
+{ const m = casosMppt(S); ok(m.ok, 'tensao dos MPPT na lib: piso estrito de 3 A, minimos de 6, mediana, instante com um so MPPT e limitacao fora: ' + m.txt); }
 { const a = S.le(csvInversor(800000, 1, INV_COLS)), embaralhado = [INV_COLS[0], ...INV_COLS.slice(1).reverse()];
   const b = S.le(csvInversor(800000, 1, embaralhado));
   const da = S.diaInversor(a.cab, a.linhas, 'a'), db = S.diaInversor(b.cab, b.linhas, 'b');
@@ -204,7 +245,8 @@ const PARADO = { sn: 'A0000000504', pos: 'M1/TS5/INV04', v0: 850000, f: 0 };
 const VELHO = { sn: 'A0000000503', pos: 'M1/TS5/INV03', v0: 840000, f: 0.90, dia0: '2026-09-25' };
 for (const x of [...INVS, PARADO]) x.dia0 = DIAS[0];
 // grandezas por inversor (t em 0,1 °C, iso kΩ, ef em 0,01 %); o 601 tem potencia limitada de 10:00 a 15:00 (indices 120 a 179)
-Object.assign(INVS[0], { q: { t: 450, iso: 500, ef: 9870 } }); Object.assign(INVS[1], { q: { t: 470, iso: 300, ef: 9850 } });
+// o 501 com um modulo a menos no MPPT3 (0,966 = 28/29, arredondado como o logger grava), o 502 com metade da corrente no MPPT7
+Object.assign(INVS[0], { q: { t: 450, iso: 500, ef: 9870, mppt: { 3: 0.966 } } }); Object.assign(INVS[1], { q: { t: 470, iso: 300, ef: 9850, mpptI: { 7: 0.5 } } });
 Object.assign(INVS[2], { q: { t: 520, iso: 800, ef: 9880, lim: [120, 180] } }); Object.assign(INVS[3], { q: { t: 430, iso: 450, ef: 9860 } });
 PARADO.q = { t: 400, iso: 900, ef: 9870 };
 /* o DIA MISTO: o 505 (TS5) inteiro em 28/09 e parcial em 29/09 (logger ate 12:30), com a temperatura mais alta e o
@@ -224,6 +266,10 @@ fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '28.09 A 30.09.zip'), 
   ({ nome: 'hiscsv/HIS_' + x.sn + '_202609280000_202609302355.csv', dados: csvInversor(x.v0, x.f, INV_COLS, null, null, COD[x.sn], x.q), metodo: i % 2 ? 8 : 0 }))));
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '28.09 A 29.09.zip'), zip([{ nome: 'hiscsv/HIS_' + MISTO.sn + '_202609280000_202609292355.csv',
   dados: csvInversor(MISTO.v0, MISTO.f, INV_COLS, ['2026-09-28', '2026-09-29'], { '2026-09-29': [0, 150] }, null, MISTO.q), metodo: 8 }]));
+fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '00 parcial.zip'), zip([{ nome: 'hiscsv/HIS_' + INVS[1].sn + '_202609280000_202609281100.csv',
+  dados: csvInversor(INVS[1].v0, INVS[1].f, INV_COLS, ['2026-09-28'], { '2026-09-28': [0, 132] }, null, { mppt: { 2: 0.9 } }), metodo: 8 }]));
+fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '29.09 B.zip'), zip([{ nome: 'hiscsv/HIS_' + INVS[0].sn + '_202609290000_202609291100.csv',
+  dados: csvInversor(INVS[0].v0, INVS[0].f, INV_COLS, ['2026-09-29'], { '2026-09-29': [0, 132] }, null, { mppt: { 3: 0.9 } }), metodo: 8 }]));
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', '01 A 05', '25.09.zip'), zip([
   { nome: 'hiscsv/HIS_' + VELHO.sn + '_202609250000_202609252355.csv', dados: csvInversor(VELHO.v0, VELHO.f, INV_COLS, ['2026-09-25']), metodo: 8 }]));
 const zipNunca = (d) => zip([{ nome: 'hiscsv/HIS_' + NUNCA + '_' + d.replace(/-/g, '') + '0000_' + d.replace(/-/g, '') + '2355.csv',
@@ -271,6 +317,14 @@ const pid = []; for (const d of DIAS) HH.forEach((h, k) => pid.push([d + ' ' + h
 const estDia = (d) => HH.map((h, k) => { const p = perfil(k, 0.95) + perfil(k, 0.92); return [d + ' ' + h + ':00', 20, PT1(p), PT2(p), p, 7040, 1000, ...etcDe(p, -1, k)].join(', '); });
 const N_GER = HH.filter((h, k) => perfil(k, 0.95) + perfil(k, 0.92) > 0).length;   // amostras de um dia com o eletrocentro gerando
 const ZIP_EST_NOVO = path.join(RAW, 'M10', 'TS05', 'PID 100', '01.10.zip');
+// e um dia NOVO do 501 (04/10), na rodada 4: o arquivo dos MPPT por eletrocentro tem de ACUMULAR
+const ZIP_INV_NOVO = path.join(RAW, 'M10', 'TS05', '01 A 05', '04.10.zip');
+// a TROCA na rodada 4: o 512 assume a posicao do 502 (M1/TS5/INV02) a partir de 30/09, com o MPPT5 a 0,9; o 502 continua com
+// registro de 30/09 no zip dele, e nao pode mais valer nesse dia
+const TROCA = { sn: 'A0000000512', pos: 'M1/TS5/INV02', v0: 900000, f: 0.97, q: { mppt: { 5: 0.9 } } };
+const ZIP_TROCA = path.join(RAW, 'M10', 'TS05', '01 A 05', '30.09 troca.zip');
+// os instantes que a tensao dos MPPT julga: inversor acima de 150 kW e sem limitacao (o 601 limitado de 120 a 179)
+const julgados = (f, lim) => HH.map((h, k) => k).filter((k) => perfil(k, f) > 150000 && !(lim && k >= lim[0] && k < lim[1])).length;
 fs.writeFileSync(path.join(RAW, 'M10', 'TS05', 'PID 100', '28.09 A 30.09.zip'), zip([
   { nome: 'hiscsv/HIS_B0000000006_202609280000_202609302355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + est.join('\n') + '\n', metodo: 8 },
   { nome: 'hiscsv/HIS_6_8510_202609280000_202609302355.csv', dados: '﻿' + PID_H.join(',') + '\n' + pid.join('\n') + '\n', metodo: 8 }]));
@@ -305,12 +359,15 @@ const semGerado = (n) => JSON.stringify(le(n), (k, v) => (k === 'gerado_em' ? un
 const lidosFundo = (log) => { const m = log.match(/busca funda: (\d+) export/); return m ? Number(m[1]) : 0; };
 
 /* o CENARIO inteiro, cinco rodadas; o gerador de verdade e cada plantio passam por ele todo */
-function cenario(gen) {
+function cenario(gen, lib) {
   const R = { txt: {} };
+  { const q = require.resolve(lib || './lib-sungrow.js'); delete require.cache[q]; R.okLibMppt = casosMppt(require(q)).ok; delete require.cache[q]; }
   for (const n of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, n));
   const novo = path.join(RAW, 'M06', 'TS01', '01 A 05', '26.09.zip');
   if (fs.existsSync(novo)) fs.unlinkSync(novo);
   if (fs.existsSync(ZIP_EST_NOVO)) fs.unlinkSync(ZIP_EST_NOVO);
+  if (fs.existsSync(ZIP_INV_NOVO)) fs.unlinkSync(ZIP_INV_NOVO);
+  if (fs.existsSync(ZIP_TROCA)) fs.unlinkSync(ZIP_TROCA);
   try {
     // 1 · primeira rodada
     let log = roda(gen);
@@ -349,7 +406,25 @@ function cenario(gen) {
       && t29.n_fora === t29.n_ger5 && T.find((x) => x.d === '2026-09-30').n_fora === 0 && T.find((x) => x.d === '2026-09-30').n_ger5 > 0
       && t29.inv_h_fora === 1 && t28.inv_h_fora === 0 && T.find((x) => x.d === '2026-09-30').inv_h_fora === null;
     // os campos de trabalho (_p, _pt, _etc) nao vazam para o publico nem para o historico
+    // a tensao dos MPPT: o 501 (M1/TS5/INV01) com o MPPT3 a 0,966, o MPPT12 vazio nulo; o 502 com metade da corrente no MPPT7;
+    // o 601 (M1/TS6/INV01) com o MPPT5 desviado SO durante a limitacao: razao 1; e o ranking com o MPPT3 do 501 em primeiro
+    const M5 = leOu('sg_mppt_M1_TS5.json').serie, M6 = leOu('sg_mppt_M1_TS6.json').serie, RK = leOu('sg_mppt.json').serie;
+    const mm = (L, inv, d) => L.find((x) => x.inv === inv && x.d === d) || { r: [], i: [] };
+    const a1 = mm(M5, 'INV01', '2026-09-29'), a2 = mm(M5, 'INV02', '2026-09-29'), b1 = mm(M6, 'INV01', '2026-09-29');
+    R.okMppt = a1.r[2] === 0.966 && a1.r[0] === 1 && a1.r[11] === null && a1.i[2] === 1 && a1.v === 1300 && a1.n === julgados(1)
+      && a1.ms === Date.parse('2026-09-29T00:00:00-03:00') && a2.r[6] === 1 && a2.i[6] === 0.5
+      // o parcial do 502 em 28/09 lido ANTES do inteiro (e o do 501 em 29/09 lido DEPOIS): fica o de mais instantes
+      && mm(M5, 'INV02', '2026-09-28').r[1] === 1 && mm(M5, 'INV02', '2026-09-28').n === julgados(0.97) && a1.sn === INVS[0].sn
+      && b1.r[4] === 1 && b1.n === julgados(0.95, [120, 180]) && !M5.some((x) => x.inv === 'INV04')
+      && RK.length > 0 && RK[0].ufv === 'M1' && RK[0].ts === 'TS5' && RK[0].inv === 'INV01' && RK[0].mppt === 3 && RK[0].r === 0.966
+      && RK[0].mod === 0.99 && RK[0].dias === 5 && !RK.some((x) => x.ts === 'TS6') && !RK.some((x) => x.mppt === 12)
+      // a corrente do ranking: o MPPT7 do 502 pela metade (na rodada 4 a troca o tira da janela: so 4 dias na posicao)
+      && RK.some((x) => x.ts === 'TS5' && x.inv === 'INV02' && x.mppt === 7 && x.i === 0.5 && x.r === 1);
+    R.txt.mppt = '501 MPPT3 ' + a1.r[2] + ' MPPT12 ' + a1.r[11] + ' n ' + a1.n + ' (esperado ' + julgados(1) + ') · 502 MPPT7 i ' + a2.i[6]
+      + ' · 601 MPPT5 ' + b1.r[4] + ' · ranking ' + RK.length + ', 1o ' + (RK[0] ? RK[0].ufv + '/' + RK[0].ts + '/' + RK[0].inv + ' MPPT' + RK[0].mppt + ' ' + RK[0].r + ' (' + RK[0].mod + ' modulo, ' + RK[0].dias + ' d)' : '—');
     R.okSemTrabalho = T.length > 0 && Object.keys(le('sg_hist.json').est).length > 0 && T.every((x) => !Object.keys(x).some((k) => k[0] === '_'))
+      && le('sg_inv_dia_M1.json').serie.length > 0 && le('sg_inv_dia_M1.json').serie.every((x) => !Object.keys(x).some((k) => k[0] === '_'))
+      && Object.values(le('sg_hist.json').inv).every((o) => Object.values(o.dias).every((x) => !Object.keys(x).some((k) => k[0] === '_')))
       && Object.values(le('sg_hist.json').est).every((o) => Object.values(o.dias).every((x) => !Object.keys(x).some((k) => k[0] === '_')));
     R.txt.etc = EC.length + ' linhas (esperado ' + DIAS.length * N_GER + ') · 29/09 12:30 cap ' + ec('2026-09-29 12:30').cap + ' rede ' + ec('2026-09-29 12:30').rede
       + ' · horas fora 28/09 ' + t28.inv_h_fora + ', 29/09 ' + t29.inv_h_fora + ', 30/09 ' + (T.find((x) => x.d === '2026-09-30') || {}).inv_h_fora;
@@ -403,19 +478,60 @@ function cenario(gen) {
     log = roda(gen);
     R.okIdem = /novos ou mudados: 0/.test(log) && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     R.okNaoRepete = lidosFundo(log) === 0;
-    // 3 · migracao por MARCA, com o esquema 4 FIEL (o que esta no ar): o historico sem as horas fora, e SEM os arquivos do
-    //     eletrocentro de 5 min (o do PT100 ja existe e fica)
-    const h = le('sg_hist.json'); h.esquema = 4;
-    for (const o of Object.values(h.est)) for (const x of Object.values(o.dias)) delete x.inv_h_fora;
-    for (const n of fs.readdirSync(OUT)) if (/^sg_etc_M\d+_TS\d+\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
+    // 3 · migracao por MARCA, com o esquema 5 FIEL (o que esta no ar): o historico igual (os MPPT nunca foram para ele), e SEM
+    //     os arquivos dos MPPT (os do PT100 e do eletrocentro de 5 min ja existem e ficam)
+    const h = le('sg_hist.json'); h.esquema = 5;
+    for (const n of fs.readdirSync(OUT)) if (/^sg_mppt(_M\d+_TS\d+)?\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
     grava('sg_hist.json', h);
     log = roda(gen);
-    R.okMigra = /esquema 4 -> 5: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
-      && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
+    R.okMigra = /esquema 5 -> 6: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
+      && Object.keys(antes).length > 0 && Object.keys(antes).every((n) => fs.existsSync(path.join(OUT, n)) && semGerado(n) === antes[n]);
     // 4 · dia novo do inversor sem posicao: a busca VOLTA (1 export do M6) e a memoria anda para o dia novo
     fs.writeFileSync(novo, zipNunca('2026-09-26'));
     fs.writeFileSync(ZIP_EST_NOVO, zip([{ nome: 'hiscsv/HIS_B0000000006_202610010000_202610012355.csv', dados: '﻿' + EST_COLS.join(',') + '\n' + estDia('2026-10-01').join('\n') + '\n', metodo: 8 }]));
+    fs.writeFileSync(ZIP_INV_NOVO, zip([{ nome: 'hiscsv/HIS_' + INVS[0].sn + '_202610040000_202610042355.csv',
+      dados: csvInversor(fimDia(INVS[0], 6), INVS[0].f, INV_COLS, ['2026-10-04'], null, null, INVS[0].q), metodo: 8 }]));
+    fs.writeFileSync(ZIP_TROCA, zip([{ nome: 'hiscsv/HIS_' + TROCA.sn + '_202609300000_202610042355.csv',
+      dados: csvInversor(TROCA.v0, TROCA.f, INV_COLS, ['2026-09-30', '2026-10-04'], null, null, TROCA.q), metodo: 8 }]));
+    { const I4 = le('sg_ident.json');
+      I4.ident[TROCA.sn] = { pos: TROCA.pos, d: '2026-09-30', metodo: 'contador de vida' };
+      // um eletrocentro identificado SEM nenhum inversor-dia de MPPT (M1/TS7): tem de ter arquivo, com a serie vazia
+      I4.ident.A0000000777 = { pos: 'M1/TS7/INV01', d: '2026-09-30', metodo: 'contador de vida' };
+      grava('sg_ident.json', I4);
+      /* no publicado do M1/TS5: o INV08 com 6 dias a mais de 365 dias do ultimo (saem do arquivo); o INV09 com 6 dias logo
+         antes da janela de 30 (ficam no arquivo, fora do ranking); o INV10 com 5 dias e o INV11 com 4 dentro da janela (so o
+         INV10 entra). O ultimo dia passa a ser 04/10: a janela vai de 05/09 a 04/10 */
+      const P4 = le('sg_mppt_M1_TS5.json');
+      const lin = (d, inv, r0) => ({ d, ms: Date.parse(d + 'T03:00:00Z'), inv, n: 50, v: 1300, r: [r0, ...Array(10).fill(1), null], i: Array(11).fill(1).concat([null]) });
+      const dias = (d0, n) => Array.from({ length: n }, (_, k) => new Date(Date.parse(d0 + 'T00:00:00Z') + k * 864e5).toISOString().slice(0, 10));
+      P4.serie.push(lin('2025-10-04', 'INV08', 0.5), lin('2025-10-05', 'INV08', 0.5), ...dias('2026-08-30', 6).map((d) => lin(d, 'INV09', 0.5)),
+        ...dias('2026-09-20', 5).map((d) => lin(d, 'INV10', 0.8)), ...dias('2026-09-20', 4).map((d) => lin(d, 'INV11', 0.7)));
+      grava('sg_mppt_M1_TS5.json', P4); }
     log = roda(gen);
+    { const E = leOu('sg_mppt_M1_TS5.json').serie, K = leOu('sg_mppt.json'), INV = le('sg_inv_dia_M1.json').serie;
+      const e = (inv, d) => E.filter((x) => x.inv === inv && x.d === d);
+      // a troca: INV02 em 29/09 e do 502 (MPPT5 a 1); a partir de 30/09, do 512 (MPPT5 a 0,9), uma linha so, nos dois produtos
+      const diasM = E.filter((x) => x.inv === 'INV02').map((x) => x.d).sort().join(), diasI = INV.filter((x) => x.ts === 'TS5' && x.inv === 'INV02').map((x) => x.d).sort().join();
+      R.okTroca = diasM === diasI && E.filter((x) => x.inv === 'INV02' && x.d >= '2026-09-30').every((x) => x.sn === TROCA.sn)
+        && !E.some((x) => x.inv === 'INV02' && (x.d === '2026-10-01' || x.d === '2026-10-03'))
+        && e('INV02', '2026-09-29').length === 1 && e('INV02', '2026-09-29')[0].r[4] === 1 && e('INV02', '2026-09-30').length === 1
+        && e('INV02', '2026-09-30')[0].r[4] === 0.9 && e('INV02', '2026-10-04').length === 1
+        && INV.filter((x) => x.ts === 'TS5' && x.inv === 'INV02' && x.d === '2026-09-30').map((x) => x.sn).join() === TROCA.sn
+        && INV.filter((x) => x.ts === 'TS5' && x.inv === 'INV02' && x.d === '2026-09-29').map((x) => x.sn).join() === INVS[1].sn;
+      R.txt.troca = 'dias MPPT ' + diasM.split(',').map((d) => d.slice(5)).join(' ') + ' | resumo ' + diasI.split(',').map((d) => d.slice(5)).join(' ') + ' · ' + ['2026-09-29', '2026-09-30', '2026-10-04'].map((d) => d.slice(5) + ' mppt ' + JSON.stringify(e('INV02', d).map((x) => x.r[4]))
+        + ' inv ' + INV.filter((x) => x.ts === 'TS5' && x.inv === 'INV02' && x.d === d).map((x) => x.sn.slice(-3)).join('+')).join(' · ');
+      R.okMpptVazio = fs.existsSync(path.join(OUT, 'sg_mppt_M1_TS7.json')) && le('sg_mppt_M1_TS7.json').serie.length === 0;
+      const rk = (inv, m) => (K.serie || []).find((x) => x.ts === 'TS5' && x.inv === inv && x.mppt === m);
+      R.okMpptJanela = E.filter((x) => x.inv === 'INV08').map((x) => x.d).join() === '2025-10-05' && E.filter((x) => x.inv === 'INV09').length === 6 && K.de === '2026-09-05' && K.ate === '2026-10-04'
+        && !rk('INV09', 1) && !!rk('INV10', 1) && rk('INV10', 1).r === 0.8 && rk('INV10', 1).dias === 5 && !rk('INV11', 1);
+      // a ORDEM inteira do ranking: r crescente, depois usina/TS/inversor, depois MPPT; e a corrente do MPPT7 do 502
+      const ch = (x) => x.ufv + '/' + x.ts + '/' + x.inv;
+      const S4 = K.serie || [];
+      R.okRankOrdem = S4.length > 0 && S4.every((x, i) => i === 0 || S4[i - 1].r < x.r || (S4[i - 1].r === x.r && (ch(S4[i - 1]) < ch(x) || (ch(S4[i - 1]) === ch(x) && S4[i - 1].mppt < x.mppt))))
+        ;
+      R.txt.r4 = 'ranking ' + S4.length + ' de ' + K.de + ' a ' + K.ate + ' · INV10 ' + JSON.stringify(rk('INV10', 1) || null) + ' · INV11 ' + (rk('INV11', 1) ? 'ENTROU' : 'fora');
+      R.okMpptAcumula = E.some((x) => x.inv === 'INV01' && x.d === '2026-09-28' && x.r[2] === 0.966) && E.some((x) => x.inv === 'INV01' && x.d === '2026-10-04' && x.r[2] === 0.966)
+        && E.some((x) => x.inv === 'INV02' && x.d === '2026-09-29') && !!rk('INV01', 3) && rk('INV01', 3).dias === 6; }
     { const E2 = (fs.existsSync(path.join(OUT, 'sg_pt_M1_TS6.json')) ? le('sg_pt_M1_TS6.json') : { serie: [] }).serie; R.okPtAcumula = E2.length === 863 + 288 && E2[0].t === '2026-09-28 00:00' && E2.some((x) => x.t === '2026-10-01 12:00'); }
     { const E3 = (fs.existsSync(path.join(OUT, 'sg_etc_M1_TS6.json')) ? le('sg_etc_M1_TS6.json') : { serie: [] }).serie;
       R.okEtcAcumula = E3.length === (DIAS.length + 1) * N_GER && E3.some((x) => x.t === '2026-09-29 12:30' && x.rede === 1) && E3.some((x) => x.t === '2026-10-01 12:00'); }
@@ -442,6 +558,13 @@ ok(R.okPt, 'temperatura PT100 do eletrocentro: maximo, hora, minimo sem o zero s
 ok(R.okPtEtc, 'PT100 por eletrocentro: um arquivo so do TS do logger (TS6), 863 linhas de 5 min, valores e instante iguais');
 ok(R.okPtAcumula, 'PT100 por eletrocentro ACUMULA: com o dia novo do logger, 863 + 288 linhas e os dias antigos mantidos');
 ok(R.okEtc, 'eletrocentro de 5 min: so o TS do logger, so com geracao, a capacidade e a rede da hora com um inversor fora, e as horas fora do dia: ' + R.txt.etc);
+ok(R.okMppt, 'tensao dos MPPT: o modulo a menos, o MPPT vazio nulo, a corrente pela metade, a limitacao fora, e o ranking: ' + R.txt.mppt);
+ok(R.okLibMppt, 'os casos de fronteira dos MPPT na lib usada pelo cenario');
+ok(R.okTroca, 'a troca: o inversor retirado deixa de valer no primeiro dia do sucessor, no resumo do dia e nos MPPT (uma linha por posicao e dia)' + ': ' + R.txt.troca);
+ok(R.okMpptVazio, 'eletrocentro identificado sem nenhum dia de MPPT tem arquivo, com a serie vazia');
+ok(R.okMpptJanela, 'a janela: o arquivo corta o que passa de 365 dias, o ranking so ve os ultimos 30 e exige 5 dias: ' + R.txt.r4);
+ok(R.okRankOrdem, 'o ranking inteiro em ordem (razao, posicao, MPPT)');
+ok(R.okMpptAcumula, 'tensao dos MPPT ACUMULA: com o dia novo do inversor, os dias antigos mantidos e o ranking ate o dia novo');
 ok(R.okSemTrabalho, 'os campos de trabalho de 5 min nao vazam para o resumo do dia publicado nem para o historico');
 ok(R.okEtcAcumula, 'eletrocentro de 5 min ACUMULA: com o dia novo do logger, os quatro dias de geracao, a hora do inversor fora mantida');
 ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 2)');
@@ -453,7 +576,7 @@ ok(R.okSaudeResumo, 'sg_saude: alarme x falha e rede x equipamento contados em s
 ok(R.okParado, 'o inversor parado o dia inteiro, lido inteiro, num dia em que a usina gerou: parcial = false');
 ok(R.okIdem, 'segunda rodada: nenhum zip novo, produtos identicos');
 ok(R.okNaoRepete, 'segunda rodada: a busca funda nao se repete (nenhum dado novo do inversor sem posicao)');
-ok(R.okMigra, 'historico de esquema 4 FIEL (sem as horas fora e sem os arquivos do eletrocentro de 5 min): relido inteiro, produtos identicos (os arquivos refeitos)');
+ok(R.okMigra, 'historico de esquema 5 FIEL (sem os arquivos dos MPPT): relido inteiro, produtos identicos (os arquivos refeitos)');
 ok(R.okBuscaVolta, 'dia novo do inversor sem posicao: a busca volta (1 export) e a memoria anda para 26/09');
 ok(R.okNula, 'linha sem t0/t1: parcial nula, fora da conferencia (29/09 com 3 + 1) e fora dos inteiros do resumo da saude');
 
@@ -477,7 +600,7 @@ function plantaLib(nome, de, para, chave) {
   if (src.split(req).length !== 2) { ok(false, 'plantio ' + nome + ': o gerador nao le a lib 1x'); return; }
   fs.writeFileSync(lib, srcLib.split(de).join(para)); fs.writeFileSync(g, src.split(req).join("require('./_plantio_lib_sungrow.js')"));
   let r2;
-  try { r2 = cenario(g); } finally { fs.unlinkSync(g); fs.unlinkSync(lib); }
+  try { r2 = cenario(g, lib); } finally { fs.unlinkSync(g); fs.unlinkSync(lib); }
   ok(!r2.erro && r2[chave] === false, 'plantio na lib "' + nome + '" reprova em ' + chave + (r2.erro ? ' (estourou: ' + r2.erro + ')' : ''));
 }
 planta('identificar pela pasta', "if (hits.length === 1) { const a = ident[sn];",
@@ -517,6 +640,34 @@ plantaLib('sem leitura da rede vira zero hora', 'return q == null || n == null ?
 plantaLib('sem a capacidade no teste', 'if (a.slice(0, 3).some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'if ([a[0], a[2]].some((x) => x != null && x > 0)) et5[hhmm(v)] = a;', 'okEtc');
 plantaLib('cobertura conta toda amostra gerando', 'n_fora: julgadas.length', 'n_fora: fora.length', 'okEtc');
 planta('campo de trabalho do eletrocentro no historico', 'const v = x._etc; delete x._etc;', 'const v = x._etc;', 'okSemTrabalho');
+plantaLib('MPPT com a limitacao', "if ((num(v[cp]) || 0) <= MPPT.p_min_w || num(v[cl]) !== 0) continue;", "if ((num(v[cp]) || 0) <= MPPT.p_min_w) continue;", 'okMppt');
+plantaLib('MPPT sem piso de corrente', 'return x != null && i != null && i > MPPT.i_min ? x : null;', 'return x != null && i != null ? x : null;', 'okMppt');
+plantaLib('MPPT contra a media', 'const mv = med(ok),', 'const mv = ok.reduce((a, b) => a + b, 0) / ok.length,', 'okMppt');
+planta('ranking sem minimo de dias', 'if (rs.length < MPPT_DIAS_MIN) continue;', '', 'okMppt');
+planta('modulos com o sinal trocado', 'mod: Math.round((1 - rm) * MOD_STRING * 100) / 100', 'mod: Math.round((rm - 1) * MOD_STRING * 100) / 100', 'okMppt');
+planta('MPPT sem acumular', "const mTudo = new Map(antV.map((l) => [l.d + '|' + l.inv, l]));", 'const mTudo = new Map();', 'okMpptAcumula');
+planta('linha antiga do retirado fica', 'const antV = ((ant && ant.serie) || []).filter((l) => vale(l, u, tsx));', 'const antV = ((ant && ant.serie) || []);', 'okTroca');
+planta('o primeiro zip vence', 'if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v;', 'if (v && !mr[x.d]) mr[x.d] = v;', 'okMppt');
+plantaLib('instante exige tres MPPT', 'if (ok.length < 2) continue;', 'if (ok.length < 3) continue;', 'okLibMppt');
+planta('corte de 366 dias no MPPT', "const corte = ult ? new Date(Date.parse(ult + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5)", "const corte = ult ? new Date(Date.parse(ult + 'T00:00:00Z') - (DIAS_PT) * 864e5)", 'okMpptJanela');
+planta('corte de 364 dias no MPPT', "const corte = ult ? new Date(Date.parse(ult + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5)", "const corte = ult ? new Date(Date.parse(ult + 'T00:00:00Z') - (DIAS_PT - 2) * 864e5)", 'okMpptJanela');
+planta('campo de trabalho do MPPT no historico', 'const v = x._mppt; delete x._mppt;', 'const v = x._mppt;', 'okSemTrabalho');
+plantaLib('MPPT com piso zero', 'i > MPPT.i_min ? x : null', 'i > 0 ? x : null', 'okLibMppt');
+plantaLib('MPPT com o piso na escala errada', 'i_min: 30,', 'i_min: 3,', 'okLibMppt');
+plantaLib('instante com um so MPPT', 'if (ok.length < 2) continue;', 'if (ok.length < 1) continue;', 'okLibMppt');
+plantaLib('MPPT com qualquer numero de amostras', 'return z.length >= MPPT.amostras ? med(z) : null;', 'return z.length ? med(z) : null;', 'okLibMppt');
+plantaLib('dia com qualquer numero de instantes', 'if (rs.length < MPPT.amostras) return null;', 'if (rs.length < 1) return null;', 'okLibMppt');
+plantaLib('primeiro valor no lugar da mediana', 'return z.length >= MPPT.amostras ? med(z) : null;', 'return z.length >= MPPT.amostras ? z[0] : null;', 'okLibMppt');
+plantaLib('coluna de MPPT faltando calada', "cv.push(exige(cab, 'Tensão MPPT' + k, 0, onde)); ci.push(exige(cab, 'Corrente MPPT' + k, 0, onde));", "cv.push(col(cab, 'Tensão MPPT' + k)); ci.push(col(cab, 'Corrente MPPT' + k));", 'okLibMppt');
+planta('troca ignorada', 'return suc && d >= suc ? null : a.pos;', 'return a.pos;', 'okTroca');
+planta('o ultimo zip vence', 'if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v;', 'if (v) mr[x.d] = v;', 'okMppt');
+planta('arquivo do MPPT sem corte de 365 dias', 'const serie = ks.filter((c) => c.slice(0, 10) >= corte).map((c) => mTudo.get(c));', 'const serie = ks.map((c) => mTudo.get(c));', 'okMpptJanela');
+planta('ranking sem a janela de 30 dias', 'if (l.d >= mDe) (porInv', 'if (true) (porInv', 'okMpptJanela');
+planta('minimo de dias rebaixado', 'const MPPT_DIAS_MIN = 5;', 'const MPPT_DIAS_MIN = 4;', 'okMpptJanela');
+planta('ranking com o desempate do MPPT invertido', '|| x.mppt - y.mppt);', '|| y.mppt - x.mppt);', 'okRankOrdem');
+planta('corrente do ranking pela tensao', 'i: med(L.map((l) => l.i[m]))', 'i: med(L.map((l) => l.r[m]))', 'okMppt');
+planta('eletrocentro sem MPPT sem arquivo', 'if (!novo.length && ant && !tirados) continue;', 'if (!novo.length) continue;', 'okMpptVazio');
+planta('migracao sem o ranking', "pesos['sg_mppt.json'] = await escreve(", "if (!migra) pesos['sg_mppt.json'] = await escreve(", 'okMigra');
 planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).map', 'const tudo = new Map(([]).map', 'okPtAcumula');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');

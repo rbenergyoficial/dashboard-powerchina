@@ -35,9 +35,14 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 5;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
+const ESQ_HIST = 6;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
                                                             // 4: PT100 de 5 min por eletrocentro com o historico inteiro (so relendo se constroi)
                                                             // 5: eletrocentro de 5 min (potencia, capacidade, inversores na rede) e horas fora
+                                                            // 6: tensao dos MPPT por inversor-dia, com o historico inteiro
+const DIAS_MPPT = 30;                                       // a janela do ranking dos MPPT (o arquivo por eletrocentro guarda DIAS_PT)
+const MPPT_DIAS_MIN = 5;                                    // dias com a razao do MPPT para ele entrar no ranking
+// modulos por string: a placa do parque (1.155 inversores, strings de 29 modulos). Um modulo a menos = 1/29 da tensao
+const MOD_STRING = 29;
 const DIAS_PT = 365;                                        // a serie de 5 min do PT100 por eletrocentro guarda um ano
 const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -164,6 +169,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     corta(s, P_DIAS); };
   const ptRodada = {};                                     // PT100 de 5 min de TUDO o que esta rodada leu, por logger
   const etcRodada = {};                                    // e o eletrocentro de 5 min (potencia, capacidade, rede), idem
+  const mpptRodada = {};                                   // e a tensao dos MPPT de cada inversor-dia, por numero de serie
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
   const novos = raw.filter((z) => lidos.get(z.nome) !== z.bytes);
@@ -193,7 +199,12 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       const onde = z.nome + ' :: ' + e.nome;
       if (t === 'inversor') {
         const o = H.inv[m[1]] || (H.inv[m[1]] = { ufv: u, pasta: tsPasta, dias: {} });
-        const dl = S.diaInversor(cab, linhas, onde); guardaP(H.pinv, m[1], dl); junta(o.dias, dl);
+        const dl = S.diaInversor(cab, linhas, onde); guardaP(H.pinv, m[1], dl);
+        // a tensao dos MPPT sai do resumo (nao vai para o historico: pesaria 24 numeros por inversor-dia) e fica na rodada;
+        // no mesmo dia vindo de dois zips, fica o de mais amostras julgadas
+        const mr = mpptRodada[m[1]] || (mpptRodada[m[1]] = {});
+        for (const x of dl) { const v = x._mppt; delete x._mppt; if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v; }
+        junta(o.dias, dl);
       } else if (t === 'pid') {
         const end = m[1].split('_')[0];
         const id = (logger || (u + '/' + tsPasta)) + '/' + end;
@@ -285,15 +296,17 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   /* -------- produtos -------- */
   const pesos = {};
   const porU = {};
+  // com troca, cada serie so vale a partir do seu primeiro dia e ate o primeiro dia do sucessor
+  const ini = (s) => Object.keys(H.inv[s].dias).sort()[0];
+  const sucDe = {};
+  const sucessor = (sn) => { if (!(sn in sucDe)) { const a = ident[sn];
+    sucDe[sn] = a ? porPos.get(a.pos).filter((s) => s !== sn && H.inv[s] && ini(s) > ini(sn)).map(ini).sort()[0] : undefined; } return sucDe[sn]; };
+  const posNoDia = (sn, d) => { const a = ident[sn]; if (!a || !H.inv[sn]) return null; const suc = sucessor(sn); return suc && d >= suc ? null : a.pos; };
   for (const [sn, o] of Object.entries(H.inv)) {
     const a = ident[sn]; if (!a) continue;
     const [u, ts, inv] = a.pos.split('/');
-    const dono = porPos.get(a.pos);
-    // com troca, cada serie so vale a partir do seu primeiro dia e ate o primeiro dia do sucessor
-    const ini = (s) => Object.keys(H.inv[s].dias).sort()[0];
-    const suc = dono.filter((s) => s !== sn && ini(s) > ini(sn)).map(ini).sort()[0];
     for (const x of Object.values(o.dias)) {
-      if (suc && x.d >= suc) continue;
+      if (!posNoDia(sn, x.d)) continue;
       (porU[u] || (porU[u] = [])).push({ ...x, ufv: u, ts, inv, sn, chave: u + '/' + ts + '/' + inv });
     }
   }
@@ -322,6 +335,65 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       unidade: 'e kWh (subida do contador de vida); p kW; t °C; iso kΩ; ef %; v V; h_op min; lim_pct % dos instantes gerando;'
         + ' t0/t1 primeira e ultima amostra do dia; parcial = o logger nao viu a janela de geracao nas duas pontas', serie: L });
   }
+  /* -------- TENSAO DOS MPPT (lote 5): um arquivo por eletrocentro, uma linha por inversor-dia, acumulado DIAS_PT dias como o
+     PT100 (o historico interno nao guarda os MPPT: 24 numeros por inversor-dia). r = tensao do MPPT / mediana dos irmaos do
+     mesmo inversor (instantes sem limitacao, ver a lib); i = a corrente do MPPT / mediana dos irmaos; v = a mediana das
+     tensoes dos MPPT, V. Todo eletrocentro com inversor identificado tem arquivo, mesmo vazio. E o RANKING dos MPPT nos
+     ultimos DIAS_MPPT dias de todo o parque (sg_mppt.json): a mediana da razao e o deficit em MODULOS de uma string -------- */
+  /* 🔴 A TROCA VALE PARA TODA LINHA, NOVA OU JA PUBLICADA (achado do revisor, 05/10/2026): a linha guarda o numero de serie e
+     so fica se aquele numero de serie ocupa a posicao naquele dia (posNoDia, a mesma regra do sg_inv_dia). Sem isso, a linha
+     do inversor retirado gravada ANTES de a troca ser conhecida ficava no arquivo acumulado e entrava no ranking da posicao */
+  const mNovo = {};
+  for (const [sn, dias] of Object.entries(mpptRodada)) for (const [d, mp] of Object.entries(dias)) {
+    const a = ident[sn]; if (!a) continue;
+    const [u, ts, inv] = a.pos.split('/'), k = u + '_' + ts;
+    (mNovo[k] || (mNovo[k] = [])).push({ d, ms: Date.parse(d + 'T03:00:00Z'), inv, sn, n: mp.n, v: mp.v, r: mp.r, i: mp.i });
+  }
+  const vale = (l, u, ts) => !l.sn || !H.inv[l.sn] || posNoDia(l.sn, l.d) === u + '/' + ts + '/' + l.inv;
+  const mEtcs = [...new Set(Object.values(ident).map((a) => a.pos.split('/').slice(0, 2).join('_')))].sort();
+  const mSeries = {};
+  let mEscritos = 0, mLinhas = 0;
+  for (const k of mEtcs) {
+    const [u, tsx] = k.split('_');
+    const novo = (mNovo[k] || []).filter((l) => vale(l, u, tsx));
+    const ant = await leAnterior('sg_mppt_' + k + '.json');
+    const antV = ((ant && ant.serie) || []).filter((l) => vale(l, u, tsx));
+    const tirados = ((ant && ant.serie) || []).length - antV.length;
+    const mTudo = new Map(antV.map((l) => [l.d + '|' + l.inv, l]));
+    for (const l of novo) mTudo.set(l.d + '|' + l.inv, l);
+    const ks = [...mTudo.keys()].sort();
+    const ult = ks.length ? ks[ks.length - 1].slice(0, 10) : '';
+    const corte = ult ? new Date(Date.parse(ult + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5).toISOString().slice(0, 10) : '';
+    const serie = ks.filter((c) => c.slice(0, 10) >= corte).map((c) => mTudo.get(c));
+    mSeries[k] = serie;
+    if (!novo.length && ant && !tirados) continue;         // nada novo nem tirado: o publicado continua valendo
+    pesos['sg_mppt_' + k + '.json'] = await escreve('sg_mppt_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_PT,
+      unidade: 'r tensao de cada MPPT / mediana dos MPPT do mesmo inversor no mesmo instante (1..12), i idem para a corrente; v V (mediana'
+        + ' das tensoes dos MPPT); n instantes julgados (sem limitacao, inversor > 150 kW, MPPT > 3 A); sn numero de serie; ms epoch do dia (BRT)', serie });
+    mEscritos += 1; mLinhas += serie.length;
+  }
+  const mUlt = Object.values(mSeries).flat().reduce((a, l) => (l.d > a ? l.d : a), '');
+  const mDe = mUlt ? new Date(Date.parse(mUlt + 'T00:00:00Z') - (DIAS_MPPT - 1) * 864e5).toISOString().slice(0, 10) : '';
+  const med = (a) => { const v = a.filter((x) => x != null).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+  const rank = [];
+  for (const [k, serie] of Object.entries(mSeries)) {
+    const [u, ts] = k.split('_');
+    const porInv = {};
+    for (const l of serie) if (l.d >= mDe) (porInv[l.inv] || (porInv[l.inv] = [])).push(l);
+    for (const [inv, L] of Object.entries(porInv)) for (let m = 0; m < S.MPPT.n; m += 1) {
+      const rs = L.map((l) => l.r[m]).filter((x) => x != null);
+      if (rs.length < MPPT_DIAS_MIN) continue;
+      const rm = med(rs);
+      rank.push({ ufv: u, ts, inv, mppt: m + 1, r: rm, i: med(L.map((l) => l.i[m])), dias: rs.length,
+        mod: Math.round((1 - rm) * MOD_STRING * 100) / 100 });
+    }
+  }
+  const chaveInv = (x) => x.ufv + '/' + x.ts + '/' + x.inv;
+  rank.sort((x, y) => x.r - y.r || (chaveInv(x) < chaveInv(y) ? -1 : chaveInv(x) > chaveInv(y) ? 1 : 0) || x.mppt - y.mppt);
+  pesos['sg_mppt.json'] = await escreve('sg_mppt.json', { gerado_em: agora, esquema: 1, de: mDe, ate: mUlt, janela_dias: DIAS_MPPT,
+    modulos_por_string: MOD_STRING, unidade: 'r mediana diaria da razao da tensao do MPPT contra os irmaos, na janela; i idem para a corrente;'
+      + ' mod = (1 - r) x modulos por string (positivo: tensao abaixo dos irmaos); dias com a razao', serie: rank });
+  console.log('  MPPT: ' + mEscritos + ' eletrocentro(s) gravado(s), ' + mLinhas + ' linhas · ranking ' + rank.length + ' MPPT de ' + mDe + ' a ' + mUlt);
   /* -------- SAUDE DO INVERSOR (lote 3): o sg_inv_dia passa do teto de ~1.100 KB que a pagina baixa (M1: 1.325 KB). Aqui
      sai o recorte que a pagina de saude usa, por usina (73 a 333 KB gzipado com o historico inteiro), e um resumo do
      conjunto por usina e dia. Familia, tipo (alarme/falha) e origem (rede/equipamento) de cada codigo: lib-sungrow,

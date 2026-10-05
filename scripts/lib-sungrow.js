@@ -56,6 +56,35 @@ const conta = (vals) => { const o = {}; for (const x of vals) if (x != null) o[x
 const hhmm = (v) => v[0].slice(11, 16);
 
 /* ------------------------------------------------------------ inversor ---------------------------------------------- */
+/* 🔴 A TENSAO DE CADA MPPT contra os IRMAOS do mesmo inversor, no mesmo instante (lote 5, 05/10/2026). O logger tem uma
+   coluna "Tensão na corda N" por string, mas ela REPETE a tensao do MPPT (strings 1 e 2 = MPPT1, 3 e 4 = MPPT2...): a
+   tensao medida e a do MPPT, 12 por inversor, duas strings em paralelo em cada. Medido em 90 dias de cinco eletrocentros
+   (M5/TS1, M6/TS6, M7/TS1, M8/TS5, M9/TS1): so nos instantes SEM limitacao de potencia, com o inversor acima de 150 kW e
+   o MPPT acima de 3 A, a razao fica entre 0,984 e 1,020 (p01 a p99) e muda 0,1 a 0,2 % de um dia para outro; um modulo a
+   menos numa string de 29 e -3,4 % (M9/TS1: dois MPPT a 0,967 e 0,968 por 76 dias, com a corrente igual a dos irmaos).
+   Com limitacao o rastreador sai do ponto de maxima potencia e a razao espalha (1.137 a 1.224 V num inversor limitado do
+   M8/TS5 ao meio-dia de 29/09): esses instantes ficam fora. Escalas: tensao em 0,1 V, corrente do MPPT em 0,1 A */
+const MPPT = { n: 12, p_min_w: 150000, i_min: 30, amostras: 6 };
+// coluna de MPPT faltando ESTOURA com o nome, como as outras do inversor: cabecalho renomeado nao pode virar produto vazio
+function mpptDoDia(cab, L, onde) {
+  const cv = [], ci = [];
+  for (let k = 1; k <= MPPT.n; k += 1) { cv.push(exige(cab, 'Tensão MPPT' + k, 0, onde)); ci.push(exige(cab, 'Corrente MPPT' + k, 0, onde)); }
+  const cp = exige(cab, 'Potência ativa total', 0, onde), cl = exige(cab, 'Modo de potência limitada', 0, onde);
+  const rs = [], is = [], vs = [];
+  for (const v of L) {
+    if ((num(v[cp]) || 0) <= MPPT.p_min_w || num(v[cl]) !== 0) continue;
+    const V = cv.map((c, k) => { const x = num(v[c]), i = num(v[ci[k]]); return x != null && i != null && i > MPPT.i_min ? x : null; });
+    const ok = V.filter((x) => x != null);
+    if (ok.length < 2) continue;                              // sem irmao nao ha comparacao
+    const mv = med(ok), mi = med(ci.map((c, k) => (V[k] == null ? null : num(v[c]))));
+    rs.push(V.map((x) => (x == null ? null : x / mv))); is.push(ci.map((c, k) => (V[k] == null ? null : num(v[c]) / mi))); vs.push(mv / 10);
+  }
+  if (rs.length < MPPT.amostras) return null;
+  // MPPT com poucas amostras julgadas no dia (vazio, ou acima de 3 A so em instantes soltos) fica nulo, nao vira razao
+  const porM = (a, k) => { const z = a.map((x) => x[k]).filter((x) => x != null); return z.length >= MPPT.amostras ? med(z) : null; };
+  return { n: rs.length, v: r(med(vs), 1), r: Array.from({ length: MPPT.n }, (_, k) => r(porM(rs, k), 4)), i: Array.from({ length: MPPT.n }, (_, k) => r(porM(is, k), 3)) };
+}
+
 function diaInversor(cab, linhas, onde) {
   const c = {
     vida: exige(cab, 'Geração total', 0, onde), diaria: exige(cab, 'Geração de energia ao longo do dia', 0, onde),
@@ -105,6 +134,8 @@ function diaInversor(cab, linhas, onde) {
     if (o.t_max === -99) o.t_max = null;
     // a potencia de 5 min (kW, uma casa), so para provar a qual TS o logger pertence; o gerador a separa do resumo
     o._p = {}; L.forEach((v, i) => { if (P[i] != null) o._p[hhmm(v)] = Math.round(P[i] * 10) / 10; });
+    // a tensao dos MPPT do dia (campo de trabalho: o gerador o separa do resumo, como a potencia)
+    o._mppt = mpptDoDia(cab, L, onde);
   }
   return out;
 }
@@ -247,4 +278,4 @@ function diaEstacao(cab, linhas, onde) {
   return out;
 }
 
-module.exports = { le, tipo, col, num, diaInversor, seriePid, diaPid, diaEstacao, PID_COLS, energiaDoDia, passosDoDia, FAIXAS, familia };
+module.exports = { le, tipo, col, num, diaInversor, mpptDoDia, MPPT, seriePid, diaPid, diaEstacao, PID_COLS, energiaDoDia, passosDoDia, FAIXAS, familia };
