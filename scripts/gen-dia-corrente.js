@@ -120,6 +120,7 @@ function baixa(url) {
   const novo = r2(val.Complexo);
   const motivo = guardaDia(novo, antes, linha.ate);
   if (motivo) { console.log(motivo + ' — abortando'); process.exit(1); }
+  const mes = hoje.slice(0, 7);   // o mes em curso: a soma dos dias e a manchete abaixo (a linha morava na guarda antiga)
 
   // ---- a MANCHETE do mesmo dia ---------------------------------------------
   //
