@@ -45,6 +45,13 @@ function mapaCircuitos() {
 // senao o M9 (9,82 MW) ficaria sempre por ultimo e a comparacao viraria ranking de tamanho.
 const CAP = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11, M7: 14.733, M8: 49.11, M9: 9.822 };
 
+// Potencia instalada de cada CIRCUITO, em MW, na ordem C1, C2, C3 de cada usina (a ordem dos pontos no CIRC do gen-executivo)
+// (PROMOVER portal-cap-circuito). Fonte: os unifilares de 34,5 kV do SCADA (telas B1/B2 e B3/B4), o numero sob "UFV MAURITI N"
+// de cada alimentador, lido em 05/10/2026. A soma de cada usina fecha com CAP, e a ordem foi conferida pela energia do dia: com
+// ela os 22 circuitos ficam entre 8,97 e 9,43 MWh/MW (o M7 inteiro, 7,94). Sem a mesma quantidade de circuitos do mapa, nao publica.
+const CAP_CIRC = { M1: [16.38, 19.65, 13.08], M2: [12.27, 12.285], M3: [13.097, 19.633, 16.38], M4: [13.08, 16.37, 19.66],
+  M5: [19.66, 9.816, 19.634], M6: [19.639, 16.366, 13.105], M7: [14.733], M8: [13.088, 19.66, 16.362], M9: [9.822] };
+
 const r = (v, c = 2) => (v == null || !isFinite(v) ? null : Math.round(v * 10 ** c) / 10 ** c);
 
 function serie(elet, ponto, grandeza = 'Demat') {
@@ -140,7 +147,7 @@ function monta(elet, saude) {
     //    Custo medido antes de publicar: ~90 KB crus, ~25 KB no gzip.
     circuitos = [];
     for (const [u, ps] of Object.entries(CIRC)) ps.forEach((p, i) => {
-      circuitos.push({ pid: p, u, nome: u + ' · C' + (i + 1),
+      circuitos.push({ pid: p, u, nome: u + ' · C' + (i + 1), cap_mw: (CAP_CIRC[u] || []).length === ps.length ? CAP_CIRC[u][i] : null,
         pts: [...sc[p].keys()].sort().map(h => [h, r(sc[p].get(h), 2)]), agora: retrato(elet, p) });
     });
     const todos = Object.values(sc);
@@ -181,4 +188,4 @@ function monta(elet, saude) {
   };
 }
 
-module.exports = { monta, mapaCircuitos, retrato, COMPLEXO, TRAFOS, OUTORGA, CAP };
+module.exports = { monta, mapaCircuitos, retrato, COMPLEXO, TRAFOS, OUTORGA, CAP, CAP_CIRC };

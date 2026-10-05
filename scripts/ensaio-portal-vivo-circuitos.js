@@ -129,6 +129,18 @@ function confere(pv, elet, CIRC) {
   };
   cont.kpis = 0;
   kp('Complexo', pv.curva, pv.outorga_mw, pv, 'pct_outorga');
+  // a potencia de cada circuito (PROMOVER portal-cap-circuito): a tabela lida no unifilar do SCADA, transcrita AQUI de novo
+  // (referencia independente da lib), circuito a circuito na ordem C1..C3; e a soma de cada usina = a capacidade dela
+  const CAPREF = { M1: [16.38, 19.65, 13.08], M2: [12.27, 12.285], M3: [13.097, 19.633, 16.38], M4: [13.08, 16.37, 19.66],
+    M5: [19.66, 9.816, 19.634], M6: [19.639, 16.366, 13.105], M7: [14.733], M8: [13.088, 19.66, 16.362], M9: [9.822] };
+  cont.cap = 0; let capTot = 0;
+  for (const [u, ps] of Object.entries(CIRC)) {
+    const caps = ps.map(p => (C.find(c => c.pid === p) || {}).cap_mw);
+    caps.forEach((v, i) => { if (v !== (CAPREF[u] || [])[i]) f.push(u + ' · C' + (i + 1) + ': potencia instalada ' + v + ' MW, o unifilar diz ' + (CAPREF[u] || [])[i]); else cont.cap++; });
+    const s = caps.reduce((a, v) => a + (v || 0), 0); capTot += s;
+    if (L.CAP && Math.abs(s - L.CAP[u]) > 1e-6) f.push(u + ': os circuitos somam ' + s.toFixed(3) + ' MW, a usina tem ' + L.CAP[u]);
+  }
+  if (Math.abs(capTot - 343.77) > 1e-6) f.push('os 22 circuitos somam ' + capTot.toFixed(3) + ' MW, a outorga e 343,77');
   for (const [e, o] of Object.entries(pv.kpis || {})) kp(e, (pv.curvas || {})[e], o && o.cap_mw, o, 'pct_cap');
   return { f, cont };
 }
@@ -201,7 +213,7 @@ async function main() {
     const pv = L.monta(elet, null);
     const { f, cont } = confere(pv, elet, CIRC);
     if (!f.length) f.push(...aMao(pv));
-    if (!f.length && (cont.pontos < 60 || cont.campos < 100 || cont.soma < 1 || cont.altaq !== 2 || cont.kpis < 48))
+    if (!f.length && (cont.pontos < 60 || cont.campos < 100 || cont.soma < 1 || cont.altaq !== 2 || cont.kpis < 48 || cont.cap !== 22))
       f.push('julgou pouco: ' + JSON.stringify(cont));
     if (f.length) { console.error('REPROVADO (lib):\n  ' + f.slice(0, 20).join('\n  ')); process.exit(1); }
     console.log('lib: ' + JSON.stringify(cont) + ' · referencia refeita do bruto e valores a mao conferem');
@@ -220,6 +232,8 @@ async function main() {
       ['retratos nulos', p => { p.circuitos.forEach(c => { c.agora = null; }); }],
       ['energia do dia errada na segunda casa', p => { p.energia_mwh += 0.02; }],
       ['FC de uma usina errado na segunda casa', p => { p.kpis.M2.fc_pct -= 0.02; }],
+      ['potencia de dois circuitos trocada (a soma da usina fecha)', p => { const a = p.circuitos.find(x => x.pid === CIRC.M5[0]), b = p.circuitos.find(x => x.pid === CIRC.M5[1]); const z = a.cap_mw; a.cap_mw = b.cap_mw; b.cap_mw = z; }],
+      ['circuito sem potencia instalada', p => { p.circuitos[0].cap_mw = null; }],
     ];
     for (const [nome, estraga] of plant) {
       const p = JSON.parse(JSON.stringify(pv)); estraga(p);
