@@ -25,6 +25,12 @@ const IDENT = ['MW', 'GWh', 'MWh', 'kWh', 'kW', 'kV', 'MVA', 'MVAr', '%', 'h', '
   'ENE', 'CNF', 'REL', 'ND'];
 
 const DIC = {
+  // --- etapas da cascata "Para onde foi a energia" (executivo.json, campo `etapa`) · PROMOVER cascata-etapa-idiomas.
+  //     Os mesmos textos que as colunas das páginas EN e 中文 já usavam: o nome da barra e o da série batem.
+  'Entregue': { en: 'Delivered', zh: '已送出' },
+  'Cortado pelo ONS': { en: 'Curtailed by the ONS', zh: 'ONS 限电' },
+  'Outras perdas': { en: 'Other losses', zh: '其他损失' },
+  'Referência abaixo do verificado': { en: 'Reference below verified', zh: '参考值低于实测' },
   // --- barra de selos (way2_saude.json) · 13 páginas -----------------------
   'Way2': { en: 'Way2', zh: 'Way2' },
   'Medidores': { en: 'Meters', zh: '电表' },

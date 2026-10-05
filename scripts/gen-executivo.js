@@ -308,7 +308,9 @@ async function writeOut(obj, nome, opts) {
   // ⚠️ `u` e a UNIDADE, igual nas tres linguas — mas a irma precisa existir mesmo assim,
   //    senao a paridade recusa a troca e a coluna fica em portugues junto com as vizinhas.
   guardaTextoPublico(obj);
-  rot.localizaTudo(obj, ['lbl', 'label', 'sub', 'u']);
+  // `etapa` (PROMOVER cascata-etapa-idiomas): o nome da barra da cascata vinha so em portugues e as paginas EN e 中文 o
+  // mostravam assim no eixo; `etapa` segue a CHAVE do filtro do painel, e o rotulo de cada lingua vai na irma
+  rot.localizaTudo(obj, ['lbl', 'label', 'sub', 'u', 'etapa']);
   const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
