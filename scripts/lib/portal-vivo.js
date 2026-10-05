@@ -131,8 +131,8 @@ function monta(elet, saude) {
       const pk = c.reduce((a, b) => (b[1] > a[1] ? b : a));
       const ag = c[c.length - 1], cap = capDe(e);
       kpis[e] = { cap_mw: r(cap, 3), n: c.length, hora: ag[0], agora_mw: ag[1], pico_mw: pk[1], pico_hora: pk[0],
-        pct_cap: r(100 * pk[1] / cap, 1), energia_mwh: r(en, 1),
-        fc_pct: r(100 * en / (cap * c.length * 5 / 60), 1), media_mw: r(en / (c.length * 5 / 60), 1) };
+        pct_cap: r(100 * pk[1] / cap, 2), energia_mwh: r(en, 2),   // duas casas (PROMOVER portal-vivo-casas): a tela mostra duas
+        fc_pct: r(100 * en / (cap * c.length * 5 / 60), 2), media_mw: r(en / (c.length * 5 / 60), 2) };
     }
     // 🔴 OS 22 CIRCUITOS, um a um (PROMOVER portal-vivo-circuitos): a curva do dia de cada um, cada instante que ELE
     //    mediu (nao a grade do complexo: um circuito que parou nao ganha zeros, fica sem ponto), e o retrato eletrico do
@@ -163,9 +163,9 @@ function monta(elet, saude) {
     gerado: new Date().toISOString(),
     dia, hora: agora[0], n: curva.length, passo_min: 5, outorga_mw: OUTORGA,
     agora_mw: agora[1], pico_mw: pico[1], pico_hora: pico[0],
-    pct_outorga: r(100 * pico[1] / OUTORGA, 1),
-    energia_mwh: r(ener, 1), fc_pct: r(100 * ener / (OUTORGA * curva.length * 5 / 60), 1),
-    media_mw: r(ener / (curva.length * 5 / 60), 1),
+    pct_outorga: r(100 * pico[1] / OUTORGA, 2),   // duas casas (PROMOVER portal-vivo-casas)
+    energia_mwh: r(ener, 2), fc_pct: r(100 * ener / (OUTORGA * curva.length * 5 / 60), 2),
+    media_mw: r(ener / (curva.length * 5 / 60), 2),
     curva, alta,
     // por entidade: M1..M9, PPA, ML (o Complexo e `curva`/os campos acima); null onde o mapa nao leu
     curvas, kpis,

@@ -116,6 +116,20 @@ function confere(pv, elet, CIRC) {
     if (Math.abs(aq.get(h) - ref) > 0.0005 + 1e-9) f.push('alta_q ' + h + ': ' + aq.get(h) + ', refeito ' + ref.toFixed(4));
     cont.altaq++;
   }
+  // os numeros do dia em DUAS casas (PROMOVER portal-vivo-casas): energia, FC, media e % do pico, do conjunto e de cada
+  // entidade, refeitos da curva publicada (a lib soma a mesma curva, em 3 casas); folga = meia unidade da 2a casa
+  const kp = (nome, c, cap, o, pctK) => {
+    if (!o || !Array.isArray(c) || !c.length || !(cap > 0)) return;
+    const en = c.reduce((s, [, v]) => s + v, 0) * 5 / 60, hs = c.length * 5 / 60, pk = Math.max(...c.map(x => x[1]));
+    const ref = { energia_mwh: en, fc_pct: 100 * en / (cap * hs), media_mw: en / hs, [pctK]: 100 * pk / cap };
+    for (const [k, v] of Object.entries(ref)) {
+      if (o[k] == null || Math.abs(o[k] - v) > 0.005 + 1e-6) f.push(nome + ': ' + k + ' = ' + o[k] + ', refeito da curva ' + v.toFixed(4) + ' (duas casas)');
+      cont.kpis++;
+    }
+  };
+  cont.kpis = 0;
+  kp('Complexo', pv.curva, pv.outorga_mw, pv, 'pct_outorga');
+  for (const [e, o] of Object.entries(pv.kpis || {})) kp(e, (pv.curvas || {})[e], o && o.cap_mw, o, 'pct_cap');
   return { f, cont };
 }
 
@@ -187,7 +201,7 @@ async function main() {
     const pv = L.monta(elet, null);
     const { f, cont } = confere(pv, elet, CIRC);
     if (!f.length) f.push(...aMao(pv));
-    if (!f.length && (cont.pontos < 60 || cont.campos < 100 || cont.soma < 1 || cont.altaq !== 2))
+    if (!f.length && (cont.pontos < 60 || cont.campos < 100 || cont.soma < 1 || cont.altaq !== 2 || cont.kpis < 48))
       f.push('julgou pouco: ' + JSON.stringify(cont));
     if (f.length) { console.error('REPROVADO (lib):\n  ' + f.slice(0, 20).join('\n  ')); process.exit(1); }
     console.log('lib: ' + JSON.stringify(cont) + ' · referencia refeita do bruto e valores a mao conferem');
@@ -204,6 +218,8 @@ async function main() {
       ['alta_q com um trafo so', p => { p.alta_q.splice(1, 0, ['10:05', 9.9]); }],
       ['alta_q vazia', p => { p.alta_q = []; }],
       ['retratos nulos', p => { p.circuitos.forEach(c => { c.agora = null; }); }],
+      ['energia do dia errada na segunda casa', p => { p.energia_mwh += 0.02; }],
+      ['FC de uma usina errado na segunda casa', p => { p.kpis.M2.fc_pct -= 0.02; }],
     ];
     for (const [nome, estraga] of plant) {
       const p = JSON.parse(JSON.stringify(pv)); estraga(p);
