@@ -63,14 +63,18 @@ hora viram um temporizador; os demais viram vários. Por isso 15 workflows dão 
 - **Sonda**: `GET /api/saude` devolve a agenda que subiu e se o token está presente — dá para
   conferir sem esperar o próximo horário.
 
-## O que falta para ele funcionar
+## O que ele precisa para funcionar
 
 | passo | onde |
 |---|---|
 | criar o Function App (Consumption, Node 20, Linux) | portal do Azure |
 | `GH_TOKEN` = PAT com `actions: write` neste repo | **Configurações do aplicativo** do Function App |
 | `RELOGIO_APP_NAME` = nome do recurso | *Variables* do repo no GitHub |
-| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` | *Secrets* do repo no GitHub |
+| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (identificadores, não credenciais: o acesso vem da credencial federada no Entra) | *Variables* do repo no GitHub |
+
+ℹ️ Feito: o app existe desde 01/09 e o deploy por OIDC publica desde 02/09 (ver "O CI publica o
+relógio"). O `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` não existe e não vai existir: o Flex Consumption
+não emite perfil de publicação.
 
 ⚠️ O `GH_TOKEN` vive **no Azure**, nunca no repo. O repo é público.
 
@@ -109,17 +113,34 @@ velha que isso não pode estar viva. O maior `timeout-minutes` do repo é 120 �
 ✅ Provado no ar: primeiro `workflow_dispatch` do `way2-agg` em **02/09 20:05:01Z**, no segundo
 exato do gatilho. `ensaio-guarda.js` cobre as duas direções e as bordas do teto.
 
-## 🔴 O CI NUNCA publicou o relógio — e dizia `success`
+## ✅ O CI publica o relógio (OIDC, desde 02/09/2026)
+
+Todo push na `main` que toca em `relogio/**` dispara o `relogio-deploy.yml`, que confere a agenda
+(`gerar-agenda.js --conferir`), roda o `ensaio-guarda.js`, entra no Azure por **OIDC** (credencial
+federada no Entra, amarrada a `refs/heads/main` deste repo, sem segredo nenhum no caminho) e
+publica com `Azure/functions-action`. A conferência no fim é a do destino: quantas funções o host
+enxerga (`az functionapp function list`), nunca o status do deploy.
+
+✅ Provado em 05/10/2026: o push de `79929f9` (o `portal-dia.yml` entrando na agenda) disparou o
+deploy (run 37380990182, success) e o app passou de 21 para 22 funções, com
+`relogio-mauriti/dispara-portal-dia`. Uma publicação à mão logo depois recebeu **409**
+(`DeploymentConflictException: there is an on-going deployment`): era o deploy do CI em andamento.
+
+Então, para mudar a agenda ou o código do relógio: `node relogio/gerar-agenda.js`, commit e push.
+Conferir o `relogio-deploy.yml` daquele push e a lista de funções. A publicação à mão abaixo fica
+só para quando o CI estiver fora (e nunca com um deploy do CI em andamento).
+
+### Histórico: o CI dizia `success` sem publicar (até 02/09/2026)
 
 `RELOGIO_APP_NAME` nunca foi definida, então o passo "O destino existe?" saía com `ok=false` e
 os quatro passos seguintes eram **pulados**. Job verde a cada push. O que estava no ar era o
 pacote de 01/09, publicado à mão; duas correções posteriores nunca chegaram nele.
 
 ⚠️ E o motivo de o segredo nunca ter sido criado: **o app está em Flex Consumption, que não emite
-perfil de publicação**. O workflow foi escrito para um plano que o app não usa. Hoje ele **falha**
-com a lista do que falta.
+perfil de publicação**. A saída foi o OIDC (`2f43681`); o workflow passou a **falhar** nomeando a
+variável que faltar, em vez de pular em silêncio.
 
-## Como publicar à mão (enquanto o CI não publica)
+## Como publicar à mão (só com o CI fora)
 
 ```
 node gerar-agenda.js --conferir
