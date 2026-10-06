@@ -297,7 +297,9 @@ function julga(R) {
   const infla = (Y, mesmo) => { const T = Y.tempo_real.rendimento, r = T.por_usina.find((x) => x.ufv === 'M5'), a = Y.agora.por_entidade.M5;
     if (!r || !a || !T.ate) return false; a.hora = mesmo ? T.ate : '23:59';
     r.mwh = Math.round((a.energia_hoje_mwh + 2) * 10) / 10; r.mwh_por_mw = Math.round(1000 * r.mwh / 49.11) / 1000; return true; };
-  plantio('rendimento diferente do agora no mesmo horizonte', (Y) => infla(Y, true), /rendimento M5 [\d.]+ MWh contra [\d.]+ do agora$/);
+  /* de madrugada a energia do dia e NEGATIVA (consumo do trafo): o numero da mensagem aceita o sinal (06/10/2026, 41 runs
+     vermelhas das 02:25 as 05:40 com o detector certo e "reprovou pelo motivo errado" so porque [\d.]+ nao casa "-0.1") */
+  plantio('rendimento diferente do agora no mesmo horizonte', (Y) => infla(Y, true), /rendimento M5 -?[\d.]+ MWh contra -?[\d.]+ do agora$/);
   plantio('rendimento atrasado passando do agora', (Y) => infla(Y, false), /rendimento M5 .* passou do agora/);
   plantio('rendimento trocado entre usinas', (Y) => trocaExtremos([['hoje',
     Object.fromEntries(Y.tempo_real.rendimento.por_usina.map((x) => [x.ufv, x]))]], 'mwh_por_mw', 0.05, 'MWh/MW (madrugada?)'),
