@@ -1,4 +1,4 @@
-name: Transformadores da SE -> trafo_*.json
+name: Transformadores da SE -> trafo_*.json (5, 30 e 60 min e diario)
 on:
   schedule:
     # 07:38 BRT — o arquivo diario do Trafo chega ao container por volta das 03:30 BRT.
@@ -16,12 +16,16 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm i @azure/storage-blob@12
+      - run: npm i @azure/storage-blob@12 xlsx@0.18.5
+      # a serie de 5 min do historiador (planilhas IED/04T1 e IED/04T2): congelado fora, planilha viva vence o export,
+      # tap interpolado fora, 30 min na grade, pico do dia dos 5 min, guarda de concordancia; com plantios. Sem rede.
+      - name: Ensaio · trafo com a planilha de 5 min do historiador (sem rede)
+        run: node scripts/ensaio-trafo.js
       - name: Gerar trafo_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -29,6 +33,8 @@ jobs:
           OUT_CONTAINER: dados
           # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo' || '' }}
+          # as planilhas do historiador tem ate 41 MB; o SheetJS chega a ~0,8 GB por planilha
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
           node scripts/gen-trafo.js

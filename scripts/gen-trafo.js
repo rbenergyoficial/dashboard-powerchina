@@ -89,10 +89,23 @@
  *   aproximacao — sobra ~3,9% de erro medio contra o medidor —, e o pico diario e o maior valor
  *   AMOSTRADO, que subestima o pico real. Para energia, a fonte continua sendo o medidor.
  *
+ * 🔴 A SERIE DE 5 MIN DO HISTORIADOR DA SE (lote trafo-ied, 06/10/2026): as planilhas da pasta IED/04T1 e IED/04T2
+ *   (`<id>_01.01 A 05.10.xlsx` no scada-raw) trazem as MESMAS tags a cada 5 min, de 01/05/2025 em diante. Leitura,
+ *   identificacao do trafo e trechos congelados: lib-trafo-ied.js. A FUSAO, instante a instante e grandeza a grandeza:
+ *   o valor da planilha VIVA vence; onde ela esta congelada ou nao tem o instante, fica o export de 30 min. Medido:
+ *     - corrente, tensao e potencia ativa sao IGUAIS nas duas fontes nos instantes comuns (guarda abaixo);
+ *     - a temperatura do 04T1 no export DIFERE da planilha de jan a set/2026 — mas la a planilha esta congelada (o mesmo
+ *       valor de 01/01 ate set), entao fica o export; depois de 18/09 o export esta vazio e a planilha viva preenche;
+ *     - a temperatura do 04T2 no export tinha zeros e rampas ate jul/2026 (o "canal com defeito" de 25/08/2026) onde a
+ *       planilha esta viva e plausivel: era o EXPORT, nao o sensor. A contagem de implausiveis passa a ser da serie fundida.
+ *   Os produtos de 30 e 60 min continuam sendo a amostra no instante (:00 e :30), como antes; o de 5 min (30 dias) e o
+ *   diario (pico e media) usam todos os instantes da serie fundida.
+ *
  * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados
  *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio sem segredo.
  */
 const zlib = require('zlib');
+const IED = require('./lib-trafo-ied.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -101,7 +114,14 @@ const TRAFOS = ['04T1', '04T2'];
 
 // As janelas saem do MESMO teto de ~8.700 linhas que dimensiona os blobs do MUST e do comparativo.
 const RESOLUCOES = [{ min: 30, dias: 180 }, { min: 60, dias: 365 }];
-const RES_FONTE = 30;                                 // o export e semi-horario
+const DIAS_5MIN = 30;                                 // a serie de 5 min do historiador: o mesmo teto de ~8.700 linhas
+/* a guarda de identidade da planilha: nos instantes comuns, |dif| mediana contra o export abaixo disto. A CONTA: o export
+   publica 2 casas (A, kV, MW) e a planilha o valor cheio, entao o arredondamento sozinho da ate 0,005; medido 0,003 nos
+   17,4 mil instantes comuns. 0,05 e 10x o arredondamento, e fica 15x abaixo do que separa os dois trafos com a carga quase
+   igual (~0,75 A no lado de 230 kV a 0,3 MVA de diferenca). Menos de MIN_COMUNS instantes comuns: a planilha nao se
+   confere, e NAO entra (registrada no log) */
+const TOL_CONCORDA = 0.05;
+const MIN_COMUNS = 100;
 
 const num = (v) => {
   const s = String(v == null ? '' : v).trim().replace(',', '.');
@@ -177,15 +197,22 @@ const IMPLAUSIVEL = 10;
 async function listaArquivos() {
   if (process.env.LOCAL_DIR) {
     const fs = require('fs'), path = require('path');
-    return fs.readdirSync(process.env.LOCAL_DIR).filter((n) => CARIMBO.test(n))
+    const ns = fs.readdirSync(process.env.LOCAL_DIR).sort();
+    const csvs = ns.filter((n) => CARIMBO.test(n))
       .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
+    csvs.ied = ns.filter((n) => IED.ARQ_IED.test(n))
+      .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
+    return csvs;
   }
   const { BlobServiceClient } = require('@azure/storage-blob');
   if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
   const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
   const out = []; let total = 0;
+  out.ied = [];
   for await (const b of c.listBlobsFlat()) {
     total++;
+    if (IED.ARQ_IED.test(b.name)) { out.ied.push({ nome: b.name, bytes: b.properties.contentLength || 0,
+      ler: async () => c.getBlobClient(b.name).downloadToBuffer() }); continue; }
     if (!CARIMBO.test(b.name)) continue;
     out.push({ nome: b.name, bytes: b.properties.contentLength || 0,
       ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
@@ -202,7 +229,7 @@ async function listaArquivos() {
   });
   console.log('  container "' + RAW_CONTAINER + '": ' + total + ' blob(s) · '
     + out.length + ' arquivo(s) de trafo · '
-    + Math.round(out.reduce((s, x) => s + x.bytes, 0) / 1048576) + ' MB');
+    + Math.round(out.reduce((s, x) => s + x.bytes, 0) / 1048576) + ' MB · planilhas do historiador: ' + out.ied.length);
   return out;
 }
 
@@ -220,7 +247,7 @@ function leArquivo(buf, nome) {
     for (const t of TRAFOS) {
       if (!c.includes(t)) continue;
       for (const [chave, pedaco] of Object.entries(GRANDEZAS)) {
-        if (c.includes(pedaco)) {
+        if (IED.casa(c, pedaco)) {
           const k = t + '|' + chave;
           if (!cand.has(k)) cand.set(k, []);
           cand.get(k).push(i);
@@ -374,9 +401,6 @@ async function grava(nome, obj) {
           // lisa e o defeito invisivel; publicando, a rampa aparece na tela e se reconhece de
           // relance. O que o blob acrescenta e a CONTAGEM, para o painel poder dizer que aquele
           // canal nao esta medindo em vez de desenhar uma media que nao significa nada.
-          if (v != null && TEMPS.includes(chave) && v < IMPLAUSIVEL) {
-            ruins[t + '|' + chave] = (ruins[t + '|' + chave] || 0) + 1;
-          }
           if (v != null) o[chave] = v;
         }
         if (Object.keys(o).length) reg[t] = o;
@@ -384,8 +408,61 @@ async function grava(nome, obj) {
       porMs.set(l.ms, reg);
     }
   }
+  // ---- a serie de 5 min do historiador, por trafo: le, tira os trechos congelados, confere contra o export, funde ----
+  const XLSX = arqs.ied.length ? require('xlsx') : null;
+  const ied = { '04T1': new Map(), '04T2': new Map() };
+  /* 🔴 A ORDEM DAS COPIAS: a mesma planilha chega mais de uma vez (o fluxo grava `<id do item>_<nome>`). Le-se em ordem
+     NUMERICA do id, e a de id maior (a mais nova no SharePoint) vence no mesmo instante — nunca a ordem alfabetica do
+     nome, em que '1000_' viria antes de '201_' */
+  const idDe = (n) => { const m = String(n).split('/').pop().match(/^(\d+)_/); return m ? Number(m[1]) : -1; };
+  arqs.ied.sort((x, y) => idDe(x.nome) - idDe(y.nome) || (x.nome < y.nome ? -1 : 1));
+  for (const a of arqs.ied) {
+    const r = IED.leIed(XLSX, await a.ler(), a.nome);
+    if (!r) { console.log('    ' + a.nome.split('/').pop() + ': nao e planilha do historiador do trafo (sem DataHora ou sem tag UCT/URT) — ignorada'); continue; }
+    for (const l of r.linhas) { const o = ied[r.trafo].get(l.ms) || ied[r.trafo].set(l.ms, {}).get(l.ms); Object.assign(o, l.v); }
+    console.log('    ' + a.nome.split('/').pop() + ': ' + r.trafo + ' · ' + r.lado + ' kV · ' + r.linhas.length + ' instante(s)'
+      + (r.linhas.length ? ' · ' + iso(r.linhas[0].ms) + ' a ' + iso(r.linhas[r.linhas.length - 1].ms) : '')
+      + (r.recusadas ? ' · ' + r.recusadas + ' linha(s) sem carimbo' : ''));
+  }
+  const congelados = {}, historiador = {};
+  for (const t of TRAFOS) {
+    if (!ied[t].size) continue;
+    const tir = IED.tiraCongelados(ied[t], Object.keys(IED.GRANDEZAS_IED));
+    for (const [k, n] of Object.entries(tir)) congelados[t + '|' + k] = n;
+    let semConferir = false;
+    // 🔴 GUARDA DE IDENTIDADE: nos instantes comuns, a planilha e o export tem de dar o MESMO numero (sao a mesma tag no
+    //    mesmo historiador). Se a pasta de um trafo trouxer o outro, ou a escala mudar, o job fica vermelho
+    for (const k of ['i1a', 'v1ab', 'p']) {
+      const d = [];
+      for (const [ms, o] of ied[t]) { const e = (porMs.get(ms) || {})[t]; if (o[k] != null && e && e[k] != null) d.push(Math.abs(o[k] - e[k])); }
+      if (d.length < MIN_COMUNS) { console.log('  guarda ' + t + ' ' + k + ': so ' + d.length + ' instante(s) comuns com o export — a planilha deste trafo NAO entra'); semConferir = true; continue; }
+      d.sort((x, y) => x - y);
+      const m = d[d.length >> 1];
+      console.log('  guarda ' + t + ' ' + k + ': planilha x export em ' + d.length + ' instantes comuns, |dif| mediana ' + m.toFixed(3));
+      if (!(m < TOL_CONCORDA)) throw new Error('trafo ' + t + ' ' + k + ': a planilha do historiador difere do export (|dif| mediana '
+        + m.toFixed(3) + ' em ' + d.length + ' instantes). Arquivo de outro trafo, ou escala trocada — NAO fundir.');
+    }
+    if (semConferir) { ied[t] = new Map(); continue; }
+    const vivos = [...ied[t].entries()].filter(([, o]) => Object.keys(o).length).map(([ms]) => ms).sort((a, b) => a - b);
+    if (vivos.length) historiador[t] = { de: iso(vivos[0]), ate: iso(vivos[vivos.length - 1]) };
+  }
+  for (const [k, n] of Object.entries(congelados)) console.log('  CONGELADO: ' + k + ' -> ' + n + ' instante(s) de 5 min tirados (mais de 24 h com o mesmo valor)');
+  // a FUSAO: a planilha viva vence o export no mesmo instante e grandeza; o resto do export fica
+  let fundidos = 0;
+  for (const t of TRAFOS) for (const [ms, o] of ied[t]) {
+    if (!Object.keys(o).length) continue;
+    const reg = porMs.get(ms) || porMs.set(ms, { ms }).get(ms);
+    reg[t] = Object.assign(reg[t] || {}, o); fundidos += 1;
+  }
   const serie = [...porMs.values()].sort((a, b) => a.ms - b.ms);
   if (!serie.length) throw new Error('nenhuma linha aproveitada de ' + arqs.length + ' arquivo(s)');
+  // 🔴 A LEITURA IMPLAUSIVEL FICA, e e CONTADA — agora na serie FUNDIDA (a planilha viva substituiu os zeros do export)
+  for (const r of serie) for (const t of TRAFOS) for (const k of TEMPS) {
+    const v = (r[t] || {})[k];
+    if (v != null && v < IMPLAUSIVEL) ruins[t + '|' + k] = (ruins[t + '|' + k] || 0) + 1;
+  }
+  const ied5 = serie.filter((r) => r.ms % 1800000 !== 0).length;
+  console.log('  fusao: ' + fundidos + ' instante(s) da planilha · ' + ied5 + ' fora da grade de 30 min');
   for (const [k, n] of Object.entries(ruins)) console.log('  IMPLAUSIVEL: ' + k + ' -> ' + n
     + ' leitura(s) abaixo de ' + IMPLAUSIVEL + ' °C (' + ((n / serie.length) * 100).toFixed(1)
     + '% da serie) — o canal nao esta medindo nessas horas');
@@ -401,8 +478,10 @@ async function grava(nome, obj) {
     gerado_em: new Date().toISOString(),
     trafos: TRAFOS,
     // Medido contra o medidor a 5 min: nao ha intervalo integrado, ha amostra pontual.
-    rotulo_de_tempo: 'amostra instantânea no instante do rótulo (não é média de intervalo)',
-    energia_derivada: 'p × 0,5 h é aproximação — amostra de 30 min não integra; para energia, use o medidor',
+    rotulo_de_tempo: 'amostra no instante do rótulo (não é média de intervalo)',
+    passo: '30 e 60 min: amostra do supervisório no instante; 5 min: valor do historiador da subestação, gravado por exceção '
+      + 'e interpolado entre registros (trechos de mais de 24 h com o mesmo valor descartados como congelados)',
+    energia_derivada: 'p × passo é aproximação — amostra não integra; para energia, use o medidor',
     unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA',
       fp: 'modulo de cos(fi), 0..1', t_oleo: '°C', t_oleo_cdc: '°C', t_enrol: '°C', tap: 'degrau' },
     pontos: { 1: 'lado 230 kV', 2: 'lado 1X 34,5 kV', 3: 'lado 2X 34,5 kV' },
@@ -415,13 +494,17 @@ async function grava(nome, obj) {
     // leituras de 0 °C descartadas por grandeza e por trafo — sensor mudo, nao dia frio
     temperaturas_implausiveis: ruins,
     piso_de_plausibilidade_c: IMPLAUSIVEL,
+    congelados_5min: congelados,
+    // ate onde a planilha do historiador (5 min) cobre cada trafo; depois disso, so o export de 30 min. Nulo = sem planilha
+    historiador_5min: TRAFOS.reduce((o, t) => { o[t] = historiador[t] || null; return o; }, {}),
   };
   const saidas = [];
+  // 30 e 60 min: SO os instantes da grade de 30 min (amostra no instante, como sempre foi); os de 5 min ficam para o 5min
+  const serie30 = serie.filter((r) => r.ms % 1800000 === 0);
   for (const { min, dias } of RESOLUCOES) {
-    if (min < RES_FONTE) continue;                    // passo mais fino que a fonte nao se inventa
     const corte = ultimo - (dias - 1) * 86400e3;
     const baldes = new Map();
-    for (const r of serie) {
+    for (const r of serie30) {
       if (r.ms < corte) continue;
       const b = Math.floor(r.ms / (min * 60e3)) * (min * 60e3);
       if (!baldes.has(b)) baldes.set(b, []);
@@ -446,6 +529,26 @@ async function grava(nome, obj) {
     const bytes = await grava(nome, { ...meta, resolucao_min: min,
       janela_dias: new Set(linhas.map((l) => diaDe(l.ms))).size, janela_dias_alvo: dias, serie: linhas });
     saidas.push(nome + ': ' + linhas.length + ' linhas · ' + Math.round(bytes / 1024) + ' KB');
+  }
+
+  // ---- 5 min: os ultimos DIAS_5MIN dias da serie fundida, instante a instante (sem tap: a planilha nao o tem) ----------
+  {
+    const corte = ultimo - (DIAS_5MIN - 1) * 86400e3;
+    const linhas = serie.filter((r) => r.ms >= corte).map((r) => {
+      const o = { ms: r.ms, t: iso(r.ms) };
+      for (const t of TRAFOS) {
+        for (const chave of Object.keys(GRANDEZAS)) {
+          const v = (r[t] || {})[chave];
+          if (v == null) continue;
+          o[t + '_' + chave] = r2(chave === 'fp' ? Math.abs(v) : v);
+        }
+        if (o[t + '_s'] != null) o[t + '_carga_pct'] = r2((o[t + '_s'] / NOMINAL) * 100);
+      }
+      return o;
+    });
+    const bytes = await grava('trafo_5min.json', { ...meta, resolucao_min: 5,
+      janela_dias: new Set(linhas.map((l) => diaDe(l.ms))).size, janela_dias_alvo: DIAS_5MIN, serie: linhas });
+    saidas.push('trafo_5min.json: ' + linhas.length + ' linhas · ' + Math.round(bytes / 1024) + ' KB');
   }
 
   // ---- diario: a serie inteira, com pico e media ---------------------------------------------
