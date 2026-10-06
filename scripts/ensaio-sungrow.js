@@ -258,7 +258,9 @@ const TODOS = [...INVS, PARADO, VELHO, MISTO];
    30/09 uma falha de equipamento (38, falha do sistema, no 501) e um codigo fora do manual (639, no 601); 01/10, dia
    PARCIAL do 501, uma falha de equipamento (39, isolacao baixa) as 04:10 */
 const COD = { A0000000502: { '2026-09-29': { 100: 532, 101: 532, 102: 532 } }, A0000000601: { '2026-09-28': { 80: 10 }, '2026-09-30': { 90: 639 } },
-  A0000000602: { '2026-09-28': { 100: 532, 101: 532, 102: 533 } }, A0000000501: { '2026-09-30': { 90: 38 }, '2026-10-01': { 50: 39 } } };
+  A0000000602: { '2026-09-28': { 100: 532, 101: 532, 102: 533 }, '2026-09-30': { 90: 38, 100: 532, 110: 548 } }, A0000000501: { '2026-09-30': { 90: 38 }, '2026-10-01': { 50: 39 } } };
+// 30/09 no 602: uma falha (38) e DOIS alarmes de familias diferentes (532 reversa_fv, 548 entrada_anormal) no MESMO
+// inversor-dia: o tipo do dia e o OU dos bits (3); somar daria 4 (lote sungrow-saude-tipo, RE-001)
 // um numero de serie que o SCADA nao tem, noutra usina (M6): fica sem posicao, e a busca dele e LEMBRADA
 const NUNCA = 'A0000000999';
 mk(path.join(RAW, 'M10', 'TS05', '01 A 05')); mk(path.join(RAW, 'M10', 'TS05', 'PID 100')); mk(path.join(RAW, 'M06', 'TS01', '01 A 05'));
@@ -450,6 +452,12 @@ function cenario(gen, lib) {
     // a fracao de instantes gerando (P > 1 kW) com potencia limitada, contada aqui do perfil forjado
     const limEsp = (f, a, b) => { const g = HH.map((h, k) => k).filter((k) => perfil(k, f) / 1000 > 1); return Math.round(1000 * g.filter((k) => k >= a && k < b).length / g.length) / 10; };
     const i601 = M1.find((x) => x.sn === 'A0000000601' && x.d === '2026-09-29') || {}, s601 = sl('A0000000601', '2026-09-29');
+    // o tipo do dia (bits): 1 alarme, 2 falha, 4 fora do manual; sem codigo, sem campo
+    const TPC = [['A0000000502', '2026-09-29', 1], ['A0000000601', '2026-09-28', 2], ['A0000000602', '2026-09-28', 1], ['A0000000601', '2026-09-30', 4],
+      ['A0000000501', '2026-09-30', 2], ['A0000000602', '2026-09-30', 3], ['A0000000501', '2026-10-01', 2], ['A0000000501', '2026-09-29', undefined]];
+    // a linha tem de EXISTIR (sl devolve {} quando falta): sem codigo, sem o campo
+    R.okSaudeTipo = TPC.every(([sn, d, t]) => { const x = sl(sn, d); return x.d === d && (t === undefined ? !('tp' in x) : x.tp === t); });
+    R.txt.tp = TPC.map(([sn, d, t]) => { const x = sl(sn, d); return sn.slice(-3) + ' ' + d.slice(5) + '=' + (x.d ? x.tp : 'SEM LINHA') + '(esp ' + t + ')'; }).join(' · ');
     R.okSaudeLinhas = SA.length === 24 && JSON.stringify(sl('A0000000502', '2026-09-29').f) === '{"532":3}'
       && JSON.stringify(sl('A0000000502', '2026-09-29').ev) === '{"reversa_fv":3}' && JSON.stringify(sl('A0000000601', '2026-09-28').ev) === '{"ilhamento":1}'
       && JSON.stringify(sl('A0000000602', '2026-09-28').f) === '{"532":2,"533":1}' && JSON.stringify(sl('A0000000602', '2026-09-28').ev) === '{"reversa_fv":3}'
@@ -462,7 +470,7 @@ function cenario(gen, lib) {
     R.txt.campos = 'e ' + s601.e + ' tm ' + s601.tm + ' ef ' + s601.ef + ' iso ' + s601.iso + ' lim ' + s601.lim + ' (esperado ' + limEsp(0.95, 120, 180) + ') ' + s601.ini + '-' + s601.fim;
     const conta = (d, n_ev, n_alarme, n_falha, n_rede, n_equip) => { const x = ud(d);
       return x.n_ev === n_ev && x.n_alarme === n_alarme && x.n_falha === n_falha && x.n_rede === n_rede && x.n_equip === n_equip; };
-    R.okSaudeResumo = conta('2026-09-28', 2, 1, 1, 1, 1) && conta('2026-09-29', 1, 1, 0, 0, 1) && conta('2026-09-30', 2, 0, 1, 0, 1)
+    R.okSaudeResumo = conta('2026-09-28', 2, 1, 1, 1, 1) && conta('2026-09-29', 1, 1, 0, 0, 1) && conta('2026-09-30', 3, 1, 2, 0, 2)
       // evento em dia PARCIAL conta: 01/10 sem nenhum inversor inteiro, com a falha de isolacao do 501
       && conta('2026-10-01', 1, 0, 1, 0, 1) && ud('2026-10-01').n_inv === 0
       && fd('2026-09-29', 'reversa_fv').n_inv === 1 && fd('2026-09-29', 'reversa_fv').amostras === 3 && fd('2026-09-29', 'reversa_fv').tipo === 'alarme'
@@ -565,6 +573,7 @@ ok(R.okMpptVazio, 'eletrocentro identificado sem nenhum dia de MPPT tem arquivo,
 ok(R.okMpptJanela, 'a janela: o arquivo corta o que passa de 365 dias, o ranking so ve os ultimos 30 e exige 5 dias: ' + R.txt.r4);
 ok(R.okRankOrdem, 'o ranking inteiro em ordem (razao, posicao, MPPT)');
 ok(R.okMpptAcumula, 'tensao dos MPPT ACUMULA: com o dia novo do inversor, os dias antigos mantidos e o ranking ate o dia novo');
+ok(R.okSaudeTipo, 'o tipo do dia na saude: alarme, falha, os dois no mesmo inversor-dia e codigo fora do manual, em bits (OU): ' + R.txt.tp);
 ok(R.okSemTrabalho, 'os campos de trabalho de 5 min nao vazam para o resumo do dia publicado nem para o historico');
 ok(R.okEtcAcumula, 'eletrocentro de 5 min ACUMULA: com o dia novo do logger, os quatro dias de geracao, a hora do inversor fora mantida');
 ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 2)');
@@ -668,6 +677,10 @@ planta('ranking com o desempate do MPPT invertido', '|| x.mppt - y.mppt);', '|| 
 planta('corrente do ranking pela tensao', 'i: med(L.map((l) => l.i[m]))', 'i: med(L.map((l) => l.r[m]))', 'okMppt');
 planta('eletrocentro sem MPPT sem arquivo', 'if (!novo.length && ant && !tirados) continue;', 'if (!novo.length) continue;', 'okMpptVazio');
 planta('migracao sem o ranking', "pesos['sg_mppt.json'] = await escreve(", "if (!migra) pesos['sg_mppt.json'] = await escreve(", 'okMigra');
+planta('tipo do dia pela origem', "(FAM[f] || {}).tipo === 'alarme' ? 1 :", "(FAM[f] || {}).origem === 'rede' ? 1 :", 'okSaudeTipo');
+planta('codigo fora do manual vira falha', "(FAM[f] || {}).tipo === 'falha' ? 2 : 4), 0);", "(FAM[f] || {}).tipo === 'falha' ? 2 : 2), 0);", 'okSaudeTipo');
+planta('tipo do dia soma os bits em vez de OU', "reduce((b, f) => b | ((FAM[f]", "reduce((b, f) => b + ((FAM[f]", 'okSaudeTipo');
+planta('tipo do dia sobrescreve em vez de juntar', "reduce((b, f) => b | ((FAM[f]", "reduce((b, f) => 0 | ((FAM[f]", 'okSaudeTipo');
 planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).map', 'const tudo = new Map(([]).map', 'okPtAcumula');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');

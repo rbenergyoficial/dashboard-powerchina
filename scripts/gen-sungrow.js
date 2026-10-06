@@ -408,11 +408,15 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     const linhas = L.map((x) => { const r = { d: x.d, ms: msBrt(x.d), ts: x.ts, inv: x.inv, p: x.parcial == null ? null : (x.parcial ? 1 : 0), e: x.e,
       tm: x.t_max, ef: x.ef_med, iso: x.iso_min, lim: x.lim_pct, ini: x.ini, fim: x.fim };
       if (Object.keys(x.falha || {}).length) { r.f = x.falha; r.ev = evDe(x.falha); }
+      /* 🔴 O TIPO DO DIA, em bits, pela tabela do manual (FAIXAS): 1 teve alarme, 2 teve falha, 4 teve codigo FORA do
+         manual (tipo desconhecido). A regra mora aqui; a pagina so le o numero (lote sungrow-saude-tipo, 06/10/2026) */
+      if (r.ev) r.tp = Object.keys(r.ev).reduce((b, f) => b | ((FAM[f] || {}).tipo === 'alarme' ? 1 : (FAM[f] || {}).tipo === 'falha' ? 2 : 4), 0);
       return r; });
     pesos['sg_saude_' + u + '.json'] = await escreve('sg_saude_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1,
       unidade: 'e kWh; tm °C (temperatura interna maxima); ef % (eficiencia mediana gerando); iso kΩ (isolamento minimo gerando);'
         + ' lim % dos instantes gerando com potencia limitada; ini/fim primeira e ultima amostra gerando; p 1 = dia parcial do logger;'
-        + ' f codigo de falha -> amostras de 5 min; ev familia -> amostras (sg_saude.json, familias)', serie: linhas });
+        + ' f codigo de falha -> amostras de 5 min; ev familia -> amostras (sg_saude.json, familias); tp bits do dia (OU, so nas linhas com f): 1 alarme,'
+        + ' 2 falha, 4 codigo fora do manual', serie: linhas });
     const porD = new Map();
     for (const r of linhas) (porD.get(r.d) || porD.set(r.d, []).get(r.d)).push(r);
     for (const [d, R] of porD) {
