@@ -6,7 +6,9 @@
  *   2. o fechamento NAO trocar quando a API trouxe o fim do dia que o snapshot perdeu (o furo da virada ficaria);
  *   3. gravar o arquivo de um dia que nao passa na conferencia (o ponto 6233 deixou de ser a soma dos 22);
  *   4. o `precisa` dizer "ja fechado" com um medidor sem o 24:00, ou "precisa" com os 24 completos;
- *   5. a carga regravar o que ja existe sem FORCAR, ou pular o que falta.
+ *   5. a carga regravar o que ja existe sem FORCAR, ou pular o que falta;
+ *   6. o resumo (hist/portal_resumo.json) nao ser o dos arquivos dos dias: dia regravado com resumo velho, resumo apagado que
+ *      nao se refaz (PROMOVER portal-resumo-dias).
  * Tudo numa pasta temporaria (LOCAL_DIR), sem Azure e sem API. Cada caso planta o defeito e exige o resultado.
  *
  *   node scripts/ensaio-portal-dia.js
@@ -81,5 +83,27 @@ const f = [];
   if (!ix || JSON.stringify(ix.dias) !== JSON.stringify([d1, d2, d3])) f.push('indice ' + JSON.stringify(ix && ix.dias));
   if (!/2 dia\(s\) gravado\(s\), 1 ja existiam/.test(r.out)) f.push('a carga nao contou certo: ' + r.out.split('\n').find(l => /^carga/.test(l))); }
 
+// 6 · o resumo: a energia de cada dia do indice, a do proprio arquivo do dia; dia regravado acompanha; resumo apagado se refaz
+{ const d = novo(); const d1 = '2026-02-01', d2 = '2026-02-02', d3 = '2026-02-03';
+  [d1, d2, d3].forEach(x => grava(d, 'hist/way2_' + x + '.json', forja(x, 1440)));
+  roda(d, { MODO: 'carga', DE: d1, ATE: d3 });
+  const bate = (tag) => { const rs = le(d, 'hist/portal_resumo.json');
+    if (!rs || !rs.dias) { f.push('resumo ' + tag + ': nao existe'); return null; }
+    if (JSON.stringify(Object.keys(rs.dias)) !== JSON.stringify([d1, d2, d3])) f.push('resumo ' + tag + ': dias ' + JSON.stringify(Object.keys(rs.dias)));
+    [d1, d2, d3].forEach(x => { const pv = le(d, 'hist/portal_vivo_' + x + '.json'), r = rs.dias[x] || {};
+      if (!pv || r.e == null || r.e !== pv.energia_mwh || !r.k || r.k.M1 !== pv.kpis.M1.energia_mwh || r.k.PPA !== pv.kpis.PPA.energia_mwh || r.k.ML !== pv.kpis.ML.energia_mwh)
+        f.push('resumo ' + tag + ': o dia ' + x + ' nao e o do arquivo do dia (' + JSON.stringify(r).slice(0, 100) + ' x ' + (pv && pv.energia_mwh) + ')'); });
+    return rs; };
+  const r0 = bate('da carga');
+  // d2 refeito com o dobro da potencia e regravado (FORCAR): o resumo daquele dia tem de acompanhar o arquivo novo
+  const o2 = forja(d2, 1440); o2.dados.forEach(s => { if (s.nomeGrandeza === 'Demat') s.valores.forEach(v => { if (v.valor != null) v.valor *= 2; }); });
+  grava(d, 'hist/way2_' + d2 + '.json', o2);
+  roda(d, { MODO: 'carga', DE: d2, ATE: d2, FORCAR: '1' });
+  const r1 = bate('com um dia regravado');
+  if (r0 && r1 && r1.dias[d2] && r0.dias[d2] && !(r1.dias[d2].e > r0.dias[d2].e)) f.push('resumo: o dia regravado com o dobro nao mudou (' + r0.dias[d2].e + ' -> ' + r1.dias[d2].e + ')');
+  fs.unlinkSync(cam(d, 'hist/portal_resumo.json'));
+  roda(d, { MODO: 'carga', DE: d1, ATE: d3 });
+  bate('refeito dos arquivos'); }
+
 if (f.length) { console.log('REPROVADO:\n  ' + f.join('\n  ')); process.exit(1); }
-console.log('gen-portal-dia: os cinco casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice)');
+console.log('gen-portal-dia: os seis casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice, resumo)');

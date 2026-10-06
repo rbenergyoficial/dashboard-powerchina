@@ -1,7 +1,8 @@
 name: Portal · os arquivos de cada dia (Ao vivo em outros periodos)
 
 # Grava, para cada dia fechado, os dois arquivos leves do Ao vivo (hist/portal_vivo_DIA.json e hist/portal_eletrico_DIA.json)
-# e o indice hist/portal_dias.json, montados pelas mesmas libs do Ao vivo e conferidos contra a fonte antes de gravar
+# e o indice hist/portal_dias.json (com o resumo hist/portal_resumo.json: a energia de cada dia por entidade, para a aba Energia
+# comparar o dia com as semanas anteriores), montados pelas mesmas libs do Ao vivo e conferidos contra a fonte antes de gravar
 # (scripts/gen-portal-dia.js). De madrugada, FECHA o dia anterior: refaz o dia pela API da Way2 e, se vier mais completo,
 # substitui o snapshot do historico — o furo da virada (os ultimos ~15-20 min de todo dia, que o snapshot perdia).
 # A CARGA (os dois anos do historico) e por disparo, por intervalo de datas.
