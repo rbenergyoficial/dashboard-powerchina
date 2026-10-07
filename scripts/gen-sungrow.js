@@ -158,7 +158,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const lidosAnt = REFAZER || migra ? null : await leAnterior('sg_lidos.json');
   const identAnt = await leAnterior('sg_ident.json');
   const H = hist || { esquema: ESQ_HIST, inv: {}, pid: {}, est: {}, pid5: {} };
-  H.pinv = H.pinv || {}; H.pest = H.pest || {}; H.pt5 = H.pt5 || {};            // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
+  H.pinv = H.pinv || {}; H.pest = H.pest || {}; delete H.pt5;                  // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
   const P_DIAS = 3;
   /* 🔴 O CORTE E FEITO DURANTE A LEITURA, nao no fim (03/10/2026): na carga inteira (824 zips, seis meses) guardar a
      potencia de 5 min de todo dia e cortar depois levou o processo a 3,4 GB e o coletor de lixo a dominar o tempo. O
@@ -218,15 +218,13 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       } else if (t === 'estacao') {
         const o = H.est[m[1]] || (H.est[m[1]] = { ufv: u, pasta: tsPasta, dias: {} });
         const dl = S.diaEstacao(cab, linhas, onde); guardaP(H.pest, m[1], dl);
-        // a temperatura de 5 min do barramento de BT (PT 1, PT 2) e a potencia do eletrocentro no mesmo carimbo
-        const s5 = H.pt5[m[1]] || (H.pt5[m[1]] = {});
-        // e a MESMA serie, sem corte, para o arquivo por eletrocentro (so o que esta rodada leu; o resto vem do arquivo publicado)
+        // a temperatura de 5 min do barramento de BT (PT 1, PT 2) e a potencia do eletrocentro no mesmo carimbo, para o
+        // arquivo por eletrocentro (so o que esta rodada leu; o resto vem do arquivo publicado). O historico nao guarda mais
+        // a serie: ela so servia ao `sg_pt_5min_<usina>`, que saiu em 06/10/2026
         const sr = ptRodada[m[1]] || (ptRodada[m[1]] = {});
-        for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) { s5[x.d + ' ' + h] = a; sr[x.d + ' ' + h] = a; } }
+        for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) sr[x.d + ' ' + h] = a; }
         const se = etcRodada[m[1]] || (etcRodada[m[1]] = {});
         for (const x of dl) { const v = x._etc; delete x._etc; if (v) for (const [h, a] of Object.entries(v)) se[x.d + ' ' + h] = a; }
-        const dp5 = [...new Set(Object.keys(s5).map((t) => t.slice(0, 10)))].sort();
-        if (dp5.length > DIAS_5MIN) { const c5 = dp5[dp5.length - DIAS_5MIN]; for (const t of Object.keys(s5)) if (t.slice(0, 10) < c5) delete s5[t]; }
         junta(o.dias, dl);
       }
     }
@@ -506,24 +504,12 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     unidade: 'p_max kW; sp_min kW e taxa_min ‰ (valores de CONFIGURACAO do logger, constantes; nao sao o despacho); inv_h_fora horas-inversor'
       + ' fora da rede com o eletrocentro gerando (n_ger5 amostras gerando, n_fora quantas com a rede legivel); pt1/pt2 °C (PT100 do barramento de BT do eletrocentro: _max, _min, _h hora do maximo,'
       + ' n_pt amostras validas; zero e 32767 sao sem leitura)', serie: estRows });
-  /* -------- a temperatura PT100 de 5 min de cada eletrocentro (ultimos DIAS_5MIN dias), com a potencia do logger no
-     mesmo carimbo: a curva de aquecimento contra a carga. Um arquivo por usina, como o PID -------- */
-  const pt5 = {};
-  for (const [sn, s] of Object.entries(H.pt5)) {
-    const o = H.est[sn]; if (!o) continue;
-    const ch = o.ufv + '/' + tsDoLogger[sn].ts;
-    for (const [t, v] of Object.entries(s)) (pt5[o.ufv] || (pt5[o.ufv] = [])).push({ t, ms: Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3,
-      chave: ch, pt1: v[0], pt2: v[1], p: v[2] });
-  }
-  for (const [u, L] of Object.entries(pt5)) {
-    L.sort((x, y) => (x.t < y.t ? -1 : x.t > y.t ? 1 : x.chave < y.chave ? -1 : 1));
-    pesos['sg_pt_5min_' + u + '.json'] = await escreve('sg_pt_5min_' + u + '.json', { gerado_em: agora, usina: u, esquema: 1, janela_dias: DIAS_5MIN,
-      unidade: 'pt1/pt2 °C (PT100 do barramento de BT do eletrocentro); p kW (potencia do eletrocentro)', serie: L });
-  }
+  /* o `sg_pt_5min_<usina>` (7 dias, um arquivo por usina) saiu em 06/10/2026: nenhum painel o lia desde o arquivo POR
+     ELETROCENTRO, abaixo, que tem a mesma serie com o historico (varredura de consumidores no livro do pipeline) */
   /* -------- o PT100 de 5 min POR ELETROCENTRO, com o historico (DIAS_PT), para o grafico que acompanha o filtro de periodo
      da pagina (pedido de 04/10/2026). Seis meses das oito usinas num arquivo so passariam do teto de ~1.100 KB que a pagina
-     baixa; por eletrocentro sao ~400 KB e a pagina baixa so o da caixa escolhida. 🔴 ACUMULATIVO: o historico interno so
-     guarda DIAS_5MIN dias do 5 min (memoria e peso), entao o que a rodada leu e FUNDIDO no arquivo publicado do
+     baixa; por eletrocentro sao ~400 KB e a pagina baixa so o da caixa escolhida. 🔴 ACUMULATIVO: o historico interno nao
+     guarda o 5 min do PT100 (memoria e peso), entao o que a rodada leu e FUNDIDO no arquivo publicado do
      eletrocentro (a rodada nova ganha no mesmo instante). Arquivo ausente (404) = primeira vez; outra falha de leitura
      aborta (regravar sem ele apagaria o acumulado). O historico inteiro so se constroi relendo os zips: ESQ_HIST 4 -------- */
   // todo eletrocentro com logger tem arquivo, mesmo vazio: URL que nao resolve deixa o painel em erro, nao vazio
