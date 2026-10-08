@@ -118,12 +118,12 @@ function confere(pv, elet, CIRC) {
   }
   // os numeros do dia em DUAS casas (PROMOVER portal-vivo-casas): energia, FC, media e % do pico, do conjunto e de cada
   // entidade, refeitos da curva publicada (a lib soma a mesma curva, em 3 casas); folga = meia unidade da 2a casa
-  const kp = (nome, c, cap, o, pctK) => {
+  const kp = (nome, c, cap, o, pctK, enLida) => {
     if (!o || !Array.isArray(c) || !c.length || !(cap > 0)) return;
     const en = c.reduce((s, [, v]) => s + v, 0) * 5 / 60, hs = c.length * 5 / 60, pk = Math.max(...c.map(x => x[1]));
-    const ref = { energia_mwh: en, fc_pct: 100 * en / (cap * hs), media_mw: en / hs, [pctK]: 100 * pk / cap };
+    const ref = { energia_mwh: enLida != null ? enLida : en, fc_pct: 100 * en / (cap * hs), media_mw: en / hs, [pctK]: 100 * pk / cap };
     for (const [k, v] of Object.entries(ref)) {
-      if (o[k] == null || Math.abs(o[k] - v) > 0.005 + 1e-6) f.push(nome + ': ' + k + ' = ' + o[k] + ', refeito da curva ' + v.toFixed(4) + ' (duas casas)');
+      if (o[k] == null || Math.abs(o[k] - v) > 0.005 + 1e-6) f.push(nome + ': ' + k + ' = ' + o[k] + ', refeito ' + v.toFixed(4) + ' (duas casas)');
       cont.kpis++;
     }
   };
@@ -141,7 +141,17 @@ function confere(pv, elet, CIRC) {
     if (L.CAP && Math.abs(s - L.CAP[u]) > 1e-6) f.push(u + ': os circuitos somam ' + s.toFixed(3) + ' MW, a usina tem ' + L.CAP[u]);
   }
   if (Math.abs(capTot - 343.77) > 1e-6) f.push('os 22 circuitos somam ' + capTot.toFixed(3) + ' MW, a outorga e 343,77');
-  for (const [e, o] of Object.entries(pv.kpis || {})) kp(e, (pv.curvas || {})[e], o && o.cap_mw, o, 'pct_cap');
+  // vivo-sem-leitura: a ENERGIA de usina e contrato = a curva tudo-ou-nada publicada da entidade + nos instantes do complexo em
+  // que ela falta, o que os circuitos dela leram (refeito do BRUTO, sem a lib); o FC, a media e o pico seguem a curva. Os
+  // grupos transcritos AQUI de novo (referencia independente da lib).
+  const lidaE = {}, ENTS = Object.assign({}, CIRC);
+  for (const [g, us] of Object.entries({ PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] })) ENTS[g] = us.flatMap(u => CIRC[u]);
+  for (const [e, ps] of Object.entries(ENTS)) {
+    const ce = new Map((pv.curvas || {})[e] || []); let s = 0;
+    for (const h of hc) { if (ce.has(h)) s += ce.get(h); else for (const p of ps) { const v = ((I.get(p) || new Map()).get('Demat') || new Map()).get(h); if (v != null) s += v / 1000; } }
+    lidaE[e] = s * 5 / 60;
+  }
+  for (const [e, o] of Object.entries(pv.kpis || {})) kp(e, (pv.curvas || {})[e], o && o.cap_mw, o, 'pct_cap', lidaE[e]);
   return { f, cont };
 }
 
@@ -184,6 +194,9 @@ function aMao(pv) {
   const n3 = c(6203).agora;   // madrugada: P -9 x 1,2 = -10,8 kW, Q 230,4 kVAr
   q(n3.p_mw, -0.011, 1e-9, 'M3 · C1 P negativo'); q(n3.fp, Math.round(1000 * 10.8 / Math.hypot(10.8, 230.4)) / 1000, 1e-9, 'M3 · C1 FP (|P|/S, positivo)');
   if (c(6201).pts.length !== 2 || c(6201).pts.some(p => p[0] === '10:05')) f.push('a mao · M2 · C1: a curva tem de ter so 10:00 e 10:10');
+  // vivo-sem-leitura: energia LIDA do M2 = (4,0 + 4,8 do C1, sem 10:05) + (5,0 + 5,5 + 6,0 do C2) MW x 5 min = 2,108 → 2,11
+  // (a tudo-ou-nada, sem o 10:05 dos dois, daria 1,65)
+  q(pv.kpis.M2.energia_mwh, 2.11, 1e-9, 'M2 energia lida (o C1 sem 10:05 nao tira o C2)');
   q(pv.eletrico.tr1.v_kv, Math.round(100 * 136700 * 1.2 * R3 / 1000) / 100, 1e-9, 'TR1 tensao de linha');
   q(pv.eletrico.tr1.q_mvar, 10.8, 1e-9, 'TR1 Q');
   const aq = new Map(pv.alta_q);
@@ -232,6 +245,8 @@ async function main() {
       ['retratos nulos', p => { p.circuitos.forEach(c => { c.agora = null; }); }],
       ['energia do dia errada na segunda casa', p => { p.energia_mwh += 0.02; }],
       ['FC de uma usina errado na segunda casa', p => { p.kpis.M2.fc_pct -= 0.02; }],
+      ['energia da usina tudo-ou-nada com um circuito sem leitura (a regra de antes do vivo-sem-leitura)', p => { p.kpis.M2.energia_mwh = 1.65; }],
+      ['energia do contrato tudo-ou-nada', p => { p.kpis.PPA.energia_mwh = Math.round(100 * p.curvas.PPA.reduce((a, x) => a + x[1], 0) * 5 / 60) / 100; }],
       ['potencia de dois circuitos trocada (a soma da usina fecha)', p => { const a = p.circuitos.find(x => x.pid === CIRC.M5[0]), b = p.circuitos.find(x => x.pid === CIRC.M5[1]); const z = a.cap_mw; a.cap_mw = b.cap_mw; b.cap_mw = z; }],
       ['circuito sem potencia instalada', p => { p.circuitos[0].cap_mw = null; }],
     ];

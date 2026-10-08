@@ -8,7 +8,10 @@
  *   4. o `precisa` dizer "ja fechado" com um medidor sem o 24:00, ou "precisa" com os 24 completos;
  *   5. a carga regravar o que ja existe sem FORCAR, ou pular o que falta;
  *   6. o resumo (hist/portal_resumo.json) nao ser o dos arquivos dos dias: dia regravado com resumo velho, resumo apagado que
- *      nao se refaz (PROMOVER portal-resumo-dias).
+ *      nao se refaz (PROMOVER portal-resumo-dias);
+ *   7. com um circuito sem leitura, a energia da usina e do contrato sair tudo-ou-nada (sem a parte dos circuitos que leram), no
+ *      arquivo do dia ou no resumo; e o resumo do esquema velho (sem a marca, arquivo do dia com o kpis velho) nao ser refeito
+ *      pela energia lida (PROMOVER vivo-sem-leitura).
  * Tudo numa pasta temporaria (LOCAL_DIR), sem Azure e sem API. Cada caso planta o defeito e exige o resultado.
  *
  *   node scripts/ensaio-portal-dia.js
@@ -105,5 +108,35 @@ const f = [];
   roda(d, { MODO: 'carga', DE: d1, ATE: d3 });
   bate('refeito dos arquivos'); }
 
+// 7 · circuito sem leitura (vivo-sem-leitura): o M2 · C2 (6202) sem leitura das 10:00 as 10:55 (12 instantes) e o 6233 sem a parte
+//     dele, como na Way2. Feito A MAO (todo circuito 1,5 MW): a energia lida do M2 tem 1,5 MWh a mais que a tudo-ou-nada (o C1
+//     nesses 12 instantes) e a do PPA 24 MWh (16 circuitos x 1,5 MW x 1 h). Depois o esquema velho FIEL: o arquivo do dia com o
+//     kpis tudo-ou-nada e o resumo sem `esquema`, com os valores velhos; o indice tem de refazer o resumo pela energia lida.
+{ const d = novo(), d1 = '2026-03-01', o = forja(d1, 1440);
+  const noBuraco = (v) => v.data >= d1 + 'T10:00:00' && v.data <= d1 + 'T10:55:00';
+  o.dados.forEach(s => { if (s.nomeGrandeza !== 'Demat') return;
+    if (s.pontoId === 6202) s.valores.forEach(v => { if (noBuraco(v)) delete v.valor; });
+    if (s.pontoId === 6233) s.valores.forEach(v => { if (noBuraco(v)) v.valor -= 1500; }); });
+  grava(d, 'hist/way2_' + d1 + '.json', o);
+  const r7 = roda(d, { MODO: 'carga', DE: d1, ATE: d1 });
+  const pv = le(d, 'hist/portal_vivo_' + d1 + '.json'), tudo = (e) => Math.round(100 * pv.curvas[e].reduce((a, p) => a + p[1], 0) * 5 / 60) / 100;
+  if (!pv) f.push('7: o dia com o circuito sem leitura nao foi gravado: ' + r7.out.slice(-300));
+  else {
+    if (pv.energia_regra !== 'lida') f.push('7: o arquivo do dia sem a marca energia_regra: lida');
+    if (Math.abs(pv.kpis.M2.energia_mwh - tudo('M2') - 1.5) > 0.005 + 1e-9) f.push('7: a energia do M2 no arquivo (' + pv.kpis.M2.energia_mwh + ') nao e a lida (tudo-ou-nada ' + tudo('M2') + ' + 1,5)');
+    if (Math.abs(pv.kpis.PPA.energia_mwh - tudo('PPA') - 24) > 0.005 + 1e-9) f.push('7: a energia do PPA no arquivo (' + pv.kpis.PPA.energia_mwh + ') nao e a lida (tudo-ou-nada ' + tudo('PPA') + ' + 24)');
+    const rs = le(d, 'hist/portal_resumo.json'), r = rs && rs.dias && rs.dias[d1];
+    if (!rs || rs.esquema !== 2 || !r || r.k.M2 !== pv.kpis.M2.energia_mwh || r.k.PPA !== pv.kpis.PPA.energia_mwh) f.push('7: resumo da carga ' + JSON.stringify(r) + ' (esquema ' + (rs && rs.esquema) + ')');
+    // o esquema velho, FIEL: o arquivo do dia com o kpis tudo-ou-nada e o resumo sem a marca, com os valores velhos
+    const velho = JSON.parse(JSON.stringify(pv)); delete velho.energia_regra; velho.kpis.M2.energia_mwh = tudo('M2'); velho.kpis.PPA.energia_mwh = tudo('PPA');
+    fs.writeFileSync(cam(d, 'hist/portal_vivo_' + d1 + '.json'), zlib.gzipSync(Buffer.from(JSON.stringify(velho), 'utf8')));
+    const rv = JSON.parse(JSON.stringify(rs)); delete rv.esquema; rv.dias[d1].k.M2 = tudo('M2'); rv.dias[d1].k.PPA = tudo('PPA');
+    fs.writeFileSync(cam(d, 'hist/portal_resumo.json'), zlib.gzipSync(Buffer.from(JSON.stringify(rv), 'utf8')));
+    roda(d, { MODO: 'carga', DE: d1, ATE: d1 });   // o dia existe e e pulado; o indice refaz o resumo
+    const rm = le(d, 'hist/portal_resumo.json'), m = rm && rm.dias && rm.dias[d1];
+    if (!rm || rm.esquema !== 2 || !m || m.k.M2 !== pv.kpis.M2.energia_mwh || m.k.PPA !== pv.kpis.PPA.energia_mwh)
+      f.push('7: o resumo do esquema velho nao foi refeito pela energia lida: ' + JSON.stringify(m) + ' (esquema ' + (rm && rm.esquema) + ')');
+  } }
+
 if (f.length) { console.log('REPROVADO:\n  ' + f.join('\n  ')); process.exit(1); }
-console.log('gen-portal-dia: os seis casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice, resumo)');
+console.log('gen-portal-dia: os sete casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice, resumo, circuito sem leitura e a migracao do resumo)');

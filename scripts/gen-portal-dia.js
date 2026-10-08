@@ -90,10 +90,15 @@ async function fazDia(A, dia, elet) {
 
 // o resumo de um dia: a energia do dia (MWh, as duas casas do arquivo) do Complexo e de cada entidade, e quantos instantes o
 // Complexo teve (o portal sabe assim que o dia tem buraco)
+// 🔴 ESQUEMA 2 (PROMOVER vivo-sem-leitura, 08/10/2026): a energia de cada entidade e a ENERGIA LIDA dos circuitos. Arquivo com
+//    `energia_regra: 'lida'` ja a traz no kpis; arquivo gravado antes da regra (kpis tudo-ou-nada; 27/07/2026: PPA 589 MWh abaixo
+//    do lido) e refeito pela MESMA conta do gerador (LV.energiaLidaDoArquivo: a curva da entidade + os circuitos que leram onde
+//    ela falta). Resumo sem a marca `esquema` 2 e refeito inteiro dos arquivos, uma vez (migracao por MARCA, nunca por magnitude).
 const ENT = ['PPA', 'ML', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+const RESUMO_ESQUEMA = 2;
 function resumoDe(pv) {
-  const k = {};
-  for (const e of ENT) { const x = (pv.kpis || {})[e]; k[e] = x && x.energia_mwh != null ? x.energia_mwh : null; }
+  const k = {}, EL = pv.energia_regra === 'lida' ? {} : LV.energiaLidaDoArquivo(pv);
+  for (const e of ENT) { const x = (pv.kpis || {})[e]; k[e] = x && x.energia_mwh != null ? (EL[e] != null ? EL[e] : x.energia_mwh) : null; }
   return { e: pv.energia_mwh != null ? pv.energia_mwh : null, n: pv.n || 0, k };
 }
 
@@ -103,7 +108,8 @@ async function indice(A, novos) {
   const dias = nomes.map(n => (n.match(/portal_eletrico_(\d{4}-\d{2}-\d{2})\.json$/) || [])[1]).filter(Boolean).sort();
   const gerado = new Date().toISOString(), de = dias[0] || null, ate = dias[dias.length - 1] || null;
   await A.grava('hist/portal_dias.json', Buffer.from(JSON.stringify({ gerado, n: dias.length, de, ate, dias })), false);
-  const ant = ((await A.le('hist/portal_resumo.json')) || {}).dias || {}, R = {}, faltam = [];
+  const rs0 = (await A.le('hist/portal_resumo.json')) || {};
+  const ant = rs0.esquema === RESUMO_ESQUEMA ? rs0.dias || {} : {}, R = {}, faltam = [];   // vivo-sem-leitura: sem a marca, refaz tudo
   for (const d of dias) {
     if (novos && novos.has(d)) R[d] = novos.get(d);
     else if (ant[d]) R[d] = ant[d];
@@ -113,7 +119,7 @@ async function indice(A, novos) {
     await Promise.all(faltam.slice(i, i + 16).map(async d => { const pv = await A.le('hist/portal_vivo_' + d + '.json'); if (pv) R[d] = resumoDe(pv); }));
   }
   const o = {}; Object.keys(R).sort().forEach(d => { o[d] = R[d]; });
-  await A.grava('hist/portal_resumo.json', zlib.gzipSync(Buffer.from(JSON.stringify({ gerado, n: Object.keys(o).length, de, ate, entidades: ENT, dias: o }), 'utf8')), true);
+  await A.grava('hist/portal_resumo.json', zlib.gzipSync(Buffer.from(JSON.stringify({ gerado, esquema: RESUMO_ESQUEMA, n: Object.keys(o).length, de, ate, entidades: ENT, dias: o }), 'utf8')), true);
   return dias.length + ' dias; resumo com ' + Object.keys(o).length + ' (' + faltam.length + ' lidos do arquivo do dia)';
 }
 

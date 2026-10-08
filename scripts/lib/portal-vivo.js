@@ -53,6 +53,36 @@ const CAP_CIRC = { M1: [16.38, 19.65, 13.08], M2: [12.27, 12.285], M3: [13.097, 
   M5: [19.66, 9.816, 19.634], M6: [19.639, 16.366, 13.105], M7: [14.733], M8: [13.088, 19.66, 16.362], M9: [9.822] };
 
 const r = (v, c = 2) => (v == null || !isFinite(v) ? null : Math.round(v * 10 ** c) / 10 ** c);
+const GRUPO = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
+
+// 🔴 ENERGIA LIDA (PROMOVER vivo-sem-leitura, 08/10/2026). A energia de cada usina e de cada contrato e a curva tudo-ou-nada dela
+//    (a de sempre, 3 casas) MAIS, nos instantes da curva do complexo em que ela falta, o que os circuitos dela que mediram leram.
+//    Antes era so a curva: um circuito sem leitura tirava a usina e o contrato INTEIROS do instante (27/07/2026, M5 · C2 das 13:55
+//    em diante: PPA 589 MWh abaixo do lido; 08/10, M2 · C2: 200 MWh). Em dia sem buraco o numero e o mesmo de antes, ate a 2a casa.
+//    O complexo (o ponto da Way2 que soma os 22) ja era assim. A curva da entidade, o pico, o FC e a media seguem tudo-ou-nada: um
+//    buraco nao vira queda. O arquivo marca `energia_regra: 'lida'`; o portal (vivLida) e o resumo dos dias (gen-portal-dia) refazem
+//    a mesma conta nos arquivos sem a marca, com os `circuitos[].pts` (energiaLidaDoArquivo).
+//    grupos: entidade -> pids dos circuitos dela; leitura(pid, h) -> MW ou undefined
+function energiaLida(curvas, grupos, horas, leitura) {
+  const out = {};
+  for (const [e, ps] of Object.entries(grupos)) {
+    const ce = new Map(curvas[e] || []);
+    let s = 0;
+    for (const h of horas) {
+      if (ce.has(h)) s += ce.get(h);
+      else for (const p of ps) { const v = leitura(p, h); if (v != null) s += v; }
+    }
+    out[e] = r(s * 5 / 60, 2);
+  }
+  return out;
+}
+function energiaLidaDoArquivo(pv) {
+  if (!pv || !pv.curvas || !(pv.circuitos || []).length) return {};
+  const P = new Map(pv.circuitos.map(c => [c.pid, new Map((c.pts || []).filter(x => x[1] != null))])), G = {};
+  for (const c of pv.circuitos) (G[c.u] = G[c.u] || []).push(c.pid);
+  for (const [g, us] of Object.entries(GRUPO)) G[g] = us.flatMap(u => G[u] || []);
+  return energiaLida(pv.curvas, G, (pv.curva || []).filter(x => x[1] != null).map(x => x[0]), (p, h) => P.get(p).get(h));
+}
 
 function serie(elet, ponto, grandeza = 'Demat') {
   const s = (elet.dados || []).find(x => x.pontoId === ponto && x.nomeGrandeza === grandeza);
@@ -121,7 +151,6 @@ function monta(elet, saude) {
     //    mediram. Somar oito de nove faria uma queda de cobertura parecer queda de geracao — e a
     //    queda apareceria justamente no instante em que um medidor falha.
     //    Custo medido antes de publicar: 11 entidades x 288 slots ~ 45 KB crus, ~10 KB no gzip.
-    const GRUPO = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
     const somaDe = (ps) => horas
       .map(h => ps.every(p => sc[p].has(h)) ? [h, r(ps.reduce((a, p) => a + sc[p].get(h), 0), 3)] : null)
       .filter(Boolean);
@@ -129,7 +158,8 @@ function monta(elet, saude) {
     for (const [u, ps] of Object.entries(CIRC)) curvas[u] = somaDe(ps);
     for (const [g, us] of Object.entries(GRUPO)) curvas[g] = somaDe(us.flatMap(u => CIRC[u]));
     // os quatro numeros do topo, POR entidade, pela MESMA conta do conjunto — senao o cartao
-    // "Pico do dia" com M2 selecionado continuaria mostrando o pico do complexo
+    // "Pico do dia" com M2 selecionado continuaria mostrando o pico do complexo; a ENERGIA e trocada abaixo pela energia
+    // lida dos circuitos (vivo-sem-leitura), o FC e a media ficam na curva da entidade
     const capDe = (e) => CAP[e] != null ? CAP[e] : (GRUPO[e] || []).reduce((s, u) => s + CAP[u], 0);
     kpis = {};
     for (const [e, c] of Object.entries(curvas)) {
@@ -150,6 +180,9 @@ function monta(elet, saude) {
       circuitos.push({ pid: p, u, nome: u + ' · C' + (i + 1), cap_mw: (CAP_CIRC[u] || []).length === ps.length ? CAP_CIRC[u][i] : null,
         pts: [...sc[p].keys()].sort().map(h => [h, r(sc[p].get(h), 2)]), agora: retrato(elet, p) });
     });
+    const G = Object.assign({}, CIRC); for (const [g, us] of Object.entries(GRUPO)) G[g] = us.flatMap(u => CIRC[u]);
+    const EL = energiaLida(curvas, G, horas, (p, h) => sc[p].get(h));   // vivo-sem-leitura
+    for (const e of Object.keys(kpis)) if (kpis[e] && EL[e] != null) kpis[e].energia_mwh = EL[e];
     const todos = Object.values(sc);
     const comuns = horas.filter(h => todos.every(m => m.has(h)));
     if (comuns.length) {
@@ -175,7 +208,7 @@ function monta(elet, saude) {
     media_mw: r(ener / (curva.length * 5 / 60), 2),
     curva, alta,
     // por entidade: M1..M9, PPA, ML (o Complexo e `curva`/os campos acima); null onde o mapa nao leu
-    curvas, kpis,
+    curvas, kpis, energia_regra: 'lida',   // vivo-sem-leitura: a energia do kpis ja e a lida
     rendimento: rend, rendimento_ate: rendAte,
     // os 22 circuitos e o retrato eletrico dos dois trafos e do medidor do complexo (PROMOVER portal-vivo-circuitos);
     // a reativa de 230 kV do dia, so onde os DOIS trafos mediram (a mesma regra da `alta`)
@@ -188,4 +221,4 @@ function monta(elet, saude) {
   };
 }
 
-module.exports = { monta, mapaCircuitos, retrato, COMPLEXO, TRAFOS, OUTORGA, CAP, CAP_CIRC };
+module.exports = { monta, mapaCircuitos, retrato, energiaLida, energiaLidaDoArquivo, GRUPO, COMPLEXO, TRAFOS, OUTORGA, CAP, CAP_CIRC };
