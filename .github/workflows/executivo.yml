@@ -28,6 +28,12 @@ jobs:
       - name: Ensaio · a tolerancia do rateio cobre o arredondamento e ainda pega defeito
         run: node scripts/ensaio-tol-rateio.js
 
+      # A disponibilidade declarada ao operador e media na janela FIXA 04:00–17:30, em todo mes: o operador mudou tres vezes
+      # o que publica no campo, e a media sobre o que veio comparava janelas diferentes mes a mes. A REGRA, em meses
+      # forjados com os tres formatos de publicacao, os defeitos plantados na lib e a fiacao no gerador, antes de gerar.
+      - name: Ensaio · a disponibilidade declarada na janela fixa (regra)
+        run: node scripts/ensaio-disp-declarada.js
+
       # A conta dos campos da manchete que se movem no dia mora numa lib que o executivo e o remendo
       # de 5 min chamam. Este ensaio cobra que eles andem JUNTOS (energia) e que a projecao, que
       # parte dos dias fechados, fique PARADA — e que o mes fechado nao seja tocado.
@@ -147,6 +153,12 @@ jobs:
       # o comissionamento e o gerado contra a serie mensal, o resumo refeito; cada plantio reprova pelo que plantou.
       - name: Ensaio · o historico da projecao (produto)
         run: node scripts/ensaio-historico-projecao.js --produto
+
+      # ... e o PRODUTO da disponibilidade declarada: cada mes publicado refeito do arquivo cru do conjunto, com a janela
+      # 04:00–17:30 escrita no proprio ensaio (sem a lib). Pega o gerador que chama a lib e publica outra coisa. Se o arquivo
+      # do conjunto foi regravado depois do executivo montado, diz que nao julgou (duas vintages) em vez de reprovar.
+      - name: Ensaio · a disponibilidade declarada na janela fixa (produto)
+        run: node scripts/ensaio-disp-declarada.js --produto
 
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:

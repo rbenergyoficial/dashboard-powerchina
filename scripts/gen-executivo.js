@@ -9,7 +9,7 @@
  * FÓRMULAS — usa a definição JÁ VALIDADA do gen-ons-consolidado.js, não inventa:
  *   referencia = Σ(gref × H)                                        [MWh]
  *   frustrada  = Σ max(0, (gref − ger) × H), SÓ onde lim > 0        [MWh]   (max(0) porque o realizado às vezes supera a referência)
- *   disp_pct   = Σdisp / n_linhas / CAP_MW × 100                    [%]
+ *   disp_pct   = Σdisp(>0) / n_declarados / CAP_MW × 100, SÓ 04:00–17:30   [%]   (lib-disp-declarada.js)
  * ⚠️ DOIS "potenciais" DIFERENTES, não misturar (erro silencioso clássico):
  *   gref = referência do ONS (usada p/ frustrada)  ≠  ge = estimada por irradiância (usada p/ PR)
  *   PR   = Σgv / Σge × 100   ← este é o Performance Ratio de verdade (o pr_pct do ons_kpis é ger/gref, outra coisa)
@@ -29,6 +29,7 @@ const { instanteAoVivo } = require('./lib-aovivo.js');
 // a tolerancia do par MWh x GWh, DERIVADA da cadeia de arredondamento (e maior no rateio)
 const { fatorRateio, tolRateio, TOL_PAR } = require('./lib-tol-unidade.js');
 const { conferePares } = require('./lib-par-mwh.js');
+const DISP = require('./lib-disp-declarada.js');   // a disponibilidade declarada, na janela fixa (PROMOVER disp-janela)
 // a guarda da energia liquidada (teto do residuo numa janela de dias, nao so no mes): uma escrita, o ensaio usa a mesma
 const GL = require('./lib-guarda-liquida.js');
 // os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
@@ -514,13 +515,15 @@ async function writeOut(obj, nome, opts) {
   const RAZ_TS = new Map();
   for (const r of restr.consolidado) {
     const mes = String(r.ts).slice(0, 7); if (!/^\d{4}-\d{2}$/.test(mes)) continue;
-    const m = M[mes] || (M[mes] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
+    const m = M[mes] || (M[mes] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, n_janela: 0, raz: {}, ori: {}, dias: new Set(), int_restr: 0 });
     const ger = num(r.ger), gref = num(r.gref), lim = num(r.lim);
     // disp=0 é AUSÊNCIA DE PUBLICAÇÃO, não indisponibilidade. A partir de 2026-07-07 o ONS parou de
     // publicar disp na janela 20h–04h (16 dos 48 intervalos, todo dia). Em 10 meses antes disso houve
     // ZERO zeros. Contar esses zeros como "usina parada" derrubou jul/26 p/ 79,46% com a planta intacta.
     // Media sobre os intervalos DECLARADOS; disp_cobertura expõe quantos foram, p/ queda real não se esconder.
-    const dsp = num(r.disp); if (dsp > 0) { m.disp += dsp; m.n_disp++; }
+    // 🔴 E SÓ NA JANELA 04:00–17:30, em todo mês (PROMOVER disp-janela, 10/10/2026): em out/26 a madrugada voltou, com o
+    // conjunto sem o M2 e o M6 (~270 MW), e a média sobre o que veio passou a comparar janelas diferentes mês a mês.
+    DISP.acumula(m, r);
     m.ger += ger * H; m.ref += gref * H; m.n++; m.dias.add(String(r.ts).slice(0, 10));
     // série DIÁRIA do complexo — mesma fonte e mesma fórmula da cascata, p/ os números não brigarem
     const _d = String(r.ts).slice(0, 10);
@@ -581,7 +584,7 @@ async function writeOut(obj, nome, opts) {
     const ultimoONS = Object.keys(M).sort().pop() || '';
     const doW2 = [...new Set(daily.dias.map(d => String(d.dia).slice(0, 7)))]
       .filter(m => /^[0-9]{4}-[0-9]{2}$/.test(m) && !M[m] && m > ultimoONS);
-    doW2.forEach(m => { M[m] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0,
+    doW2.forEach(m => { M[m] = { ger: 0, gerX: 0, ref: 0, fru: 0, disp: 0, n: 0, n_disp: 0, n_janela: 0,
       raz: {}, ori: {}, dias: new Set(), int_restr: 0, semONS: true }; });
     if (doW2.length) console.log('meses so da NOSSA medicao (o ONS ainda nao publicou): '
       + doW2.join(', ') + ' — os campos do ONS saem nulos');
@@ -946,8 +949,7 @@ async function writeOut(obj, nome, opts) {
       pr_livre_pct: prLivre(i.gvPL, i.gePL, i.parLivre),
       pr_livre_cobertura_pct: i.parN > 0 ? r2(100 * (i.parLivre || 0) / i.parN) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
-      disp_pct: m.n_disp ? r2(m.disp / m.n_disp / CAP_MW * 100) : null,
-      disp_cobertura_pct: m.n ? r2(100 * m.n_disp / m.n) : null,
+      ...DISP.fecha(m, CAP_MW),      // disp_pct e disp_cobertura_pct, na janela 04:00–17:30
       // ⚠️ num mes que o operador ainda nao publicou, o fallback `IRR[mes] || {irr_media: 0}`
       // viraria "irradiancia media 0 W/m2" — noite permanente. Ausencia sai nula.
       irr_media: oN(r2(i.irr_media)), ge_reconstruido_pct: oN(i.rec_pct),
