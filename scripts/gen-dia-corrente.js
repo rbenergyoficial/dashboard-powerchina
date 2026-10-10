@@ -24,7 +24,7 @@ const { horasDoDia } = require('./lib-horas.js');
 // a conta dos campos da manchete que se movem no dia — a MESMA que o executivo chama
 const { remendaManchete } = require('./lib-manchete.js');
 // a guarda do dia em curso: teto FISICO (343,77 MW x horas desde 05:00), PROMOVER executivo-teto-fisico
-const { guardaDia } = require('./lib-teto-dia.js');
+const { guardaDia, relidoDoPublicado, corteTrafos } = require('./lib-teto-dia.js');
 
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const BLOB = process.env.OUT_BLOB || 'executivo.json';
@@ -50,8 +50,13 @@ function baixa(url) {
 (async () => {
   const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
   let snap;
+  // so o 404 e ausencia (o snapshot do dia ainda nao existe, logo depois da meia-noite); HTTP 500, gzip ou JSON quebrado
+  // estouram: com "nada a fazer" o dia em curso parava em silencio e o job ficava verde (revisor-ensaio RE-007, 10/10/2026)
   try { snap = await baixa(BASE + 'hist/way2_' + hoje + '.json'); }
-  catch (e) { console.log('snapshot de ' + hoje + ' indisponivel (' + e.message + ') — nada a fazer'); return; }
+  catch (e) {
+    if (!/^HTTP 404 /.test(e.message)) throw e;
+    console.log('snapshot de ' + hoje + ' ainda nao existe (' + e.message + ') — nada a fazer'); return;
+  }
 
   const linha = rollupDia(snap, hoje);
   if (!(linha.slots > 0)) { console.log('snapshot de ' + hoje + ' sem slots — nada a fazer'); return; }
@@ -102,23 +107,38 @@ function baixa(url) {
   const alvo = (j.serie_dia_ufv || []).filter((x) => x.dia === hoje);
   if (!alvo.length) { console.log('o executivo ainda nao tem linha para ' + hoje + ' — nada a patchar'); return; }
 
-  let n = 0, antes = null;
+  // o que estava publicado, e o snapshot NOVO relido no trecho publicado — ANTES de o laco abaixo regravar a linha. O trecho e o
+  // `liq_corte` que este remendo grava (o ultimo instante dos trafos que a `liq_mwh` soma; o `ate` e o do 6233, ~10 min a frente);
+  // linha sem ele (escrita pela rodada completa) e relida na janela de +/- 10 min do `ate`.
+  const trafos = [valoresW2(snap, 6196, 'Demat'), valoresW2(snap, 6197, 'Demat')];
+  const corte = corteTrafos(trafos, hoje);
+  const cx = alvo.find((x) => x.ufv === 'Complexo');
+  const antes = cx && cx.liq_mwh != null ? cx.liq_mwh : null;
+  const antesAte = antes != null ? cx.ate : null;
+  // o corte so vale na linha que ESTE remendo escreveu: a rodada completa reconstroi a linha sem ele, e um corte que viesse de
+  // outra escrita compararia o valor de um corte com o trecho de outro (revisor RE-206)
+  const antesCorte = antes != null && cx.liq_fonte === 'snapshot 5 min' ? cx.liq_corte : null;
+  const relido = antes != null ? relidoDoPublicado(trafos, hoje, antesAte, antesCorte) : null;
+  let n = 0;
   alvo.forEach((x) => {
     if (!(x.ufv in val)) return;
-    if (x.ufv === 'Complexo') antes = x.liq_mwh;
     x.liq_mwh = r2(val[x.ufv]);
     x.parcial = 1;
     x.ate = linha.ate;
+    x.liq_corte = corte;
     x.liq_fonte = 'snapshot 5 min';
     n += 1;
   });
   if (n !== 12) { console.log('esperava 12 entidades no dia, patchei ' + n + ' — abortando'); process.exit(1); }
 
-  // guarda: o dia em curso nunca passa do teto FISICO (343,77 MW x horas desde 05:00 ate o ultimo instante) e nunca ENCOLHE
-  // dentro do mesmo dia (o snapshot so cresce). Qualquer um dos dois e leitura torta, e publicar seria pior que ficar com o
-  // valor de antes. (Era "o maior dia do mes x 1,25": no inicio de um mes com dias cortados, ele recusava um dia de sol — 05/10/2026.)
+  // guarda: o dia em curso nunca passa do teto FISICO (343,77 MW x horas desde 05:00 ate o ultimo instante); relido no trecho
+  // que estava publicado, nunca ENCOLHE; e depois dele nao cai mais que o consumo maximo do complexo. Qualquer um e leitura
+  // torta, e publicar seria pior que ficar com o valor de antes. (Era "o maior dia do mes x 1,25": no inicio de um mes com dias
+  // cortados, ele recusava um dia de sol — 05/10/2026.)
+  // 🔴 A liquida NOVA pode ser menor que a publicada: depois do por do sol o trafo consome (~7 MWh ate a meia-noite). Comparar
+  //    o novo com o publicado congelou 08/10/2026 em 19:20 (1.992,81 MWh, o dia inteiro foi 1.987,00) — PROMOVER dia-noite-encolhe.
   const novo = r2(val.Complexo);
-  const motivo = guardaDia(novo, antes, linha.ate);
+  const motivo = guardaDia(novo, antes, linha.ate, relido, corte);
   if (motivo) { console.log(motivo + ' — abortando'); process.exit(1); }
   const mes = hoje.slice(0, 7);   // o mes em curso: a soma dos dias e a manchete abaixo (a linha morava na guarda antiga)
 
@@ -173,6 +193,8 @@ function baixa(url) {
     throw e;
   }
   console.log('dia ' + hoje + ' ate ' + linha.ate + ' · Complexo ' + (antes == null ? '—' : antes)
+    + (relido ? ' (relido ' + r2(relido.mwh) + ' ate ' + relido.em + (relido.exato ? ', o corte gravado' : ', na janela de ' + antesAte) + ')' : '')
+    + ' -> corte ' + corte
     + ' -> ' + novo + ' MWh (' + linha.slots + ' slots)');
 
   // ---- a CAMADA HORARIA do mesmo dia ---------------------------------------

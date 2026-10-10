@@ -64,6 +64,10 @@ jobs:
         run: node scripts/ensaio-manchete-noite.js --lib
       - name: Ensaio · o teto fisico do dia em curso (regra)
         run: node scripts/ensaio-teto-dia.js
+      # O GERADOR executado sobre um dia forjado (Azure e https trocados por arquivos, sem rede): grava a noite depois de uma
+      # pausa, recusa o passado torto e a cauda torta (PROMOVER dia-noite-encolhe; 08/10/2026 ficou congelado as 19:20).
+      - name: Ensaio · o remendo segue a noite e recusa a leitura torta (gerador)
+        run: node scripts/ensaio-dia-noite.js
       - name: Dia em curso no executivo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
