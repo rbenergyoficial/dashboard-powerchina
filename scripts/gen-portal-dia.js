@@ -13,6 +13,9 @@
  * de cada usina, tirada do proprio arquivo do dia. A aba Energia compara o dia escolhido com as semanas anteriores; sem o resumo
  * seriam 42 arquivos baixados a cada dia escolhido. O resumo so muda pelo arquivo do dia: dia gravado nesta rodada entra com o
  * que foi gravado, dia que o resumo ainda nao tem e lido do arquivo, dia que saiu do indice sai do resumo.
+ * E o RESUMO POR CIRCUITO hist/portal_resumo_circuitos.json (PROMOVER portal-resumo-circuitos): energia, registros, fator de
+ * potencia, desequilibrio de corrente e tensao de cada circuito por dia, para a aba 34,5 kV acima de 31 dias; mesma regra de
+ * vida do resumo (ver resumoCircuitosDe).
  *
  * 🔴 NADA SE GRAVA SEM PASSAR NA CONFERENCIA: cada arquivo montado e conferido contra a MESMA fonte pela referencia
  * independente dos ensaios (ensaio-portal-vivo-circuitos.js e ensaio-portal-eletrico.js). Dia que nao passa e listado e
@@ -85,7 +88,7 @@ async function fazDia(A, dia, elet) {
   await A.grava('hist/portal_vivo_' + dia + '.json', b1, true);
   await A.grava('hist/portal_eletrico_' + dia + '.json', b2, true);
   const fim = pe.medidores.filter(m => MEDIDORES.includes(m.pid) && m.hora === '24:00').length;
-  return { dia, kb: Math.round((b1.length + b2.length) / 1024), ate: pe.hora, completos: fim, resumo: resumoDe(pv) };
+  return { dia, kb: Math.round((b1.length + b2.length) / 1024), ate: pe.hora, completos: fim, resumo: resumoDe(pv), circ: resumoCircuitosDe(pe) };
 }
 
 // o resumo de um dia: a energia do dia (MWh, as duas casas do arquivo) do Complexo e de cada entidade, e quantos instantes o
@@ -102,25 +105,101 @@ function resumoDe(pv) {
   return { e: pv.energia_mwh != null ? pv.energia_mwh : null, n: pv.n || 0, k };
 }
 
-// novos: Map dia -> resumo dos dias gravados nesta rodada (o arquivo do dia mudou; o resumo antigo daquele dia nao vale mais)
+// 🔴 O RESUMO POR CIRCUITO hist/portal_resumo_circuitos.json (PROMOVER portal-resumo-circuitos, 10/10/2026): a aba 34,5 kV do
+//    portal mostra o circuito ate 31 dias (lendo o arquivo eletrico de cada dia); acima disso precisa de um ponto por dia e por
+//    circuito. Tirado do arquivo eletrico do dia, pelas MESMAS contas da aba ate 31 dias, com os 22 circuitos de capacidade
+//    conhecida no mapa (o Complexo):
+//      e   energia (MWh, 3 casas) dos registros com potencia POSITIVA: o consumo da noite fica fora;
+//      n   registros de 5 min com potencia lida;
+//      fp  fator de potencia nos instantes com sol (a soma dos circuitos, todos lidos, acima de 10 % da capacidade deles):
+//          soma de P / soma de raiz(P2 + Q2), 4 casas;
+//      ds  desequilibrio de corrente medio (%, 2 casas) nos instantes com sol e corrente media acima de 2 % da maior do dia:
+//          maior desvio de fase / media das tres;
+//      v   tensao de linha media (kV, 3 casas) nos instantes com as tres fases entre 80 % e 120 % da nominal (fora disso e
+//          falha de leitura do medidor, nao tensao).
+//    Arquivo proprio, ao lado do resumo de energia (que nao muda); esquema proprio: sem a marca, refeito inteiro dos arquivos.
+//    Dia sem circuito de capacidade conhecida grava {} (apurado, nada a resumir), para nao ser relido a cada rodada.
+const RESUMO_CIRC_ESQUEMA = 1;
+const arred = (x, c) => x == null || !isFinite(x) ? null : Math.round(x * Math.pow(10, c)) / Math.pow(10, c);
+function deseqFase(a, b, c) {
+  if (a == null || b == null || c == null || !(a > 1 && b > 1 && c > 1)) return null;
+  const m = (a + b + c) / 3;
+  return 100 * Math.max(Math.abs(a - m), Math.abs(b - m), Math.abs(c - m)) / m;
+}
+// os 22 circuitos do arquivo: o mapa circuito -> usina e a capacidade de cada um, os mesmos que o arquivo do dia usa
+function circuitosDoMapa() {
+  const CIRC = LV.mapaCircuitos() || {}, o = [];
+  for (const [u, ps] of Object.entries(CIRC)) ps.forEach((p, i) => o.push({ pid: p, u, nome: u + ' · C' + (i + 1),
+    cap_mw: (LV.CAP_CIRC[u] || []).length === ps.length ? LV.CAP_CIRC[u][i] : null }));
+  return o;
+}
+// 🔴 a capacidade de cada circuito vem do MAPA (lib), nao do arquivo do dia: o arquivo do dia so a traz desde 05/10/2026
+//    (vivo-cap-circuito); lida dele, 618 dos 623 dias sairiam vazios (ensaio da migracao, 10/10/2026)
+function resumoCircuitosDe(pe) {
+  const cap = {};
+  for (const c of circuitosDoMapa()) if (c.cap_mw > 0) cap[c.pid] = c.cap_mw;
+  const C = ((pe && pe.medidores) || []).filter(m => !m.soma && m.u && cap[m.pid] > 0);
+  if (!C.length) return {};
+  const passo = (pe.passo_min || 5) / 60, N = Math.max(...C.map(m => (m.p || []).length));
+  const capT = C.reduce((a, m) => a + cap[m.pid], 0), sol = [];
+  for (let i = 0; i < N; i++) {
+    let s = 0, ok = true;
+    for (const m of C) { const p = (m.p || [])[i]; if (p == null) { ok = false; break; } s += p; }
+    sol.push(ok && s > 0.1 * capT);
+  }
+  const vale = (m, k, i) => { const x = m[k] && m[k][i]; return x != null && x >= 0.8 * 34.5 && x <= 1.2 * 34.5 ? x : null; };
+  const o = {};
+  for (const m of C) {
+    const P = m.p || [], Q = m.q || [], fase = (i) => [m.ia && m.ia[i], m.ib && m.ib[i], m.ic && m.ic[i]];
+    let e = 0, nr = 0, sp = 0, ss = 0, ds = 0, dn = 0, vs = 0, vn = 0, imx = 0;
+    for (let i = 0; i < N; i++) { const I = fase(i); if (I.every(x => x != null)) imx = Math.max(imx, (I[0] + I[1] + I[2]) / 3); }
+    for (let i = 0; i < N; i++) {
+      const p = P[i];
+      if (p != null) { nr++; if (p > 0) e += p * passo; }
+      const va = vale(m, 'va', i), vb = vale(m, 'vb', i), vc = vale(m, 'vc', i);
+      if (va != null && vb != null && vc != null) { vs += (va + vb + vc) / 3; vn++; }
+      if (!sol[i] || p == null || Q[i] == null) continue;
+      sp += p; ss += Math.hypot(p, Q[i]);
+      const I = fase(i);
+      if (I.every(x => x != null) && (I[0] + I[1] + I[2]) / 3 > 0.02 * imx) { const d = deseqFase(I[0], I[1], I[2]); if (d != null) { ds += d; dn++; } }
+    }
+    o[m.pid] = { e: arred(e, 3), n: nr, fp: ss > 0 ? arred(sp / ss, 4) : null, ds: dn ? arred(ds / dn, 2) : null, v: vn ? arred(vs / vn, 3) : null };
+  }
+  return o;
+}
+
+// novos: Map dia -> { r: resumo de energia, c: resumo por circuito } dos dias gravados nesta rodada (o arquivo do dia mudou; os
+// resumos antigos daquele dia nao valem mais)
 async function indice(A, novos) {
   const nomes = await A.lista('hist/portal_eletrico_');
   const dias = nomes.map(n => (n.match(/portal_eletrico_(\d{4}-\d{2}-\d{2})\.json$/) || [])[1]).filter(Boolean).sort();
   const gerado = new Date().toISOString(), de = dias[0] || null, ate = dias[dias.length - 1] || null;
   await A.grava('hist/portal_dias.json', Buffer.from(JSON.stringify({ gerado, n: dias.length, de, ate, dias })), false);
-  const rs0 = (await A.le('hist/portal_resumo.json')) || {};
+  const rs0 = (await A.le('hist/portal_resumo.json')) || {}, rc0 = (await A.le('hist/portal_resumo_circuitos.json')) || {};
   const ant = rs0.esquema === RESUMO_ESQUEMA ? rs0.dias || {} : {}, R = {}, faltam = [];   // vivo-sem-leitura: sem a marca, refaz tudo
+  const antC = rc0.esquema === RESUMO_CIRC_ESQUEMA ? rc0.dias || {} : {}, RC = {}, faltamC = [];   // portal-resumo-circuitos: idem
   for (const d of dias) {
-    if (novos && novos.has(d)) R[d] = novos.get(d);
-    else if (ant[d]) R[d] = ant[d];
-    else faltam.push(d);
+    const nv = novos && novos.get(d);
+    if (nv) { R[d] = nv.r; RC[d] = nv.c; continue; }
+    if (ant[d]) R[d] = ant[d]; else faltam.push(d);
+    if (antC[d]) RC[d] = antC[d]; else faltamC.push(d);
   }
-  for (let i = 0; i < faltam.length; i += 16) {   // a primeira vez sao todos: lidos de 16 em 16
-    await Promise.all(faltam.slice(i, i + 16).map(async d => { const pv = await A.le('hist/portal_vivo_' + d + '.json'); if (pv) R[d] = resumoDe(pv); }));
+  const ler = [...new Set(faltam.concat(faltamC))].sort(), sR = new Set(faltam), sC = new Set(faltamC);
+  for (let i = 0; i < ler.length; i += 16) {   // a primeira vez sao todos: lidos de 16 em 16
+    await Promise.all(ler.slice(i, i + 16).map(async d => {
+      if (sR.has(d)) { const pv = await A.le('hist/portal_vivo_' + d + '.json'); if (pv) R[d] = resumoDe(pv); }
+      if (sC.has(d)) { const pe = await A.le('hist/portal_eletrico_' + d + '.json'); if (pe) RC[d] = resumoCircuitosDe(pe); }
+    }));
   }
   const o = {}; Object.keys(R).sort().forEach(d => { o[d] = R[d]; });
   await A.grava('hist/portal_resumo.json', zlib.gzipSync(Buffer.from(JSON.stringify({ gerado, esquema: RESUMO_ESQUEMA, n: Object.keys(o).length, de, ate, entidades: ENT, dias: o }), 'utf8')), true);
-  return dias.length + ' dias; resumo com ' + Object.keys(o).length + ' (' + faltam.length + ' lidos do arquivo do dia)';
+  const oc = {}; Object.keys(RC).sort().forEach(d => { oc[d] = RC[d]; });
+  const circuitos = circuitosDoMapa();
+  await A.grava('hist/portal_resumo_circuitos.json', zlib.gzipSync(Buffer.from(JSON.stringify({ gerado, esquema: RESUMO_CIRC_ESQUEMA, n: Object.keys(oc).length, de, ate,
+    campos: { e: 'MWh, potencia positiva', n: 'registros de 5 min lidos', fp: 'fator de potencia com sol', ds: 'desequilibrio de corrente medio com sol (%)', v: 'tensao de linha media (kV)' },
+    circuitos, dias: oc }), 'utf8')), true);
+  return dias.length + ' dias; resumo com ' + Object.keys(o).length + ' (' + faltam.length + ' lidos do arquivo do dia); por circuito com '
+    + Object.keys(oc).length + ' (' + faltamC.length + ' lidos dos arquivos do dia)';
 }
 
 (async () => {
@@ -145,8 +224,8 @@ async function indice(A, novos) {
       H = API;
     }
     const r = await fazDia(A, dia, H);
-    console.log('  ' + JSON.stringify(Object.assign({}, r, { resumo: undefined })));
-    console.log('indice: ' + (await indice(A, r.erro ? null : new Map([[dia, r.resumo]]))));
+    console.log('  ' + JSON.stringify(Object.assign({}, r, { resumo: undefined, circ: undefined })));
+    console.log('indice: ' + (await indice(A, r.erro ? null : new Map([[dia, { r: r.resumo, c: r.circ }]]))));
     if (r.erro) process.exit(1);
     return;
   }
@@ -160,7 +239,7 @@ async function indice(A, novos) {
       if (ja.has(d)) { pulados++; continue; }
       let r;
       try { r = await fazDia(A, d, await A.le('hist/way2_' + d + '.json')); } catch (e) { r = { dia: d, erro: e.message }; }
-      if (r.erro) falhas.push(r); else { feitos++; novos.set(d, r.resumo); }
+      if (r.erro) falhas.push(r); else { feitos++; novos.set(d, { r: r.resumo, c: r.circ }); }
       if ((feitos + falhas.length) % 30 === 0) console.log('  ... ' + d + ' · ' + feitos + ' gravados, ' + falhas.length + ' sem arquivo');
     }
     console.log('carga ' + de + ' a ' + ate + ': ' + feitos + ' dia(s) gravado(s), ' + pulados + ' ja existiam, ' + falhas.length + ' sem arquivo');

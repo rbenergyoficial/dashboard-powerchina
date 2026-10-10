@@ -138,5 +138,56 @@ const f = [];
       f.push('7: o resumo do esquema velho nao foi refeito pela energia lida: ' + JSON.stringify(m) + ' (esquema ' + (rm && rm.esquema) + ')');
   } }
 
+// 8 · o resumo por circuito (portal-resumo-circuitos). Dia forjado e conta feita A MAO, sem o gerador: cada circuito a -0,1 MW da
+//     meia-noite as 06:00 (72 registros) e a 5 MW no resto (216), Q = -0,25 MVAr, correntes 120/121/122 A, tensoes de fase
+//     20.000/19.900/20.100 V; o M2 · C2 (6202) sem leitura das 10:00 as 10:55 (12 registros) e o 6233 sem a parte dele.
+//     Esperado: e = 216 x 5 x 5/60 = 90 MWh (o consumo da noite fica fora; 6202: 204 x 5 x 5/60 = 85), n = 288 (6202: 276),
+//     fp = 5 / raiz(25 + 0,0625) = 0,9988, ds = 100 x 1 / 121 = 0,83 %, v = media de 20,0/19,9/20,1 kV x raiz(3) = 34,641 kV.
+//     Depois: dia regravado com 2,5 MW (FORCAR) acompanha (45 MWh); arquivo apagado se refaz; esquema velho (sem a marca, com
+//     valores errados) e refeito dos arquivos dos dias.
+{ const d = novo(), d1 = '2026-04-01', d2 = '2026-04-02';
+  const forjaC = (dia, kw) => { const o = forja(dia, 1440);
+    o.dados.forEach(s => { if (s.nomeGrandeza !== 'Demat') return;
+      s.valores.forEach(v => { if (v.valor == null) return; const h = String(v.data).slice(11, 16), noite = v.data.slice(0, 10) === dia && h <= '06:00' && h !== '00:00';
+        const c = noite ? -100 : kw; v.valor = s.pontoId === 6233 ? c * 22 : (PIDS.includes(s.pontoId) && s.pontoId > 6197 ? c : v.valor);
+        if ((s.pontoId === 6202 || s.pontoId === 6233) && v.data >= dia + 'T10:00:00' && v.data <= dia + 'T10:55:00') { if (s.pontoId === 6202) delete v.valor; else v.valor -= kw; } }); });
+    return o; };
+  grava(d, 'hist/way2_' + d1 + '.json', forjaC(d1, 5000)); grava(d, 'hist/way2_' + d2 + '.json', forjaC(d2, 5000));
+  const r8 = roda(d, { MODO: 'carga', DE: d1, ATE: d2 });
+  const confere = (tag, esp) => {
+    const rc = le(d, 'hist/portal_resumo_circuitos.json');
+    if (!rc || rc.esquema !== 1 || !rc.dias) { f.push('8 ' + tag + ': o resumo por circuito nao existe ou sem esquema 1 (' + (rc && rc.esquema) + '): ' + r8.out.slice(-300)); return null; }
+    if (JSON.stringify(Object.keys(rc.dias)) !== JSON.stringify([d1, d2])) f.push('8 ' + tag + ': dias ' + JSON.stringify(Object.keys(rc.dias)));
+    if (!Array.isArray(rc.circuitos) || rc.circuitos.length !== 22 || rc.circuitos.some(c => !(c.cap_mw > 0) || !c.u)) f.push('8 ' + tag + ': a lista dos 22 circuitos ' + JSON.stringify(rc.circuitos).slice(0, 120));
+    for (const [dia, e0] of Object.entries(esp)) {
+      const D = rc.dias[dia] || {}, pids = Object.keys(D);
+      if (pids.length !== 22) { f.push('8 ' + tag + ': ' + dia + ' com ' + pids.length + ' circuitos'); continue; }
+      for (const p of pids) {
+        const x = D[p], buraco = p === '6202', e = buraco ? e0 - 12 * (e0 / 216) : e0;
+        const quer = { e: Math.round(e * 1000) / 1000, n: buraco ? 276 : 288, fp: 0.9988, ds: 0.83, v: 34.641 };
+        if (e0 !== 90) quer.fp = Math.round(10000 * (e0 / 216 * 12) / Math.hypot(e0 / 216 * 12, 0.25)) / 10000;
+        const ruim = Object.keys(quer).filter(k => x[k] !== quer[k]);
+        if (ruim.length) { f.push('8 ' + tag + ': ' + dia + ' circuito ' + p + ' ' + JSON.stringify(x) + ' (esperado ' + JSON.stringify(quer) + ')'); break; }
+      }
+    }
+    return rc; };
+  confere('da carga', { [d1]: 90, [d2]: 90 });
+  grava(d, 'hist/way2_' + d2 + '.json', forjaC(d2, 2500));
+  roda(d, { MODO: 'carga', DE: d2, ATE: d2, FORCAR: '1' });
+  confere('com um dia regravado', { [d1]: 90, [d2]: 45 });
+  fs.unlinkSync(cam(d, 'hist/portal_resumo_circuitos.json'));
+  roda(d, { MODO: 'carga', DE: d1, ATE: d2 });
+  const rc = confere('refeito dos arquivos', { [d1]: 90, [d2]: 45 });
+  if (rc) {   // o esquema velho, FIEL ao que nao existia: sem a marca, com valores que os arquivos dos dias nao sustentam
+    const rv = JSON.parse(JSON.stringify(rc)); delete rv.esquema; rv.dias[d1]['6198'].e = 1;
+    fs.writeFileSync(cam(d, 'hist/portal_resumo_circuitos.json'), zlib.gzipSync(Buffer.from(JSON.stringify(rv), 'utf8')));
+    // e o arquivo do dia como era antes de 05/10/2026 (vivo-cap-circuito): os circuitos SEM a capacidade. O resumo por circuito
+    // tem de sair inteiro mesmo assim (a capacidade e a do mapa): lida do arquivo do dia, 618 de 623 dias saiam vazios
+    [d1, d2].forEach(x => { const pv = le(d, 'hist/portal_vivo_' + x + '.json'); (pv.circuitos || []).forEach(c => { c.cap_mw = null; });
+      fs.writeFileSync(cam(d, 'hist/portal_vivo_' + x + '.json'), zlib.gzipSync(Buffer.from(JSON.stringify(pv), 'utf8'))); });
+    roda(d, { MODO: 'carga', DE: d1, ATE: d2 });
+    confere('do esquema velho', { [d1]: 90, [d2]: 45 });
+  } }
+
 if (f.length) { console.log('REPROVADO:\n  ' + f.join('\n  ')); process.exit(1); }
-console.log('gen-portal-dia: os sete casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice, resumo, circuito sem leitura e a migracao do resumo)');
+console.log('gen-portal-dia: os oito casos saem como deviam (troca so com mais leituras, o furo da virada fecha, dia reprovado sem arquivo, precisa, carga e indice, resumo, circuito sem leitura e a migracao do resumo, resumo por circuito)');
