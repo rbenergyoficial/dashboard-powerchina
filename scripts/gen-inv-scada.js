@@ -39,6 +39,7 @@
  */
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
+const CACHE = require('./lib-cache-blob').abre(RAW_CONTAINER);
 const OUT_BLOB = process.env.OUT_BLOB || 'inv_scada.json';
 const DIAS = Number(process.env.DIAS || 60);          // quanto do BRUTO reprocessar a cada rodada
 // 🔴 A FONTE SO GUARDA ~38 DIAS. Enquanto o gerador reescrevia o blob inteiro a cada rodada, o
@@ -120,7 +121,8 @@ async function listaArquivos() {
   for await (const b of c.listBlobsFlat()) {
     total++;
     if (!CARIMBO.test(b.name.split('/').pop())) continue;
-    out.push({ nome: b.name, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+    // 💰 pela copia da execucao anterior quando ela confere com a listagem (`lib-cache-blob.js`, 10/10/2026)
+    out.push({ nome: b.name, ler: async () => CACHE.baixa(c, b) });
   }
   console.log('  container "' + RAW_CONTAINER + '": ' + total + ' blob(s) · ' + out.length + ' arquivo(s) de usina/dia');
   return out;
@@ -395,6 +397,8 @@ function comparaComPares(reg) {
     // o CORTE da janela fina continua pelo nome (escolhe QUAIS arquivos ler); o rotulo e o do conteudo
     if (a.dia >= corteHora) for (const h of intraDia(reg)) intra.push({ dia: reg.dia, ufv: a.parque, ...h });
   }
+  CACHE.poda();
+  CACHE.resumo();
   if (!serie.length) throw new Error('nenhum inversor com energia em ' + alvo.length + ' arquivo(s) — o layout do export mudou?');
 
   // ---- acumula com o historico publicado ---------------------------------------------------

@@ -46,6 +46,14 @@ jobs:
       # silencio. O ensaio le o CARIMBO do fonte do gerador e o julga contra os nomes que chegaram, antes de gerar.
       - name: Ensaio · o gerador le todo nome de export que chegou
         run: node scripts/ensaio-carimbo-inversor.js
+      # 💰 Copia do scada-raw entre execucoes (`lib-cache-blob.js`, 10/10/2026): este job baixava ~2 GB do mesmo bruto
+      #    a cada execucao (medido em 09/10/2026). Mesma regra do scada.yml; cache proprio deste workflow.
+      - name: Restaurar a copia do scada-raw
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: scada-raw-gen-inv-scada-${{ github.run_id }}
+          restore-keys: scada-raw-gen-inv-scada-
       - name: Gerar inv_scada.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -58,7 +66,15 @@ jobs:
           JANELA_HORA: ${{ github.event.inputs.janela_hora || '30' }}
           HORA_BLOB: inv_scada_hora.json
           LISTAR: ${{ github.event.inputs.listar }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-inv-scada.js
+      - name: Guardar a copia do scada-raw
+        if: ${{ !cancelled() && hashFiles('.cache-blob/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: scada-raw-gen-inv-scada-${{ hashFiles('.cache-blob/**/*.meta') }}
 
       # O historico e rotulado pelo dia do CONTEUDO desde 24/09/2026 (antes, pelo nome do arquivo, um dia
       # adiante). O ensaio prova pela assinatura de cada dia entre os inversores, contra o perdas_inv, e roda

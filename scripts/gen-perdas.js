@@ -70,6 +70,7 @@ const { energiaDoDia } = require('./lib-contador-dia.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
+const CACHE = require('./lib-cache-blob').abre(RAW_CONTAINER);
 const DIAS = Number(process.env.DIAS || 30);
 const CMP = 'https://rbenergydata.blob.core.windows.net/dados/cmp_diario.json';
 // BRUTO x LIQUIDO: o consumo proprio da usina. O bruto (energia recebida) vem do cmp_diario e o
@@ -431,7 +432,8 @@ async function listaArquivos() {
   for await (const b of c.listBlobsFlat()) {
     total++;
     if (!CARIMBO.test(b.name)) continue;
-    out.push({ nome: b.name, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+    // 💰 pela copia da execucao anterior quando ela confere com a listagem (`lib-cache-blob.js`, 10/10/2026)
+    out.push({ nome: b.name, ler: async () => CACHE.baixa(c, b) });
   }
   if (!out.length) throw new Error('nenhum M<NN>_<data>_<hora>.csv em "' + RAW_CONTAINER
     + '" — 0 de ' + total + ' blob(s)');
@@ -971,6 +973,8 @@ async function grava(nome, obj) {
         + medidos.length + '/' + nLin + ' instantes medidos');
     }
   }
+  CACHE.poda();
+  CACHE.resumo();
 
   if (!diario.size) throw new Error('nenhum dia aproveitado');
   const us = [...new Set(Object.keys(CAP_CA_MW))];

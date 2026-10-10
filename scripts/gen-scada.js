@@ -246,21 +246,26 @@ async function loadRawBuffers() {
   // digitos; quando passarem de 99999, "100000_M4.xlsx" viria ANTES de "79210_M4.xlsx" e a versao
   // VELHA venceria. Ordenar pelo id numerico remove a armadilha antes de ela disparar.
   //
-  // ⚠️ Custa 1,4 GB e ~8 min por rodada, e isso e o preco de poder reconstruir. Se um dia doer,
+  // ⚠️ Le 1,4 GB (1,8 GB em out/2026) por rodada, e isso e o preco de poder reconstruir. Se um dia doer,
   // a saida NAO e filtrar aqui: e o container parar de acumular, do lado de quem escreve.
+  // 💰 O preco de reconstruir ficou no DISCO, nao na rede (10/10/2026): a copia da execucao anterior vem do cache do
+  //    Actions (`lib-cache-blob.js`, CACHE_BLOB_DIR) e so a planilha nova e baixada. Continua lendo TODAS.
+  const cache = require('./lib-cache-blob').abre(RAW_CONTAINER);
   const todos = [];
   for await (const b of cont.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name)) continue;
     const m = b.name.split('/').pop().match(/^(\d+)_/);
-    todos.push({ nome: b.name, id: m ? Number(m[1]) : 0, bytes: b.properties.contentLength || 0 });
+    todos.push({ nome: b.name, id: m ? Number(m[1]) : 0, bytes: b.properties.contentLength || 0, item: b });
   }
   todos.sort((a, b) => a.id - b.id || (a.nome < b.nome ? -1 : 1));
   console.log('  planilhas: ' + todos.length + ' blob(s) .xlsx · '
     + Math.round(todos.reduce((a, x) => a + x.bytes, 0) / 1048576) + ' MB · lidas da mais ANTIGA para a mais NOVA');
   for (const e of todos) {
-    const buf = await streamToBuffer((await cont.getBlobClient(e.nome).download()).readableStreamBody);
+    const buf = await cache.baixa(cont, e.item);
     out.push({ name: e.nome, buf });
   }
+  cache.poda();
+  cache.resumo();
   return out;
 }
 

@@ -40,6 +40,16 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i xlsx@0.18.5 @azure/storage-blob@12
+      # 💰 Copia do scada-raw entre execucoes (`lib-cache-blob.js`, 10/10/2026). O storage cobra a SAIDA para fora do
+      #    continente, e este job baixava ~1,8 GB do MESMO bruto a cada execucao (medido em 09/10/2026). A copia so vale
+      #    se conferir com a listagem (etag, tamanho, MD5); a chave de gravacao e o hash das marcas, entao execucao sem
+      #    planilha nova nao regrava o cache. Sem copia (primeira vez, cache expirado) o gerador baixa tudo, como antes.
+      - name: Restaurar a copia do scada-raw
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: scada-raw-gen-scada-${{ github.run_id }}
+          restore-keys: scada-raw-gen-scada-
       - name: Gerar scada_comparativo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -47,7 +57,16 @@ jobs:
           OUT_CONTAINER: dados
           OUT_BLOB: scada_comparativo.json
           DIAG_COLS: ${{ github.event.inputs.diag_cols }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-scada.js
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais.
+      - name: Guardar a copia do scada-raw
+        if: ${{ !cancelled() && hashFiles('.cache-blob/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: scada-raw-gen-scada-${{ hashFiles('.cache-blob/**/*.meta') }}
 
       # 🔴 `always()`: a hora em que o vigia mais importa e quando o passo acima falhou.
       #    E ele NAO derruba o job — o alerta e a saida dele, nao o codigo de retorno.

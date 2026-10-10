@@ -43,6 +43,12 @@ jobs:
         if: always()
         run: node scripts/ensaio-lib-alerta.js
 
+      # 💰 A copia do scada-raw entre execucoes (10/10/2026) so vale quando confere com a listagem, e nunca esconde
+      #    falha de download. Container simulado, sem rede; confere tambem que os tres geradores passam por ela.
+      - name: Ensaio · a copia em disco do bruto (lib-cache-blob)
+        if: always()
+        run: node scripts/ensaio-cache-blob.js
+
       - name: Ensaio · os quatro eventos do vigia da Way2 deduplicam e fecham
         if: always()
         run: node scripts/ensaio-way2-watchdog-canal.js
