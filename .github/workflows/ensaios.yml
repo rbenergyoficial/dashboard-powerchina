@@ -49,6 +49,11 @@ jobs:
         if: always()
         run: node scripts/ensaio-cache-blob.js
 
+      # O SCADA do comparativo vira energia pelo trapezio entre amostras, e a meia hora so sai completa (10/10/2026).
+      - name: Ensaio · o SCADA do comparativo pelo trapezio
+        if: always()
+        run: node scripts/ensaio-comparativo-trapezio.js
+
       - name: Ensaio · os quatro eventos do vigia da Way2 deduplicam e fecham
         if: always()
         run: node scripts/ensaio-way2-watchdog-canal.js

@@ -413,6 +413,42 @@ function scadaDiarioParaMapa(sc, deDia) {
   return m;
 }
 
+// ---- SCADA: da amostra para a energia do intervalo, pelo TRAPEZIO (10/10/2026) -------------------
+// O supervisorio entrega POTENCIA AMOSTRADA de 5 em 5 min, e o `scada_comparativo` a converte por retangulo:
+// energia de [T, T+5) = P(T) x 5/60. Medido em 10/10/2026 contra o Way2 (30 dias, complexo, meia hora): o retangulo
+// erra 1,08% no tipico e 9,9% no p95; o trapezio entre amostras vizinhas, 0,50% e 3,9%. Nas usinas, p95 de 11-14%
+// cai para 4-6%. No balde de 5 min o trapezio e exato: e(T) = (r(T) + r(T+5)) / 2. No de 15 min, que so guarda a
+// SOMA das tres amostras, o mesmo trapezio sai da reta entre baldes vizinhos: e(T) = r(T) + (r(T+15) - r(T)) / 6
+// (2,5 min de 15) — exato quando a potencia varia em reta; medido 0,62% e 4,5%. O fator geral e 2,5 / passo.
+// Sem o balde seguinte (o fim da serie, ou um buraco) o balde fica de fora: ausencia, nunca retangulo misturado.
+const SCADA_INTEGRACAO = 'trapezio';
+function trapezio(mapa, passoMin) {
+  const f = 2.5 / passoMin;
+  const out = new Map();
+  for (const [chave, l] of mapa) {
+    const prox = mapa.get(new Date(Date.parse(chave + ':00Z') + passoMin * 60000).toISOString().slice(0, 16));
+    if (!prox) continue;
+    const o = {};
+    let algum = false;
+    for (const p of PARQUES) {
+      if (l[p] == null || prox[p] == null) continue;
+      o[p] = l[p] + (prox[p] - l[p]) * f;
+      algum = true;
+    }
+    if (algum) out.set(chave, o);
+  }
+  return out;
+}
+
+// O blob publicado antes de 10/10/2026 tem o SCADA por retangulo. Juntar a rodada curta (DIAS=7) a ele deixaria
+// dois metodos na mesma serie, entao, sem a MARCA, a resolucao e remontada na janela inteira dela uma vez (o
+// `intra15` do supervisorio cobre desde 01/01/2025, a janela mais longa e 365 dias). O diario nao muda de metodo:
+// ele vem do total do dia do proprio supervisorio.
+function precisaMigrar(antigo, res) {
+  if (res.min === 0) return false;
+  return !(antigo && antigo.scada_integracao === SCADA_INTEGRACAO);
+}
+
 // ---- agregacao de um passo fino para um passo maior --------------------------------------------
 // Energia e aditiva, entao agregar e somar. Vale para o ONS (30 -> 60) e para o SCADA (15 -> 30/60).
 function agrega(mapa, passoDestinoMin) {
@@ -427,6 +463,23 @@ function agrega(mapa, passoDestinoMin) {
     const o = out.get(k) || {};
     for (const p of PARQUES) if (l[p] != null) o[p] = (o[p] || 0) + l[p];
     out.set(k, o);
+  }
+  return out;
+}
+
+// A soma do SCADA so sai com TODOS os baldes finos da usina presentes. O trapezio tira o balde que nao tem o
+// seguinte (fim da serie, buraco), e a `agrega` somaria o que sobrou: meia hora publicada com um quarto de hora so,
+// pela metade e sem aviso. O ensaio do trapezio pegou isso no ultimo balde de um dia sintetico (10/10/2026).
+function agregaCompleto(mapa, passoOrigemMin, passoDestinoMin) {
+  const precisa = passoDestinoMin / passoOrigemMin;
+  const soma = agrega(mapa, passoDestinoMin);
+  const conta = agrega(new Map([...mapa].map(([k, l]) => [k, Object.fromEntries(Object.keys(l).map((p) => [p, 1]))])), passoDestinoMin);
+  const out = new Map();
+  for (const [k, l] of soma) {
+    const o = {};
+    let algum = false;
+    for (const p of PARQUES) if (l[p] != null && (conta.get(k) || {})[p] === precisa) { o[p] = l[p]; algum = true; }
+    if (algum) out.set(k, o);
   }
   return out;
 }
@@ -484,6 +537,7 @@ module.exports = {
   PONTOS, PARQUES, TAG_ONS, PREFIXO, AMOSTRAS_DIA, RESOLUCOES,
   leBlob, lerONS, way2ParaMapa, way2DiarioParaMapa, diasPorBloco, somaDias,
   scadaParaMapa, scadaDiarioParaMapa, agrega, agregaDia, montaSerie, chaveBRT,
+  trapezio, precisaMigrar, SCADA_INTEGRACAO, agregaCompleto,
 };
 
 if (require.main !== module) return;
@@ -519,18 +573,27 @@ if (require.main !== module) return;
     const rotulo = diario ? 'diario' : res.min + ' min';
     console.log('\n  --- ' + res.blob + ' (' + rotulo + ') ---');
 
+    // o que esta no ar e lido ANTES: a marca do metodo do SCADA decide a janela desta rodada
+    let antigo = null;
+    try { antigo = await leBlob(res.blob); }
+    catch (e) { throw new Error('nao consegui ler ' + res.blob + ': ' + e.message); }
+    const migra = precisaMigrar(antigo, res);
+    const de = migra ? diaBRT(res.dias - 1) : deDia;
+    if (migra) console.log('    SCADA ainda por retangulo no ar: remontando a janela inteira (' + res.dias + ' dias, desde ' + de + ')');
+
     // --- Way2 ---------------------------------------------------------------------------------
     const mWay2 = await buscaEmBlocos(
-      deDia, hoje, diario ? 'UmDia' : INTERVALO_API[res.min], res.min, token, diario,
+      de, hoje, diario ? 'UmDia' : INTERVALO_API[res.min], res.min, token, diario,
     );
     console.log('    Way2:  ' + mWay2.size + ' baldes');
 
     // --- SCADA --------------------------------------------------------------------------------
+    // energia do intervalo pelo TRAPEZIO entre amostras (`trapezio`); o diario e o total do dia do supervisorio
     let mScada = new Map();
-    if (diario && scada) mScada = scadaDiarioParaMapa(scada, deDia);
-    else if (res.min === 5 && scada5) mScada = scadaParaMapa(scada5, deDia, 'intra5', 5);
-    else if (res.min === 15 && scada) mScada = scadaParaMapa(scada, deDia, 'intra15', 15);
-    else if (res.min > 15 && scada) mScada = agrega(scadaParaMapa(scada, deDia, 'intra15', 15), res.min);
+    if (diario && scada) mScada = scadaDiarioParaMapa(scada, de);
+    else if (res.min === 5 && scada5) mScada = trapezio(scadaParaMapa(scada5, de, 'intra5', 5), 5);
+    else if (res.min === 15 && scada) mScada = trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15);
+    else if (res.min > 15 && scada) mScada = agregaCompleto(trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15), 15, res.min);
     console.log('    SCADA: ' + mScada.size + ' baldes'
       + (res.min === 5 && !scada5 ? '  (o blob de 5 min ainda nao existe)' : ''));
 
@@ -538,10 +601,11 @@ if (require.main !== module) return;
     // Abaixo de 30 min o ONS nao entra. Repartir a meia hora em dois ou seis pedacos iguais
     // desenharia um patamar que a fonte nunca mediu, e ele apareceria como uma curva plausivel —
     // que e o pior modo de errar. Ausencia declarada e melhor que interpolacao disfarcada.
+    const onsRes = migra && res.min >= 30 ? await lerONS(de) : onsFino;
     let mOns = new Map();
-    if (diario) mOns = agregaDia(onsFino);
-    else if (res.min === 30) mOns = onsFino;
-    else if (res.min === 60) mOns = agrega(onsFino, 60);
+    if (diario) mOns = agregaDia(onsRes);
+    else if (res.min === 30) mOns = onsRes;
+    else if (res.min === 60) mOns = agrega(onsRes, 60);
     console.log('    ONS:   ' + mOns.size + ' baldes'
       + (res.min && res.min < 30 ? '  (a fonte nao publica nesta resolucao)' : ''));
 
@@ -558,10 +622,7 @@ if (require.main !== module) return;
     console.log('    montadas ' + novas.length + ' linhas de ' + presentes.length
       + ' fontes (' + presentes.join(', ') + ')');
 
-    // --- merge com o que ja esta no ar ---------------------------------------------------------
-    let antigo = null;
-    try { antigo = await leBlob(res.blob); }
-    catch (e) { throw new Error('nao consegui ler ' + res.blob + ': ' + e.message); }
+    // --- merge com o que ja esta no ar (lido no inicio da resolucao) ------------------------------
     // a FOTOGRAFIA do que esta no ar, tirada ANTES da fusao e da poda — que mexem nos mesmos objetos
     const antigoTxt = JSON.stringify(((antigo && antigo.serie) || []).slice().sort((a, b) => a.ms - b.ms));
     const porChave = new Map();
@@ -593,7 +654,7 @@ if (require.main !== module) return;
     //    10:40 (42% do medidor) ate um dia novo entrar, e o `gen-perdas` leu o dia pela metade. A mesma
     //    forma do "dia parcial que virou permanente" do MUST. A poda de esquema entra sozinha: ela muda
     //    o texto da serie.
-    if (JSON.stringify(serie) === antigoTxt && !FORCAR) {
+    if (JSON.stringify(serie) === antigoTxt && !FORCAR && !migra) {
       console.log('    sem mudanca — nao regrava (versao a toa e ruido)');
       continue;
     }
@@ -638,6 +699,13 @@ if (require.main !== module) return;
       })),
       colunas: 'o<N> = ONS, w<N> = Way2, s<N> = SCADA, com N de 1 a 9 (a usina). Coluna ausente '
         + 'significa que aquela fonte nao tem valor naquele instante.',
+      // marca lida pela proxima rodada (`precisaMigrar`); o texto explica ao leitor como o SCADA vira energia
+      scada_integracao: diario ? 'total_do_dia' : SCADA_INTEGRACAO,
+      scada_metodo: diario
+        ? 'O supervisorio entra pelo total do dia que ele mesmo apura.'
+        : 'O supervisorio registra potencia amostrada a cada 5 minutos. A energia de cada intervalo sai da '
+          + 'media entre amostras vizinhas (regra do trapezio), que acompanha a energia medida pelo '
+          + 'medidor de faturamento melhor que somar as amostras do intervalo.',
       rotulo_de_tempo: 'O instante e o INICIO do intervalo: o valor em T cobre de T a T mais '
         + (diario ? '1 dia' : res.min + ' min') + '. O operador nacional e o supervisorio ja '
         + 'rotulam assim; a serie do medidor rotula pelo fim e foi deslocada um intervalo na '
