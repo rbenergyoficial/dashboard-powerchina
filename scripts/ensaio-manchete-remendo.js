@@ -15,7 +15,7 @@
  * Sem segredo nenhum: le so blob publico.
  */
 const https = require('https'), zlib = require('zlib');
-const { remendaManchete, parse } = require('./lib-manchete.js');
+const { remendaManchete, parse, fmt } = require('./lib-manchete.js');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 
 function getJSON(url) {
@@ -85,6 +85,16 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
     const o = orig.find(x => x.ufv === m.ufv && x.mes === m.mes);
     return o || m;   // leva a ancora forjada, quando foi o caso
   }));
+  /* 🔴 O "ANTES" DO "entregou mais" E O REMENDO COM A ENERGIA DE HOJE PUBLICADA, sobre a MESMA ancora — e nao a linha
+     publicada (PROMOVER executivo-vermelho, 10/10/2026). A linha publicada sai do remendo de producao, que soma os dias da
+     serie (`mwhMesPorUfv`); este ensaio forja pelo caminho da ancora. Com a rodada completa parada um dia, a ancora fica um
+     dia atras da serie, o forjado perde esse dia e "o que falta" SOBE contra o publicado: reprovou 9 entidades de 10/10
+     04:13Z em diante, ANTES do gerador, que era o unico que trazia a ancora de volta. Dois forjados pela mesma regra so
+     diferem pelos 0,25 GWh a mais: o que a assercao quer julgar. */
+  const cru = clone(linhas);   // as linhas antes de qualquer remendo, para o caso forjado do 3b
+  const antesRef = clone(linhas);
+  remendaManchete(antesRef, { mes, diaNum: 28, ate: '14:05', gwhPorUfv: hojePub });
+  const ref = {}; antesRef.forEach(m => { ref[m.ufv + '|' + m.mes] = m; });
   const c = remendaManchete(linhas, { mes, diaNum: 28, ate: '14:05', gwhPorUfv: gwh });
   console.log('   remendo: ' + c.quando + ' com a hora, ' + c.energia + ' com a energia'
     + (c.semAncora ? ', ' + c.semAncora + ' sem ancora' : ''));
@@ -96,6 +106,7 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
   }
 
   const novo = {}; linhas.forEach(m => { novo[m.ufv + '|' + m.mes] = m; });
+  let nFalta = 0;   // entidades em que o "entregou mais" julgou alguma coisa (so as que ainda nao bateram a meta)
   orig.forEach(a => {
     const b = novo[a.ufv + '|' + a.mes], id = a.ufv + ' ' + a.mes;
     if (b.dia_hoje !== 28 || b.ao_vivo !== 1 || b.ao_vivo_ate !== '14:05') {
@@ -135,8 +146,12 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
       const falta = meta - parse(b.liq_gwh);
       const esp = falta > 0 ? falta : 0;
       if (Math.abs(parse(b.falta_gwh) - esp) > 0.02) f.push(id + ': falta_gwh nao acompanhou');
-      if (falta > 0 && parse(a.falta_gwh) != null && !(parse(b.falta_gwh) < parse(a.falta_gwh))) {
-        f.push(id + ': entregou mais e o que falta nao diminuiu');
+      const r = ref[a.ufv + '|' + a.mes];
+      if (falta > 0 && parse(r.falta_gwh) != null) {
+        nFalta++;
+        if (!(parse(b.falta_gwh) < parse(r.falta_gwh))) {
+          f.push(id + ': entregou mais e o que falta nao diminuiu (' + r.falta_gwh + ' -> ' + b.falta_gwh + ')');
+        }
       }
     }
     // 4) o que NAO e do dia fica parado
@@ -144,6 +159,28 @@ const PARADOS = ['dias_decorridos', 'dias_total', 'dias_restantes', 'meta_gwh', 
       if (k in a && a[k] !== b[k]) f.push(id + ': ' + k + ' mudou, e nao devia');
     });
   });
+
+  /* 3b) o "entregou mais" JULGA ALGUMA COISA em qualquer mes: ele so roda onde ainda falta energia, e num fim de mes com as
+     12 entidades acima da meta julgaria zero e o ensaio diria OK (revisor-ensaio, 10/10/2026). Uma linha forjada com a
+     meta 10 GWh acima do entregue passa pelos dois remendos, e o que falta tem de cair os 0,25 GWh a mais (folga de dois
+     arredondamentos de 2 casas). */
+  const alvoF = cru.find(m => m.mes === mes && m.fechado === 0 && m.liq_fechada_gwh != null && parse(m.liq_gwh) != null);
+  if (!alvoF) f.push('nenhuma linha com ancora para o caso forjado do "entregou mais"');
+  else {
+    const forja = (gwhPorUfv) => {
+      const L = clone(cru), m = L.find(x => x.ufv === alvoF.ufv && x.mes === mes && x.fechado === 0);
+      m.meta_gwh = fmt(parse(m.liq_gwh) + 10);
+      if (m.meta_mwh != null) m.meta_mwh = Math.round((parse(m.liq_gwh) + 10) * 100000) / 100;
+      remendaManchete(L, { mes, diaNum: 28, ate: '14:05', gwhPorUfv });
+      return parse(m.falta_gwh);
+    };
+    const f0 = forja(hojePub), f1 = forja(gwh);
+    if (!(f0 > 0) || !(f1 < f0) || Math.abs((f0 - f1) - 0.25) > 0.011) {
+      f.push(alvoF.ufv + ' forjado com a meta acima: entregou 0,25 GWh a mais e o que falta foi de ' + f0 + ' a ' + f1);
+    }
+  }
+  console.log('   entregou mais: julgado em ' + nFalta + ' entidade(s) com falta > 0, e na linha forjada com a meta acima ('
+    + (alvoF ? alvoF.ufv : '—') + ')');
 
   // 5) meses FECHADOS intactos
   const fech2 = {}; linhas.forEach(m => { if (m.fechado === 1) fech2[m.ufv + '|' + m.mes] = m; });

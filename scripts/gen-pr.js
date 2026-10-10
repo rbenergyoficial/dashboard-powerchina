@@ -119,14 +119,24 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   if (!corteU.size) throw new Error('executivo.json sem corte_diario_ufv: formato mudou?');
   const velhosU = new Map();
   for (const [e, v] of Object.entries((antU && antU.entidades) || {})) for (const d of v.dias || []) { const o = velhosU.get(d.dia) || {}; o[e] = d; velhosU.set(d.dia, o); }
+  /* 🔴 E o dia cuja impedida publicada DIVERGE do corte que o executivo apura agora (PROMOVER executivo-vermelho,
+     10/10/2026). O operador revisa dias velhos: 01/10 entrou com a referencia de UM quinto do dia, foi republicado inteiro em
+     06-07/10, e o corte do M1 nesse dia foi de 2,7 a 10,18 MWh. O dia ja estava fora dos ultimos REFAZ_DIAS e tinha corrigido,
+     entao nunca mais era refeito: o `ensaio-pr-ufv --produto` reprovou 8 usinas de 01/10 (o M3 fechava) em toda rodada de 07/10 22:13Z
+     em diante, e o executivo ficou vermelho com o blob gravado. A folga e a do proprio ensaio (0,0006 MWh). */
+  const revisto = (d, v) => ENT.some((u) => v[u] && v[u].impedida_mwh != null && corteU.has(d + '|' + u)
+    && Math.abs(v[u].impedida_mwh - corteU.get(d + '|' + u)) > 0.0006);
   const precisaU = (d) => { const v = velhosU.get(d); if (!v) return false;
-    return d >= limiteRefaz || travDias.has(d) || ENT.some((u) => !v[u] || v[u].pr_pct == null || (v[u].pr_corrigido_pct == null && corteU.has(d + '|' + u))); };
+    return d >= limiteRefaz || travDias.has(d) || revisto(d, v)
+      || ENT.some((u) => !v[u] || v[u].pr_pct == null || (v[u].pr_corrigido_pct == null && corteU.has(d + '|' + u))); };
   const alvoU = diasEntre(inicio, ultimoIrr).filter(precisaU)
     .concat(diasEntre(inicio, ultimoIrr).filter((d) => !velhosU.has(d)).reverse().slice(0, LOTE_UFV)).sort();
   const alvoUSet = new Set(alvoU);
   for (const d of alvoU) if (!baixar.includes(d)) baixar.push(d);
   baixar.sort();
-  console.log('pr por entidade:', alvoU.length, 'dias a calcular ·', velhosU.size, 'ja publicados ·', corteU.size, 'usina-dias com corte apurado');
+  const revistos = [...velhosU.keys()].filter((d) => d < limiteRefaz && revisto(d, velhosU.get(d))).sort();
+  console.log('pr por entidade:', alvoU.length, 'dias a calcular ·', velhosU.size, 'ja publicados ·', corteU.size, 'usina-dias com corte apurado'
+    + (revistos.length ? ' · ' + revistos.length + ' refeito(s) pelo corte revisto: ' + revistos.join(', ') : ''));
   const cortadoDe = (u, d) => corteU.has(d + '|' + u) ? corteU.get(d + '|' + u)
     : (velhosU.get(d) && velhosU.get(d)[u] && velhosU.get(d)[u].impedida_mwh != null ? velhosU.get(d)[u].impedida_mwh : null);
   const novosU = new Map();

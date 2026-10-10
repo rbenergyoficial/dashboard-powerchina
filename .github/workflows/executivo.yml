@@ -53,6 +53,12 @@ jobs:
       - name: Ensaio · o PR por usina e por contrato (regra)
         run: node scripts/ensaio-pr-ufv.js --lib
 
+      # A guarda de fechamento da referencia do operador (Complexo somado das usinas x arquivo do conjunto) aceita UM
+      # patamar por dia com nenhuma ou uma parcela no conjunto, e nada alem disso. A REGRA, em casos forjados e com os
+      # defeitos plantados na propria lib, antes de gerar: cada afrouxamento passa em todo ensaio de produto.
+      - name: Ensaio · a guarda da referencia do conjunto (regra)
+        run: node scripts/ensaio-ref-conjunto.js
+
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
