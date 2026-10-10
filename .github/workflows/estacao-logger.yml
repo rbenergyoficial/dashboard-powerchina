@@ -1,0 +1,42 @@
+name: Estacoes solarimetricas (datalogger) -> estacao_logger_30min.json
+on:
+  schedule:
+    - cron: '23 8 * * *' # 05:23 BRT — o arquivo do dia chega ao computador as 02:00 e sobe ao backup-dados-scada as 04:00
+  workflow_dispatch:
+concurrency:
+  group: gen-estacao-logger
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # campo pelo nome, meia hora T = media de T+10, T+20 e T+30 (tudo-ou-nada), M10 = usina 1, duplicados e 3 s fora; com plantios
+      - name: Ensaio · leitura do datalogger e a meia hora (sem rede)
+        run: node scripts/ensaio-estacao-logger.js
+      # 💰 ~4 mil arquivos de 128 KB: so o arquivo novo vem pela rede (lib-cache-blob.js); cache proprio deste workflow
+      - name: Restaurar a copia do backup-dados-scada
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: backup-dados-scada-estacao-${{ github.run_id }}
+          restore-keys: backup-dados-scada-estacao-
+      - name: Gerar estacao_logger_30min.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW: backup-dados-scada
+          PREFIXO: Estacao_Meteorologica_Logger/
+          OUT: dados
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+        run: node scripts/gen-estacao-logger.js
+      - name: Guardar a copia do backup-dados-scada
+        if: ${{ !cancelled() && hashFiles('.cache-blob/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: backup-dados-scada-estacao-${{ hashFiles('.cache-blob/**/*.meta') }}
