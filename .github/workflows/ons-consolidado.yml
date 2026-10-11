@@ -16,6 +16,7 @@ jobs:
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       - name: Consolidar ONS restricao + irradiancia
+        id: consolidado
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -47,7 +48,14 @@ jobs:
       # 🔴 O ensaio roda ANTES, e ele prova que a auditoria REPROVA: apaga um dia do registro,
       # planta uma linha ilegivel e desloca a potencia de um dia inteiro, exigindo o gatilho certo
       # em cada caso. Auditoria vista so no caminho feliz nao esta testada.
+      #
+      # ⚠️ Os dois passos do PPC dependem SO do consolidado, nao do gemeo: o portao de calibracao do
+      # gemeo reprovou em 11/10/2026 (vies do mes aberto -8,38 %, limite +-8) e, com o `if` padrao,
+      # pulou a auditoria que ia publicar a correcao da mesa em 04/10. Passo vermelho que nada tem a
+      # ver com o registro nao desliga a auditoria dele.
       - name: Ensaio da auditoria do PPC
+        id: ensaio_ppc
+        if: ${{ !cancelled() && steps.consolidado.outcome == 'success' }}
         run: node scripts/ensaio-ppc.js
       # Vermelho aqui significa uma destas tres, e nenhuma delas se conserta no pipeline:
       #   · o operador nacional limitou e a mesa nao registrou (corte sem registro);
@@ -56,6 +64,7 @@ jobs:
       # A divergencia de BORDA e o atraso de registro vao publicados SEM alarme: sao conhecidos,
       # medidos, e quem os resolve e a mesa, nao o codigo.
       - name: Auditar o registro do PPC contra o ONS
+        if: ${{ !cancelled() && steps.consolidado.outcome == 'success' && steps.ensaio_ppc.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
