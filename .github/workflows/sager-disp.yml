@@ -1,0 +1,27 @@
+name: SAGER (ONS) disponibilidade por usina -> sager_disp_30min.json
+on:
+  schedule:
+    - cron: '47 7 * * *' # 04:47 BRT — o historico do SAGER sobe do computador da usina ao backup-dados-scada as 04:00
+  workflow_dispatch:
+concurrency:
+  group: gen-sager-disp
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # usinas pelo nome do cabecalho, publicado do comentario, contestado = amarelo, insatisfatorio = fonte vermelha; com plantios
+      - name: Ensaio · leitura do Relatorio Geral do SAGER (sem rede)
+        run: node scripts/ensaio-sager-disp.js
+      - name: Gerar sager_disp_30min.json
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW: backup-dados-scada
+          PREFIXO: SAGER_ONS/Historico/
+          OUT: dados
+        run: node scripts/gen-sager-disp.js

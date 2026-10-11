@@ -41,6 +41,9 @@
  "render-paineis.yml": [
   "0 10 0,15 * * *"
  ],
+ "sager-disp.yml": [
+  "0 47 7 * * *"
+ ],
  "scada.yml": [
   "0 30 11 * * *",
   "0 0 17,21 * * *"
