@@ -164,9 +164,15 @@ function tituloDe(acao) {
 }
 
 async function achaAberta(titulo) {
-  const q = encodeURIComponent('repo:' + REPO + ' is:issue is:open label:' + ROTULO);
-  const r = await pedeGh('/issues?state=open&labels=' + encodeURIComponent(ROTULO) + '&per_page=100', 'GET');
-  return (r || []).find((i) => i.title === titulo) || null;
+  // pagina ate achar ou esgotar (ate 10 paginas): com mais de 100 issues abertas no rotulo, uma pagina so deixava a issue do
+  // evento de fora — e o `soSeNova` repetiria o aviso, e o `resolve` nunca o fecharia (vigia-desmente-2, RE-030)
+  for (let p = 1; p <= 10; p++) {
+    const r = await pedeGh('/issues?state=open&labels=' + encodeURIComponent(ROTULO) + '&per_page=100&page=' + p, 'GET');
+    const achou = (r || []).find((i) => i.title === titulo);
+    if (achou) return achou;
+    if (!r || r.length < 100) break;
+  }
+  return null;
 }
 
 /**
@@ -193,6 +199,17 @@ async function alerta(acao) {
       out.issue = 'nada aberto para fechar';
       console.log('  alerta [' + (acao.chave || acao.tipo) + '] · nada aberto — '
         + 'nenhum canal acionado');
+      return out;
+    }
+  }
+  // `soSeNova`: o evento ja aberto NAO e noticia de novo — nenhum canal. E o dedup de quem nao tem onde guardar estado (o
+  // vigia sem o blob de estado, PROMOVER vigia-desmente-2): a issue aberta e a memoria. Se a consulta falhar, avisa (repetir
+  // e melhor que calar).
+  if (acao.soSeNova && !acao.resolve && GH) {
+    const jaAberta = await achaAberta(tituloDe(acao)).catch(() => null);
+    if (jaAberta) {
+      out.issue = 'ja aberta #' + jaAberta.number;
+      console.log('  alerta [' + (acao.chave || acao.tipo) + '] · ja aberto (#' + jaAberta.number + ') — nenhum canal acionado');
       return out;
     }
   }

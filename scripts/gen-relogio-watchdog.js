@@ -117,15 +117,25 @@ function gh(caminho) {
 
   // ── o estado ANTES de julgar: a rodada decide quem abre e quem fecha contra ele ─────────────
   // 🔴 so `exists() === false` e ausencia. Erro de leitura NAO vira estado vazio: com estado vazio o vigia esqueceria
-  //    o alarme aberto (o ✅ nunca chegaria) e reabriria o que ja esta aberto. Leitura falha deixa o job vermelho, sem
-  //    gravar estado nem avisar nada (PROMOVER vigia-desmente).
+  //    o alarme aberto (o ✅ nunca chegaria) e reabriria o que ja esta aberto. Estado ilegivel (ou que nao e um objeto
+  //    de chaves e datas): a lib nao decide nada por workflow e nada se grava no estado, mas a saude sai e o aviso proprio
+  //    e pedido (PROMOVER vigia-desmente-2 — na primeira versao o vigia parava aqui e ficava mudo se o blob nao se lesse).
+  // 🔴 E O STORAGE INTEIRO PODE FALHAR (credencial trocada, 403): toda E/S do blob fica em try, e cada falha vai para o
+  //    mesmo aviso. O dedup dele e a issue aberta (`soSeNova`), que nao depende do storage.
   const conn = process.env.DADOS_STORAGE;
-  let cont = null, estado = {};
+  let cont = null, estado = {}, estadoLegivel = true;
+  const falhasStorage = [];
   if (conn) {
     const { BlobServiceClient } = require('@azure/storage-blob');
     cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
-    const bc = cont.getBlockBlobClient(ESTADO);
-    if (await bc.exists()) estado = JSON.parse((await bc.downloadToBuffer()).toString('utf8'));
+    try {
+      const bc = cont.getBlockBlobClient(ESTADO);
+      if (await bc.exists()) {
+        const lido = JSON.parse((await bc.downloadToBuffer()).toString('utf8'));
+        if (!VIG.estadoValido(lido)) throw new Error(ESTADO + ' nao e um objeto de chaves e datas (' + JSON.stringify(lido).slice(0, 60) + ')');
+        estado = lido;
+      }
+    } catch (e) { estadoLegivel = false; estado = {}; falhasStorage.push('ler ' + ESTADO + ': ' + e.message); console.error('ESTADO ILEGIVEL: ' + e.message); }
   }
 
   // ── a leitura: as respostas do GitHub vao CRUAS para a lib ──────────────────────────────────
@@ -142,10 +152,9 @@ function gh(caminho) {
     } catch (e) { entradas.push({ wf, gap, erro: e.message }); }
   }
   const R = VIG.rodada({ agora, agoraIso, agenda: Object.keys(AGENDA), entradas, estado,
-    tolerancia: TOLERANCIA, margem: MARGEM_MIN });
+    tolerancia: TOLERANCIA, margem: MARGEM_MIN, estadoLegivel });
   const { linhas, atrasados, quebrados, indecididos, novos, voltaram, novosQ, voltaramQ, sairam } = R;
 
-  linhas.sort((a, b) => (b.idade_min / b.limite_min) - (a.idade_min / a.limite_min));
   linhas.forEach((l) => console.log('  ' + (l.ok && l.saudavel !== 0 ? '   ' : '🔴 ') + l.wf.padEnd(26)
     + 'cadencia ' + String(l.cadencia_min).padStart(4) + ' min · idade ' + String(l.idade_min).padStart(4)
     + ' · limite ' + String(l.limite_min).padStart(4) + ' · ' + l.evento
@@ -155,12 +164,11 @@ function gh(caminho) {
 
   // ── saude no blob ─────────────────────────────────────────────────────────────────────────
   if (cont) {
-    const saude = { gerado_em: agoraIso, tolerancia: TOLERANCIA,
-      margem_min: MARGEM_MIN, atrasados: atrasados.length, sem_sucesso: quebrados.length,
-      workflows: linhas };
-    const b = JSON.stringify(saude);
-    await cont.getBlockBlobClient(SAUDE).upload(b, Buffer.byteLength(b),
-      { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
+    const b = JSON.stringify(R.saude);
+    try {
+      await cont.getBlockBlobClient(SAUDE).upload(b, Buffer.byteLength(b),
+        { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
+    } catch (e) { falhasStorage.push('gravar ' + SAUDE + ': ' + e.message); }
   }
 
   // ── alerta, com dedup por workflow ────────────────────────────────────────────────────────
@@ -249,10 +257,44 @@ function gh(caminho) {
     }
   }
 
-  if (cont) {
+  if (cont && R.estado) {
     const b = JSON.stringify(R.estado);
-    await cont.getBlockBlobClient(ESTADO).upload(b, Buffer.byteLength(b),
-      { blobHTTPHeaders: { blobContentType: 'application/json' } });
+    try {
+      await cont.getBlockBlobClient(ESTADO).upload(b, Buffer.byteLength(b),
+        { blobHTTPHeaders: { blobContentType: 'application/json' } });
+    } catch (e) { falhasStorage.push('gravar ' + ESTADO + ': ' + e.message); }
+  }
+
+  // o vigia sem o estado (ou sem o storage): o aviso proprio, pedido em TODA rodada assim e deduplicado pela issue aberta
+  // (`soSeNova`); na rodada em que tudo se le e se grava, ele e fechado (sem issue aberta, nada sai).
+  // 🔴 o job so fica VERMELHO se esse aviso nao chega a canal nenhum: o aviso e o canal, e um vermelho a cada rodada
+  //    (~72 por dia) ensinaria a ignorar o vermelho do vigia (decisao de 11/10/2026, RE-025).
+  if (R.avisoEstado === 'abre' || falhasStorage.length) {
+    const r = await alerta({
+      soSeNova: true,
+      tipo: 'vigia_estado_ilegivel',
+      chave: 'vigia:estado',
+      titulo: 'vigia sem o estado dos alarmes',
+      assunto: '🔴 Mauriti · o vigia nao consegue ler o estado dos alarmes',
+      corpo: '<b>O vigia nao consegue ler ou gravar o estado dos alarmes no storage.</b><br><br>' + falhasStorage.join('<br>')
+        + '<br><br>Enquanto durar, o vigia pode nao saber quais alarmes estao abertos: lido nada, nenhum alarme de workflow '
+        + 'abre nem fecha e a saude sai marcada como sem estado; nao gravado, os avisos da rodada podem se repetir. Se o '
+        + 'arquivo ' + ESTADO + ' estiver corrompido, apaga-lo faz o vigia recomecar do zero (os alarmes ainda abertos voltam '
+        + 'a ser avisados); se for a credencial do storage, o segredo DADOS_STORAGE do repositorio.',
+    });
+    // chegou = a issue foi aberta, comentada ou JA ESTA aberta (numero de verdade), ou o webhook respondeu 2xx, ou o e-mail saiu
+    const chegou = !!r && (/^(abriu|comentou) #\d|^ja aberta #[1-9]/.test(r.issue || '') || /^HTTP 2/.test(r.webhook || '')
+      || (!!r.email && r.email !== '-' && !/^FALHOU/.test(r.email)));
+    console.error('\n  🔴 storage: ' + falhasStorage.join(' · ') + (R.estado ? '' : ' — nenhum alarme de workflow decidido nesta rodada'));
+    if (!chegou) { console.error('  🔴 e o aviso nao chegou a canal nenhum'); process.exitCode = 1; }
+  } else {
+    await alerta({
+      tipo: 'vigia_estado_legivel', resolve: true,
+      chave: 'vigia:estado',
+      titulo: 'vigia sem o estado dos alarmes',
+      assunto: '✅ Mauriti · o vigia voltou a ler o estado dos alarmes',
+      corpo: '<b>O vigia voltou a ler ' + ESTADO + '</b> e os alarmes de workflow voltaram a abrir e fechar.',
+    });
   }
 
   console.log('\n  ' + linhas.length + ' workflows julgados · '

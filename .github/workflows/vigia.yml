@@ -43,9 +43,10 @@ jobs:
 
       # 0 · A REGRA DO VIGIA, ANTES DE VIGIAR (11/10/2026): casos, plantios na lib-vigia.js e o proprio vigia rodando com
       #     o GitHub, o alerta e o blob forjados. Antes ele rodava DEPOIS, e uma regra quebrada so ficava vermelha depois
-      #     de ter mandado e-mail, mexido em issue e gravado o estado.
+      #     de ter mandado e-mail, mexido em issue e gravado o estado. `--rapido`: sem as contraprovas (~300 processos), que
+      #     provam o ENSAIO e rodam inteiras no ensaios.yml a cada push em scripts/.
       - name: Ensaio do vigia de resultado
-        run: node scripts/ensaio-vigia-resultado.js
+        run: node scripts/ensaio-vigia-resultado.js --rapido
 
       # 1 · O RELOGIO ESTA TOCANDO? Compara a idade da ultima execucao de CADA workflow da agenda
       #     com o maior intervalo que o proprio cron dele produz, vezes a tolerancia. Cobre o caso

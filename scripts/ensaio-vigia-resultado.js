@@ -28,6 +28,9 @@ const path = require('path');
 const cp = require('child_process');
 
 const f = [];
+// --rapido (vigia.yml, 3 vezes por hora): casos, plantios e os cenarios do vigia de verdade, sem as contraprovas — elas provam
+// o ENSAIO, que so muda no push, e rodam inteiras no ensaios.yml (~300 processos)
+const RAPIDO = process.argv.includes('--rapido');
 const LIB_SRC = fs.readFileSync(path.join(__dirname, 'lib-vigia.js'), 'utf8').replace(/\r\n/g, '\n');
 const GER_SRC = fs.readFileSync(path.join(__dirname, 'gen-relogio-watchdog.js'), 'utf8').replace(/\r\n/g, '\n');
 const AGENDA = Object.keys(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'relogio', 'agenda.json'), 'utf8')));
@@ -100,6 +103,44 @@ const CASOS = {
       const R = rod(L, t, [ent(EX, [{ created_at: iso(t - 10000), conclusion: c, status: c ? 'completed' : 'in_progress' }], SUC0610)], est);
       n += R.novosQ.length + R.voltaramQ.length; est = R.estado; }
     return n === 0 && est['resultado:' + EX] === A0; },
+  // ---- vigia-desmente-2 (2a passada do revisor) ----
+  'C-presa-borda': (L) => { const v = L.veredito(T0, run(T0, 33, null, 'queued'), run(T0, 40), 33); return v.pendente === 1 && v.saudavel === null; },
+  'I-cad-dedup': (L) => rod(L, T0, [ent('a.yml', [run(T0, 1000)], run(T0, 1000))], { 'cadencia:a.yml': 'x' }).novos.length === 0,
+  'I-cad-data': (L) => rod(L, T0, [ent('a.yml', [run(T0, 1000)], run(T0, 1000))], { 'cadencia:a.yml': 'x' }).estado['cadencia:a.yml'] === 'x',
+  'I-cad-vazia': (L) => { const R = rod(L, T0, [ent('a.yml', [], null)], { 'cadencia:a.yml': 'x' });
+    return R.voltaram.length === 0 && R.estado['cadencia:a.yml'] === 'x'; },
+  'I-cad-borda': (L) => rod(L, T0, [ent('a.yml', [run(T0, 920)], run(T0, 920))]).linhas[0].ok === 1
+    && rod(L, T0, [ent('a.yml', [run(T0, 921)], run(T0, 921))]).linhas[0].ok === 0,
+  'I-linhas': (L) => { const R = rod(L, T0, [ent('a.yml', [run(T0, 1, null, 'in_progress')], run(T0, 2000)),
+      ent('b.yml', [run(T0, 5, 'failure')], run(T0, 2000)), ent(EX, [run(T0, 930, null, 'queued')], run(T0, 3000))]);
+    const l = (w) => R.linhas.find((x) => x.wf === w);
+    return l('a.yml').saudavel === null && l('a.yml').pendente === 1 && l('a.yml').ok === 1
+      && l('b.yml').saudavel === 0 && l('b.yml').pendente === 0 && l(EX).saudavel === 0 && l(EX).ok === 0; },
+  'I-saude': (L) => { const R = rod(L, T0, [ent('a.yml', [run(T0, 1000, 'failure')], run(T0, 3000)), ent('b.yml', [run(T0, 5)], run(T0, 5))]);
+    return R.saude.atrasados === 1 && R.saude.sem_sucesso === 1 && R.saude.estado_legivel === 1 && R.saude.workflows.length === 2
+      && R.saude.workflows[0].wf === 'a.yml'; },
+  // estado ilegivel com um workflow quebrado E um atrasado: nenhuma das cinco listas, nada a gravar, o aviso pedido
+  'E-ilegivel': (L) => { const R = L.rodada({ agora: T0, agoraIso: iso(T0), agenda: AGENDA,
+      entradas: [ent(EX, [run(T0, 5, 'failure')], run(T0, 3000)), ent('a.yml', [run(T0, 1000)], run(T0, 1000))],
+      estado: {}, tolerancia: 2.5, margem: 20, estadoLegivel: false });
+    return ['novos', 'voltaram', 'novosQ', 'voltaramQ', 'sairam'].every((k) => R[k].length === 0) && R.estado === null
+      && R.avisoEstado === 'abre' && R.saude.estado_legivel === 0 && R.saude.sem_sucesso === 2 && R.saude.atrasados === 1; },
+  'E-legivel': (L) => L.rodada({ agora: T0, agoraIso: iso(T0), agenda: AGENDA, entradas: [], estado: {}, tolerancia: 2.5, margem: 20,
+    estadoLegivel: true }).avisoEstado === 'fecha',
+  'E-valido': (L) => L.estadoValido({}) && L.estadoValido({ 'resultado:a.yml': 'x', 'cadencia:b.yml': 'y' })
+    && !L.estadoValido(null) && !L.estadoValido([]) && !L.estadoValido(3) && !L.estadoValido('x') && !L.estadoValido({ 'resultado:a.yml': 5 })
+    && !L.estadoValido({ outra: 'x' }),
+  // o "Re-run" guarda o created_at da rodada original: o resultado vale pelo inicio da tentativa, a CADENCIA pela criacao
+  'R-rerun': (L) => { const ok = Object.assign(run(T0, 3000), { run_started_at: iso(T0 - 5 * MIN), run_attempt: 2 });
+    const andando = Object.assign(run(T0, 3000, null, 'in_progress'), { run_started_at: iso(T0 - 2 * MIN), run_attempt: 2 });
+    const R = rod(L, T0, [ent('a.yml', [ok], ok)]);
+    return L.veredito(T0, ok, L.ultimoSucesso([ok], null), LIM).saudavel === 1
+      && L.veredito(T0, andando, run(T0, 2000), LIM).pendente === 1
+      && R.linhas[0].saudavel === 1 && R.linhas[0].ok === 0 && R.novos.length === 1; },
+  // o re-run de uma rodada antiga com o relogio FUNCIONANDO: a ultima (pelo inicio) e o re-run, a cadencia e a agendada de 10 min
+  'R-rerun-cad': (L) => { const ag = run(T0, 10); const rr = Object.assign(run(T0, 3000), { run_started_at: iso(T0 - 4 * MIN), run_attempt: 2 });
+    const R = rod(L, T0, [ent('a.yml', [ag, rr], rr)]);
+    return R.linhas[0].idade_min === 10 && R.linhas[0].ok === 1 && R.novos.length === 0 && R.linhas[0].saudavel === 1; },
 };
 function julga(L) {
   return Object.entries(CASOS).map(([nome, fn]) => { let ok; try { ok = fn(L) === true; } catch (e) { ok = false; } return [nome, ok]; });
@@ -107,7 +148,7 @@ function julga(L) {
 const R1 = julga(compila(LIB_SRC));
 R1.forEach(([n, o]) => console.log('  ' + (o ? 'ok  ' : '🔴  ') + n));
 R1.filter(([, o]) => !o).forEach(([n]) => f.push('a regra errou: ' + n));
-if (R1.length !== 27) f.push('julgou ' + R1.length + ' caso(s), esperava 27');
+if (R1.length !== 39) f.push("julgou " + R1.length + " caso(s), esperava 39");
 
 /* ================================ 2 · OS PLANTIOS ================================ */
 const PLANTIOS = [
@@ -126,6 +167,24 @@ const PLANTIOS = [
   ['quebrado perde a data de abertura', "quebrados.forEach((a) => { const k = 'resultado:' + a.wf; st[k] = estado[k] || agoraIso; });",
     "quebrados.forEach((a) => { const k = 'resultado:' + a.wf; st[k] = agoraIso; });", ['F-data-quebrado']],
   ['a ultima e a primeira da lista, sem ordenar', '.sort((a, b) => ms(b) - ms(a));', ';', ['I-ordem']],
+  ['prazo do pendente exclusivo', 'if (rodando && idadeUlt <= limite)', 'if (rodando && idadeUlt < limite)', ['C-presa-borda']],
+  ['cadencia reabre a cada rodada', "const novos = atrasados.filter((a) => !estado['cadencia:' + a.wf]);", 'const novos = atrasados;', ['I-cad-dedup']],
+  ['lista vazia conta como lida', "if (!ult) { indecididos.push(e.wf + ' (sem execucao registrada)'); continue; }\n    lidos.push(e.wf);",
+    "lidos.push(e.wf);\n    if (!ult) { indecididos.push(e.wf + ' (sem execucao registrada)'); continue; }", ['I-cad-vazia']],
+  ['cadencia perde a data de abertura', "atrasados.forEach((a) => { const k = 'cadencia:' + a.wf; st[k] = estado[k] || agoraIso; });",
+    "atrasados.forEach((a) => { const k = 'cadencia:' + a.wf; st[k] = agoraIso; });", ['I-cad-data']],
+  ['cadencia com limite exclusivo', 'const ok = idade <= limite;', 'const ok = idade < limite;', ['I-cad-borda']],
+  ['a saude diz saudavel sempre', 'saudavel: v.saudavel, pendente: v.pendente });', 'saudavel: 1, pendente: v.pendente });', ['I-linhas']],
+  ['a saude diz ok sempre (o perdas.yml de 13/09)', 'conclusao: ult.conclusion, ok: ok ? 1 : 0,', 'conclusao: ult.conclusion, ok: 1,', ['I-linhas']],
+  ['a saude sem as contagens', 'sem_sucesso: quebrados.length,', 'sem_sucesso: 0,', ['I-saude']],
+  ['o instante e o created_at (re-run conta como velho)', 'const ms = (r) => Date.parse(r.run_started_at || r.created_at);', 'const ms = (r) => Date.parse(r.created_at);', ['R-rerun']],
+  ['estado ilegivel decide alarmes assim mesmo', 'if (!estadoLegivel) return Object.assign(', 'if (false) return Object.assign(', ['E-ilegivel']],
+  ['o aviso de estado nunca fecha', "const avisoEstado = estadoLegivel ? 'fecha' : 'abre';", "const avisoEstado = estadoLegivel ? null : 'abre';", ['E-legivel']],
+  ['a cadencia avisada com o estado ilegivel', 'const nada = { novos: [],', 'const nada = { novos: atrasados,', ['E-ilegivel']],
+  ['a cadencia pelo inicio da tentativa (o re-run esconde o relogio parado)', 'const idade = Math.max(0, Math.round((agora - cri(criada)) / 60000));',
+    'const idade = Math.max(0, Math.round((agora - ms(ult)) / 60000));', ['R-rerun']],
+  ['a cadencia pela ultima iniciada (o re-run com o relogio ok da 🟠 falso)', 'const criada = runs.reduce((a, r) => (cri(r) > cri(a) ? r : a), runs[0]);', 'const criada = ult;', ['R-rerun-cad']],
+  ['estado sem validacao', "return !!x && typeof x === 'object' && !Array.isArray(x)", "return true || (!!x && typeof x === 'object' && !Array.isArray(x))", ['E-valido']],
 ];
 for (const [nome, de, para, devem] of PLANTIOS) {
   const n = LIB_SRC.split(de).length - 1;
@@ -145,9 +204,10 @@ const STUB = `
 const Module = require('module'), orig = Module._load;
 const C = JSON.parse(process.env.SECO_CENARIO), agora = Date.now();
 const iso = (m) => new Date(agora - m * 60000).toISOString();
-const mk = (x) => ({ id: 1, created_at: iso(x.m), status: x.st || 'completed', conclusion: x.c === undefined ? 'success' : x.c, event: 'schedule' });
-const SAI = { alertas: [], estado: null, saude: null };
-process.on('exit', (code) => { require('fs').writeSync(1, '\\nSECO ' + JSON.stringify(Object.assign(SAI, { code })) + '\\n'); });
+const mk = (x) => Object.assign({ id: 1, created_at: iso(x.m), status: x.st || 'completed', conclusion: x.c === undefined ? 'success' : x.c, event: 'schedule' },
+  x.rs != null ? { run_started_at: iso(x.rs), run_attempt: 2 } : {});
+const SAI = { alertas: [], gravouEstado: false, estado: null, estadoCru: null, saude: null };
+process.on('exit', (code) => { require('fs').writeSync(1, '\\nSECO ' + JSON.stringify(Object.assign(SAI, { code: process.exitCode || code })) + '\\n'); });
 const https = { get(opts, cb) {
   const m = /\\/workflows\\/([^/]+)\\/runs\\?(.*)$/.exec(opts.path); const wf = m[1], q = m[2];
   const w = C.wf[wf] || C.padrao;
@@ -157,21 +217,28 @@ const https = { get(opts, cb) {
   else if (/status=success/.test(q)) corpo = { workflow_runs: w.filtrado ? [mk(w.filtrado)] : [] };
   else { const pp = Number((/per_page=(\\d+)/.exec(q) || [])[1] || 30); corpo = { workflow_runs: w.lista.map(mk).slice(0, pp) }; }
   setImmediate(() => { cb(res); res.emit('data', Buffer.from(JSON.stringify(corpo || {}))); res.emit('end'); });
-  const req = new (require('events'))(); return req; } };
+  return new (require('events'))(); } };
+const falha = () => { if (C.storageErro) throw new Error(C.storageErro); };
 const blob = { BlobServiceClient: { fromConnectionString: () => ({ getContainerClient: () => ({ createIfNotExists: async () => {}, getBlockBlobClient: (n) => ({
-  exists: async () => n === 'relogio_watchdog.json' && C.estado !== null,
-  downloadToBuffer: async () => { if (C.estadoErro) throw new Error(C.estadoErro); return Buffer.from(JSON.stringify(C.estado)); },
-  upload: async (b) => { if (n === 'relogio_watchdog.json') SAI.estado = JSON.parse(b); else SAI.saude = JSON.parse(b); } }) }) }) } };
+  exists: async () => { falha(); return n === 'relogio_watchdog.json' && (C.estado !== null || C.estadoCru != null); },
+  downloadToBuffer: async () => { falha(); if (C.estadoErro) throw new Error(C.estadoErro);
+    return Buffer.from(C.estadoCru != null ? C.estadoCru : JSON.stringify(C.estado)); },
+  upload: async (b) => { falha();
+    if (n === 'relogio_watchdog.json') { if (C.gravaEstadoErro) throw new Error(C.gravaEstadoErro); SAI.gravouEstado = true; SAI.estadoCru = String(b); SAI.estado = JSON.parse(b); }
+    else SAI.saude = JSON.parse(b); } }) }) }) } };
 Module._load = function (req) {
   if (req === 'https') return https;
   if (req === '@azure/storage-blob') return blob;
-  if (/lib-alerta(\\.js)?$/.test(req)) return { alerta: async (a) => { SAI.alertas.push({ chave: a.chave, fecha: !!a.resolve, tipo: a.tipo }); } };
+  if (/lib-alerta(\\.js)?$/.test(req)) return { alerta: async (a) => {
+    SAI.alertas.push({ chave: a.chave, fecha: !!a.resolve, tipo: a.tipo, soSeNova: !!a.soSeNova });
+    return C.alertaResposta || (C.alertaFalha ? { issue: 'FALHOU: 401', webhook: '-', email: 'FALHOU: sem OIDC' } : { issue: 'abriu #1', webhook: '-', email: '-' }); } };
   return orig.apply(this, arguments);
 };`;
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-vigia-'));
 fs.writeFileSync(path.join(TMP, 'stub.js'), STUB);
-function montaVigia(nome, gerSrc) {
-  const d = path.join(TMP, nome); fs.mkdirSync(path.join(d, 'scripts'), { recursive: true }); fs.mkdirSync(path.join(d, 'relogio'), { recursive: true });
+let nVig = 0;
+function montaVigia(gerSrc) {
+  const d = path.join(TMP, 'v' + (nVig++)); fs.mkdirSync(path.join(d, 'scripts'), { recursive: true }); fs.mkdirSync(path.join(d, 'relogio'), { recursive: true });
   fs.writeFileSync(path.join(d, 'scripts', 'gen-relogio-watchdog.js'), gerSrc);
   fs.writeFileSync(path.join(d, 'scripts', 'lib-vigia.js'), LIB_SRC);
   fs.copyFileSync(path.join(__dirname, '..', 'relogio', 'agenda.json'), path.join(d, 'relogio', 'agenda.json'));
@@ -185,60 +252,121 @@ function seco(gerPath, cen) {
   return m ? JSON.parse(m[1]) : { code: r.status, alertas: null, estado: null, erro: (r.stderr || '').slice(-300) };
 }
 const OK = { lista: [{ m: 1 }], filtrado: { m: 1 } };      // todo workflow que o cenario nao nomeia: em dia, com sucesso
-const sem = (o) => o.alertas && o.alertas.length === 0;
+/* o pedido de FECHAR o aviso de estado sai em toda rodada legivel (a lib-alerta nao aciona canal sem issue aberta):
+   ele nao conta como alerta "de verdade" nos cenarios */
+const reais = (o) => o.alertas.filter((a) => !(a.chave === 'vigia:estado' && a.fecha));
+const fechouAviso = (o) => o.alertas.some((a) => a.chave === 'vigia:estado' && a.fecha);
+const sem = (o) => o.alertas && reais(o).length === 0;
+const lin = (o, w) => ((o.saude || {}).workflows || []).find((x) => x.wf === w) || {};
+const so = (o, chave, fecha, tipo) => { const r = reais(o); return r.length === 1 && r[0].chave === chave && r[0].fecha === fecha && (!tipo || r[0].tipo === tipo); };
+const aviso = (o) => so(o, 'vigia:estado', false, 'vigia_estado_ilegivel') && reais(o)[0].soSeNova === true;
+const QUEBRADO = { lista: [{ m: 5, c: 'failure' }], filtrado: { m: 3000 } };
+const PARADO = { lista: [{ m: 1000 }], filtrado: { m: 1000 } };
+const CEGO = (o) => aviso(o) && !o.gravouEstado && !fechouAviso(o);
+/* [chave curta, descricao, cenario, exige] */
 const CENARIOS = [
-  ['08/10 23:43: rodada nova com o alarme aberto nao fecha nada', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
+  ['23:43', '08/10 23:43: rodada nova com o alarme aberto nao fecha nada; a saude diz pendente', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
     wf: { [EX]: { lista: [{ m: 0, st: 'in_progress', c: null }, { m: 30, c: 'failure' }], filtrado: { m: 2940 } } } },
-    (o) => o.code === 0 && sem(o) && o.estado && o.estado['resultado:' + EX] === A0],
-  ['08/10 23:53: a rodada falhou, nada abre de novo e a data fica', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
+    (o) => o.code === 0 && sem(o) && o.estado && o.estado['resultado:' + EX] === A0
+      && lin(o, EX).pendente === 1 && lin(o, EX).saudavel === null && o.saude.estado_legivel === 1 && fechouAviso(o)],
+  ['23:53', '08/10 23:53: a rodada falhou, nada abre de novo, a data fica e a saude diz sem sucesso', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
     wf: { [EX]: { lista: [{ m: 1, c: 'failure' }], filtrado: { m: 2940 } } } },
-    (o) => o.code === 0 && sem(o) && o.estado['resultado:' + EX] === A0],
-  ['10/10 21:30: o sucesso fecha uma vez', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
+    (o) => o.code === 0 && sem(o) && o.estado['resultado:' + EX] === A0 && lin(o, EX).saudavel === 0 && o.saude.sem_sucesso === 1],
+  ['21:30', '10/10 21:30: o sucesso fecha uma vez', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
     wf: { [EX]: { lista: [{ m: 18 }], filtrado: { m: 18 } } } },
-    (o) => o.code === 0 && o.alertas.length === 1 && o.alertas[0].chave === 'resultado:' + EX && o.alertas[0].fecha && !o.estado['resultado:' + EX]],
-  ['07/10: a filtrada de 22 dias nao acende com o sucesso de 9 h na lista', { padrao: OK, estado: {},
+    (o) => o.code === 0 && so(o, 'resultado:' + EX, true) && !o.estado['resultado:' + EX] && lin(o, EX).saudavel === 1],
+  ['07/10', '07/10: a filtrada de 22 dias nao acende com o sucesso de 9 h na lista', { padrao: OK, estado: {},
     wf: { [EX]: { lista: [{ m: 10, c: 'failure' }, { m: 70, c: 'failure' }, { m: 617 }], filtrado: { m: 31680 } } } },
-    (o) => o.code === 0 && sem(o) && Object.keys(o.estado).length === 0],
-  ['o estado nao se le: job vermelho, nada avisado, nada gravado', { padrao: OK, estado: { ['resultado:' + EX]: A0 }, estadoErro: 'Server busy 503',
-    wf: { [EX]: { lista: [{ m: 18 }], filtrado: { m: 18 } } } },
-    (o) => o.code !== 0 && (o.alertas || []).length === 0 && o.estado === null],
-  ['o workflow que saiu da agenda fecha as duas familias e sai do estado', { padrao: OK, estado: { 'resultado:saiu.yml': A0, 'cadencia:saiu.yml': A0 }, wf: {} },
-    (o) => o.code === 0 && o.alertas.length === 2 && o.alertas.every((a) => a.fecha && a.tipo === 'relogio_fora_da_agenda') && Object.keys(o.estado).length === 0],
-  ['GitHub 502 para o executivo: os dois alarmes dele ficam', { padrao: OK, estado: { ['resultado:' + EX]: A0, ['cadencia:' + EX]: A0 },
+    (o) => o.code === 0 && sem(o) && Object.keys(o.estado).length === 0 && lin(o, EX).saudavel === 1],
+  ['ilegivel', 'o estado nao se le: so o aviso (dedup pela issue), nada de workflow, nada gravado no estado, a saude sai marcada',
+    { padrao: OK, estado: { ['resultado:' + EX]: A0 }, estadoErro: 'Unexpected token in JSON', wf: { [EX]: QUEBRADO, 'ppc.yml': QUEBRADO, 'way2-agg.yml': PARADO } },
+    (o) => o.code === 0 && CEGO(o) && o.saude && o.saude.estado_legivel === 0 && lin(o, EX).saudavel === 0 && o.saude.sem_sucesso >= 2],
+  ['estado-null', 'o estado gravado como null e ilegivel, e nao e regravado', { padrao: OK, estado: null, estadoCru: 'null', wf: { [EX]: QUEBRADO } },
+    (o) => o.code === 0 && CEGO(o) && o.saude.estado_legivel === 0],
+  ['estado-lista', 'o estado gravado como lista e ilegivel (antes passava como vazio e reabria tudo)', { padrao: OK, estado: null, estadoCru: '[]', wf: { [EX]: QUEBRADO } },
+    (o) => o.code === 0 && CEGO(o) && o.saude.estado_legivel === 0],
+  ['sem-canal', 'o estado nao se le e o aviso nao chega a canal nenhum: so ai o job fica vermelho',
+    { padrao: OK, estado: {}, estadoErro: 'Unexpected token in JSON', alertaFalha: true, wf: {} },
+    (o) => o.code !== 0 && aviso(o)],
+  ['sem-canal-0', 'o aviso volta "ja aberta #0" (a consulta de issues falhou e alguem tratou como dedup): nao conta como entregue',
+    { padrao: OK, estado: {}, estadoErro: 'Unexpected token in JSON', alertaResposta: { issue: 'ja aberta #0', webhook: '-', email: '-' }, wf: {} },
+    (o) => o.code !== 0 && aviso(o)],
+  ['rerun-com-relogio', 'o re-run de uma rodada antiga com o relogio em dia: nenhum 🟠, a cadencia pela agendada de 10 min', { padrao: OK, estado: {},
+    wf: { [EX]: { lista: [{ m: 10 }, { m: 3000, rs: 4 }], filtrado: { m: 3000, rs: 4 } } } },
+    (o) => o.code === 0 && sem(o) && lin(o, EX).ok === 1 && lin(o, EX).idade_min === 10],
+  ['conteiner', 'o storage inteiro fora (403): o aviso sai mesmo assim', { padrao: OK, estado: {}, storageErro: 'HTTP 403 AuthorizationFailure', wf: { [EX]: QUEBRADO } },
+    (o) => o.code === 0 && CEGO(o) && o.saude === null],
+  ['grava-falha', 'o estado se le e nao se grava: os alarmes da rodada saem e o aviso tambem', { padrao: OK, estado: {}, gravaEstadoErro: 'HTTP 503',
+    wf: { [EX]: QUEBRADO } },
+    (o) => o.code === 0 && reais(o).length === 2 && reais(o).some((a) => a.chave === 'resultado:' + EX && !a.fecha)
+      && reais(o).some((a) => a.chave === 'vigia:estado' && !a.fecha && a.soSeNova) && o.saude.estado_legivel === 1],
+  ['saiu', 'o workflow que saiu da agenda fecha as duas familias e sai do estado', { padrao: OK, estado: { 'resultado:saiu.yml': A0, 'cadencia:saiu.yml': A0 }, wf: {} },
+    (o) => o.code === 0 && reais(o).length === 2 && reais(o).every((a) => a.fecha && a.tipo === 'relogio_fora_da_agenda') && Object.keys(o.estado).length === 0],
+  ['502', 'GitHub 502 para o executivo: os dois alarmes dele ficam', { padrao: OK, estado: { ['resultado:' + EX]: A0, ['cadencia:' + EX]: A0 },
     wf: { [EX]: { erro: 502 } } },
     (o) => o.code === 0 && sem(o) && o.estado['resultado:' + EX] === A0 && o.estado['cadencia:' + EX] === A0],
-  ['a rodada presa na fila alem do limite acende', { padrao: OK, estado: {},
+  ['presa', 'a rodada presa na fila alem do limite: acende o resultado E a cadencia, cada um com a sua chave', { padrao: OK, estado: {},
     wf: { [EX]: { lista: [{ m: 930, st: 'queued', c: null }, { m: 1000, c: 'failure' }], filtrado: { m: 3000 } } } },
-    (o) => o.code === 0 && o.alertas.some((a) => a.chave === 'resultado:' + EX && !a.fecha)],
+    (o) => o.code === 0 && reais(o).length === 2 && reais(o).some((a) => a.chave === 'resultado:' + EX && !a.fecha && a.tipo === 'relogio_sem_sucesso')
+      && reais(o).some((a) => a.chave === 'cadencia:' + EX && !a.fecha && a.tipo === 'relogio_atrasado') && lin(o, EX).saudavel === 0 && lin(o, EX).ok === 0],
+  ['parou', 'o relogio parou para o executivo: abre a cadencia com a chave dela', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
+    wf: { [EX]: PARADO } },
+    (o) => o.code === 0 && so(o, 'cadencia:' + EX, false, 'relogio_atrasado') && o.saude.atrasados === 1 && lin(o, EX).ok === 0],
+  ['parou-de-novo', 'a cadencia ja aberta e ainda atrasada: nenhum aviso e as datas ficam', { padrao: OK, estado: { ['resultado:' + EX]: A0, ['cadencia:' + EX]: A0 },
+    wf: { [EX]: PARADO } },
+    (o) => o.code === 0 && sem(o) && o.estado['cadencia:' + EX] === A0 && o.estado['resultado:' + EX] === A0],
+  ['voltou', 'o executivo voltou a rodar: a cadencia fecha uma vez', { padrao: OK, estado: { ['cadencia:' + EX]: A0 },
+    wf: { [EX]: { lista: [{ m: 3 }], filtrado: { m: 3 } } } },
+    (o) => o.code === 0 && so(o, 'cadencia:' + EX, true, 'relogio_normalizado') && !o.estado['cadencia:' + EX]],
+  ['rerun', 'um Re-run de rodada antiga deu certo agora: o resultado fecha, e a cadencia (ninguem criou execucao) acende', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
+    wf: { [EX]: { lista: [{ m: 3000, rs: 4 }], filtrado: { m: 3000, rs: 4 } } } },
+    (o) => o.code === 0 && reais(o).length === 2 && reais(o).some((a) => a.chave === 'resultado:' + EX && a.fecha)
+      && reais(o).some((a) => a.chave === 'cadencia:' + EX && !a.fecha && a.tipo === 'relogio_atrasado')],
 ];
-function cenarios(gerPath) { return CENARIOS.map(([nome, cen, exige]) => { const o = seco(gerPath, cen); let ok; try { ok = exige(o); } catch (e) { ok = false; } return [nome, ok, o]; }); }
-const R3 = cenarios(montaVigia('atual', GER_SRC));
-R3.forEach(([n, o, s]) => console.log('  ' + (o ? 'ok  ' : '🔴  ') + 'vigia · ' + n + (o ? '' : '  ' + JSON.stringify(s).slice(0, 300))));
-R3.filter(([, o]) => !o).forEach(([n]) => f.push('o vigia errou: ' + n));
+function cenarios(gerPath) {
+  return CENARIOS.map(([k, , cen, exige]) => { const o = seco(gerPath, cen); let ok; try { ok = exige(o) === true; } catch (e) { ok = false; } return [k, ok, o]; });
+}
+const R3 = cenarios(montaVigia(GER_SRC));
+R3.forEach(([k, o, s], i) => console.log('  ' + (o ? 'ok  ' : '🔴  ') + 'vigia · ' + CENARIOS[i][1] + (o ? '' : '  ' + JSON.stringify(s).slice(0, 300))));
+R3.filter(([, o]) => !o).forEach(([k]) => f.push('o vigia errou: ' + k));
 
 const troca = (de, para) => { const n = GER_SRC.split(de).length - 1; return n === 1 ? GER_SRC.replace(de, para) : null; };
 let HEAD = null;
-try { HEAD = cp.execSync('git show HEAD~0:scripts/gen-relogio-watchdog.js', { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { /* fora do git */ }
+try { HEAD = cp.execSync('git show HEAD:scripts/gen-relogio-watchdog.js', { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { /* fora do git */ }
+/* [nome, vigia quebrado, cenarios que ele TEM de reprovar] */
 const CONTRA = [
-  ['o estado montado a mao', troca('JSON.stringify(R.estado)', 'JSON.stringify({})')],
-  ['a lista das execucoes jogada fora', troca('lista: r.workflow_runs || []', 'lista: []')],
-  ['o erro de leitura do estado engolido', troca("if (await bc.exists()) estado = JSON.parse((await bc.downloadToBuffer()).toString('utf8'));",
-    "try { if (await bc.exists()) estado = JSON.parse((await bc.downloadToBuffer()).toString('utf8')); } catch (e) { console.error('estado: ' + e.message); }")],
-  ['quem saiu da agenda esquecido', troca('for (const w of sairam) {', 'for (const w of []) {')],
+  ['o estado montado a mao', troca('JSON.stringify(R.estado)', 'JSON.stringify({})'), ['23:43', 'parou-de-novo']],
+  ['a lista das execucoes jogada fora', troca('lista: r.workflow_runs || []', 'lista: []'), ['21:30', 'voltou']],
+  ['o estado ilegivel tratado como vazio', troca('catch (e) { estadoLegivel = false; estado = {};', 'catch (e) { estado = {};'), ['ilegivel']],
+  ['o estado sem validacao', troca('if (!VIG.estadoValido(lido)) throw', 'if (false) throw'), ['estado-null', 'estado-lista']],
+  ['o estado nulo gravado por cima', troca('if (cont && R.estado) {', 'if (cont) {'), ['ilegivel', 'estado-null']],
+  ['o aviso de estado desligado', troca("if (R.avisoEstado === 'abre' || falhasStorage.length) {", 'if (false) {'), ['ilegivel', 'conteiner', 'grava-falha']],
+  ['o aviso de estado sem dedup', troca('soSeNova: true,', 'soSeNova: false,'), ['ilegivel']],
+  ['o aviso de estado nunca fecha', troca("} else {\n    await alerta({\n      tipo: 'vigia_estado_legivel'", "} else if (false) {\n    await alerta({\n      tipo: 'vigia_estado_legivel'"), ['23:43']],
+  ['o upload da saude sem try', troca("} catch (e) { falhasStorage.push('gravar ' + SAUDE + ': ' + e.message); }", '} catch (e) { throw e; }'), ['conteiner']],
+  ['o vermelho que nao liga para o canal', troca('if (!chegou) {', 'if (false) {'), ['sem-canal']],
+  ['qualquer resposta conta como entregue', troca('const chegou = !!r && (', 'const chegou = !!r && (true || '), ['sem-canal', 'sem-canal-0']],
+  ['quem saiu da agenda esquecido', troca('for (const w of sairam) {', 'for (const w of []) {'), ['saiu']],
   ['o fechamento de antes (fecha o que nao esta quebrado)', troca('for (const w of voltaramQ) {',
-    "for (const w of Object.keys(estado).filter((k) => k.indexOf('resultado:') === 0).map((k) => k.slice(10)).filter((w) => !quebrados.some((a) => a.wf === w))) {")],
+    "for (const w of Object.keys(estado).filter((k) => k.indexOf('resultado:') === 0).map((k) => k.slice(10)).filter((w) => !quebrados.some((a) => a.wf === w))) {"), ['23:43']],
+  ['o relogio parado sem aviso', troca('for (const a of novos) {', 'for (const a of []) {'), ['parou', 'presa', 'rerun']],
+  ['a cadencia que nunca fecha', troca('for (const w of voltaram) {', 'for (const w of []) {'), ['voltou']],
+  ['a cadencia com a chave do resultado', troca("chave: 'cadencia:' + a.wf,", "chave: 'resultado:' + a.wf,"), ['parou', 'presa']],
+  ['a saude publicada vazia', troca('const b = JSON.stringify(R.saude);', 'const b = JSON.stringify({});'), ['23:43', '23:53']],
 ];
-// o vigia de ANTES deste lote so entra se ainda nao tiver a lib (depois do commit, o HEAD ja e este)
-if (HEAD && !/lib-vigia\.js/.test(HEAD)) CONTRA.push(['o vigia de antes deste lote', HEAD]);
-for (const [nome, src] of CONTRA) {
+// o vigia do HEAD so entra se for de antes do conserto do estado (depois do commit, o HEAD ja e este)
+if (HEAD && !/estadoValido/.test(HEAD)) CONTRA.push(['o vigia no ar antes deste lote', HEAD, ['ilegivel', 'estado-lista', 'conteiner']]);
+if (RAPIDO) console.log('  contraprovas: puladas (--rapido); rodam no ensaios.yml, a cada push em scripts/');
+for (const [nome, src, devem] of (RAPIDO ? [] : CONTRA)) {
   if (!src) { f.push('contraprova "' + nome + '": o trecho nao foi achado no vigia'); continue; }
-  const caidos = cenarios(montaVigia('q' + CONTRA.indexOf(CONTRA.find((c) => c[0] === nome)), src)).filter(([, o]) => !o).map(([n]) => n);
-  console.log('  contraprova "' + nome + '": reprova ' + caidos.length + ' cenario(s)');
-  if (!caidos.length) f.push('contraprova "' + nome + '": o vigia quebrado passou em todos os cenarios');
+  const caidos = cenarios(montaVigia(src)).filter(([, o]) => !o).map(([k]) => k);
+  const faltou = devem.filter((d) => !caidos.includes(d));
+  console.log('  contraprova "' + nome + '": reprova ' + (caidos.join(', ') || 'nada'));
+  if (faltou.length) f.push('contraprova "' + nome + '" nao reprovou o que devia: ' + faltou.join(', '));
 }
 try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* limpeza */ }
 
 console.log('');
 if (f.length) { console.log('🔴 ENSAIO REPROVOU:'); f.forEach((x) => console.log('   ' + x)); process.exit(1); }
 console.log('ensaio do vigia: ' + R1.length + ' casos, ' + PLANTIOS.length + ' plantios, ' + R3.length + ' cenarios do vigia de verdade e '
-  + CONTRA.length + ' contraprovas · passou.');
+  + (RAPIDO ? 'as contraprovas no push' : CONTRA.length + ' contraprovas') + ' · passou.');

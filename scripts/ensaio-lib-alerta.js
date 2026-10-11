@@ -14,7 +14,7 @@ let mau = 0;
 const ok = (c, m) => { if (!c) { mau += 1; console.log('  [X] ' + m); } else console.log('  ok  ' + m); };
 
 // ── GitHub simulado: guarda as issues em memoria e responde como a API ──────────────────────
-const estado = { issues: [], chamadas: [] };
+const estado = { issues: [], chamadas: [], getFalha: 0 };
 const httpsFalso = {
   request(op, cb) {
     const corpo = [];
@@ -26,8 +26,12 @@ const httpsFalso = {
         estado.chamadas.push({ metodo: op.method, caminho: op.path, body });
         let resp = null, status = 200;
         const p = op.path;
-        if (op.method === 'GET' && /\/issues\?/.test(p)) {
-          resp = estado.issues.filter((i) => i.state === 'open');
+        if (op.method === 'GET' && /\/issues\?/.test(p) && estado.getFalha) {
+          resp = { message: 'Server Error' }; status = estado.getFalha;
+        } else if (op.method === 'GET' && /\/issues\?/.test(p)) {
+          // paginado como a API: 100 por pagina, na ordem em que foram abertas (a mais nova primeiro)
+          const pg = Number((/[?&]page=(\d+)/.exec(p) || [])[1] || 1);
+          resp = estado.issues.filter((i) => i.state === 'open').slice().reverse().slice((pg - 1) * 100, pg * 100);
         } else if (op.method === 'POST' && /\/issues$/.test(p)) {
           const i = { number: estado.issues.length + 1, title: body.title, state: 'open', comentarios: [] };
           estado.issues.push(i); resp = i; status = 201;
@@ -97,6 +101,36 @@ Module._load = originalLoad;
   console.log('\n4 · o alerta carrega os campos do evento, nao so o texto');
   const ult = estado.issues[1] ? estado.chamadas.filter((x) => x.metodo === 'POST').pop() : null;
   ok(ult && /relogio_atrasado/.test(ult.body.body), 'o corpo da issue traz o tipo do evento');
+
+  console.log('\n5 · `soSeNova`: o evento ja aberto nao aciona canal nenhum (o vigia sem o estado, 11/10/2026)');
+  const ev5 = { tipo: 'vigia_estado_ilegivel', chave: 'vigia:estado', titulo: 'vigia sem o estado dos alarmes', assunto: 'x',
+    corpo: 'o vigia nao le o estado', soSeNova: true };
+  const e1 = await alerta(ev5);
+  ok(/abriu #/.test(e1.issue), 'primeira vez ABRE (' + e1.issue + ')');
+  const nCham = estado.chamadas.length;
+  const e2 = await alerta(ev5);
+  ok(/ja aberta #/.test(e2.issue), 'segunda vez nao abre nem comenta (' + e2.issue + ')');
+  ok(estado.chamadas.slice(nCham).every((x) => x.metodo === 'GET'), 'so consultou: nenhum POST nem PATCH');
+  const e3 = await alerta({ ...ev5, tipo: 'vigia_estado_legivel', resolve: true, corpo: 'voltou' });
+  ok(/fechou #/.test(e3.issue), '`resolve` com `soSeNova` continua fechando (' + e3.issue + ')');
+  const e4 = await alerta(ev5);
+  ok(/abriu #/.test(e4.issue), 'fechada, o evento seguinte abre de novo (' + e4.issue + ')');
+  const semOpcao = await alerta({ ...ev5, soSeNova: false });
+  ok(/comentou #/.test(semOpcao.issue), 'sem a opcao, o comportamento de antes: comenta (' + semOpcao.issue + ')');
+
+  console.log('\n6 · `soSeNova` com a consulta de issues FORA (HTTP 500): avisa assim mesmo, e diz que a issue falhou');
+  estado.getFalha = 500;
+  const e6 = await alerta({ ...ev5, chave: 'vigia:estado6', titulo: 'outro evento' });
+  estado.getFalha = 0;
+  ok(/^FALHOU/.test(e6.issue), 'a issue diz FALHOU, nao "ja aberta" (' + e6.issue + ')');
+  ok(!/ja aberta/.test(e6.issue), 'fail-open: a falha da consulta nao vira dedup');
+
+  console.log('\n7 · a issue do evento fora da primeira pagina (mais de 100 abertas) ainda e achada');
+  for (let k = 0; k < 120; k++) await alerta({ tipo: 't', chave: 'enchimento:' + k, titulo: 'enchimento ' + k, assunto: 'x', corpo: 'x' });
+  const nCh7 = estado.chamadas.length;
+  const e7 = await alerta(ev5);
+  ok(/ja aberta #/.test(e7.issue), 'o evento aberto antes das 120 segue achado (' + e7.issue + ')');
+  ok(estado.chamadas.slice(nCh7).every((x) => x.metodo === 'GET'), 'e nada foi aberto nem comentado');
 
   console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'abrir, comentar e fechar funcionam, e o dedup segura o ruido'));
   process.exit(mau ? 1 : 0);
