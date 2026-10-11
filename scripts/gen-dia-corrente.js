@@ -35,6 +35,23 @@ const ML = ['M1', 'M7', 'M9'];
 const UFVS = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const r2 = (v) => (typeof v === 'number' && isFinite(v) ? Math.round(v * 100) / 100 : null);
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+const SLOTS_DIA_COMPLETO = 286;   // o dia passado so fecha com o snapshot completo: a MESMA regra do `DIAS_SNAP` k > 0 do executivo
+
+// por entidade, a MESMA regra do executivo: grupo e a soma dos membros, o conjunto vem
+// do rollup dos dois transformadores (nao da soma das nove, que e outra grandeza).
+function valoresDia(linha) {
+  const uf = linha.ufv_liq_mwh || {};
+  const soma = (us) => us.reduce((a, u) => a + num(uf[u]), 0);
+  const val = { Complexo: num(linha.ene_liq_mwh), PPA: soma(PPA), ML: soma(ML) };
+  UFVS.forEach((u) => { val[u] = num(uf[u]); });
+  return val;
+}
+
+// A energia do dia sai tambem repartida em dois campos COMPLEMENTARES (um sempre nulo), que o grafico diario le como duas series:
+// `liq_hoje_mwh` enquanto o dia rende, `liq_fechada_mwh` depois. E a MESMA regra do `parte` do executivo (parcial e nao
+// encerrado = rendendo). Sem isto o remendo movia so `liq_mwh` e o grafico ficava no valor da ultima rodada completa (11/10/2026:
+// 545,25 publicado, 476,53 no grafico).
+const parte = (x, v) => ((x.parcial && !x.encerrado) ? [null, v] : [v, null]);
 
 function baixa(url) {
   return new Promise((ok, err) => https.get(url, { family: 4 }, (r) => {
@@ -45,6 +62,52 @@ function baixa(url) {
       try { ok(JSON.parse(x.toString('utf8').replace(/^﻿/, ''))); } catch (e) { err(e); }
     });
   }).on('error', err));
+}
+
+// Fecha as 12 linhas de ONTEM pelo snapshot completo, se elas ainda estao `parcial`. Nao derruba o job: o que impede o fechamento
+// sai no log (com `::warning::` quando e a guarda), e a rodada completa fecha depois. Leitura que falha sem ser 404 estoura.
+async function fechaOntem(j, hoje, mes) {
+  const ontem = new Date(Date.parse(hoje + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10);
+  const linhas = (j.serie_dia_ufv || []).filter((x) => x.dia === ontem);
+  const cxO = linhas.find((x) => x.ufv === 'Complexo');
+  if (!cxO) { console.log('ontem (' + ontem + ') sem linha no executivo — nada a fechar'); return; }
+  // aberto = `parcial`, ou a linha-reserva que a rodada completa cria para os dias futuros (`parcial` 0 e sem energia), quando o
+  // remendo nao chegou a escreve-la no dia
+  if (!cxO.parcial && cxO.liq_mwh != null) { console.log('ontem (' + ontem + ') ja fechado' + (cxO.liq_fonte ? ' (' + cxO.liq_fonte + ')' : '') + ' — nada a fazer'); return; }
+  if (ontem.slice(0, 7) !== mes) { console.log('ontem (' + ontem + ') e do mes anterior — fica para a rodada completa'); return; }
+  let snapO;
+  try { snapO = await baixa(BASE + 'hist/way2_' + ontem + '.json'); }
+  catch (e) {
+    if (!/^HTTP 404 /.test(e.message)) throw e;
+    console.log('snapshot de ontem (' + ontem + ') nao existe — ontem segue parcial'); return;
+  }
+  const lO = rollupDia(snapO, ontem);
+  const trafosO = [valoresW2(snapO, 6196, 'Demat'), valoresW2(snapO, 6197, 'Demat')];
+  const nO = trafosO.map((vs) => vs.filter((v) => v.valor != null).length);
+  if (!(lO.slots >= SLOTS_DIA_COMPLETO && nO[0] >= SLOTS_DIA_COMPLETO && nO[1] >= SLOTS_DIA_COMPLETO)) {
+    console.log('snapshot de ontem (' + ontem + ') incompleto (6233 ' + lO.slots + ', TR1 ' + nO[0] + ', TR2 ' + nO[1] + ' de 288) — ontem segue parcial');
+    return;
+  }
+  const valO = valoresDia(lO);
+  const antesO = cxO.liq_mwh != null ? cxO.liq_mwh : null;
+  const relO = antesO != null
+    ? relidoDoPublicado(trafosO, ontem, cxO.ate, cxO.liq_fonte === 'snapshot 5 min' ? cxO.liq_corte : null, antesO) : null;
+  const novoO = r2(valO.Complexo);
+  const motivoO = guardaDia(novoO, antesO, '00:00', relO, corteTrafos(trafosO, ontem));
+  if (motivoO) { console.log('::warning::ontem (' + ontem + ') NAO fechado: ' + motivoO); return; }
+  if (linhas.filter((x) => x.ufv in valO).length !== 12) { console.log('::warning::ontem (' + ontem + ') sem as 12 entidades — nao fechado'); return; }
+  linhas.forEach((x) => {
+    if (!(x.ufv in valO)) return;
+    x.liq_mwh = r2(valO[x.ufv]);
+    x.parcial = 0;
+    x.encerrado = 0;
+    [x.liq_fechada_mwh, x.liq_hoje_mwh] = parte(x, x.liq_mwh);
+    x.ate = null;
+    delete x.liq_corte;
+    x.liq_fonte = 'snapshot completo';
+  });
+  console.log('ontem (' + ontem + ') FECHADO pelo snapshot completo: Complexo ' + antesO
+    + (relO ? ' (relido ' + r2(relO.mwh) + ' ate ' + relO.em + ')' : '') + ' -> ' + novoO + ' MWh');
 }
 
 (async () => {
@@ -71,12 +134,7 @@ function baixa(url) {
     return;
   }
 
-  // por entidade, a MESMA regra do executivo: grupo e a soma dos membros, o conjunto vem
-  // do rollup dos dois transformadores (nao da soma das nove, que e outra grandeza).
-  const uf = linha.ufv_liq_mwh || {};
-  const soma = (us) => us.reduce((a, u) => a + num(uf[u]), 0);
-  const val = { Complexo: num(linha.ene_liq_mwh), PPA: soma(PPA), ML: soma(ML) };
-  UFVS.forEach((u) => { val[u] = num(uf[u]); });
+  const val = valoresDia(linha);
 
   const conn = process.env.DADOS_STORAGE;
   if (!conn && !process.env.LOCAL_OUT) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
@@ -124,6 +182,7 @@ function baixa(url) {
     if (!(x.ufv in val)) return;
     x.liq_mwh = r2(val[x.ufv]);
     x.parcial = 1;
+    [x.liq_fechada_mwh, x.liq_hoje_mwh] = parte(x, x.liq_mwh);
     x.ate = linha.ate;
     x.liq_corte = corte;
     x.liq_fonte = 'snapshot 5 min';
@@ -141,6 +200,15 @@ function baixa(url) {
   const motivo = guardaDia(novo, antes, linha.ate, relido, corte);
   if (motivo) { console.log(motivo + ' — abortando'); process.exit(1); }
   const mes = hoje.slice(0, 7);   // o mes em curso: a soma dos dias e a manchete abaixo (a linha morava na guarda antiga)
+
+  // ---- o DIA DE ONTEM ------------------------------------------------------
+  //
+  // 🔴 Quem fechava o dia que acabou era SO a rodada completa do executivo. Com ela parada (06 a 10/10/2026) as linhas de 08 e 09/10
+  //    ficaram como o remendo das ~19h as deixou, `parcial` e acima do dia inteiro (1.992,81 e 1.976,28 contra 1.987,00 e 1.969,78),
+  //    por dois dias. Agora, enquanto a linha de ontem estiver `parcial`, o remendo a fecha pelo snapshot COMPLETO de ontem, com a
+  //    mesma conta e a mesma guarda do dia em curso. A rodada completa, quando rodar, troca pela liquidada da Way2.
+  //    Ontem de OUTRO mes fica para a rodada completa: a manchete do mes que fechou nao e remendada aqui.
+  await fechaOntem(j, hoje, mes);
 
   // ---- a MANCHETE do mesmo dia ---------------------------------------------
   //

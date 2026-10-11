@@ -149,6 +149,20 @@ casoC('dia, a fonte nao avancou: corte novo igual ao gravado', true, 13 * 60, 13
 casoC('noite, a fonte nao avancou: corte novo igual ao gravado', true, 21 * 60, 21 * 60 + 10, 21 * 60, true);
 casoC('24:00, a fonte nao avancou: corte 00:00 contra 00:00', true, 1440, 1440, 1440, true);
 casoC('noite, o snapshot novo recuou UM passo', false, 21 * 60, 21 * 60 + 10, 20 * 60 + 55, true, /RECUOU/);
+// SEM instante nenhum (a rodada completa com o snapshot truncado: `parcial`, sem `ate` nem corte), so no fechamento de ontem
+// (fecha-ontem): rele onde a curva nova passa mais perto do publicado. O publicado NA curva (truncado as 21:00) passa e a cauda
+// ate 24:00 cabe; o publicado ACIMA de toda a curva nova (o passado perdeu energia) recusa.
+(() => {
+  const S = [serie(1, 1440), serie(2, 1440)];
+  const a21 = Math.round(A(21 * 60) * 100) / 100, fim = Math.round(A(1440) * 100) / 100;
+  const r = relidoDoPublicado(S, DIA, null, null, a21);
+  if (!r || r.em !== '21:00' || !r.semInstante || Math.abs(r.mwh - a21) > 0.005) f.push('sem instante: devia reler as 21:00 (' + JSON.stringify(r) + ')');
+  passa('sem instante: publicado truncado as 21:00, o dia inteiro novo', fim, a21, '00:00', r, '00:00');
+  let topo = -Infinity; for (let m = 5; m <= 1440; m += 5) topo = Math.max(topo, A(m));
+  const acima = Math.round((topo + 1) * 100) / 100;
+  barra('sem instante: publicado 1 MWh acima de toda a curva nova', fim, acima, '00:00', relidoDoPublicado(S, DIA, null, null, acima), PASSADO, '00:00');
+  if (relidoDoPublicado(S, DIA, null, null) !== null) f.push('sem instante e sem o publicado: devia ser null (a regra antiga)');
+})();
 if (relidoDoPublicado([serie(1, 1440)], DIA, null) !== null) f.push('relidoDoPublicado sem instante devia ser null (a guarda cai na regra antiga)');
 
 // a conta do acumulado: rotulo na borda DIREITA (o dia vai de 00:05 a 00:00 do dia seguinte), inclusive no instante, soma o

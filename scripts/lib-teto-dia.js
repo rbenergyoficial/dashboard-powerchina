@@ -82,10 +82,22 @@ function corteTrafos(series, dia) {
 // O snapshot NOVO relido no trecho que estava publicado: { mwh, em, exato }.
 //  - com `antesCorte` (a linha gravada pelo remendo): o acumulado EXATO ate ele;
 //  - sem ele: o maior acumulado entre `antesAte` - 10 min e `antesAte` + 10 min, e o instante dele;
-//  - sem os dois: null (a guarda cai na regra antiga).
-function relidoDoPublicado(series, dia, antesAte, antesCorte) {
+//  - sem os dois, com `antes` (so no fechamento de ONTEM pelo snapshot completo — fecha-ontem): a linha que a rodada completa
+//    grava com o snapshot TRUNCADO (`parcial`, sem `ate`), de corte desconhecido. Rele no instante, entre 05:00 e 24:00, em que a
+//    curva nova chega mais perto do publicado: a guarda confere que o publicado esta NA curva (nao acima dela) e a cauda dali.
+//    E mais fraca que as duas acima (de dia uma perda no passado fica escondida pela subida), e so vale com o snapshot completo.
+//  - sem nada: null (a guarda cai na regra antiga).
+function relidoDoPublicado(series, dia, antesAte, antesCorte, antes) {
   if (/^\d\d:\d\d$/.test(String(antesCorte || ''))) return { mwh: acumuladoAte(series, dia, antesCorte), em: antesCorte, exato: true };
-  if (!/^\d\d:\d\d$/.test(String(antesAte || ''))) return null;
+  if (!/^\d\d:\d\d$/.test(String(antesAte || ''))) {
+    if (antes == null || !isFinite(Number(antes))) return null;
+    let r = null;
+    for (let m = INICIO_MIN; m <= 1440; m += 5) {
+      const v = acumuladoAte(series, dia, hhmm(m));
+      if (!r || Math.abs(v - antes) < Math.abs(r.mwh - antes)) r = { mwh: v, em: hhmm(m), exato: false, semInstante: true };
+    }
+    return r;
+  }
   const c = minutos(antesAte);
   let r = null;
   for (let m = Math.max(5, c - DEFASAGEM_MIN); m <= Math.min(1440, c + DEFASAGEM_MIN); m += 5) {
