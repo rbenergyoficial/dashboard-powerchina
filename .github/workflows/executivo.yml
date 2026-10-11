@@ -160,6 +160,13 @@ jobs:
       - name: Ensaio · a disponibilidade declarada na janela fixa (produto)
         run: node scripts/ensaio-disp-declarada.js --produto
 
+      # O patamar do conjunto com uma parcela entra no corte pela soma das usinas, e a lista publicada no executivo vale
+      # tambem no benchmark (e dele no corte_gemeo) e no PR. O PRODUTO: a lista se sustenta sozinha, bate com a marca por dia,
+      # e o corte mensal do executivo bate com o nosso corte do benchmark quando os dois aplicaram a mesma lista. O benchmark
+      # roda ANTES do executivo e le a lista da rodada anterior: listas diferentes, ele diz que nao julgou.
+      - name: Ensaio · a troca do conjunto chega ao benchmark (produto)
+        run: node scripts/ensaio-ref-conjunto.js --produto
+
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

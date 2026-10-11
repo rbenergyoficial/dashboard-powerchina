@@ -51,14 +51,41 @@ if (PRODUTO) {
   };
   (async () => {
     const [E, O] = await Promise.all([pega('executivo.json'), pega('ons_restricao_all.json')]);
+    // O PATAMAR QUE O EXECUTIVO TROCOU (PROMOVER ref-parcela-corte, 11/10/2026): o conjunto publicou nenhuma ou uma parcela
+    // (01/10 09:00: disp 49,105 com 245,6 MW gerados), e o gerador tira a disp dele da media como nao publicada. A lista vem
+    // explicita no produto (`ref_conjunto_pela_soma`); aqui ela so e aceita se o patamar existe no arquivo cru e se
+    // contradiz como a regra diz (disp abaixo do gerado). Fora dela, nada muda nesta rota.
+    // Cada item e conferido CONTRA O CRU (revisor-ensaio, RE-021): o gref, a disp e o ger publicados sao os do arquivo, a soma
+    // esta longe do gref (o patamar nao fechava), o gref e zero ou abaixo da soma (parcela que falta), no maximo o teto por
+    // dia, e a contagem por dia e a marca da `serie_diaria`. So os NUMEROS da folga e do teto vem da lib; a conta e desta rota.
+    const { FOLGA_MW, MAX_POR_DIA } = require('./lib-ref-conjunto.js');
+    const pelaSoma = new Set(), porDia = {};
+    const cruPorTs = new Map((O.j.consolidado || []).map((r) => [String(r.ts).slice(0, 16), r]));
+    const perto = (a, b) => Math.abs(Number(a) - Number(b)) <= 0.0005;
+    for (const x of E.j.ref_conjunto_pela_soma || []) {
+      const r = cruPorTs.get(String(x.ts)), id = 'ref_conjunto_pela_soma: ' + x.ts;
+      if (!r) { f.push(id + ' nao existe no arquivo do conjunto'); continue; }
+      if (!(Number(r.disp) < Number(r.ger))) { f.push(id + ' tem disp ' + r.disp + ' >= ger ' + r.ger + ' no arquivo cru'); continue; }
+      if (!perto(x.gref_publicado, r.gref) || !perto(x.disp_publicada, r.disp) || !perto(x.ger, r.ger)) {
+        f.push(id + ' nao e o patamar do cru (publicado ' + [x.gref_publicado, x.disp_publicada, x.ger].join('/') + ', cru ' + [r.gref, r.disp, r.ger].join('/') + ')'); continue; }
+      const g = Number(r.gref), s = Number(x.soma_usinas);
+      if (!(Math.abs(s - g) > FOLGA_MW)) { f.push(id + ' ja fecha com a soma das usinas (' + g + ' x ' + s + ')'); continue; }
+      if (!(g === 0 || s >= g + FOLGA_MW)) { f.push(id + ' tem o gref acima da soma: nao e parcela que falta'); continue; }
+      pelaSoma.add(String(x.ts)); const d = String(x.ts).slice(0, 10); porDia[d] = (porDia[d] || 0) + 1;
+    }
+    Object.entries(porDia).forEach(([d, n]) => { if (n > MAX_POR_DIA) f.push('ref_conjunto_pela_soma: ' + n + ' patamares em ' + d + ', acima do teto'); });
+    for (const s of E.j.serie_diaria || []) if (s.ref_pela_soma != null && s.ref_pela_soma !== (porDia[s.dia] || 0))
+      f.push('serie_diaria ' + s.dia + ': ref_pela_soma ' + s.ref_pela_soma + ' contra ' + (porDia[s.dia] || 0) + ' na lista conferida');
     // a janela escrita de novo, de proposito sem a lib: minutos do dia do INICIO do patamar, 04:00 (240) a 17:30 (1050)
     const M = {};
     for (const r of O.j.consolidado || []) {
       const m = /^(\d{4}-\d{2})-\d{2} (\d{2}):(\d{2})/.exec(String(r.ts)); if (!m) continue;
       const min = Number(m[2]) * 60 + Number(m[3]); if (min < 240 || min > 1050) continue;
       const o = M[m[1]] || (M[m[1]] = { s: 0, d: 0, n: 0 }); o.n++;
-      const v = Number(r.disp); if (Number.isFinite(v) && v > 0) { o.s += v; o.d++; }
+      const v = pelaSoma.has(String(r.ts).slice(0, 16)) ? 0 : Number(r.disp);
+      if (Number.isFinite(v) && v > 0) { o.s += v; o.d++; }
     }
+    if (pelaSoma.size) console.log('   ' + pelaSoma.size + ' patamar(es) com a disp fora da media pela troca do executivo: ' + [...pelaSoma].join(', '));
     const serie = E.j.serie || [];
     const julgados = [];
     for (const s of serie) {

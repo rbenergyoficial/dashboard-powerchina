@@ -34,6 +34,13 @@
  * Env: DADOS_STORAGE (RW no container dados) · LOCAL_OUT p/ teste · MESES p/ limitar a janela.
  */
 const rot = require('./lib-rotulos.js');
+// o patamar do NOSSO conjunto que o executivo trocou pela soma das usinas (PROMOVER ref-parcela-corte, 11/10/2026): a lista
+// publicada (`executivo.ref_conjunto_pela_soma`) vale aqui tambem, senao o nosso corte do comparativo — e o apurado que o
+// `corte_gemeo` mostra no painel — fica 36,09 MWh abaixo do executivo em out/26. So troca onde o cru ainda traz o defeito.
+const RC = require('./lib-ref-conjunto.js');
+let LISTA = new Map(), nLista = 0;
+const APLICADOS = new Set();   // os ts trocados, publicados em `ref_conjunto_pela_soma_aplicada` (o ensaio cruza com o executivo)
+const ACHADOS = new Map();     // ts da lista -> a NOSSA linha do CSV (gref, disp, ger): trocada ou nao, o cru pode ja vir certo
 const https = require('https'), readline = require('readline'), zlib = require('zlib');
 const ONS = 'https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/';
 const FONTES = [
@@ -151,7 +158,7 @@ function linhas(url) {
 
 async function leMes(f, mo, acc, accD) {
   const rl = await linhas(ONS + f.dir + '/' + f.arq + '_' + mo + '.csv');
-  let cab = null, iSub, iUsi, iOns, iTs, iGer, iLim, iGref, iRaz, iOri, n = 0;
+  let cab = null, iSub, iUsi, iOns, iTs, iGer, iLim, iGref, iRaz, iOri, iDisp, n = 0;
   for await (const l of rl) {
     if (!l) continue;
     const c = l.replace(/^﻿/, '').split(';');
@@ -161,6 +168,7 @@ async function leMes(f, mo, acc, accD) {
       iTs = cab.indexOf('din_instante'); iGer = cab.indexOf('val_geracao');
       iLim = cab.indexOf('val_geracaolimitada'); iGref = cab.indexOf('val_geracaoreferencia');
       iRaz = cab.indexOf('cod_razaorestricao'); iOri = cab.indexOf('cod_origemrestricao');
+      iDisp = cab.indexOf('val_disponibilidade');
       if ([iSub, iOns, iTs, iGer, iLim, iGref].some(i => i < 0)) throw new Error('layout mudou em ' + f.id + ' ' + mo);
       continue;
     }
@@ -168,7 +176,13 @@ async function leMes(f, mo, acc, accD) {
     const mes = String(c[iTs]).slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(mes)) continue;
     const ger = Number(String(c[iGer] || '').replace(',', '.')) || 0;
-    const gref = Number(String(c[iGref] || '').replace(',', '.')) || 0;
+    let gref = Number(String(c[iGref] || '').replace(',', '.')) || 0;
+    if (CONJ[c[iOns]] === 'nosso' && LISTA.size) {
+      const dispTxt = iDisp >= 0 ? String(c[iDisp] || '').replace(',', '.') : '';
+      if (LISTA.has(String(c[iTs]).slice(0, 16))) ACHADOS.set(String(c[iTs]).slice(0, 16), { gref, disp: Number(dispTxt) || 0, ger });
+      const s = RC.somaDaLista(LISTA, { ts: c[iTs], gref, ger, disp: dispTxt });
+      if (s != null) { gref = s; nLista++; APLICADOS.add(String(c[iTs]).slice(0, 16)); }
+    }
     const limTxt = String(c[iLim] == null ? '' : c[iLim]).trim();
     const temLim = limTxt !== '';                        // PREENCHIDO, inclusive zero
     const limNum = Number(limTxt.replace(',', '.')) || 0;
@@ -220,12 +234,17 @@ async function grava(obj) {
 (async () => {
   const MS = process.env.MESES ? process.env.MESES.split(',') : meses();
   const acc = {}, accD = {}, faltou = [];
+  // so o 404 e ausencia (executivo ainda sem a lista): qualquer outra falha de leitura estoura
+  try { LISTA = RC.mapaDaLista((await getJSON(BASE_LEITURA + 'executivo.json')).ref_conjunto_pela_soma); }
+  catch (e) { if (!/HTTP 404/.test(e.message)) throw e; }
   for (const f of FONTES) {
     for (const mo of MS) {
       try { const n = await leMes(f, mo, acc, accD); console.log('  ' + f.id + ' ' + mo + '  ' + n + ' linhas NE'); }
       catch (e) { faltou.push(f.id + ' ' + mo + ' (' + e.message.slice(0, 40) + ')'); }
     }
   }
+  console.log('conjunto: ' + nLista + ' patamar(es) do nosso conjunto com o gref pela soma das usinas (lista do executivo: '
+    + LISTA.size + ')');
   // ---- serie mensal: uma linha por (mes, fonte), regiao e os conjuntos nomeados lado a lado ----
   const serie = [];
   const chaves = [...new Set(Object.keys(acc).map(k => k.split('|').slice(0, 2).join('|')))].sort();
@@ -483,6 +502,14 @@ async function grava(obj) {
       + 'estimado_metodo e o valor bruto ao lado. Nunca um estimado se passando por medido.',
     meses_estimados: estim,
     conjuntos: CONJ, subsistema: SUB, serie, serie_dia: serieDia,
+    // os patamares do nosso conjunto com o gref pela soma das usinas, pela lista do executivo (PROMOVER ref-parcela-corte)
+    ref_conjunto_pela_soma_aplicada: [...APLICADOS].sort(),
+    // ... a lista que ele LEU do executivo, e os ts dela que o CSV ja traz sem o defeito (o operador republicou certo), COM a
+    // linha do CSV: o ensaio separa a rodada de atraso (lida diferente) do benchmark que deixou de aplicar (lida igual), e so
+    // aceita o "sem defeito" se a linha de fato nao o traz e nao e a mesma que o executivo viu (revisor-ensaio, RE-032)
+    ref_conjunto_pela_soma_lida: [...LISTA.keys()].sort(),
+    ref_conjunto_pela_soma_sem_defeito: [...ACHADOS.entries()].filter(([t]) => !APLICADOS.has(t)).sort()
+      .map(([ts, r]) => Object.assign({ ts }, r)),
     serie_dia_criterio: 'Mesmo criterio da serie mensal, so SOLAR, um ponto por dia nos ultimos '
       + DIA_JANELA + ' dias. `parcial` marca o dia que chegou com menos intervalos que a mediana da '
       + 'janela — a publicacao do operador e D+1 e o ultimo dia costuma vir pela metade. O corte '

@@ -72,6 +72,11 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const [irr, ons, gem, ant, irr30, antM, iu, antU, exe] = await Promise.all([puxa(BASE + 'irr_60min.json'), puxa(BASE + 'ons_restricao_all.json'), puxa(BASE + 'corte_gemeo.json'), leAnterior(),
     puxa(BASE + 'irr_plano_30min.json'), leAnterior('pr_hora.json'), puxa(BASE + 'irr_ufv.json').catch((e) => { if (/HTTP 404/.test(e.message)) return null; throw e; }),
     leAnterior('pr_ufv.json'), puxa(BASE + 'executivo.json')]);
+  /* 🔴 O PATAMAR DO CONJUNTO QUE O EXECUTIVO TROCOU PELA SOMA DAS USINAS (PROMOVER ref-parcela-corte, 11/10/2026): a impedida
+     do conjunto sai daqui com a MESMA troca, pela lista que ele publica (`ref_conjunto_pela_soma`), senao o PR corrigido de
+     01/10 fica 36,09 MWh abaixo do corte do executivo. So troca onde o cru ainda traz o defeito (lib-ref-conjunto). */
+  const nLista = require('./lib-ref-conjunto.js').aplicaLista(ons.consolidado, exe && exe.ref_conjunto_pela_soma);
+  if (nLista) console.log('conjunto: ' + nLista + ' patamar(es) com o gref pela soma das usinas, pela lista do executivo');
   /* PROMOVER irr-travada: dia com leitura de irradiancia TRAVADA retirada (declarado pela solarimetria em
      `leituras_travadas`) e refeito, mesmo fora dos ultimos REFAZ_DIAS — o PR publicado dele saiu com a irradiacao errada
      (23/09/2026: 79,92 % com a manha do M5 a 0,26 W/m2). Sem o campo (solarimetria antiga), nada muda. */
@@ -91,10 +96,22 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const velhos = new Map(((ant && ant.dias) || []).map(d => [d.dia, d]));
   const limiteRefaz = new Date(Date.parse(hoje + 'T00:00:00Z') - REFAZ_DIAS * 86400e3).toISOString().slice(0, 10);
 
+  /* 🔴 O DIA QUE O OPERADOR REVISOU DEPOIS DE PUBLICADO (PROMOVER ref-parcela-corte, 11/10/2026; a regra `revisto` que o
+     pr_ufv ja tinha, agora no conjunto). 01/10 entrou com a referencia de um quinto do dia (impedida 0) e nunca mais foi refeito:
+     tinha corrigido e estava fora dos ultimos REFAZ_DIAS. O dia passa a guardar `op_impedida_mwh`, a impedida do operador
+     somada nas 24 h na hora do calculo, e e refeito quando ela muda (folga 0,0006, a do ensaio). Dia antigo, sem a impressao:
+     refeito se a impedida publicada difere da do operador nas horas com irradiacao — medido em 11/10: 5 dias (01/10 e 14, 15,
+     16 e 24/09, os de setembro com o operador ~0,5 a 4 MWh abaixo do publicado); refeitos, ganham a impressao. A regra mora na
+     lib-pr (`revistoConjunto`), e o ensaio-pr a julga em casos forjados. */
+  const opDia = (d) => L.opImpedidaDia(d, op);
+  const revistoConj = (d, v) => L.revistoConjunto(d, v, op, gH, apurados);
   const alvo = diasEntre(inicio, ultimoIrr).filter(d => {
     const v = velhos.get(d);
-    return !v || d >= limiteRefaz || v.pr_pct == null || (v.pr_corrigido_pct == null && apurados.has(d.slice(0, 7))) || travDias.has(d);
+    return !v || d >= limiteRefaz || v.pr_pct == null || (v.pr_corrigido_pct == null && apurados.has(d.slice(0, 7))) || travDias.has(d)
+      || revistoConj(d, v);
   });
+  { const rev = diasEntre(inicio, ultimoIrr).filter(d => d < limiteRefaz && velhos.get(d) && revistoConj(d, velhos.get(d)));
+    if (rev.length) console.log('pr do conjunto: ' + rev.length + ' dia(s) refeito(s) pela revisao do operador: ' + rev.join(', ')); }
   /* a meia hora: acumulativa como o dia; refaz o que o dia refaz e o que ainda nao tem (a primeira rodada faz tudo) */
   const primeiroM = [...sM.keys()].sort()[0].slice(0, 10), inicioM = primeiroM > inicio ? primeiroM : inicio;
   const velhosM = new Map(((antM && antM.dias) || []).map(d => [d.dia, d]));
@@ -149,7 +166,8 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
       let hist = null;
       try { hist = await puxa(BASE + 'hist/way2_' + dia + '.json'); }
       catch (e) { if (!/HTTP 404/.test(e.message)) { falhas++; throw e; } }
-      if (alvoSet.has(dia)) novos.set(dia, L.prDia(dia, hist ? L.energiaHoras(hist) : new Map(), gH, op, apurados));
+      if (alvoSet.has(dia)) novos.set(dia, Object.assign(L.prDia(dia, hist ? L.energiaHoras(hist) : new Map(), gH, op, apurados),
+        { op_impedida_mwh: Math.round(opDia(dia) * 1000) / 1000 }));   // a impressao da revisao do operador (ver `revistoConj`)
       if (alvoMSet.has(dia)) novosM.set(dia, L.prMeias(dia, hist ? L.energiaMeias(hist) : new Map(), sM, impM, novos.get(dia) || velhos.get(dia)));
       if (alvoUSet.has(dia)) {
         const eU = hist ? L.energiaHorasUfv(hist) : new Map(), o = {};

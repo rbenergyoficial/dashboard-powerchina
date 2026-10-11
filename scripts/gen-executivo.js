@@ -343,6 +343,41 @@ async function writeOut(obj, nome, opts) {
   const restr = await getJSON(BASE + 'ons_restricao_all.json');
   const daily = await getJSON(BASE + 'way2_daily.json');
 
+  // a referencia crua por usina so a partir de mar/26: antes disso o `ge` do ONS e inconsistente (o mesmo corte que
+  // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
+  const REF_DESDE = '2026-03-01';
+  // 🔴 O PATAMAR DO CONJUNTO COM NENHUMA OU UMA PARCELA ENTRA NO CORTE PELA SOMA DAS USINAS (PROMOVER ref-parcela-corte,
+  // 11/10/2026, decisao do humano). Em 01/10 09:00 o conjunto trouxe a parcela do M6 (gref 47,246, disp 49,105) com 245,6
+  // MW gerados e o patamar limitado: o corte saia ZERO nele, e pela soma das usinas (317,78 MW) e 36,09 MWh. A guarda do
+  // `ref_dia_ufv` (`lib-ref-conjunto.js`) roda AQUI, antes da secao 1, sobre o detalhe por usina; o que ela aceita e trocado
+  // nas linhas do conjunto (gref = soma, disp nao publicada) e marcado no dia (`ref_pela_soma`). Acima do teto, para aqui.
+  // O detalhe lido aqui fica em `CRU_LIDO` e o laco do CRU, mais adiante, o reaproveita: nenhum arquivo e baixado duas vezes.
+  const RC = require('./lib-ref-conjunto.js');
+  const CRU_LIDO = {};
+  const CONJ_PELA_SOMA = [];   // publicado em `ref_conjunto_pela_soma`: quem refaz o conjunto cru (o ensaio da disp) aplica o mesmo
+  {
+    const mesesRef = [...new Set(restr.consolidado.map(r => String(r.ts).slice(0, 7)))]
+      .filter(m => /^\d{4}-\d{2}$/.test(m) && m >= REF_DESDE.slice(0, 7)).sort();
+    for (const mes of mesesRef) {
+      // so o 404 e ausencia (o mes ainda sem detalhe publicado): qualquer outra falha de leitura ESTOURA aqui — engolida, o
+      // mes sairia sem a troca e, se o laco do CRU relesse com sucesso, a guarda de baixo fecharia o dia calada (revisor-ensaio)
+      try { CRU_LIDO[mes] = (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
+      catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('detalhe do ONS de ' + mes + ' ilegivel: ' + e.message); }
+    }
+    const { refHora: rh, refDia: rd } = RC.refPorUsina(CRU_LIDO, { desde: REF_DESDE, usinas: PPA.concat(ML) });
+    const { absorvidos, excesso } = RC.grefConjuntoPorDia(restr.consolidado, rh, { desde: REF_DESDE, usinas: PPA.concat(ML), refDia: rd });
+    if (Object.keys(excesso).length) throw new Error('ref_dia_ufv: o arquivo do conjunto traz mais de ' + RC.MAX_POR_DIA
+      + ' patamar(es) por dia com nenhuma ou uma parcela — ' + Object.entries(excesso).slice(0, 5).map(([d, n]) => d + ': ' + n).join(' · '));
+    // a lista sai com o patamar COMO o operador publicou (gref, disp e ger crus, sem arredondar) e a soma que entrou no lugar:
+    // da para auditar a troca sem o arquivo cru (revisor-ensaio). Lida ANTES de trocar, porque a troca e no lugar.
+    const cruTs = new Map(restr.consolidado.map(r => [String(r.ts).slice(0, 16), r]));
+    absorvidos.forEach(x => { const r = cruTs.get(x.ts) || {};
+      CONJ_PELA_SOMA.push({ ts: x.ts, gref_publicado: num(r.gref), disp_publicada: num(r.disp), ger: num(r.ger), soma_usinas: x.soma }); });
+    const n = RC.corrigeConjunto(restr.consolidado, absorvidos);
+    if (n) console.log('conjunto: ' + n + ' patamar(es) com nenhuma ou uma parcela, gref pela soma das usinas e disp nao publicada: '
+      + absorvidos.slice(0, 10).map(x => x.ts + ' (' + x.gref + ' -> ' + x.soma + ' MW)').join(', '));
+  }
+
   // ---------- dia corrente, quase ao vivo ----------
   // O way2_daily so fecha o dia DEPOIS que ele acaba (o arquivador roda 00:30), entao a serie
   // diaria morria em ontem. O snapshot 5-min de hoje ja existe desde a meia-noite e e reescrito
@@ -527,8 +562,9 @@ async function writeOut(obj, nome, opts) {
     m.ger += ger * H; m.ref += gref * H; m.n++; m.dias.add(String(r.ts).slice(0, 10));
     // série DIÁRIA do complexo — mesma fonte e mesma fórmula da cascata, p/ os números não brigarem
     const _d = String(r.ts).slice(0, 10);
-    const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0, raz: {}, ori: {} });
+    const dd = DIA[_d] || (DIA[_d] = { dia: _d, ger: 0, fru: 0, horas_restr: 0, raz: {}, ori: {}, ref_soma: 0 });
     dd.ger += ger * H;
+    if (r._ref_pela_soma) dd.ref_soma++;   // patamar com o gref pela soma das usinas (topo, PROMOVER ref-parcela-corte)
     // gerX = gerado no MESMO conjunto de dias em que o corte e apurado; e o denominador honesto do
     // percentual de corte. Sem ele o percentual misturaria numerador filtrado com denominador cheio.
     const excl = DIAS_EXCLUIDOS.has(_d);
@@ -602,7 +638,7 @@ async function writeOut(obj, nome, opts) {
   // gerador para aqui, onde o problema esta, em vez de tropecar la na frente.
   const falhas = [];
   for (const mes of meses) {
-    try { CRU[mes] = (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
+    try { CRU[mes] = CRU_LIDO[mes] || (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
     catch (e) { falhas.push(mes + ': ' + String(e.message).slice(0, 60)); }
   }
   if (falhas.length) {
@@ -639,9 +675,7 @@ async function writeOut(obj, nome, opts) {
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   const corteDiarioUfv = [];  // o MESMO dia aberto por usina — campo novo, ao lado, nunca no lugar
   const MOTIVO_UFV = [];      // mes -> usina/contrato -> MWh por motivo (PROMOVER motivo-entidade)
-  // a referencia crua por usina so a partir de mar/26: antes disso o `ge` do ONS e inconsistente (o mesmo corte que
-  // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
-  const REF_DESDE = '2026-03-01';
+  // REF_DESDE (a referencia crua por usina so a partir de mar/26) e declarada no topo, junto da correcao do conjunto
   const refDia = {};          // dia -> usina -> { ge, gv, irr, inv } · CRU, como o ONS publica
   // a MESMA fonte, meia hora a meia hora (`ref_hora.json`, 24/09/2026): o detalhe do dia no painel da referencia.
   // Nao se reaproveita o `perfil_dia`: ele anula a referencia quando a verificada passa dela — e esse e
@@ -1287,14 +1321,16 @@ async function writeOut(obj, nome, opts) {
     // `ensaio-ref-conjunto.js` a julga em casos forjados antes de gerar. O patamar de 01/10 09:00, que o conjunto publicou
     // primeiro sem nenhuma parcela (03/10, `ref-buraco-conjunto`) e depois com a parcela do M6 so (10/10), e conferido pela
     // soma das usinas — no maximo um por dia; acima disso o arquivo do conjunto esta quebrado em atacado e o executivo para.
-    const RC = require('./lib-ref-conjunto.js');
+    // Desde `ref-parcela-corte` (11/10/2026) a troca ja foi aplicada no topo, antes do corte: aqui o patamar ja fecha, e a
+    // guarda segue conferindo todos os dias contra o conjunto corrigido.
     const refCx = refDiaUfv.filter(x => x.ufv === 'Complexo');
-    const { grefDia, absorvidos, excesso } = RC.grefConjuntoPorDia(restr.consolidado, refHora,
+    // o teto (excesso) ja parou o gerador no topo, antes de qualquer troca; aqui sobra o fechamento de todos os dias
+    const { grefDia, absorvidos } = RC.grefConjuntoPorDia(restr.consolidado, refHora,
       { desde: REF_DESDE, usinas: PPA.concat(ML), refDia: Object.fromEntries(refCx.map(x => [x.dia, x.ref_mwh])) });
-    if (absorvidos.length) console.log('ref_dia_ufv: ' + absorvidos.length + ' patamar(es) com nenhuma ou uma parcela no conjunto, conferido(s) pela soma das usinas: '
-      + absorvidos.slice(0, 10).map(x => x.ts + ' (' + x.gref + ' x ' + x.soma + ' MW)').join(', ') + (absorvidos.length > 10 ? ' …' : ''));
-    if (Object.keys(excesso).length) throw new Error('ref_dia_ufv: o arquivo do conjunto traz mais de ' + RC.MAX_POR_DIA
-      + ' patamar(es) por dia com nenhuma ou uma parcela — ' + Object.entries(excesso).slice(0, 5).map(([d, n]) => d + ': ' + n).join(' · '));
+    // 🔴 E AQUI ELA NAO PODE ACHAR MAIS NADA (revisor-ensaio, RE-019): se achar, o topo nao corrigiu o que esta guarda aceitaria
+    // (detalhe lido de outro jeito, ou a referencia do topo diferente da daqui) e o corte publicado sairia com o patamar cru.
+    if (absorvidos.length) throw new Error('ref_dia_ufv: o topo nao corrigiu ' + absorvidos.length + ' patamar(es) que a guarda aceitaria — '
+      + absorvidos.slice(0, 5).map(x => x.ts + ' (' + x.gref + ' x ' + x.soma + ' MW)').join(', '));
     const ruins = RC.diasQueNaoFecham(refCx, grefDia);
     if (ruins.length) throw new Error('ref_dia_ufv: a referencia do Complexo, somada das usinas, nao fecha com a do arquivo do conjunto em '
       + ruins.length + ' dia(s) — ex.: ' + ruins.slice(0, 3).map(x => x.dia + ' ' + x.ref_mwh + ' x ' + x.gref_mwh).join(' · '));
@@ -1411,6 +1447,9 @@ async function writeOut(obj, nome, opts) {
       return corteDiarioUfv.filter(x => x.dia >= de); })(),
     // a referencia do ONS contra a verificada, CRUA, por entidade e por dia, desde mar/26 (PROMOVER ref-ons)
     ref_dia_ufv: refDiaUfv,
+    // os patamares do conjunto que entraram no corte pela soma das usinas, com a disponibilidade fora da media
+    // (PROMOVER ref-parcela-corte): a lista explicita da troca, para quem refaz o conjunto cru por outra rota
+    ref_conjunto_pela_soma: CONJ_PELA_SOMA,
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
     // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----
@@ -1884,6 +1923,9 @@ async function writeOut(obj, nome, opts) {
       dia: d.dia, entregue_mwh: r2(d.ger), cortado_mwh: r2(d.fru),
       potencial_mwh: r2(d.ger + d.fru), horas_restricao: r2(d.horas_restr),
       corte_pct: (d.ger + d.fru) > 0 ? r2(100 * d.fru / (d.ger + d.fru)) : 0,
+      // quantos patamares do dia o conjunto publicou com nenhuma ou uma parcela e entraram no corte pela soma das usinas
+      // (PROMOVER ref-parcela-corte). Sempre emitido, 0 no dia normal: campo que so existe em algumas linhas nao vira coluna.
+      ref_pela_soma: d.ref_soma || 0,
       // Dia sem restricao vem com o objeto VAZIO, e nao ausente: ausente e "nao apurado", vazio e "nao
       // houve" — sao coisas diferentes na tela, e ja custaram um lote neste projeto.
       //

@@ -286,6 +286,21 @@ function prMesesEnt(dias) {
   });
 }
 
-module.exports = { P_CC_MWP, DIAS_EXCLUIDOS, chaveHoraDoFim, energiaHoras, operadorHoras, irradiacaoHoras, prDia, prMeses, PISO_HORAS, PISO_LINHAS_OPERADOR, TETO_PR, FAIXA_CORRIGIDO,
+/* O DIA QUE O OPERADOR REVISOU DEPOIS DE PUBLICADO (PROMOVER ref-parcela-corte, 11/10/2026): a regra `revisto` do pr_ufv,
+   agora no conjunto. `opImpedidaDia` e a impedida do operador somada nas 24 h, que o dia guarda (`op_impedida_mwh`) na hora do
+   calculo; mudou, o dia e refeito. Dia antigo, sem a impressao: refeito se a impedida publicada difere da do operador nas horas
+   com irradiacao (as unicas que podem ter entrado nele). So em mes apurado e com impedida publicada. Folga 0,0006, a do ensaio. */
+const FOLGA_REVISTO = 0.0006;   // MWh: a impedida e a impressao vao a 3 casas, e o ensaio-pr-ufv usa a mesma para o par
+function opImpedidaDia(dia, op) {
+  let s = 0; for (let h = 0; h < 24; h++) s += op.impedida.get(dia + 'T' + String(h).padStart(2, '0')) || 0; return s;
+}
+function revistoConjunto(dia, v, op, gH, apurados) {
+  if (!v || v.impedida_mwh == null || !apurados.has(dia.slice(0, 7))) return false;
+  if (v.op_impedida_mwh != null) return Math.abs(opImpedidaDia(dia, op) - v.op_impedida_mwh) > FOLGA_REVISTO;
+  let s = 0; for (let h = 0; h < 24; h++) { const k = dia + 'T' + String(h).padStart(2, '0'); if (gH.has(k)) s += op.impedida.get(k) || 0; }
+  return Math.abs(s - v.impedida_mwh) > FOLGA_REVISTO;
+}
+
+module.exports = { opImpedidaDia, revistoConjunto, FOLGA_REVISTO, P_CC_MWP, DIAS_EXCLUIDOS, chaveHoraDoFim, energiaHoras, operadorHoras, irradiacaoHoras, prDia, prMeses, PISO_HORAS, PISO_LINHAS_OPERADOR, TETO_PR, FAIXA_CORRIGIDO,
   PISO_IRR_MEIA, chaveMeiaDoFim, energiaMeias, amostrasIrr, impedidaMeias, prMeias,
   CIRC_UFV, GRUPOS, energiaHorasUfv, irradiacaoHorasUfv, prDiaUfv, prDiaGrupo, prMesesEnt };

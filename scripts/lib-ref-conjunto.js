@@ -26,9 +26,9 @@
  * Mais de um e um arquivo do conjunto quebrado em atacado: o corte do Complexo usa o `gref` dele, e aceitar calado
  * publicaria corte perto de zero. Ele derruba, e o humano olha.
  *
- * ⚠️ So a GUARDA usa a soma das usinas. No corte do conjunto o patamar fica com perda ZERO (max(0, gref − ger)), e nao
- *    porque nao houve: em 01/10 09:00, com `lim` > 0, a soma das usinas apuraria 36,09 MWh. Trocar o `gref` desse patamar
- *    no corte (e o `disp` dele na media) muda numero publicado e e decisao do humano.
+ * E O CORTE (PROMOVER ref-parcela-corte, 11/10/2026, decisao do humano): o patamar absorvido entra no corte do conjunto
+ * pela soma das usinas, e a `disp` dele sai da media como nao publicada (`corrigeConjunto`). O gerador roda a guarda e a
+ * correcao logo depois de ler o conjunto, ANTES de apurar o corte; mais adiante a guarda roda de novo e o patamar ja fecha.
  */
 const H = 0.5;                 // patamar do ONS: 30 min
 const FOLGA_MW = 0.03;         // por patamar: o maximo medido entre o conjunto e a soma das usinas
@@ -78,10 +78,77 @@ function grefConjuntoPorDia(consolidado, refHora, { desde, usinas, refDia }) {
   return { grefDia, absorvidos, excesso };
 }
 
+/**
+ * A referencia das usinas a partir do detalhe do ONS (`ons_irradiancia_AAAA_MM`), na MESMA forma que o gerador monta mais
+ * adiante: `refHora` dia -> usina -> { ge: [48] } com o MW do patamar a 2 casas, e `refDia` dia -> MWh do Complexo, so nos
+ * dias com as nove usinas (tudo-ou-nada, como o `ref_dia_ufv`). Cru: sem a soma M3+M7 de antes do reparo, sem reconstrucao.
+ * Existe para a correcao do corte rodar ANTES da secao 1 do gerador (PROMOVER ref-parcela-corte, 11/10/2026).
+ */
+function refPorUsina(cruPorMes, { desde, usinas }) {
+  const refHora = {}, soma = {};
+  for (const C of Object.values(cruPorMes || {})) for (const r of C || []) {
+    const dd = String(r.ts).slice(0, 10); if (desde && dd < desde) continue;
+    const u = String(r.u).replace('CEFMT', 'M'); if (!usinas.includes(u)) continue;
+    const k = slot(r.ts); if (!(k >= 0 && k < 48)) continue;
+    const hd = refHora[dd] || (refHora[dd] = {});
+    const hu = hd[u] || (hd[u] = { ge: new Array(48).fill(null) });
+    hu.ge[k] = r2(num(r.ge));
+    const sd = soma[dd] || (soma[dd] = {});
+    sd[u] = (sd[u] || 0) + num(r.ge) * H;
+  }
+  const refDia = {};
+  Object.entries(soma).forEach(([d, s]) => { if (usinas.every((u) => s[u] != null)) refDia[d] = r2(usinas.reduce((a, u) => a + s[u], 0)); });
+  return { refHora, refDia };
+}
+
+/**
+ * Aplica no arquivo do CONJUNTO, no lugar, a troca que a guarda aceitou (PROMOVER ref-parcela-corte, 11/10/2026): no patamar
+ * absorvido o `gref` passa a ser a soma das usinas, e a `disp` vira 0 — AUSENCIA de publicacao, a mesma leitura que o
+ * gerador ja da ao 0 —, porque o detalhe por usina nao traz disponibilidade para somar, e o 49 MW do conjunto e de uma usina
+ * so. A linha leva `_ref_pela_soma: 1`, que o gerador conta no dia. Devolve quantas linhas trocou.
+ * Por que no corte e nao so na guarda: o corte do conjunto e max(0, gref − ger) nos patamares limitados, e com a parcela do
+ * M6 no lugar da soma o de 01/10 09:00 dava ZERO; pela soma, 36,09 MWh (decisao do humano em 11/10/2026).
+ */
+function corrigeConjunto(consolidado, absorvidos) {
+  const porTs = new Map((absorvidos || []).map((a) => [a.ts, a]));
+  let n = 0;
+  for (const r of consolidado || []) {
+    const a = porTs.get(String(r.ts).slice(0, 16)); if (!a) continue;
+    r.gref = String(a.soma); r.disp = '0'; r._ref_pela_soma = 1; n++;
+  }
+  return n;
+}
+
+/**
+ * A LISTA PUBLICADA pelo executivo (`ref_conjunto_pela_soma`: [{ ts, gref_publicado, soma_usinas }]) para quem le o conjunto
+ * por OUTRA via e tem de apurar o mesmo corte: o `gen-pr` (impedida do PR corrigido) e o `gen-benchmark-ons` (o nosso corte
+ * no comparativo regional, de onde o `corte_gemeo` tira o apurado do painel). Uma decisao so, a do executivo; quem a aplica
+ * troca SO onde o cru ainda traz o defeito (`disp < ger` e o `gref` longe da soma), entao a lista velha de um patamar que o
+ * operador ja republicou certo nao troca nada.
+ */
+function mapaDaLista(lista) {
+  return new Map((lista || []).filter((x) => x && x.ts != null && Number.isFinite(Number(x.soma_usinas)))
+    .map((x) => [String(x.ts).slice(0, 16), Number(x.soma_usinas)]));
+}
+/** a soma das usinas para esta linha do conjunto ({ ts, gref, ger, disp }), se ela esta na lista e o cru ainda traz o defeito */
+function somaDaLista(mapa, r) {
+  const s = mapa.get(String(r.ts).slice(0, 16));
+  if (s == null) return null;
+  if (!(num(r.disp) < num(r.ger)) || Math.abs(num(r.gref) - s) <= FOLGA_MW) return null;
+  return s;
+}
+/** aplica a lista publicada nas linhas do conjunto, no lugar, pela mesma troca do executivo. Devolve quantas trocou. */
+function aplicaLista(consolidado, lista) {
+  const m = mapaDaLista(lista), abs = [];
+  for (const r of consolidado || []) { const s = somaDaLista(m, r); if (s != null) abs.push({ ts: String(r.ts).slice(0, 16), soma: s }); }
+  return corrigeConjunto(consolidado, abs);
+}
+
 /** Os dias do Complexo (`[{ dia, ref_mwh }]`) que nao fecham com o `grefDia` do conjunto. Dia sem conjunto nao se julga. */
 function diasQueNaoFecham(refComplexo, grefDia) {
   return (refComplexo || []).filter((x) => grefDia[x.dia] != null && Math.abs(x.ref_mwh - grefDia[x.dia]) > FOLGA_DIA)
     .map((x) => ({ dia: x.dia, ref_mwh: x.ref_mwh, gref_mwh: r2(grefDia[x.dia]) }));
 }
 
-module.exports = { grefConjuntoPorDia, diasQueNaoFecham, FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };
+module.exports = { grefConjuntoPorDia, diasQueNaoFecham, refPorUsina, corrigeConjunto, mapaDaLista, somaDaLista, aplicaLista,
+  FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };

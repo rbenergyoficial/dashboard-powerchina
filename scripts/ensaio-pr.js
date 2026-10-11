@@ -91,6 +91,38 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
   const muito = new Map(eM); muito.set(dia + 'T08:00', { inj_mwh: 500, n: 6 });
   const mt = L.prMeias(dia, muito, sM, impM, d);
   exige(mt.pr[16] === null && mt.acima_teto >= 1, 'PR acima de 110 % sai vazio e contado');
+
+  /* O DIA REVISTO PELO OPERADOR (PROMOVER ref-parcela-corte): `revistoConjunto` refaz o dia cuja impedida do operador mudou
+     depois de publicado, e so ele. Forjado: 01/10 com impedida 50 MWh as 10 h (lim > 0), irradiancia das 06 as 18 h. */
+  { const d1 = '2026-10-01', ap = new Set(['2026-10']), gHr = new Map();
+    for (let h = 0; h < 24; h++) gHr.set(d1 + 'T' + String(h).padStart(2, '0'), h >= 6 && h < 18 ? 0.8 : 0);
+    const cons = [];
+    for (let h = 0; h < 24; h++) for (const mm of ['00', '30'])
+      cons.push({ ts: d1 + ' ' + String(h).padStart(2, '0') + ':' + mm + ':00', lim: h === 10 ? '150' : '', ger: h === 10 ? '150' : '0', gref: h === 10 ? '250' : '0' });
+    const opR = L.operadorHoras(cons), imp = L.opImpedidaDia(d1, opR);
+    exige(perto(imp, 100, 1e-9), 'opImpedidaDia: (250-150) x 0,5 x 2 = 100 MWh (veio ' + imp + ')');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 100, op_impedida_mwh: 100 }, opR, gHr, ap), 'dia com a impressao igual ao operador foi refeito');
+    // as BORDAS da folga, nos dois caminhos (revisor-ensaio, RE-027): uma folga afrouxada para 1 ou 5 MWh deixaria sem refazer
+    // as revisoes de 0,5 a 4 MWh que o operador fez em setembro. Logo abaixo e logo acima da folga da lib.
+    const F = L.FOLGA_REVISTO, dentro = F * 0.8, fora = F * 1.2;
+    // presa nos dois lados: abaixo de meio milesimo a impressao a 3 casas refaria o mesmo dia em toda rodada (RE-034)
+    exige(F > 0.0005 && F < 0.01, 'a folga do revisto deixou de ser a do arredondamento a 3 casas (' + F + ')');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 1, op_impedida_mwh: 100 - dentro }, opR, gHr, ap), 'impressao: diferenca dentro da folga refez');
+    exige(L.revistoConjunto(d1, { impedida_mwh: 1, op_impedida_mwh: 100 - fora }, opR, gHr, ap), 'impressao: diferenca logo acima da folga nao refez');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 100 - dentro }, opR, gHr, ap), 'dia antigo: diferenca dentro da folga refez');
+    exige(L.revistoConjunto(d1, { impedida_mwh: 100 - fora }, opR, gHr, ap), 'dia antigo: diferenca logo acima da folga nao refez');
+    exige(L.revistoConjunto(d1, { impedida_mwh: 99.5 }, opR, gHr, ap), 'dia antigo: a revisao de 0,5 MWh (a menor de setembro) nao refez');
+    exige(L.revistoConjunto(d1, { impedida_mwh: 0, op_impedida_mwh: 0 }, opR, gHr, ap), 'dia com a impressao velha (o operador revisou) nao foi refeito');
+    // a impressao MANDA sobre a regra antiga: impedida publicada 0 porque a hora das 10 ficou sem energia (fora das validas),
+    // e o operador igual ao da impressao — refazer esse dia seria refaze-lo em TODA rodada, e baixar o historico de novo
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 0, op_impedida_mwh: 100 }, opR, gHr, ap), 'dia com a impressao igual e hora sem energia foi refeito (refaria sempre)');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 100 }, opR, gHr, ap), 'dia antigo que bate com o operador foi refeito');
+    exige(L.revistoConjunto(d1, { impedida_mwh: 0 }, opR, gHr, ap), 'dia antigo publicado com a revisao de um quinto (impedida 0) nao foi refeito');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 0 }, opR, gHr, new Set()), 'dia de mes nao apurado foi refeito');
+    exige(!L.revistoConjunto(d1, { impedida_mwh: null }, opR, gHr, ap), 'dia sem impedida publicada foi refeito');
+    const semSol = new Map(gHr); semSol.delete(d1 + 'T10');   // a hora da impedida sem irradiacao: ela nao pode ter entrado no dia
+    exige(!L.revistoConjunto(d1, { impedida_mwh: 0 }, opR, semSol, ap), 'dia antigo: a impedida de hora sem irradiacao entrou na conta');
+  }
 })();
 
 /* ── PRODUTO ───────────────────────────────────────────────────────────────────────────────────── */
