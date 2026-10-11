@@ -73,8 +73,10 @@ const LEGENDA = {
     + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
   tempo_real: 'medidores: dos 24 medidores (2 de 230 kV e 22 de circuito de 34,5 kV), quantos chegaram em dia e quais estao fora (idade em minutos). '
     + 'rendimento: energia de hoje por usina e por MW instalado (compara usinas de tamanhos diferentes). operador: registro '
-    + 'da mesa do controlador de potencia; ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca registrada '
-    + '(limite igual a 343,77 MW = sem limitacao); o registro chega da planilha da mesa, nao e instantaneo. must: demanda no '
+    + 'da mesa do controlador de potencia, PRELIMINAR: a fonte confiavel de restricao e o dado aberto do operador nacional '
+    + '(bloco corte), publicado com cerca de um dia de atraso; a mesa serve para o dia corrente e para achar erro de registro, e '
+    + 'quando as duas divergem vale o operador nacional. ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca '
+    + 'registrada (limite igual a 343,77 MW = sem limitacao); o registro chega da planilha da mesa, nao e instantaneo. must: demanda no '
     + 'ponto de conexao no ultimo instante de hoje e o maior valor de hoje, contra o contratado (acima de 100 % do contratado '
     + 'gera penalidade). fontes: o selo de frescor de cada '
     + 'fonte de dado (em dia, atencao, atrasada). A irradiancia nao e em tempo real: a estacao chega por export diario.',
@@ -222,7 +224,9 @@ function montaTempoReal(V, P, MU, F) {
     fora: (s.medidores || []).filter((m) => m.estado !== 'ok').map((m) => ({ nome: m.nome, grupo: m.grupo, idade_min: m.idade, estado: m.estado })) };
   const rendimento = { ate: V.rendimento_ate || V.hora, por_usina: (V.rendimento || []).map((r) => ({ ufv: r.ufv, mwh: r.mwh, mwh_por_mw: r.mwh_mw })) };
   const evs = P.eventos || [], ult = evs[evs.length - 1] || null, hojeP = (P.dias || []).find((d) => d.dia === V.dia) || null;
-  const operador = { registro_gerado: P.gerado_em, hoje: hojeP && { dia: hojeP.dia, ordens: hojeP.eventos, ordens_com_limite: hojeP.restritos,
+  /* a mesa e PRELIMINAR (decisao do humano, 11/10/2026): o numero de corte que vale e o do operador nacional, no bloco corte */
+  const operador = { fonte: 'registro da mesa de operacao (preliminar; vale o dado aberto do operador nacional)',
+    registro_gerado: P.gerado_em, hoje: hojeP && { dia: hojeP.dia, ordens: hojeP.eventos, ordens_com_limite: hojeP.restritos,
       primeira: hojeP.primeiro, ultima: hojeP.ultimo, menor_limite_mw: hojeP.pot_min, horas_sob_limite: hojeP.horas_restricao,
       termina_limitado: hojeP.restricao_aberta === 1, motivos: hojeP.motivo_cods },
     ultima_ordem: ult && { quando: ult.ts, limite_mw: ult.pot, limitado: ult.restr === 1, motivo: ult.motivo } };

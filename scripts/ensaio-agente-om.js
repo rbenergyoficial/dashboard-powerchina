@@ -146,6 +146,9 @@ function julga(R) {
       if (x.agora_mw != null && x.pico_hoje_mw != null && x.pico_hoje_mw + EPS < x.agora_mw) mau.push('tempo real: MUST ' + p + ' pico ' + x.pico_hoje_mw + ' abaixo do agora ' + x.agora_mw);
       if (!(T.must.contratos_mw || {})[p]) mau.push('tempo real: MUST ' + p + ' sem contratado');
     });
+    /* o registro da mesa vai marcado como preliminar, no campo e na legenda (decisao do humano, 11/10/2026) */
+    if (!/preliminar/i.test(T.operador.fonte || '')) mau.push('tempo real: o registro da mesa sem a marca de preliminar');
+    if (!/operador: registro da mesa[^.]*PRELIMINAR/i.test((R.legenda || {}).tempo_real || '')) mau.push('legenda: o registro da mesa sem a marca de preliminar');
     const o = T.operador.ultima_ordem;
     if (o && (o.limite_mw > CAP_COMPLEXO + 0.01 || (!o.limitado && o.limite_mw < CAP_COMPLEXO - 0.01))) mau.push('tempo real: ultima ordem ' + o.limite_mw + ' MW incoerente com limitado=' + o.limitado);
     T.fontes.selos.forEach((s) => { if (s.estado === 'sem estado') mau.push('tempo real: selo "' + s.item + '" sem estado conhecido'); });
@@ -322,6 +325,9 @@ function julga(R) {
     const a = (((Y.ativos || {}).transformadores || {}).por_trafo || {})['04T2']; if (!a) return false;
     a.temperatura_em_verificacao = true; a.t_oleo_max_c = 60; return true;
   }, /em verificacao e ainda publicando/);
+  plantio('registro da mesa sem a marca de preliminar', (Y) => { delete Y.tempo_real.operador.fonte; return true; }, /mesa sem a marca de preliminar/);
+  plantio('legenda que apresenta a mesa como fonte', (Y) => { if (!Y.legenda) return false;
+    Y.legenda.tempo_real = Y.legenda.tempo_real.replace(/, PRELIMINAR: [^.]*\./, '.'); return true; }, /legenda: o registro da mesa sem/);
   plantio('legenda que chama a ultrapassagem de transitorio', (Y) => { if (!Y.legenda) return false; Y.legenda.tempo_real += ' o pico de 5 min passa da outorga por transitorio de medicao'; return true; }, /legenda: chama/);
   plantio('PR do conjunto inflado', (Y) => {
     const m = ((Y.desempenho || {}).pr || { meses: [] }).meses.filter((q) => q.pr_pct != null).slice(-2)[0]; if (!m) return false;
