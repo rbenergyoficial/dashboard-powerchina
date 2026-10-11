@@ -18,8 +18,13 @@
  *    pontas (`parcial`); a conferencia com o SCADA so compara o dia provado inteiro. O historico de esquema 1 e relido.
  * 🔴 SO O 404 E "PRIMEIRA RODADA". Falha ao ler o historico publicado aborta: regravar sem ele apagaria o acumulado.
  *
+ * 🔴 DISPONIBILIDADE (lib-sungrow-disp, 11/10/2026): o estado de cada inversor a cada 5 min vai para um historico proprio
+ *    (`sg_disp_hist.json`, interno) e sai `sg_disp_dia.json` (publico: por usina e Complexo, dia a dia), refeito do
+ *    historico inteiro a cada rodada com a irradiancia do `estacao_logger_30min.json`.
+ *
  * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1
  *      ensaio: LOCAL_RAW_DIR (pasta com a mesma arvore M05/TS01/...) · LOCAL_SCADA_DIR · LOCAL_OUT_DIR · LOCAL_INV_SCADA
+ *      · LOCAL_RAW_LISTA (recorte da pasta local, um caminho relativo por linha)
  */
 const fs = require('fs');
 const path = require('path');
@@ -27,6 +32,7 @@ const zlib = require('zlib');
 const https = require('https');
 const { entradas } = require('./lib-zip.js');
 const S = require('./lib-sungrow.js');
+const D = require('./lib-sungrow-disp.js');
 const { casaCru } = require('./lib-inversor-cru.js');
 
 const RAW = process.env.RAW || 'sungrow-raw';
@@ -56,10 +62,12 @@ const svc = () => { if (!_svc) { const { BlobServiceClient } = require('@azure/s
 async function listaRaw() {
   if (process.env.LOCAL_RAW_DIR) {
     const out = [];
+    // so local: um recorte da pasta (um caminho relativo por linha), para conferir um periodo sem ler a pasta inteira
+    const so = process.env.LOCAL_RAW_LISTA ? new Set(fs.readFileSync(process.env.LOCAL_RAW_LISTA, 'utf8').split(/\r?\n/).filter(Boolean)) : null;
     const anda = (d, rel) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const r = rel ? rel + '/' + e.name : e.name;
       if (e.isDirectory()) anda(path.join(d, e.name), r);
-      else if (/^M\d\d\/TS\d\d\/[^/]+\/[^/]+\.zip$/i.test(r)) out.push({ nome: r, bytes: fs.statSync(path.join(d, e.name)).size,
+      else if (/^M\d\d\/TS\d\d\/[^/]+\/[^/]+\.zip$/i.test(r) && (!so || so.has(r))) out.push({ nome: r, bytes: fs.statSync(path.join(d, e.name)).size,
         ler: async () => fs.readFileSync(path.join(d, e.name)) }); } };
     anda(process.env.LOCAL_RAW_DIR, '');
     return out;
@@ -170,10 +178,18 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const ptRodada = {};                                     // PT100 de 5 min de TUDO o que esta rodada leu, por logger
   const etcRodada = {};                                    // e o eletrocentro de 5 min (potencia, capacidade, rede), idem
   const mpptRodada = {};                                   // e a tensao dos MPPT de cada inversor-dia, por numero de serie
+  /* 🔴 A DISPONIBILIDADE (lib-sungrow-disp) tem historico PROPRIO, sg_disp_hist.json: a classe de cada 5 min de cada
+     inversor-dia. Ausente (404) ou de esquema velho = reler TODOS os zips uma vez (a primeira rodada constroi o historico
+     inteiro; o sg_hist fica, e os dias relidos saem iguais). Outra falha de leitura aborta, como o sg_hist */
+  let DH = REFAZER ? null : await leAnterior('sg_disp_hist.json');
+  if (DH && (DH.esquema || 0) < D.ESQUEMA) { console.log('  sg_disp_hist esquema ' + (DH.esquema || 0) + ' -> ' + D.ESQUEMA + ': relendo todos os zips'); DH = null; }
+  const releDisp = !DH;
+  DH = DH || D.histVazio();
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
-  const novos = raw.filter((z) => lidos.get(z.nome) !== z.bytes);
-  console.log('sungrow-raw: ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : ''));
+  const novos = releDisp ? raw : raw.filter((z) => lidos.get(z.nome) !== z.bytes);
+  console.log('sungrow-raw: ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : releDisp ? ' (sem sg_disp_hist: todos)' : ''));
+  let dispFora = 0;
 
   const junta = (dias, linhas) => { for (const x of linhas) { const a = dias[x.d]; if (!a || x.n > a.n) dias[x.d] = x; } };
   let nCsv = 0;
@@ -197,6 +213,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     for (const { e, m, cab, linhas, t } of lidas) {
       tipos[t] = (tipos[t] || 0) + 1; nCsv += 1;
       const onde = z.nome + ' :: ' + e.nome;
+      // a disponibilidade de 5 min: so o CSV de INVERSOR pelo cabecalho (o do proprio logger, serial B..., fica fora)
+      if (t === 'inversor') { const dd = D.diaDisp(cab, linhas, onde); dispFora += dd.reduce((s, x) => s + x.fora, 0); D.junta(DH, m[1], u, dd); }
       if (t === 'inversor') {
         const o = H.inv[m[1]] || (H.inv[m[1]] = { ufv: u, pasta: tsPasta, dias: {} });
         const dl = S.diaInversor(cab, linhas, onde); guardaP(H.pinv, m[1], dl);
@@ -294,12 +312,13 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   /* -------- produtos -------- */
   const pesos = {};
   const porU = {};
-  // com troca, cada serie so vale a partir do seu primeiro dia e ate o primeiro dia do sucessor
-  const ini = (s) => Object.keys(H.inv[s].dias).sort()[0];
-  const sucDe = {};
-  const sucessor = (sn) => { if (!(sn in sucDe)) { const a = ident[sn];
-    sucDe[sn] = a ? porPos.get(a.pos).filter((s) => s !== sn && H.inv[s] && ini(s) > ini(sn)).map(ini).sort()[0] : undefined; } return sucDe[sn]; };
-  const posNoDia = (sn, d) => { const a = ident[sn]; if (!a || !H.inv[sn]) return null; const suc = sucessor(sn); return suc && d >= suc ? null : a.pos; };
+  // com troca, cada serie vale do seu inicio efetivo ao do sucessor (D.janelasTroca, sungrow-disp 11/10/2026): o sucessor comeca no
+  // primeiro dia que NAO repete o contador de vida e a energia do dono no mesmo dia (arquivo duplicado nao antecipa a troca)
+  const dupDia = (novo, dono, d) => { const a = H.inv[dono].dias[d], b = H.inv[novo].dias[d];
+    return !!(a && b && a.vida != null && b.vida != null && Math.abs(a.vida - b.vida) < 0.05 && Math.abs((a.e || 0) - (b.e || 0)) < 0.05); };
+  const janela = {};
+  for (const lista of porPos.values()) Object.assign(janela, D.janelasTroca(Object.fromEntries(lista.filter((s) => H.inv[s]).map((s) => [s, Object.values(H.inv[s].dias).map((x) => x.d)])), dupDia));
+  const posNoDia = (sn, d) => { const a = ident[sn], w = janela[sn]; if (!a || !H.inv[sn] || !w || !w.ini) return null; return d >= w.ini && (!w.fim || d < w.fim) ? a.pos : null; };
   for (const [sn, o] of Object.entries(H.inv)) {
     const a = ident[sn]; if (!a) continue;
     const [u, ts, inv] = a.pos.split('/');
@@ -333,6 +352,20 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       unidade: 'e kWh (subida do contador de vida); p kW; t °C; iso kΩ; ef %; v V; h_op min; lim_pct % dos instantes gerando;'
         + ' t0/t1 primeira e ultima amostra do dia; parcial = o logger nao viu a janela de geracao nas duas pontas', serie: L });
   }
+  /* -------- DISPONIBILIDADE DOS INVERSORES por usina e do Complexo, dia a dia (lib-sungrow-disp; NT-MRT-2026-0057, decisoes
+     do humano de 11/10/2026). Refeita do historico INTEIRO a cada rodada: a heranca do ultimo estado valido atravessa a
+     meia-noite e o dia que ganhou leitura (ou irradiancia) depois se completa sozinho. Conta so o inversor que ocupa a
+     posicao no dia (posNoDia, a mesma regra do sg_inv_dia). A irradiancia e a do estacao_logger_30min.json (estacao-logger.yml,
+     05:23 BRT, antes deste): sem ela nao ha dia, e a ausencia aborta em vez de publicar vazio -------- */
+  const estLog = await leAnterior('estacao_logger_30min.json');
+  if (!estLog || !Array.isArray(estLog.serie) || !estLog.serie.length) throw new Error('estacao_logger_30min.json ausente ou vazio: a disponibilidade do dia precisa da irradiancia');
+  const dLinhas = D.calcula(DH, D.estacaoPorMeia(estLog), { regra: 'posicao', posNoDia });
+  const dProd = D.produto(dLinhas, agora);
+  pesos['sg_disp_dia.json'] = await escreve('sg_disp_dia.json', dProd);
+  const dUlt = dProd.serie.filter((r) => r.CX_disp_sol_pct != null).pop();
+  console.log('  disponibilidade: ' + dProd.serie.length + ' dias, ' + Object.keys(DH.inv).length + ' inversores no historico · '
+    + dispFora + ' carimbo(s) fora da grade de 5 min nesta rodada · ultimo dia com Complexo: '
+    + (dUlt ? dUlt.dia + ' ' + dUlt.CX_disp_sol_pct + ' % (' + dUlt.CX_usinas_sol + ' usinas)' : 'nenhum'));
   /* -------- TENSAO DOS MPPT (lote 5): um arquivo por eletrocentro, uma linha por inversor-dia, acumulado DIAS_PT dias como o
      PT100 (o historico interno nao guarda os MPPT: 24 numeros por inversor-dia). r = tensao do MPPT / mediana dos irmaos do
      mesmo inversor (instantes sem limitacao, ver a lib); i = a corrente do MPPT / mediana dos irmaos; v = a mediana das
@@ -573,6 +606,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
 
   pesos['sg_ident.json'] = await escreve('sg_ident.json', { gerado_em: agora, esquema: 2, ident, busca,
     sem_posicao: semPos.map((sn) => ({ sn, ufv: H.inv[sn].ufv, pasta: H.inv[sn].pasta, ultimo_dia: Object.keys(H.inv[sn].dias).sort().pop() })) });
+  pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);
   pesos['sg_hist.json'] = await escreve('sg_hist.json', H);
   pesos['sg_lidos.json'] = await escreve('sg_lidos.json', { gerado_em: agora, zips: Object.fromEntries(lidos) });
   for (const [k, v] of Object.entries(pesos)) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');

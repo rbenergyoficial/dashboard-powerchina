@@ -32,6 +32,13 @@ jobs:
       # a soma por eletrocentro da potencia e do setpoint de despacho (SCADA, 30 min): carimbo sem leitura nulo, acumulo, contrato da fonte e leitura do blob, com plantios
       - name: Ensaio · potencia e setpoint por eletrocentro (sem rede)
         run: node scripts/ensaio-ts-setpoint.js
+      # a disponibilidade dos inversores (lib-sungrow-disp, sg_disp_dia.json): estado pela Tabela 2 pelo NOME da coluna,
+      # heranca do ultimo estado valido atravessando a meia-noite, falta de leitura fora da conta, irradiancia da estacao,
+      # so o inversor que ocupa a posicao no dia, Complexo pela capacidade instalada; o gerador de ponta a ponta (logger
+      # forjado fora do historico, recarga sem historico, estacao ausente aborta), com plantios. Sem rede. A primeira rodada
+      # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 240 min)
+      - name: Ensaio · disponibilidade dos inversores pelo logger (sem rede)
+        run: node scripts/ensaio-sungrow-disp.js
       - name: Gerar sg_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

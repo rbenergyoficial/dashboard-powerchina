@@ -68,7 +68,7 @@ console.log('1 · lib-zip');
   ok(estoura(() => entradas(z.slice(0, z.length - 30), 'tc.zip'), /tc\.zip/), 'zip truncado estoura com o nome do zip'); }
 
 /* ---------- os CSV sinteticos, no formato do logger ---------- */
-const INV_COLS = ['Horário', 'Potência ativa nominal', 'Modo de potência limitada', 'Geração de energia ao longo do dia', 'Geração total',
+const INV_COLS = ['Horário', 'Potência ativa nominal', 'Status do dispositivo', 'Modo de potência limitada', 'Geração de energia ao longo do dia', 'Geração total',
   'Temperatura de ar interna', 'Potência CC total', 'Potência ativa total', 'Potência ativa total', 'Status de operação do inversor',
   'Código de falha', 'Impedância paralela em relação à terra', 'Tempo de operação diário', 'Tensão de pólo negativo / terra',
   'Tensão do barramento', 'Tensão MPPT1', 'Estado de trabalho PID', 'Código de falha PID', 'Eficiência do inversor',
@@ -86,7 +86,7 @@ function csvInversor(vida0, f, ordem, dias, corte, cod, q) {
   for (const d of (dias || DIAS)) { let dia = 0;
     HH.forEach((h, k) => { if (corte && corte[d] && (k < corte[d][0] || k > corte[d][1])) return;
       const p = perfil(k, f); const e = p / 12 / 1000; vida += e; dia += e;
-      const v = { 'Horário': d + ' ' + h + ':00', 'Potência ativa nominal': 3200, 'Modo de potência limitada': q.lim && k >= q.lim[0] && k < q.lim[1] ? 1 : 0,
+      const v = { 'Horário': d + ' ' + h + ':00', 'Potência ativa nominal': 3200, 'Status do dispositivo': p ? 0 : 0x1400, 'Modo de potência limitada': q.lim && k >= q.lim[0] && k < q.lim[1] ? 1 : 0,
         'Geração de energia ao longo do dia': Math.round(dia * 10), 'Geração total': Math.round(vida * 10), 'Temperatura de ar interna': q.t || 450,
         'Potência CC total': Math.round(p * 1.015), 'Potência ativa total': p, 'Status de operação do inversor': p ? 4 : 0, 'Código de falha': (cod && cod[d] && cod[d][k]) || 0,
         'Impedância paralela em relação à terra': q.iso || 500, 'Tempo de operação diário': p ? 1 : 0, 'Tensão de pólo negativo / terra': -7000,
@@ -351,6 +351,9 @@ fs.writeFileSync(path.join(raiz, 'inv_scada_hist.json'), JSON.stringify({ serie:
 const TOL_E = 0.1 + 0.005 + 0.005;
 const TOL_R = 0.00005 + TOL_E / Math.min(...[...INVS, VELHO].map(eDia));
 
+// a serie publicada da estacao (estacao_logger_30min.json), plana, nos dias do cenario: sem ela o gerador aborta
+const ESTACAO = { serie: Array.from({ length: 12 * 48 }, (_, i) => { const t = new Date(Date.parse('2026-09-24T00:00:00-03:00') + i * 18e5 - 3 * 36e5)
+  .toISOString().slice(0, 16) + ':00-03:00'; return Object.assign({ t, ms: Date.parse(t) }, ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((u) => ({ ['e' + u]: 500 }))); }) };
 function roda(gen) {
   const env = Object.assign({}, process.env, { LOCAL_RAW_DIR: RAW, LOCAL_SCADA_DIR: SC, LOCAL_OUT_DIR: OUT, LOCAL_INV_SCADA: path.join(raiz, 'inv_scada_hist.json') });
   return execFileSync('node', [gen], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -365,6 +368,8 @@ function cenario(gen, lib) {
   const R = { txt: {} };
   { const q = require.resolve(lib || './lib-sungrow.js'); delete require.cache[q]; R.okLibMppt = casosMppt(require(q)).ok; delete require.cache[q]; }
   for (const n of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, n));
+  // a irradiancia que a disponibilidade (lib-sungrow-disp) le; o ensaio dela e o ensaio-sungrow-disp.js
+  grava('estacao_logger_30min.json', ESTACAO);
   const novo = path.join(RAW, 'M06', 'TS01', '01 A 05', '26.09.zip');
   if (fs.existsSync(novo)) fs.unlinkSync(novo);
   if (fs.existsSync(ZIP_EST_NOVO)) fs.unlinkSync(ZIP_EST_NOVO);
@@ -676,7 +681,7 @@ plantaLib('MPPT com qualquer numero de amostras', 'return z.length >= MPPT.amost
 plantaLib('dia com qualquer numero de instantes', 'if (rs.length < MPPT.amostras) return null;', 'if (rs.length < 1) return null;', 'okLibMppt');
 plantaLib('primeiro valor no lugar da mediana', 'return z.length >= MPPT.amostras ? med(z) : null;', 'return z.length >= MPPT.amostras ? z[0] : null;', 'okLibMppt');
 plantaLib('coluna de MPPT faltando calada', "cv.push(exige(cab, 'Tensão MPPT' + k, 0, onde)); ci.push(exige(cab, 'Corrente MPPT' + k, 0, onde));", "cv.push(col(cab, 'Tensão MPPT' + k)); ci.push(col(cab, 'Corrente MPPT' + k));", 'okLibMppt');
-planta('troca ignorada', 'return suc && d >= suc ? null : a.pos;', 'return a.pos;', 'okTroca');
+planta('troca ignorada', 'return d >= w.ini && (!w.fim || d < w.fim) ? a.pos : null;', 'return a.pos;', 'okTroca');
 planta('o ultimo zip vence', 'if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v;', 'if (v) mr[x.d] = v;', 'okMppt');
 planta('arquivo do MPPT sem corte de 365 dias', 'const serie = ks.filter((c) => c.slice(0, 10) >= corte).map((c) => mTudo.get(c));', 'const serie = ks.map((c) => mTudo.get(c));', 'okMpptJanela');
 planta('ranking sem a janela de 30 dias', 'if (l.d >= mDe) (porInv', 'if (true) (porInv', 'okMpptJanela');
