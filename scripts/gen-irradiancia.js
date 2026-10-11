@@ -33,6 +33,7 @@
  */
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
 const { travadas } = require('./lib-irr-travada.js');   // PROMOVER irr-travada
+const { rotulaQualidade, confereCobertura } = require('./lib-irr-rotulo.js');   // PROMOVER irr-rotulo
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
 // SAIDA EM DOIS GRUPOS:
 //   irr_ufv.json          - o blob principal: serie diaria, mensal, qualidade e a lista dias_hora.
@@ -74,6 +75,11 @@ const FAIXA = {
   'TAXA DE PERDA POR SUJEIRA 1': [-5, 25], 'TAXA DE PERDA POR SUJEIRA 2': [-5, 25],
   'TENSÃO DA BATERIA': [8, 16],
 };
+// PROMOVER irr-rotulo: toda grandeza da FAIXA tem nome em inglês e em chinês (lib-irr-rotulo.js), e a lib não conhece
+// grandeza que o gerador não tem. Falha fechada no carregamento: nada é gravado.
+{ const c = confereCobertura(Object.keys(FAIXA));
+  if (c.falta.length || c.sobra.length) throw new Error('lib-irr-rotulo.js fora da FAIXA · sem rótulo: '
+    + (c.falta.join(', ') || '-') + ' · sobra: ' + (c.sobra.join(', ') || '-')); }
 // as que se INTEGRAM no tempo (energia); as demais se promediam
 const INTEGRA = new Set(['IRRADIAÇÃO INCLINADA', 'IRRADIAÇÃO DIFUSA', 'IRRADIAÇÃO DIRETA',
   'IRRADIAÇÃO ALBEDO DE CIMA', 'IRRADIAÇÃO ALBEDO DE BAIXO']);
@@ -589,6 +595,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     const seed = 'data/irr_seed.json.gz';
     if (!fs.existsSync(seed)) throw new Error('sem IIRR_URL/IIRR_LOCAL e sem ' + seed);
     const j = leSeed(seed);
+    rotulaQualidade(j.qualidade);   // PROMOVER irr-rotulo: o nome da grandeza nas três línguas, antes de qualquer gravação
     j.modo = 'seed';
     j.nota_seed = 'Historico processado do export IIRR de 08/08/2026, versionado no repo. '
       + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
@@ -1100,6 +1107,10 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
           : zdPct > 2 ? 'falhas diurnas'
             : q.fora > 0 ? 'picos isolados' : 'ok' });
   }));
+  // PROMOVER irr-rotulo: o nome da grandeza nas três línguas (`grandeza_pt`/`_en`/`_zh`), AO LADO de `grandeza` e
+  // ANTES de qualquer gravação — a tabela da página em inglês lia o nome do export em português. Grandeza sem rótulo
+  // aborta aqui (lib-irr-rotulo.js).
+  rotulaQualidade(qualidade);
 
   // 🔴 O conjunto entra ANTES de `out` e antes das emissoes, para alcancar os TRES produtos: o blob
   //    principal, os arquivos por nivel de zoom e os por resolucao. Mesmo ponto unico do modo

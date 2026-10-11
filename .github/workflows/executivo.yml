@@ -182,6 +182,12 @@ jobs:
       - name: Ensaio · a leitura travada sai da serie (produto)
         run: node scripts/ensaio-irr-travada.js --produto
 
+      # ... e o NOME da grandeza nas tres linguas (PROMOVER irr-rotulo): a regra em casos forjados e, no irr_ufv.json recem
+      # gravado, toda linha de `qualidade` com `grandeza_pt`/`_en`/`_zh` da lib — a traducao da pagina troca o `_pt` pela
+      # irma so com essa paridade. Cada plantio reprova pelo que plantou.
+      - name: Ensaio · o nome da grandeza nas tres linguas (lib e produto)
+        run: node scripts/ensaio-irr-rotulo.js
+
       # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
       # irr_60min que o passo anterior grava) e com `always()`: se a irradiancia falhar, o PR recalcula com a
       # publicada — os dias sem irradiacao nova simplesmente nao fecham.
