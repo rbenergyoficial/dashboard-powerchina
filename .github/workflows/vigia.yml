@@ -41,12 +41,19 @@ jobs:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
 
+      # 0 · A REGRA DO VIGIA, ANTES DE VIGIAR (11/10/2026): casos, plantios na lib-vigia.js e o proprio vigia rodando com
+      #     o GitHub, o alerta e o blob forjados. Antes ele rodava DEPOIS, e uma regra quebrada so ficava vermelha depois
+      #     de ter mandado e-mail, mexido em issue e gravado o estado.
+      - name: Ensaio do vigia de resultado
+        run: node scripts/ensaio-vigia-resultado.js
+
       # 1 · O RELOGIO ESTA TOCANDO? Compara a idade da ultima execucao de CADA workflow da agenda
       #     com o maior intervalo que o proprio cron dele produz, vezes a tolerancia. Cobre o caso
       #     que nenhum job cobre sozinho: o job nao RODAR.
-      #     ⚠️ `if: always()` nao aparece aqui de proposito — este e o primeiro passo, e se ele
-      #        falhar o job fica vermelho, que e o sinal que se quer.
+      #     ⚠️ `if: always()` de proposito: com o ensaio acima vermelho o job ja fica vermelho, mas o vigia de cadencia
+      #        nao pode calar junto — um relogio parado e justamente o que ninguem mais avisa.
       - name: Vigia de cadência (o relógio está tocando?)
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -57,12 +64,6 @@ jobs:
           MAIL_DE: ${{ vars.MAIL_DE }}
           MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/gen-relogio-watchdog.js
-
-      # a regra que decide "roda e falha" e COMPILADA do proprio vigia, entao este ensaio prova a
-      # versao que acabou de rodar — e nao uma copia que concorda consigo mesma.
-      - name: Ensaio do vigia de resultado
-        if: always()
-        run: node scripts/ensaio-vigia-resultado.js
 
       # 2 · O SELO CONSEGUE FICAR VERMELHO? Le os blobs PUBLICOS e exige que todo selo que mostra
       #     idade carregue a ancora e os limiares — sem eles o selo congela no ultimo valor bom

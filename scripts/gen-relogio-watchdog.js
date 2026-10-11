@@ -41,6 +41,8 @@ const path = require('path');
 // 🔴 o alerta sai pela lib compartilhada: ela manda para o webhook do Power Automate E abre uma
 //    ISSUE no repositorio. O webhook cai com a licenca; a issue nao depende de nada externo.
 const { alerta } = require('./lib-alerta.js');
+// o ultimo sucesso, o veredito e quem abre/fecha moram numa lib que o ensaio julga (PROMOVER vigia-desmente)
+const VIG = require('./lib-vigia.js');
 
 const AGENDA = require(path.join(__dirname, '..', 'relogio', 'agenda.json'));
 const REPO = process.env.GH_REPO || 'rbenergyoficial/dashboard-powerchina';
@@ -111,59 +113,49 @@ function gh(caminho) {
 (async () => {
   if (!TOKEN) { console.error('RECUSADO: sem GH_TOKEN/GITHUB_TOKEN — nao da para ler as execucoes'); process.exit(1); }
   const agora = Date.now();
-  const linhas = [], atrasados = [], quebrados = [], indecididos = [];
+  const agoraIso = new Date(agora).toISOString();
 
-  for (const [wf, crons] of Object.entries(AGENDA)) {
-    const gap = maiorIntervalo(crons);
-    if (gap == null) { indecididos.push(wf); continue; }
-    let ult = null, suc = null;
-    try {
-      const r = await gh('/workflows/' + wf + '/runs?per_page=1');
-      ult = (r.workflow_runs || [])[0] || null;
-      // a idade do ultimo SUCESSO vem do proprio GitHub, filtrada: um workflow quebrado ha
-      // semanas nao caberia numa pagina de execucoes recentes
-      const s = await gh('/workflows/' + wf + '/runs?status=success&per_page=1');
-      suc = (s.workflow_runs || [])[0] || null;
-    } catch (e) { indecididos.push(wf + ' (' + e.message + ')'); continue; }
-    if (!ult) { indecididos.push(wf + ' (sem execucao registrada)'); continue; }
-    const idade = Math.round((agora - new Date(ult.created_at).getTime()) / 60000);
-    const limite = Math.round(gap * TOLERANCIA + MARGEM_MIN);
-    const ok = idade <= limite;
-
-    // ── o RESULTADO ────────────────────────────────────────────────────────────────────────
-    // ⚠️ `conclusion` nulo e execucao EM ANDAMENTO, nao falha: enquanto ela nao termina, quem
-    //    responde pela saude e a anterior, e o ultimo sucesso ainda pode ser ela mesma.
-    const idadeOk = suc ? Math.round((agora - new Date(suc.created_at).getTime()) / 60000) : null;
-    const rodando = ult.conclusion === null || ult.status !== 'completed';
-    // 🔴 sem NENHUM sucesso registrado o vigia NAO inventa veredito: um workflow recem-criado
-    //    ainda nao teve chance, e acusa-lo seria alarme que nasce falso.
-    const saudavel = (idadeOk === null) ? null : (idadeOk <= limite || rodando ? 1 : 0);
-
-    linhas.push({ wf, cadencia_min: gap, idade_min: idade, limite_min: limite,
-      evento: ult.event, conclusao: ult.conclusion, ok: ok ? 1 : 0,
-      idade_sucesso_min: idadeOk, saudavel });
-    if (!ok) atrasados.push({ wf, idade, limite, cadencia: gap });
-    if (saudavel === 0) quebrados.push({ wf, idade: idadeOk, limite, cadencia: gap, conclusao: ult.conclusion });
-  }
-
-  linhas.sort((a, b) => (b.idade_min / b.limite_min) - (a.idade_min / a.limite_min));
-  linhas.forEach((l) => console.log('  ' + (l.ok && l.saudavel !== 0 ? '   ' : '🔴 ') + l.wf.padEnd(26)
-    + 'cadencia ' + String(l.cadencia_min).padStart(4) + ' min · idade ' + String(l.idade_min).padStart(4)
-    + ' · limite ' + String(l.limite_min).padStart(4) + ' · ' + l.evento
-    + (l.saudavel === 0 ? '  · SEM SUCESSO ha ' + l.idade_sucesso_min + ' min' : '')));
-  if (indecididos.length) console.log('  sem julgamento: ' + indecididos.join(', '));
-
-  // ── estado e saude no blob ────────────────────────────────────────────────────────────────
+  // ── o estado ANTES de julgar: a rodada decide quem abre e quem fecha contra ele ─────────────
+  // 🔴 so `exists() === false` e ausencia. Erro de leitura NAO vira estado vazio: com estado vazio o vigia esqueceria
+  //    o alarme aberto (o ✅ nunca chegaria) e reabriria o que ja esta aberto. Leitura falha deixa o job vermelho, sem
+  //    gravar estado nem avisar nada (PROMOVER vigia-desmente).
   const conn = process.env.DADOS_STORAGE;
   let cont = null, estado = {};
   if (conn) {
     const { BlobServiceClient } = require('@azure/storage-blob');
     cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+    const bc = cont.getBlockBlobClient(ESTADO);
+    if (await bc.exists()) estado = JSON.parse((await bc.downloadToBuffer()).toString('utf8'));
+  }
+
+  // ── a leitura: as respostas do GitHub vao CRUAS para a lib ──────────────────────────────────
+  // a lista das 100 ultimas traz a ultima execucao e os sucessos recentes; a filtrada so alcanca o sucesso mais velho
+  // que isso (e em 07/10/2026 devolveu um de 22 dias com o real a 9 h: vale o mais recente das duas, na lib)
+  const entradas = [];
+  for (const [wf, crons] of Object.entries(AGENDA)) {
+    const gap = maiorIntervalo(crons);
+    if (gap == null) { entradas.push({ wf, gap: null }); continue; }
     try {
-      const bc = cont.getBlockBlobClient(ESTADO);
-      if (await bc.exists()) estado = JSON.parse((await bc.downloadToBuffer()).toString('utf8'));
-    } catch (e) { console.error('estado: ' + e.message); }
-    const saude = { gerado_em: new Date().toISOString(), tolerancia: TOLERANCIA,
+      const r = await gh('/workflows/' + wf + '/runs?per_page=100');
+      const s = await gh('/workflows/' + wf + '/runs?status=success&per_page=1');
+      entradas.push({ wf, gap, lista: r.workflow_runs || [], filtrado: (s.workflow_runs || [])[0] || null });
+    } catch (e) { entradas.push({ wf, gap, erro: e.message }); }
+  }
+  const R = VIG.rodada({ agora, agoraIso, agenda: Object.keys(AGENDA), entradas, estado,
+    tolerancia: TOLERANCIA, margem: MARGEM_MIN });
+  const { linhas, atrasados, quebrados, indecididos, novos, voltaram, novosQ, voltaramQ, sairam } = R;
+
+  linhas.sort((a, b) => (b.idade_min / b.limite_min) - (a.idade_min / a.limite_min));
+  linhas.forEach((l) => console.log('  ' + (l.ok && l.saudavel !== 0 ? '   ' : '🔴 ') + l.wf.padEnd(26)
+    + 'cadencia ' + String(l.cadencia_min).padStart(4) + ' min · idade ' + String(l.idade_min).padStart(4)
+    + ' · limite ' + String(l.limite_min).padStart(4) + ' · ' + l.evento
+    + (l.saudavel === 0 ? '  · SEM SUCESSO ha ' + l.idade_sucesso_min + ' min' : '')
+    + (l.pendente ? '  · em andamento, ultimo sucesso ha ' + l.idade_sucesso_min + ' min (alarme mantido como estava)' : '')));
+  if (indecididos.length) console.log('  sem julgamento (alarmes mantidos como estavam): ' + indecididos.join(', '));
+
+  // ── saude no blob ─────────────────────────────────────────────────────────────────────────
+  if (cont) {
+    const saude = { gerado_em: agoraIso, tolerancia: TOLERANCIA,
       margem_min: MARGEM_MIN, atrasados: atrasados.length, sem_sucesso: quebrados.length,
       workflows: linhas };
     const b = JSON.stringify(saude);
@@ -176,17 +168,10 @@ function gh(caminho) {
   //    ensina a ignorar o alerta — que e o oposto do que ele existe para fazer.
   // 🔴 AS DUAS FAMILIAS TEM CHAVE PROPRIA, e o estado as guarda separadas. "nao rodou" e "rodou
   //    e falhou" sao diagnosticos diferentes, com causas diferentes — misturar os dois num dedup
-  //    so faria o segundo alerta ser engolido pelo primeiro, calado, que e o defeito que este
-  //    lote existe para fechar.
-  const chaveEstado = (tipo, wf) => tipo + ':' + wf;
-  const novos = atrasados.filter((a) => !estado[chaveEstado('cadencia', a.wf)]);
-  const voltaram = Object.keys(estado).filter((k) => k.indexOf('cadencia:') === 0)
-    .map((k) => k.slice('cadencia:'.length))
-    .filter((w) => !atrasados.some((a) => a.wf === w));
-  const novosQ = quebrados.filter((a) => !estado[chaveEstado('resultado', a.wf)]);
-  const voltaramQ = Object.keys(estado).filter((k) => k.indexOf('resultado:') === 0)
-    .map((k) => k.slice('resultado:'.length))
-    .filter((w) => !quebrados.some((a) => a.wf === w));
+  //    so faria o segundo alerta ser engolido pelo primeiro, calado.
+  // 🔴 QUEM ABRE E QUEM FECHA sai da lib (lib-vigia.js): o alarme de resultado so fecha para o workflow julgado saudavel,
+  //    o de cadencia so para o lido e em dia; pendente e nao lido mantem o estado. Ate 10/10/2026 a execucao em
+  //    andamento fechava o alarme com um ✅ falso, e a rodada seguinte abria issue nova.
 
   // 🔴 UM ALERTA POR WORKFLOW, com chave estavel. A chave e o que faz o dedup do canal
   //    funcionar: o mesmo workflow atrasado sempre gera o MESMO titulo de issue, entao a
@@ -248,12 +233,24 @@ function gh(caminho) {
     });
   }
 
+  // o workflow que SAIU DA AGENDA nao voltou nem se recuperou: as duas familias fecham com o que de fato aconteceu
+  for (const w of sairam) {
+    for (const [fam, tit] of [['cadencia', ' fora da cadencia'], ['resultado', ' roda e falha']]) {
+      if (!estado[fam + ':' + w]) continue;
+      await alerta({
+        tipo: 'relogio_fora_da_agenda', resolve: true,
+        chave: fam + ':' + w,
+        titulo: w + tit,
+        assunto: 'ℹ️ Mauriti · ' + w + ' saiu da agenda do relogio',
+        corpo: '<b>' + w + ' saiu da agenda do relogio</b> e deixou de ser vigiado. O alarme fecha por isso, nao porque '
+          + 'o workflow voltou a rodar ou a ter sucesso.',
+        workflow: w,
+      });
+    }
+  }
+
   if (cont) {
-    const st = {};
-    const agoraIso = new Date().toISOString();
-    atrasados.forEach((a) => { const k = chaveEstado('cadencia', a.wf); st[k] = estado[k] || agoraIso; });
-    quebrados.forEach((a) => { const k = chaveEstado('resultado', a.wf); st[k] = estado[k] || agoraIso; });
-    const b = JSON.stringify(st);
+    const b = JSON.stringify(R.estado);
     await cont.getBlockBlobClient(ESTADO).upload(b, Buffer.byteLength(b),
       { blobHTTPHeaders: { blobContentType: 'application/json' } });
   }

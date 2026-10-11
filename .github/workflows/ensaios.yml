@@ -58,6 +58,13 @@ jobs:
         if: always()
         run: node scripts/ensaio-way2-watchdog-canal.js
 
+      # O vigia de resultado e de cadencia (lib-vigia.js): execucao em andamento nao fecha alarme, o ultimo sucesso nao
+      # volta no tempo, o nao lido e o pendente mantem o estado (11/10/2026). Casos, plantios e o proprio vigia rodando
+      # com o GitHub, o alerta e o blob forjados. E no push que a regra muda; no vigia.yml ele roda de novo antes de vigiar.
+      - name: Ensaio · o vigia nao se desmente (lib-vigia)
+        if: always()
+        run: node scripts/ensaio-vigia-resultado.js
+
       - name: Ensaio · o vigia da intake do SCADA reprova quando deve
         if: always()
         run: node scripts/ensaio-scada-intake-watchdog.js
