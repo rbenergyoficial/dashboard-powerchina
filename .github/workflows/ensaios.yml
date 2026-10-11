@@ -65,6 +65,12 @@ jobs:
         if: always()
         run: node scripts/ensaio-vigia-resultado.js
 
+      # O portao do corte por gemeo julga so meses FECHADOS (lib-portao-gemeo.js, 11/10/2026): numeros reais da rodada que
+      # reprovou com o mes em curso a -42 %, bordas e plantios. No ons-consolidado.yml ele roda de novo antes do gemeo.
+      - name: Ensaio · o portao do gemeo julga so meses fechados (lib-portao-gemeo)
+        if: always()
+        run: node scripts/ensaio-portao-gemeo.js --lib
+
       - name: Ensaio · o vigia da intake do SCADA reprova quando deve
         if: always()
         run: node scripts/ensaio-scada-intake-watchdog.js

@@ -24,6 +24,8 @@
  */
 const rot = require('./lib-rotulos.js');
 const https = require('https');
+// o portao (so meses fechados contam) mora numa lib que o ensaio julga (PROMOVER gemeo-mes-fechado)
+const PG = require('./lib-portao-gemeo.js');
 
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -198,27 +200,21 @@ const num = s => (s === '' || s == null) ? null : Number(s);
   });
 
   // ---- PORTAO: revalida contra os meses em que a apuracao do ONS presta -------------------------
-  const pares = serie.filter(s => verdade[s.mes] != null)
-    .map(s => ({ mes: s.mes, ons: verdade[s.mes], modelo: s.corte_gwh,
-                 erro_pct: r2(100 * (s.corte_gwh - verdade[s.mes]) / verdade[s.mes]) }));
-  const mae = pares.length ? r2(pares.reduce((a, p) => a + Math.abs(p.erro_pct), 0) / pares.length) : null;
-  const vies = pares.length ? r2(pares.reduce((a, p) => a + p.erro_pct, 0) / pares.length) : null;
-  const pior = pares.length ? r2(Math.max(...pares.map(p => Math.abs(p.erro_pct)))) : null;
-  const validacao = { meses: pares.length, mae_pct: mae, vies_pct: vies, pior_mes_pct: pior,
-    limite_mae_pct: MAX_MAE, limite_vies_pct: MAX_VIES, pares };
+  // 🔴 SO MESES FECHADOS CONTAM (11/10/2026): o mes em curso fica nos pares, marcado, e fora do MAE, do vies e do pior mes.
+  //    Com ele dentro, o veredito virava entre rodadas do mesmo dia so com a republicacao do operador (lib-portao-gemeo.js).
+  const MES_ABERTO = process.env.MES_EM_CURSO || PG.mesEmCurso(Date.now());
+  const { validacao, impossivel, reprova } = PG.valida(serie, verdade, MES_ABERTO, MAX_MAE, MAX_VIES);
 
-  console.log('VALIDACAO em ' + pares.length + ' meses de referencia valida:');
-  pares.forEach(p => console.log('  ' + p.mes + '  ONS ' + String(p.ons).padStart(6)
-    + '  modelo ' + String(p.modelo).padStart(6) + '  ' + (p.erro_pct > 0 ? '+' : '') + p.erro_pct + '%'));
-  console.log('  MAE ' + mae + '%  vies ' + vies + '%  pior ' + pior + '%');
+  console.log('VALIDACAO em ' + validacao.meses + ' meses fechados de referencia valida:');
+  validacao.pares.forEach(p => console.log('  ' + p.mes + '  ONS ' + String(p.ons).padStart(6)
+    + '  modelo ' + String(p.modelo).padStart(6) + '  ' + (p.erro_pct > 0 ? '+' : '') + p.erro_pct + '%'
+    + (p.aberto ? '   (mes em curso: fora da conta)' : '')));
+  console.log('  MAE ' + validacao.mae_pct + '%  vies ' + validacao.vies_pct + '%  pior ' + validacao.pior_mes_pct + '%');
 
-  if (pares.length < 4) throw new Error('validacao impossivel: so ' + pares.length
-    + ' mes(es) de referencia valida no benchmark. Nao gravo modelo que nao pude medir.');
-  if (mae > MAX_MAE || Math.abs(vies) > MAX_VIES) {
-    const msg = 'PORTAO REPROVOU: MAE ' + mae + '% (limite ' + MAX_MAE + ') · vies ' + vies
-      + '% (limite +-' + MAX_VIES + '). O blob NAO foi atualizado.';
-    if (!process.env.SEM_PORTAO) throw new Error(msg);
-    console.log('AVISO (SEM_PORTAO=1): ' + msg);
+  if (impossivel) throw new Error(impossivel);
+  if (reprova) {
+    if (!process.env.SEM_PORTAO) throw new Error(reprova);
+    console.log('AVISO (SEM_PORTAO=1): ' + reprova);
   }
 
   const out = {

@@ -28,12 +28,22 @@ jobs:
       # O proprio gerador tem portao: revalida contra os meses de referencia valida do ONS e
       # ABORTA sem gravar se o erro passar do limite. Job vermelho aqui significa modelo fora de
       # calibracao, e o blob antigo continua no ar — que e o comportamento certo.
+      # 🔴 So meses FECHADOS entram no portao (11/10/2026): com o mes em curso dentro, o veredito virava entre rodadas do
+      #    mesmo dia so com a republicacao do operador. A REGRA, antes de gerar; o PRODUTO, logo depois.
+      - name: Ensaio · o portao do gemeo julga so meses fechados (regra)
+        run: node scripts/ensaio-portao-gemeo.js --lib
+
       - name: Corte por gemeo de irradiancia (set/25 em diante)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
           OUT_BLOB: corte_gemeo.json
         run: node scripts/gen-corte-gemeo.js
+
+      # ... e o PRODUTO: o mes em curso (pelo `gerado_em`) marcado e fora da conta, e o MAE, o vies, o pior mes e a contagem
+      # do `corte_gemeo.json` publicado refeitos dos meses fechados, no centesimo.
+      - name: Ensaio · o portao do gemeo julga so meses fechados (produto)
+        run: node scripts/ensaio-portao-gemeo.js --produto
 
       # DEPOIS do gemeo, sobre o que subiu: o `corte_mwh` (MWh com centesimos) fecha com o GWh e nao tem a
       # resolucao do GWh x 1000. O campo nasceu em 25/09/2026 sem ensaio nenhum.
