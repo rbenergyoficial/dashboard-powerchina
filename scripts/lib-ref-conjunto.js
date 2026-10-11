@@ -144,6 +144,37 @@ function aplicaLista(consolidado, lista) {
   return corrigeConjunto(consolidado, abs);
 }
 
+/*
+ * O DIA QUE NAO FECHA E RETIDO, E NAO PARA O EXECUTIVO (PROMOVER ref-retem-dia, 11/10/2026, decisao do humano). De 06/10 23:00Z
+ * a 07/10 18:13Z o operador republicou 01–05/10 inteiros e os dois arquivos chegaram em horas diferentes: o por usina (5
+ * vezes por dia) ja trazia a revisao nova, o do conjunto (consolidado 1 vez por dia) a velha; a guarda viu certo e derrubou o
+ * executivo inteiro por ~19 h — manchete, dias fechados e o resto congelados por causa de um campo de referencia.
+ * Agora o dia que nao fecha sai do `ref_dia_ufv` (todas as linhas: as nove usinas e os agregados) e do `ref_hora`, e vai para
+ * `ref_dias_retidos` com a hora em que comecou a ser retido (`desde`, carregada da publicacao anterior). O resto do executivo
+ * grava. O teto (atacado) segue parando: ali o corte do conjunto estaria errado.
+ * E a retencao NAO se cala: dia retido ha mais de LIMITE_RETIDO_H e o ensaio de produto reprova. 27 h = o pior caso da
+ * cadencia das duas fontes (o mensal do conjunto e escrito as 16:00Z, o consolidado roda as 18:17Z, o executivo de hora em
+ * hora: uma revisao que chega logo depois das 16:00Z so entra no consolidado do dia seguinte, ~26,3 h depois); a fase A
+ * medida durou 19 h.
+ * A MARGEM sobre o pior caso e de minutos: um dia retido na rodada das 16:13Z so fecha na das 19:13Z do dia seguinte, e so
+ * se o consolidado das 18:17Z rodou antes. Se o consolidado atrasa ou falha, a retencao vence e o ensaio fica vermelho — e
+ * esse e o sinal certo: o descompasso entre os dois arquivos do operador deixou de ser so de cadencia.
+ * E a retencao nao esconde defeito NOSSO: o ensaio de produto confere cada dia retido contra os dois arquivos crus do
+ * operador (a soma das nove usinas do arquivo por usina tem de ser a referencia que o executivo calculou, o gref tem de ser o
+ * do arquivo do conjunto, e os dois tem de discordar entre si); fora disso o defeito e nosso e reprova na hora.
+ */
+const LIMITE_RETIDO_H = 27;
+/** tira do `ref_dia_ufv` os dias que nao fecham; devolve as linhas que ficam e a lista de retidos com o `desde` carregado */
+function retemDias(refDiaUfv, ruins, desdeAntes, agoraIso) {
+  const fora = new Set((ruins || []).map((x) => x.dia));
+  const retidos = (ruins || []).map((x) => ({ dia: x.dia, ref_mwh: x.ref_mwh, gref_mwh: x.gref_mwh, desde: (desdeAntes || {})[x.dia] || agoraIso }));
+  return { linhas: (refDiaUfv || []).filter((x) => !fora.has(x.dia)), retidos, fora };
+}
+/** os retidos ha mais de LIMITE_RETIDO_H horas no instante `agoraMs` */
+function retidosVencidos(retidos, agoraMs) {
+  return (retidos || []).filter((x) => !(Date.parse(x.desde) > 0) || (agoraMs - Date.parse(x.desde)) / 3600e3 > LIMITE_RETIDO_H);
+}
+
 /** Os dias do Complexo (`[{ dia, ref_mwh }]`) que nao fecham com o `grefDia` do conjunto. Dia sem conjunto nao se julga. */
 function diasQueNaoFecham(refComplexo, grefDia) {
   return (refComplexo || []).filter((x) => grefDia[x.dia] != null && Math.abs(x.ref_mwh - grefDia[x.dia]) > FOLGA_DIA)
@@ -151,4 +182,4 @@ function diasQueNaoFecham(refComplexo, grefDia) {
 }
 
 module.exports = { grefConjuntoPorDia, diasQueNaoFecham, refPorUsina, corrigeConjunto, mapaDaLista, somaDaLista, aplicaLista,
-  FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };
+  retemDias, retidosVencidos, LIMITE_RETIDO_H, FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };

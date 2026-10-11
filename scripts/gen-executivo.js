@@ -1292,6 +1292,7 @@ async function writeOut(obj, nome, opts) {
   // (a mesma regra da solarimetria do conjunto). TUDO-OU-NADA: um agregado com uma usina faltando nao sai — somar
   // oito contra nove esconderia a falta, e o leitor leria a diferenca como defeito da referencia.
   const refDiaUfv = [];
+  const refRetidos = [];      // os dias que nao fecham com o conjunto, fora do ref_dia_ufv e do ref_hora (PROMOVER ref-retem-dia)
   { const GRUPOS = { Complexo: PPA.concat(ML), PPA, ML };
     // horas sob limitacao do conjunto, por dia — a mesma bandeira (LIM_TS) que o corte usa
     const limH = {};
@@ -1316,7 +1317,9 @@ async function writeOut(obj, nome, opts) {
       Object.entries(GRUPOS).forEach(([g, L]) => lin(g, L));
     }
     // 🔴 GUARDA DE FECHAMENTO contra OUTRA fonte: a referencia do Complexo, somada das nove usinas, contra o `gref` do
-    // arquivo do CONJUNTO, dia a dia; se nao fechar, uma usina sumiu ou foi lida errada, e o campo nao sai. A conta mora em
+    // arquivo do CONJUNTO, dia a dia; se nao fechar, uma usina sumiu, foi lida errada ou os dois arquivos estao em revisoes
+    // diferentes do operador, e o DIA fica retido, fora do campo (desde `ref-retem-dia`; antes o campo inteiro nao saia e o
+    // executivo parava). A conta mora em
     // `lib-ref-conjunto.js` (PROMOVER executivo-vermelho, 10/10/2026), com o porque de cada condicao, e o
     // `ensaio-ref-conjunto.js` a julga em casos forjados antes de gerar. O patamar de 01/10 09:00, que o conjunto publicou
     // primeiro sem nenhuma parcela (03/10, `ref-buraco-conjunto`) e depois com a parcela do M6 so (10/10), e conferido pela
@@ -1331,9 +1334,20 @@ async function writeOut(obj, nome, opts) {
     // (detalhe lido de outro jeito, ou a referencia do topo diferente da daqui) e o corte publicado sairia com o patamar cru.
     if (absorvidos.length) throw new Error('ref_dia_ufv: o topo nao corrigiu ' + absorvidos.length + ' patamar(es) que a guarda aceitaria — '
       + absorvidos.slice(0, 5).map(x => x.ts + ' (' + x.gref + ' x ' + x.soma + ' MW)').join(', '));
+    // 🔴 O DIA QUE NAO FECHA E RETIDO, E O EXECUTIVO GRAVA (PROMOVER ref-retem-dia, 11/10/2026): ele sai do `ref_dia_ufv` e do
+    // `ref_hora` e vai para `ref_dias_retidos`, com o `desde` carregado da publicacao anterior (lida so quando ha o que reter;
+    // so o 404 e ausencia). Retido alem de LIMITE_RETIDO_H, o ensaio de produto reprova. O porque, na lib.
     const ruins = RC.diasQueNaoFecham(refCx, grefDia);
-    if (ruins.length) throw new Error('ref_dia_ufv: a referencia do Complexo, somada das usinas, nao fecha com a do arquivo do conjunto em '
-      + ruins.length + ' dia(s) — ex.: ' + ruins.slice(0, 3).map(x => x.dia + ' ' + x.ref_mwh + ' x ' + x.gref_mwh).join(' · '));
+    if (ruins.length) {
+      const desdeAntes = {};
+      try { ((await getJSON(BASE + OUT_BLOB)).ref_dias_retidos || []).forEach(x => { desdeAntes[x.dia] = x.desde; }); }
+      catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('ref_dia_ufv: a publicacao anterior ilegivel para carregar a retencao: ' + e.message); }
+      const rt = RC.retemDias(refDiaUfv, ruins, desdeAntes, new Date().toISOString());
+      refDiaUfv.length = 0; rt.linhas.forEach(x => refDiaUfv.push(x));
+      rt.retidos.forEach(x => { refRetidos.push(x); if (DIA[x.dia]) DIA[x.dia].ref_retido = 1; });
+      console.log('⚠️ ref_dia_ufv: ' + ruins.length + ' dia(s) RETIDO(S) — a referencia do Complexo, somada das usinas, nao fecha com a do arquivo do conjunto: '
+        + rt.retidos.slice(0, 5).map(x => x.dia + ' ' + x.ref_mwh + ' x ' + x.gref_mwh + ' (desde ' + x.desde + ')').join(' · '));
+    }
     console.log('ref_dia_ufv: %d linhas, de %s a %s · o Complexo fecha com o gref do conjunto em %d dias',
       refDiaUfv.length, (refDiaUfv[0] || {}).dia, (refDiaUfv[refDiaUfv.length - 1] || {}).dia,
       refDiaUfv.filter(x => x.ufv === 'Complexo' && grefDia[x.dia] != null).length);
@@ -1352,7 +1366,9 @@ async function writeOut(obj, nome, opts) {
   {
     const doDia = new Map(refDiaUfv.map(x => [x.dia + '|' + x.ufv, x]));
     const ruins = [];
+    const diasRetidos = new Set(refRetidos.map(x => x.dia));   // o dia retido sai da meia hora tambem (PROMOVER ref-retem-dia)
     for (const dia of Object.keys(refHora).sort()) {
+      if (diasRetidos.has(dia)) continue;
       refHoraOut.dias.push(Object.assign({ dia, lim: refLim[dia] || new Array(48).fill(0) }, DIAS_EXCLUIDOS.has(dia) ? { excluido: 1 } : {}));
       for (const u of Object.keys(refHora[dia]).sort()) {
         const s = refHora[dia][u];
@@ -1450,6 +1466,9 @@ async function writeOut(obj, nome, opts) {
     // os patamares do conjunto que entraram no corte pela soma das usinas, com a disponibilidade fora da media
     // (PROMOVER ref-parcela-corte): a lista explicita da troca, para quem refaz o conjunto cru por outra rota
     ref_conjunto_pela_soma: CONJ_PELA_SOMA,
+    // os dias que nao fecharam com o arquivo do conjunto nesta rodada, fora do ref_dia_ufv e do ref_hora, com o `desde`
+    // (PROMOVER ref-retem-dia). Sempre emitido: [] quando todos fecham.
+    ref_dias_retidos: refRetidos,
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
     // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----
@@ -1926,6 +1945,9 @@ async function writeOut(obj, nome, opts) {
       // quantos patamares do dia o conjunto publicou com nenhuma ou uma parcela e entraram no corte pela soma das usinas
       // (PROMOVER ref-parcela-corte). Sempre emitido, 0 no dia normal: campo que so existe em algumas linhas nao vira coluna.
       ref_pela_soma: d.ref_soma || 0,
+      // 1 no dia RETIDO (a referencia das usinas nao fecha com a do conjunto: os dois arquivos do operador em revisoes
+      // diferentes): o corte deste dia sai do arquivo do conjunto como ele esta (PROMOVER ref-retem-dia). Sempre emitido.
+      ref_retido: d.ref_retido ? 1 : 0,
       // Dia sem restricao vem com o objeto VAZIO, e nao ausente: ausente e "nao apurado", vazio e "nao
       // houve" — sao coisas diferentes na tela, e ja custaram um lote neste projeto.
       //

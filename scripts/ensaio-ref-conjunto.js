@@ -155,6 +155,63 @@ function julgaLista(lib) {
   if (lib.somaDaLista(m, { ts: '2026-10-01 09:00:00', gref: '47.246', ger: '245.594', disp: '49.105' }) !== 317.78) e.push('somaDaLista: nao leu a linha em texto do CSV');
   return e;
 }
+/* A RETENCAO DO DIA QUE NAO FECHA (PROMOVER ref-retem-dia): sai o dia INTEIRO (as nove usinas e os agregados), os outros
+   ficam, o `desde` da publicacao anterior e carregado, e o vencimento cai logo depois de LIMITE_RETIDO_H e nao antes. */
+function julgaRetencao(lib) {
+  const e = [];
+  const ENT = USINAS.concat(['Complexo', 'PPA', 'ML']);
+  const linhas = ['2026-10-01', '2026-10-02'].flatMap((d) => ENT.map((u) => ({ dia: d, ufv: u, ref_mwh: 1 })));
+  const ruins = [{ dia: '2026-10-01', ref_mwh: 2579.45, gref_mwh: 617.96 }];
+  const antes = '2026-10-10T12:00:00.000Z', agora = '2026-10-11T00:00:00.000Z';
+  const r1 = lib.retemDias(linhas, ruins, {}, agora);
+  if (r1.linhas.some((x) => x.dia === '2026-10-01')) e.push('retemDias: ficou linha do dia retido (' + r1.linhas.filter((x) => x.dia === '2026-10-01').map((x) => x.ufv).join(',') + ')');
+  if (r1.linhas.filter((x) => x.dia === '2026-10-02').length !== ENT.length) e.push('retemDias: mexeu no dia que fecha');
+  if (r1.retidos.length !== 1 || r1.retidos[0].desde !== agora) e.push('retemDias: o dia novo nao saiu retido desde agora');
+  const r2 = lib.retemDias(linhas, ruins, { '2026-10-01': antes }, agora);
+  if (r2.retidos[0].desde !== antes) e.push('retemDias: nao carregou o desde da publicacao anterior');
+  const t0 = Date.parse(antes), H = 3600e3, L = lib.LIMITE_RETIDO_H;
+  // preso por baixo no pior caso derivado (a rodada das 16:13Z so fecha na das 19:13Z do dia seguinte: 27 h) — RE-044
+  if (!(L >= 27 && L < 48)) e.push('o limite da retencao saiu da cadencia das fontes (' + L + ' h)');
+  if (lib.retidosVencidos([{ dia: 'x', desde: antes }], t0 + (L - 0.5) * H).length) e.push('retidosVencidos: venceu antes do limite');
+  if (lib.retidosVencidos([{ dia: 'x', desde: antes }], t0 + (L + 0.5) * H).length !== 1) e.push('retidosVencidos: nao venceu depois do limite');
+  if (lib.retidosVencidos([{ dia: 'x', desde: 'lixo' }], t0).length !== 1) e.push('retidosVencidos: um desde ilegivel nao venceu (a retencao calaria)');
+  /* a SEGUNDA ROTA do dia retido (RE-042), com os dois arquivos do operador forjados: as nove usinas somam 100 MWh no dia e o
+     conjunto 25 (a revisao velha). O legitimo passa; o defeito nosso, o gref de outro lugar, o dia que fecha, o dia ainda no
+     ref_hora, a usina faltando no arquivo e o retido sem segunda rota reprovam. */
+  const D = '2026-10-01', agoraMs = Date.parse(agora);
+  const cruU = () => ({ '2026-10': USINAS.map((u) => ({ ts: D + ' 12:00:00', u: u.replace('M', 'CEFMT'), ge: 200 / 9 })) });
+  const conj = (g) => [{ ts: D + ' 12:00:00', gref: g, ger: 40, disp: 343.5 }];
+  const base = () => ({ ref_dia_ufv: [{ dia: '2026-10-02', ufv: 'Complexo', ref_mwh: 1 }], ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 25, desde: agora }],
+    serie_diaria: [{ dia: D, ref_retido: 1 }, { dia: '2026-10-02', ref_retido: 0 }] });
+  const fontes = (o) => Object.assign({ cruUsina: cruU(), conjunto: conj(50), refHoraDias: new Set(['2026-10-02']) }, o || {});
+  const CASOS_R = [
+    ['retencao legitima (os dois arquivos do operador discordam)', base(), fontes(), false],
+    ['a referencia retida nao e a soma das usinas (defeito nosso)', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 150, gref_mwh: 25, desde: agora }] }), fontes(), true],
+    ['o gref retido nao e o do arquivo do conjunto', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 30, desde: agora }] }), fontes(), true],
+    ['os dois arquivos fecham (nada a reter)', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 100, desde: agora }] }), fontes({ conjunto: conj(200) }), true],
+    ['o dia retido ainda no ref_hora', base(), fontes({ refHoraDias: new Set([D]) }), true],
+    ['o dia retido ainda no ref_dia_ufv', Object.assign(base(), { ref_dia_ufv: [{ dia: D, ufv: 'Complexo', ref_mwh: 100 }] }), fontes(), true],
+    ['a usina faltando no arquivo do operador', base(), fontes({ cruUsina: { '2026-10': cruU()['2026-10'].filter((r) => r.u !== 'CEFMT9') } }), true],
+    ['retido sem a segunda rota', base(), null, true],
+    // RE-047: o arquivo do conjunto regravado depois do executivo (a retencao se resolvendo) — o gref nao bate, e NAO reprova
+    ['duas safras (o conjunto gravado depois do executivo)', base(), fontes({ conjunto: conj(4888.3), safraNova: ['ons_restricao_all.json'] }), false],
+    // RE-052: data ilegivel nao e safra nova — reprova; RE-053: o ref_hora se confere mesmo com a safra nova
+    ['sem a data do arquivo para julgar a safra', base(), fontes({ semData: ['ons_restricao_all.json (last-modified)'] }), true],
+    ['duas safras e o dia retido ainda no ref_hora', base(), fontes({ conjunto: conj(4888.3), safraNova: ['ons_restricao_all.json'], refHoraDias: new Set([D]) }), true],
+    // RE-048: a marca na serie_diaria
+    ['a marca ausente no dia retido', Object.assign(base(), { serie_diaria: [{ dia: D, ref_retido: 0 }, { dia: '2026-10-02', ref_retido: 0 }] }), fontes(), true],
+    ['a marca num dia que nao esta retido', Object.assign(base(), { serie_diaria: [{ dia: D, ref_retido: 1 }, { dia: '2026-10-02', ref_retido: 1 }] }), fontes(), true],
+    ['a serie_diaria sem o campo da marca', Object.assign(base(), { serie_diaria: [{ dia: D }, { dia: '2026-10-02' }] }), fontes(), true],
+  ];
+  for (const [nome, E5, F5, reprova] of CASOS_R) {
+    const r = julgaRetidos(E5, agoraMs, lib, F5);
+    if (reprova !== (r.erros.length > 0)) e.push('segunda rota: "' + nome + '" ' + (reprova ? 'passou' : 'reprovou (' + r.erros.join('; ') + ')'));
+  }
+  return e;
+}
+const RT_ = julgaRetencao(compila(src));
+RT_.forEach((x) => f.push('a retencao errou: ' + x));
+console.log('   retencao do dia: ' + (RT_.length ? RT_.length + ' erro(s)' : 'sai o dia inteiro, o desde e carregado, vence logo depois de ' + compila(src).LIMITE_RETIDO_H + ' h'));
 const RL_ = julgaLista(compila(src));
 RL_.forEach((x) => f.push('a lista errou: ' + x));
 console.log('   lista publicada: ' + (RL_.length ? RL_.length + ' erro(s)' : 'troca so onde o cru ainda traz o defeito; lista velha, patamar coerente e ts fora nao trocam'));
@@ -168,6 +225,11 @@ const PLANTIOS = [
   ['a correcao nao marca a linha', 'r._ref_pela_soma = 1; ', ''],
   ['o Complexo sem o tudo-ou-nada', 'if (usinas.every((u) => s[u] != null)) refDia[d]', 'refDia[d]'],
   ['a lista sem conferir o cru', 'if (!(num(r.disp) < num(r.ger)) || Math.abs(num(r.gref) - s) <= FOLGA_MW) return null;', ''],
+  ['a retencao so do Complexo', 'linhas: (refDiaUfv || []).filter((x) => !fora.has(x.dia))', "linhas: (refDiaUfv || []).filter((x) => !(fora.has(x.dia) && x.ufv === 'Complexo'))"],
+  ['a retencao sem carregar o desde', 'desde: (desdeAntes || {})[x.dia] || agoraIso', 'desde: agoraIso'],
+  ['a retencao com o limite frouxo', 'const LIMITE_RETIDO_H = 27;', 'const LIMITE_RETIDO_H = 1e9;'],
+  ['a retencao com o limite abaixo do pior caso', 'const LIMITE_RETIDO_H = 27;', 'const LIMITE_RETIDO_H = 24;'],
+  ['o desde ilegivel nao vence', '!(Date.parse(x.desde) > 0) || ', ''],
   ['sem a condicao da parcela', '(g === 0 || parc.some((x) => Math.abs(g - x) <= FOLGA_MW))', 'true'],
   ['sem a condicao disp < ger', 'num(r.disp) < num(r.ger) && refHora[dd]', 'refHora[dd]'],
   ['sem o teto por dia', 'const MAX_POR_DIA = 1;', 'const MAX_POR_DIA = 1e9;'],
@@ -181,7 +243,7 @@ for (const [nome, de, para] of PLANTIOS) {
   const mut = src.replace(de, para);
   if (mut === src) { f.push('plantio "' + nome + '": o texto nao mudou'); continue; }
   const lm = compila(mut);
-  const erros = julga(lm).filter((x) => !x.ok).map((x) => x.nome).concat(julgaCorrecao(lm), julgaLista(lm));
+  const erros = julga(lm).filter((x) => !x.ok).map((x) => x.nome).concat(julgaCorrecao(lm), julgaLista(lm), julgaRetencao(lm));
   console.log('   plantio "' + nome + '": ' + erros.length + ' caso(s) fora do esperado' + (erros.length ? ' (' + erros.join('; ') + ')' : ''));
   if (!erros.length) f.push('plantio "' + nome + '" passou em todos os casos — o ensaio nao o pega');
 }
@@ -193,10 +255,15 @@ const FIOS = ["require('./lib-ref-conjunto.js')", 'RC.grefConjuntoPorDia(', 'ref
   // a guarda de baixo NAO pode achar o que trocar: se achar, o topo nao corrigiu (revisor-ensaio, RE-019)
   'if (absorvidos.length) throw',
   // so o 404 e ausencia no topo (RE-020)
-  "if (!/^404 /.test(String(e.message))) throw"];
+  "if (!/^404 /.test(String(e.message))) throw",
+  // o dia que nao fecha e retido, sai do ref_hora tambem, e a lista sai publicada (PROMOVER ref-retem-dia)
+  'RC.retemDias(', 'ref_dias_retidos: refRetidos', 'if (diasRetidos.has(dia)) continue;',
+  // e o dia retido marcado na serie_diaria (RE-045)
+  'DIA[x.dia].ref_retido = 1', 'ref_retido: d.ref_retido ? 1 : 0'];
 /* e a ORDEM: a correcao tem de vir antes do corte do conjunto (secao 1), senao ela so mexe no que ja foi apurado */
 const SECAO1 = '// ---------- 1) complexo por m';
-const fiacao = (s) => FIOS.filter((x) => !s.includes(x))
+const VELHO = "throw new Error('ref_dia_ufv: a referencia do Complexo, somada das usinas, nao fecha";   // o throw que parava tudo
+const fiacao = (s) => FIOS.filter((x) => !s.includes(x)).concat(s.includes(VELHO) ? ['o throw antigo do dia que nao fecha voltou'] : [])
   .concat(s.indexOf('RC.corrigeConjunto(') > -1 && s.indexOf(SECAO1) > -1 && s.indexOf('RC.corrigeConjunto(') > s.indexOf(SECAO1)
     ? ['a correcao depois do corte (secao 1)'] : [])
   .concat(s.indexOf(SECAO1) < 0 ? ['o marco da secao 1 sumiu do gerador'] : []);
@@ -208,6 +275,9 @@ if (semErro === gen || !fiacao(semErro).length) f.push('a conferencia da fiacao 
 const semBaixo = gen.replace('if (absorvidos.length) throw', 'if (false) throw');
 if (semBaixo === gen || !fiacao(semBaixo).length) f.push('a conferencia da fiacao nao acusa a guarda de baixo sem o erro');
 console.log('   a guarda de baixo sem o erro: ' + (fiacao(semBaixo).length ? 'acusada' : 'NAO acusada'));
+const comVelho = gen + '\n' + VELHO + "')";
+if (!fiacao(comVelho).includes('o throw antigo do dia que nao fecha voltou')) f.push('a conferencia da fiacao nao acusa o throw antigo de volta');
+console.log('   o throw antigo do dia que nao fecha de volta: ' + (fiacao(comVelho).includes('o throw antigo do dia que nao fecha voltou') ? 'acusado' : 'NAO acusado'));
 const tarde = gen.replace('RC.corrigeConjunto(', 'RC.semCorrecao(') + '\nRC.corrigeConjunto(';
 if (tarde === gen || !fiacao(tarde).includes('a correcao depois do corte (secao 1)')) f.push('a conferencia da fiacao nao acusa a correcao depois do corte');
 console.log('   fiacao no gen-executivo: ' + (FIOS.length - faltam.length) + ' de ' + FIOS.length + ', na ordem · o gerador sem o erro do excesso: '
@@ -248,6 +318,16 @@ function pega(nome) {
     if (r.statusCode !== 200) { r.resume(); return ko(new Error(nome + ': HTTP ' + r.statusCode)); }
     const ch = []; r.on('data', (d) => ch.push(d));
     r.on('end', () => { try { let b = Buffer.concat(ch); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); } });
+  }).on('error', ko));
+}
+/* a mesma leitura, devolvendo tambem o last-modified (a safra do arquivo, para a segunda rota do dia retido) */
+function pegaData(nome) {
+  const https = require('https'), zlib = require('zlib');
+  return new Promise((ok, ko) => https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
+    if (r.statusCode !== 200) { r.resume(); return ko(new Error(nome + ': HTTP ' + r.statusCode)); }
+    const ch = []; r.on('data', (d) => ch.push(d));
+    r.on('end', () => { try { let b = Buffer.concat(ch); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+      ok({ j: JSON.parse(b.toString('utf8')), mod: r.headers['last-modified'] }); } catch (e) { ko(e); } });
   }).on('error', ko));
 }
 /* julga um par (executivo, benchmark); devolve { erros, julgado, comparados } — usado no par real e nos forjados */
@@ -294,6 +374,10 @@ function julgaProduto(E, B, lib) {
   }
   const bm = new Map((B.serie || []).filter((x) => x.fonte === 'solar').map((x) => [x.mes, x]));
   const foraMes = new Set(), avisos = [];
+  // o mes com dia RETIDO (PROMOVER ref-retem-dia): o corte do executivo nele sai do conjunto na revisao velha e o benchmark le
+  // o CSV na nova — os dois divergem por definicao enquanto a retencao durar; quem vigia o dia retido e o julgaRetidos
+  (E.ref_dias_retidos || []).forEach((x) => { const m = String(x.dia).slice(0, 7);
+    if (!foraMes.has(m)) { foraMes.add(m); avisos.push(m + ': mes com dia retido (' + x.dia + '), fora da comparacao mensal'); } });
   for (const ts of doExec) {
     const mes = ts.slice(0, 7);
     if (ap.includes(ts)) continue;
@@ -340,9 +424,82 @@ function julgaProduto(E, B, lib) {
   return { erros: e, julgado: true, comparados, mesesComparados, dias, avisos };
 }
 const clone = (o) => JSON.parse(JSON.stringify(o));
+/* a RETENCAO no produto (PROMOVER ref-retem-dia): o campo existe, o dia retido nao tem linha no ref_dia_ufv, retido alem de
+   LIMITE_RETIDO_H reprova — e a SEGUNDA ROTA (revisor-ensaio, RE-042): a retencao so e legitima quando o descompasso e entre os
+   dois arquivos do OPERADOR. A soma das nove usinas do arquivo POR USINA tem de ser a referencia que o executivo calculou (senao
+   o defeito e NOSSO: usina lida em dobro, faltando, trocada), o gref tem de ser o do arquivo do CONJUNTO, e os dois tem de
+   discordar entre si; e o dia nao pode estar no ref_hora. `fontes` = { cruUsina: {mes: linhas}, conjunto: linhas, refHoraDias:
+   Set } — no produto, os arquivos publicados (baixados so quando ha dia retido); na regra, forjados. */
+function julgaRetidos(E, agoraMs, lib, fontes) {
+  const e = [], R = E.ref_dias_retidos, av = [];
+  if (!Array.isArray(R)) return { erros: ['executivo sem ref_dias_retidos'], avisos: [] };
+  const comLinha = new Set((E.ref_dia_ufv || []).map((x) => x.dia));
+  R.forEach((x) => { if (comLinha.has(x.dia)) e.push('ref_dias_retidos: ' + x.dia + ' retido mas ainda no ref_dia_ufv'); });
+  lib.retidosVencidos(R, agoraMs).forEach((x) => e.push('ref_dias_retidos: ' + x.dia + ' retido desde ' + x.desde + ', alem de ' + lib.LIMITE_RETIDO_H
+    + ' h — os arquivos por usina e do conjunto nao voltaram a fechar (ref ' + x.ref_mwh + ' x conjunto ' + x.gref_mwh + ' MWh)'));
+  // a MARCA do dia retido na serie_diaria (RE-048): 1 em cada dia retido que esta na janela, 0 em todos os outros, sempre presente
+  const retidos = new Set(R.map((x) => x.dia));
+  for (const d of E.serie_diaria || []) {
+    if (d.ref_retido == null) { e.push('serie_diaria ' + d.dia + ' sem a marca ref_retido'); break; }
+    if (d.ref_retido !== (retidos.has(d.dia) ? 1 : 0)) e.push('serie_diaria ' + d.dia + ': ref_retido ' + d.ref_retido + (retidos.has(d.dia) ? ' num dia retido' : ' num dia que nao esta retido'));
+  }
+  if (R.length && !fontes) e.push('ref_dias_retidos: dia retido sem a segunda rota (os arquivos do operador nao foram lidos)');
+  /* a SAFRA da segunda rota (RE-047): os arquivos do operador sao lidos minutos depois do gerador, e o estado retido e
+     justamente aquele em que o operador os regrava. Arquivo gravado depois do executivo montado (menos 15 min, a regra do
+     ensaio-disp-declarada): a segunda rota diz que NAO JULGOU e nao reprova; o vencimento de 27 h continua valendo. */
+  // o ref_hora e produto NOSSO, gravado na mesma rodada: o dia retido fora dele se confere sempre, com ou sem safra (RE-053)
+  if (fontes && fontes.refHoraDias) R.forEach((x) => { if (fontes.refHoraDias.has(x.dia)) e.push('ref_dias_retidos: ' + x.dia + ': retido mas ainda no ref_hora'); });
+  // data ILEGIVEL nao e safra nova: sem ela nao ha como julgar, e calar a segunda rota em toda rodada esconderia o defeito
+  // nosso por 27 h (RE-052)
+  if (R.length && fontes && (fontes.semData || []).length) e.push('ref_dias_retidos: sem a data para julgar a safra (' + fontes.semData.join(', ') + ')');
+  let rodou = false;
+  if (R.length && fontes && (fontes.safraNova || []).length) {
+    av.push('segunda rota NAO JULGADA (duas safras: ' + fontes.safraNova.join(', ') + ' gravado(s) depois do executivo) — a proxima rodada julga');
+    fontes = null;
+  }
+  if (fontes && R.length) rodou = true;
+  for (const x of fontes ? R : []) {
+    const por = {}, id = 'ref_dias_retidos: ' + x.dia;
+    for (const r of fontes.cruUsina[String(x.dia).slice(0, 7)] || []) {
+      if (String(r.ts).slice(0, 10) !== x.dia) continue;
+      const u = String(r.u).replace('CEFMT', 'M'); if (!USINAS.includes(u)) continue;
+      por[u] = (por[u] || 0) + (Number(r.ge) || 0) * 0.5;
+    }
+    const faltam = USINAS.filter((u) => por[u] == null);
+    if (faltam.length) { e.push(id + ': o arquivo por usina do operador nao tem ' + faltam.join(',') + ' no dia'); continue; }
+    const somaU = USINAS.reduce((s2, u) => s2 + por[u], 0);
+    let grefCru = 0, nCru = 0;
+    for (const r of fontes.conjunto || []) if (String(r.ts).slice(0, 10) === x.dia) { grefCru += (Number(r.gref) || 0) * 0.5; nCru++; }
+    if (Math.abs(somaU - x.ref_mwh) > 0.011) e.push(id + ': a referencia retida (' + x.ref_mwh + ') nao e a soma das usinas do arquivo do operador ('
+      + somaU.toFixed(2) + ') — o defeito e NOSSO, nao do operador');
+    if (!nCru) e.push(id + ': o arquivo do conjunto nao tem o dia');
+    else if (Math.abs(grefCru - x.gref_mwh) > 0.011) e.push(id + ': o gref retido (' + x.gref_mwh + ') nao e o do arquivo do conjunto (' + grefCru.toFixed(2) + ')');
+    if (Math.abs(somaU - grefCru) <= lib.FOLGA_DIA) e.push(id + ': os dois arquivos do operador FECHAM (' + somaU.toFixed(2) + ' x ' + grefCru.toFixed(2) + ') — nao ha o que reter');
+  }
+  return { erros: e, rodou, avisos: R.map((x) => x.dia + ' retido desde ' + x.desde + ' (' + x.ref_mwh + ' x ' + x.gref_mwh + ')').concat(av) };
+}
 async function produto() {
   const lib = compila(src);
   const [E, B] = await Promise.all([pega('executivo.json'), pega('benchmark_ne.json')]);
+  { const R = E.ref_dias_retidos || [];
+    let fontes = null;
+    if (R.length) {   // a segunda rota so custa download quando ha dia retido
+      const meses = [...new Set(R.map((x) => String(x.dia).slice(0, 7)))];
+      const cruUsina = {}, safraNova = [], semData = [];
+      const montado = Date.parse(E.atualizado || '') || 0;
+      if (!montado) semData.push('executivo.atualizado');
+      const novo = (nome, mod) => { const t = Date.parse(mod || '');
+        if (!(t > 0)) semData.push(nome + ' (last-modified)'); else if (montado && t > montado - 15 * 60000) safraNova.push(nome); };
+      for (const m of meses) { const n = 'ons_irradiancia_' + m.replace('-', '_') + '.json', x = await pegaData(n); cruUsina[m] = x.j.consolidado; novo(n, x.mod); }
+      const [O, Hr] = await Promise.all([pegaData('ons_restricao_all.json'), pega('ref_hora.json')]);
+      novo('ons_restricao_all.json', O.mod);
+      fontes = { cruUsina, conjunto: O.j.consolidado, refHoraDias: new Set((Hr.dias || []).map((d) => d.dia)), safraNova, semData };
+    }
+    const rr = julgaRetidos(E, Date.now(), lib, fontes);
+    rr.erros.forEach((x) => f.push('retencao: ' + x));
+    console.log('   retencao: ' + R.length + ' dia(s) retido(s)' + (rr.rodou ? ', conferido(s) contra os dois arquivos do operador' : ''));
+    rr.avisos.forEach((x) => console.log('   ⚠️ ' + x));
+  }
   suite(E, B, lib, 'produto');
   /* e o ENSAIO INTEIRO no estado da VIRADA DO MES (revisor-ensaio, RE-035): o mes aberto do executivo um mes adiante, o mes
      que acabou de fechar com a safra de hoje. O par real, os controles e os plantios tem de se comportar igual nele — um plantio
@@ -356,8 +513,31 @@ function suite(E, B, lib, rot) {
   console.log('   ' + rot + ': lista com ' + (E.ref_conjunto_pela_soma || []).length + ' patamar(es) · ' + (r.julgado
     ? r.comparados + ' mes(es) fechado(s) e ' + r.dias + ' dia(s) da lista comparados com o benchmark' : 'executivo x benchmark NAO JULGADO (' + r.motivo + ')'));
   (r.avisos || []).forEach((x) => console.log('   ⚠️ ' + x + ' — fica fora da comparacao'));
-  // o mes do plantio mensal e um que a comparacao do par real JULGOU (nunca o tirado por safra): o ultimo comparado
-  const mesJulgado = (r.mesesComparados || []).slice(-1)[0];
+  /* A BASE dos plantios e controles: o par real com as listas CONSISTENTES (o benchmark leu e aplicou a lista do executivo, o
+     dia da lista igual nos dois) e, com a lista real VAZIA, um patamar sintetico num dia presente nas duas series. Sem isso,
+     com a lista vazia (o operador republicou certo, ou a fase de uma retencao) os plantios de lista nao teriam o que plantar,
+     "passariam" e o ensaio reprovaria um estado legitimo. A base tem de estar LIMPA: plantio que reprova sobre base suja nao
+     prova nada. */
+  const E0 = clone(E), B0 = clone(B);
+  if (!(E0.ref_conjunto_pela_soma || []).length) {
+    const bDias = new Set((B0.serie_dia || []).filter((d) => d.fonte === 'solar' && d.nosso_cortado_gwh != null).map((d) => d.dia));
+    const d = (E0.serie_diaria || []).filter((x) => x.cortado_mwh != null && bDias.has(x.dia)).map((x) => x.dia).sort().pop();
+    if (d) {
+      E0.ref_conjunto_pela_soma = [{ ts: d + ' 12:00', gref_publicado: 10, disp_publicada: 5, ger: 20, soma_usinas: 100 }];
+      (E0.serie_diaria || []).forEach((x) => { if (x.dia === d) x.ref_pela_soma = (x.ref_pela_soma || 0) + 1; });
+    }
+  }
+  const tsE0 = (E0.ref_conjunto_pela_soma || []).map((x) => String(x.ts));
+  B0.ref_conjunto_pela_soma_lida = tsE0.slice(); B0.ref_conjunto_pela_soma_aplicada = tsE0.slice(); B0.ref_conjunto_pela_soma_sem_defeito = [];
+  tsE0.forEach((ts) => { const dia = ts.slice(0, 10), x = (E0.serie_diaria || []).find((y) => y.dia === dia),
+    b = (B0.serie_dia || []).find((y) => y.fonte === 'solar' && y.dia === dia); if (x && b && x.cortado_mwh != null) b.nosso_cortado_gwh = Math.round(x.cortado_mwh / 10) / 100; });
+  const r0 = julgaProduto(E0, B0, lib);
+  if (!tsE0.length) f.push(rot + ': sem dia comum as duas series para montar a base dos plantios');
+  if (r0.erros.length) f.push(rot + ': a base dos plantios nao esta limpa (' + r0.erros[0] + ')');
+  console.log('   ' + rot + ' · base dos plantios: ' + ((E.ref_conjunto_pela_soma || []).length ? 'a lista real' : 'patamar sintetico em ' + (tsE0[0] || '—'))
+    + ', ' + (r0.erros.length ? 'SUJA' : 'limpa'));
+  // o mes do plantio mensal e um que a comparacao da base JULGOU (nunca o tirado por safra): o ultimo comparado
+  const mesJulgado = (r0.mesesComparados || []).slice(-1)[0];
   // os defeitos plantados sobre o par: cada um tem de reprovar
   const forjados = [
     ['a marca do dia sem a troca', (e2) => { const s = (e2.serie_diaria || []).find((x) => x.dia === (String(((e2.ref_conjunto_pela_soma || [])[0] || {}).ts || '').slice(0, 10)))
@@ -385,12 +565,12 @@ function suite(E, B, lib, rot) {
       const b = m && (b2.serie || []).find((x) => x.fonte === 'solar' && x.mes === m.mes); if (b) b.nosso_cortado_gwh_maior_zero = Math.round((m.frustrada_mwh / 1000 - 0.03609) * 100) / 100; }],
   ];
   // e os dois estados LEGITIMOS nao podem reprovar: a rodada de atraso (lida de outra rodada) e o patamar republicado certo
-  if ((E.ref_conjunto_pela_soma || []).length) {
-    const e3 = clone(E), b3 = clone(B); b3.ref_conjunto_pela_soma_lida = []; b3.ref_conjunto_pela_soma_aplicada = [];
+  if ((E0.ref_conjunto_pela_soma || []).length) {
+    const e3 = clone(E0), b3 = clone(B0); b3.ref_conjunto_pela_soma_lida = []; b3.ref_conjunto_pela_soma_aplicada = [];
     const r3 = julgaProduto(e3, b3, lib);
     console.log('   ' + rot + ' · controle "rodada de atraso": ' + (!r3.julgado && !r3.erros.length ? 'nao julgado, sem reprovar' : 'ERRADO'));
     if (r3.julgado || r3.erros.length) f.push(rot + ': a rodada de atraso foi julgada ou reprovada');
-    const e4 = clone(E), b4 = clone(B), L4 = E.ref_conjunto_pela_soma || [], ts4 = L4.map((x) => String(x.ts));
+    const e4 = clone(E0), b4 = clone(B0), L4 = E0.ref_conjunto_pela_soma || [], ts4 = L4.map((x) => String(x.ts));
     b4.ref_conjunto_pela_soma_lida = ts4; b4.ref_conjunto_pela_soma_aplicada = [];
     // a linha REPUBLICADA: o gref ja e a soma das usinas e a disp e a do conjunto inteiro
     b4.ref_conjunto_pela_soma_sem_defeito = L4.map((x) => ({ ts: String(x.ts), gref: x.soma_usinas, disp: 343.482, ger: x.ger }));
@@ -410,8 +590,8 @@ function suite(E, B, lib, rot) {
       const dMais = new Date(Date.parse(uE + 'T00:00:00Z') + 86400e3).toISOString().slice(0, 10);
       if (dMais.slice(0, 7) === ultMes) (b5.serie_dia || (b5.serie_dia = [])).push({ dia: dMais, fonte: 'solar', nosso_cortado_gwh: 1 });
       else e5.serie_diaria = (e5.serie_diaria || []).filter((d) => d.dia !== uE);
-      // isolado da lista (os dois lados sem ela): o controle julga so a regra da safra, em qualquer estado do benchmark
-      e5.ref_conjunto_pela_soma = []; (e5.serie_diaria || []).forEach((d) => { d.ref_pela_soma = 0; });
+      // isolado da lista (os dois lados sem ela) e da retencao: o controle julga so a regra da safra, em qualquer estado
+      e5.ref_conjunto_pela_soma = []; e5.ref_dias_retidos = []; (e5.serie_diaria || []).forEach((d) => { d.ref_pela_soma = 0; });
       b5.ref_conjunto_pela_soma_lida = []; b5.ref_conjunto_pela_soma_aplicada = []; b5.ref_conjunto_pela_soma_sem_defeito = [];
       const bmm = (b5.serie || []).find((x) => x.fonte === 'solar' && x.mes === ultMes); if (bmm) bmm.nosso_cortado_gwh_maior_zero += 1;
       const r5 = julgaProduto(e5, b5, lib);
@@ -421,7 +601,7 @@ function suite(E, B, lib, rot) {
     }
   }
   for (const [nome, muda] of forjados) {
-    const e2 = clone(E), b2 = clone(B); muda(e2, b2);
+    const e2 = clone(E0), b2 = clone(B0); muda(e2, b2);
     const rr = julgaProduto(e2, b2, lib);
     console.log('   ' + rot + ' · plantio "' + nome + '": ' + (rr.erros.length ? 'reprovou (' + rr.erros[0].slice(0, 90) + ')' : 'PASSOU'));
     if (!rr.erros.length) f.push(rot + ': o plantio "' + nome + '" passou — o ensaio nao o pega');
