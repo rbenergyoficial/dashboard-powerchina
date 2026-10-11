@@ -42,8 +42,8 @@ const iso = (t) => new Date(t).toISOString();
 const run = (agora, minAtras, conclusion, status) => ({ created_at: iso(agora - minAtras * MIN),
   conclusion: conclusion === undefined ? 'success' : conclusion, status: status || 'completed', event: 'schedule' });
 const ent = (wf, lista, filtrado, extra) => Object.assign({ wf, gap: 360, lista, filtrado: filtrado || null }, extra || {});
-const rod = (L, agora, entradas, estado, agenda) => L.rodada({ agora, agoraIso: iso(agora), agenda: agenda || AGENDA.concat(['a.yml', 'b.yml']),
-  entradas, estado: estado || {}, tolerancia: 2.5, margem: 20 });
+const rod = (L, agora, entradas, estado, agenda, frescor) => L.rodada({ agora, agoraIso: iso(agora), agenda: agenda || AGENDA.concat(['a.yml', 'b.yml']),
+  entradas, estado: estado || {}, tolerancia: 2.5, margem: 20, frescor: frescor || [] });
 const SUC0610 = { created_at: '2026-10-06T22:13:00Z', conclusion: 'success', status: 'completed' };
 const EX = 'executivo.yml', A0 = '2026-10-07T12:53:00Z';
 
@@ -141,6 +141,32 @@ const CASOS = {
   'R-rerun-cad': (L) => { const ag = run(T0, 10); const rr = Object.assign(run(T0, 3000), { run_started_at: iso(T0 - 4 * MIN), run_attempt: 2 });
     const R = rod(L, T0, [ent('a.yml', [ag, rr], rr)]);
     return R.linhas[0].idade_min === 10 && R.linhas[0].ok === 1 && R.novos.length === 0 && R.linhas[0].saudavel === 1; },
+  // ---- vigia-frescor: o DADO, pela ancora que so a rodada completa grava ----
+  'F1-velho-abre': (L) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], {}, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 1000 * MIN }]);
+    return R.novosF.length === 1 && R.estado['frescor:executivo.json'] === iso(T0) && R.saude.dado_velho === 1 && R.saude.frescor[0].fresco === 0 && R.saude.frescor[0].limite_min === 920; },
+  'F2-ja-aberto': (L) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], { 'frescor:executivo.json': 'x' }, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 1000 * MIN }]);
+    return R.novosF.length === 0 && R.estado['frescor:executivo.json'] === 'x'; },
+  'F3-volta': (L) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], { 'frescor:executivo.json': 'x' }, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 10 * MIN }]);
+    return R.voltaramF.join() === 'executivo.json' && !R.estado['frescor:executivo.json'] && R.saude.frescor[0].fresco === 1; },
+  'F4-nao-lido': (L) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], { 'frescor:executivo.json': 'x' }, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, erro: 'HTTP 503' }]);
+    return R.voltaramF.length === 0 && R.novosF.length === 0 && R.estado['frescor:executivo.json'] === 'x'; },
+  'F5-borda': (L) => { const fr = (m) => rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], {}, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - m * MIN }]);
+    return fr(920).novosF.length === 0 && fr(921).novosF.length === 1; },
+  'F6-ilegivel': (L) => { const R = L.rodada({ agora: T0, agoraIso: iso(T0), agenda: AGENDA, entradas: [ent(EX, [run(T0, 5)], run(T0, 5))], estado: {}, tolerancia: 2.5, margem: 20,
+      estadoLegivel: false, frescor: [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 1000 * MIN }] });
+    return R.novosF.length === 0 && R.voltaramF.length === 0 && R.estado === null && R.saude.dado_velho === 1; },
+  'F7-sem-cadencia': (L) => { const R = rod(L, T0, [], { 'frescor:executivo.json': 'x' }, null, [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 10 * MIN }]);
+    return R.voltaramF.length === 0 && R.estado['frescor:executivo.json'] === 'x'; },
+  'E-valido-frescor': (L) => L.estadoValido({ 'frescor:executivo.json': 'x', 'resultado:a.yml': 'y' }),
+  // o blob LIDO sem ancora valida: contrato quebrado, abre com o motivo e a saude nao diz "fresco" por omissao
+  'F8-contrato': (L) => [null, NaN].every((anc) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], {}, null,
+      [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: anc }]);
+    return R.novosF.length === 1 && !!R.novosF[0].motivo && R.saude.dado_velho === 1 && R.saude.frescor[0].fresco === null
+      && R.saude.frescor[0].motivo === (anc === null ? 'atualizado ausente no blob' : 'atualizado no blob nao e data'); }),
+  // o blob que saiu da lista FRESCOR com o alarme aberto: fecha e sai do estado
+  'F9-saiu-da-lista': (L) => { const R = rod(L, T0, [ent(EX, [run(T0, 5)], run(T0, 5))], { 'frescor:portal_vivo.json': 'x' }, null,
+      [{ blob: 'executivo.json', campo: 'atualizado', wf: EX, ancoraMs: T0 - 10 * MIN }]);
+    return R.sairamF.join() === 'portal_vivo.json' && !('frescor:portal_vivo.json' in R.estado); },
 };
 function julga(L) {
   return Object.entries(CASOS).map(([nome, fn]) => { let ok; try { ok = fn(L) === true; } catch (e) { ok = false; } return [nome, ok]; });
@@ -148,7 +174,7 @@ function julga(L) {
 const R1 = julga(compila(LIB_SRC));
 R1.forEach(([n, o]) => console.log('  ' + (o ? 'ok  ' : '🔴  ') + n));
 R1.filter(([, o]) => !o).forEach(([n]) => f.push('a regra errou: ' + n));
-if (R1.length !== 39) f.push("julgou " + R1.length + " caso(s), esperava 39");
+if (R1.length !== 49) f.push("julgou " + R1.length + " caso(s), esperava 49");
 
 /* ================================ 2 · OS PLANTIOS ================================ */
 const PLANTIOS = [
@@ -184,6 +210,15 @@ const PLANTIOS = [
   ['a cadencia pelo inicio da tentativa (o re-run esconde o relogio parado)', 'const idade = Math.max(0, Math.round((agora - cri(criada)) / 60000));',
     'const idade = Math.max(0, Math.round((agora - ms(ult)) / 60000));', ['R-rerun']],
   ['a cadencia pela ultima iniciada (o re-run com o relogio ok da 🟠 falso)', 'const criada = runs.reduce((a, r) => (cri(r) > cri(a) ? r : a), runs[0]);', 'const criada = ult;', ['R-rerun-cad']],
+  ['o contrato quebrado vira nao lido', 'if (fr.ancoraMs == null || !Number.isFinite(fr.ancoraMs)) {', 'if (fr.ancoraMs == null || !Number.isFinite(fr.ancoraMs)) { indecididos.push(fr.blob); continue;', ['F8-contrato']],
+  ['o blob fora da lista fica no estado', "const sairamF = chaves('frescor:').filter((b) => !naLista.has(b));", 'const sairamF = [];', ['F9-saiu-da-lista']],
+  ['o frescor nunca abre', "const novosF = velhos.filter((v) => !estado['frescor:' + v.blob]);", 'const novosF = [];', ['F1-velho-abre']],
+  ['o frescor reabre a cada rodada', "const novosF = velhos.filter((v) => !estado['frescor:' + v.blob]);", 'const novosF = velhos;', ['F2-ja-aberto']],
+  ['o frescor nunca fecha', "const voltaramF = chaves('frescor:').filter((b) => temB(frescos, b));", 'const voltaramF = [];', ['F3-volta']],
+  ['o frescor nao lido esquecido', "chaves('frescor:').filter((b) => naLista.has(b) && !temB(frescos, b) && !temB(velhos, b)).forEach", '[].forEach', ['F4-nao-lido', 'F7-sem-cadencia']],
+  ['o frescor com limite exclusivo', 'const fresco = idade <= limite;', 'const fresco = idade < limite;', ['F5-borda']],
+  ['o frescor perde a data de abertura', "velhos.forEach((v) => { const k = 'frescor:' + v.blob; st[k] = estado[k] || agoraIso; });", "velhos.forEach((v) => { const k = 'frescor:' + v.blob; st[k] = agoraIso; });", ['F2-ja-aberto']],
+  ['o estado nao aceita a familia do frescor', '/^(cadencia|resultado|frescor):.+/', '/^(cadencia|resultado):.+/', ['E-valido-frescor']],
   ['estado sem validacao', "return !!x && typeof x === 'object' && !Array.isArray(x)", "return true || (!!x && typeof x === 'object' && !Array.isArray(x))", ['E-valido']],
 ];
 for (const [nome, de, para, devem] of PLANTIOS) {
@@ -220,8 +255,13 @@ const https = { get(opts, cb) {
   return new (require('events'))(); } };
 const falha = () => { if (C.storageErro) throw new Error(C.storageErro); };
 const blob = { BlobServiceClient: { fromConnectionString: () => ({ getContainerClient: () => ({ createIfNotExists: async () => {}, getBlockBlobClient: (n) => ({
-  exists: async () => { falha(); return n === 'relogio_watchdog.json' && (C.estado !== null || C.estadoCru != null); },
-  downloadToBuffer: async () => { falha(); if (C.estadoErro) throw new Error(C.estadoErro);
+  exists: async () => { falha(); if (C.blobs && n in C.blobs) return true; return n === 'relogio_watchdog.json' && (C.estado !== null || C.estadoCru != null); },
+  downloadToBuffer: async () => { falha();
+    if (C.blobs && n in C.blobs) { const v = C.blobs[n]; if (v === 'lixo') return Buffer.from('nao e json');
+      const o = typeof v === 'object' ? v : { m: v };
+      const corpo = Buffer.from(JSON.stringify(o.semCampo ? { mes: {} } : { atualizado: iso(o.m), mes: {} }));
+      return o.gzip === false ? corpo : require('zlib').gzipSync(corpo); }
+    if (C.estadoErro) throw new Error(C.estadoErro);
     return Buffer.from(C.estadoCru != null ? C.estadoCru : JSON.stringify(C.estado)); },
   upload: async (b) => { falha();
     if (n === 'relogio_watchdog.json') { if (C.gravaEstadoErro) throw new Error(C.gravaEstadoErro); SAI.gravouEstado = true; SAI.estadoCru = String(b); SAI.estado = JSON.parse(b); }
@@ -318,6 +358,21 @@ const CENARIOS = [
   ['voltou', 'o executivo voltou a rodar: a cadencia fecha uma vez', { padrao: OK, estado: { ['cadencia:' + EX]: A0 },
     wf: { [EX]: { lista: [{ m: 3 }], filtrado: { m: 3 } } } },
     (o) => o.code === 0 && so(o, 'cadencia:' + EX, true, 'relogio_normalizado') && !o.estado['cadencia:' + EX]],
+  ['frescor-parado', 'o executivo verde e sem rodada completa ha 1000 min: abre o frescor, com a chave dele', { padrao: OK, estado: {}, blobs: { 'executivo.json': 1000 }, wf: {} },
+    (o) => o.code === 0 && so(o, 'frescor:executivo.json', false, 'relogio_dado_velho') && o.saude.dado_velho === 1
+      && o.saude.frescor[0].fresco === 0 && !!o.estado['frescor:executivo.json']],
+  ['frescor-ja-aberto', 'o frescor ja aberto e o dado ainda velho: nenhum aviso, a data fica', { padrao: OK, estado: { 'frescor:executivo.json': A0 }, blobs: { 'executivo.json': 1000 }, wf: {} },
+    (o) => o.code === 0 && sem(o) && o.estado['frescor:executivo.json'] === A0],
+  ['frescor-voltou', 'a rodada completa voltou: o frescor fecha uma vez', { padrao: OK, estado: { 'frescor:executivo.json': A0 }, blobs: { 'executivo.json': 10 }, wf: {} },
+    (o) => o.code === 0 && so(o, 'frescor:executivo.json', true, 'relogio_dado_fresco') && !o.estado['frescor:executivo.json'] && o.saude.frescor[0].fresco === 1],
+  ['frescor-ilegivel', 'o executivo.json nao se le: nada abre nem fecha, o alarme fica', { padrao: OK, estado: { 'frescor:executivo.json': A0 }, blobs: { 'executivo.json': 'lixo' }, wf: {} },
+    (o) => o.code === 0 && sem(o) && o.estado['frescor:executivo.json'] === A0],
+  ['frescor-sem-campo', 'o executivo.json lido SEM o atualizado: contrato quebrado, abre o frescor com o motivo', { padrao: OK, estado: {}, blobs: { 'executivo.json': { semCampo: true } }, wf: {} },
+    (o) => o.code === 0 && so(o, 'frescor:executivo.json', false, 'relogio_dado_velho') && o.saude.dado_velho === 1 && o.saude.frescor[0].fresco === null],
+  ['frescor-sem-gzip', 'o executivo.json gravado SEM gzip e parado: o frescor abre do mesmo jeito', { padrao: OK, estado: {}, blobs: { 'executivo.json': { m: 1000, gzip: false } }, wf: {} },
+    (o) => o.code === 0 && so(o, 'frescor:executivo.json', false, 'relogio_dado_velho')],
+  ['frescor-saiu', 'o blob que saiu da lista do frescor: o alarme dele fecha com aviso proprio e sai do estado', { padrao: OK, estado: { 'frescor:portal_vivo.json': A0 }, blobs: { 'executivo.json': 10 }, wf: {} },
+    (o) => o.code === 0 && so(o, 'frescor:portal_vivo.json', true, 'relogio_frescor_fora_da_lista') && !('frescor:portal_vivo.json' in o.estado)],
   ['rerun', 'um Re-run de rodada antiga deu certo agora: o resultado fecha, e a cadencia (ninguem criou execucao) acende', { padrao: OK, estado: { ['resultado:' + EX]: A0 },
     wf: { [EX]: { lista: [{ m: 3000, rs: 4 }], filtrado: { m: 3000, rs: 4 } } } },
     (o) => o.code === 0 && reais(o).length === 2 && reais(o).some((a) => a.chave === 'resultado:' + EX && a.fecha)
@@ -352,6 +407,12 @@ const CONTRA = [
   ['o relogio parado sem aviso', troca('for (const a of novos) {', 'for (const a of []) {'), ['parou', 'presa', 'rerun']],
   ['a cadencia que nunca fecha', troca('for (const w of voltaram) {', 'for (const w of []) {'), ['voltou']],
   ['a cadencia com a chave do resultado', troca("chave: 'cadencia:' + a.wf,", "chave: 'resultado:' + a.wf,"), ['parou', 'presa']],
+  ['o frescor sem aviso', troca('for (const v of novosF) {', 'for (const v of []) {'), ['frescor-parado']],
+  ['o frescor que nunca fecha', troca('for (const b of voltaramF) {', 'for (const b of []) {'), ['frescor-voltou']],
+  ['a ancora lida do campo errado', troca("campo: 'atualizado', wf: 'executivo.yml'", "campo: 'gerado_em', wf: 'executivo.yml'"), ['frescor-parado']],
+  ['a leitura que falha conta como fresca', troca('} catch (e) { frescor.push({ ...fr, erro: e.message }); }', '} catch (e) { frescor.push({ ...fr, ancoraMs: Date.now() }); }'), ['frescor-ilegivel']],
+  ['o gzip descomprimido sempre', troca('let buf = await bc.downloadToBuffer(); if (buf[0] === 0x1f && buf[1] === 0x8b) buf = require(\'zlib\').gunzipSync(buf);', 'let buf = require(\'zlib\').gunzipSync(await bc.downloadToBuffer());'), ['frescor-sem-gzip']],
+  ['o blob fora da lista esquecido', troca('for (const b of sairamF) {', 'for (const b of []) {'), ['frescor-saiu']],
   ['a saude publicada vazia', troca('const b = JSON.stringify(R.saude);', 'const b = JSON.stringify({});'), ['23:43', '23:53']],
 ];
 // o vigia do HEAD so entra se for de antes do conserto do estado (depois do commit, o HEAD ja e este)

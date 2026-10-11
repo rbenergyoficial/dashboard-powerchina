@@ -52,6 +52,10 @@ const ESTADO = 'relogio_watchdog.json';
 const SAUDE = 'relogio_saude.json';
 const TOLERANCIA = Number(process.env.TOLERANCIA || 2.5);
 const MARGEM_MIN = Number(process.env.MARGEM_MIN || 20);
+// 🔴 O FRESCOR DO DADO (PROMOVER vigia-frescor, 11/10/2026): o blob, o campo que SO a rodada completa grava, e o workflow
+//    cuja cadencia da o limite. O `atualizado` do executivo nao e tocado pelo remendo de 5 min (gen-dia-corrente), que
+//    move o selo "ao vivo ate": de 08 a 10/10 o selo seguia fresco com a rodada completa parada.
+const FRESCOR = [{ blob: 'executivo.json', campo: 'atualizado', wf: 'executivo.yml' }];
 
 // ── NCRONTAB: so os campos que a agenda usa (`*`, `*/n`, lista, faixa) ───────────────────────
 // ⚠️ Nao e um parser geral, e nao finge ser: se aparecer uma forma que ele nao entende, ele
@@ -151,15 +155,30 @@ function gh(caminho) {
       entradas.push({ wf, gap, lista: r.workflow_runs || [], filtrado: (s.workflow_runs || [])[0] || null });
     } catch (e) { entradas.push({ wf, gap, erro: e.message }); }
   }
+  // a ancora de cada dado vigiado, lida do proprio storage; nao lida fica sem julgamento (o alarme dela mantem o estado)
+  const frescor = [];
+  for (const fr of FRESCOR) {
+    if (!cont) { frescor.push({ ...fr, erro: 'sem storage' }); continue; }
+    try {
+      const bc = cont.getBlockBlobClient(fr.blob);
+      if (!(await bc.exists())) { frescor.push({ ...fr, erro: 'blob ausente' }); continue; }
+      let buf = await bc.downloadToBuffer(); if (buf[0] === 0x1f && buf[1] === 0x8b) buf = require('zlib').gunzipSync(buf);
+      const v = JSON.parse(buf.toString('utf8'))[fr.campo];
+      frescor.push({ ...fr, ancoraMs: v ? Date.parse(v) : null });
+    } catch (e) { frescor.push({ ...fr, erro: e.message }); }
+  }
   const R = VIG.rodada({ agora, agoraIso, agenda: Object.keys(AGENDA), entradas, estado,
-    tolerancia: TOLERANCIA, margem: MARGEM_MIN, estadoLegivel });
-  const { linhas, atrasados, quebrados, indecididos, novos, voltaram, novosQ, voltaramQ, sairam } = R;
+    tolerancia: TOLERANCIA, margem: MARGEM_MIN, estadoLegivel, frescor });
+  const { linhas, atrasados, quebrados, indecididos, novos, voltaram, novosQ, voltaramQ, sairam, novosF, voltaramF, sairamF } = R;
 
   linhas.forEach((l) => console.log('  ' + (l.ok && l.saudavel !== 0 ? '   ' : '🔴 ') + l.wf.padEnd(26)
     + 'cadencia ' + String(l.cadencia_min).padStart(4) + ' min · idade ' + String(l.idade_min).padStart(4)
     + ' · limite ' + String(l.limite_min).padStart(4) + ' · ' + l.evento
     + (l.saudavel === 0 ? '  · SEM SUCESSO ha ' + l.idade_sucesso_min + ' min' : '')
     + (l.pendente ? '  · em andamento, ultimo sucesso ha ' + l.idade_sucesso_min + ' min (alarme mantido como estava)' : '')));
+  (R.saude.frescor || []).forEach((x) => console.log('  ' + (x.fresco ? '   ' : '🔴 ') + ('dado ' + x.blob).padEnd(26)
+    + (x.motivo ? 'CONTRATO QUEBRADO: ' + x.motivo : x.campo + ' ' + x.ancora + ' · idade ' + x.idade_min + ' min')
+    + ' · limite ' + x.limite_min + ' (cadencia de ' + x.wf + ')'));
   if (indecididos.length) console.log('  sem julgamento (alarmes mantidos como estavam): ' + indecididos.join(', '));
 
   // ── saude no blob ─────────────────────────────────────────────────────────────────────────
@@ -241,6 +260,46 @@ function gh(caminho) {
     });
   }
 
+  // ── o FRESCOR do dado: a rodada completa que nao grava, com o job verde ou vermelho ─────────────────────────────
+  for (const v of novosF) {
+    await alerta({
+      tipo: 'relogio_dado_velho',
+      chave: 'frescor:' + v.blob,
+      titulo: v.blob + ' sem rodada completa',
+      assunto: '🔴 Mauriti · ' + v.blob + (v.motivo ? ' sem a ancora da rodada completa (' + v.motivo + ')' : ' sem rodada completa ha ' + v.idade + ' min'),
+      corpo: (v.motivo
+        ? '<b>' + v.blob + ' foi lido e nao traz a ancora da rodada completa</b> (' + v.motivo + '). O vigia nao consegue medir a idade '
+          + 'do dado: o gerador mudou o contrato (campo renomeado ou retirado) ou gravou algo que nao e data.<br><br>'
+        : '<b>' + v.blob + ' nao recebe uma rodada completa ha ' + v.idade + ' min</b> (campo ' + v.campo + ').<br><br>')
+        + 'O limite e ' + v.limite + ' min, a cadencia de ' + v.wf + '. O job pode estar verde ou vermelho: o que se mede aqui e o '
+        + 'DADO. Enquanto durar, os dias fechados, a ancora da manchete e o que depende da rodada completa ficam parados, '
+        + 'mesmo com o selo "ao vivo ate" andando pelo remendo de 5 min.',
+      blob: v.blob, idade_min: v.idade, limite_min: v.limite, motivo: v.motivo || null,
+    });
+  }
+  for (const b of voltaramF) {
+    await alerta({
+      tipo: 'relogio_dado_fresco', resolve: true,
+      chave: 'frescor:' + b,
+      titulo: b + ' sem rodada completa',
+      assunto: '✅ Mauriti · ' + b + ' voltou a receber a rodada completa',
+      corpo: '<b>' + b + ' voltou a receber a rodada completa dentro da cadencia.</b>',
+      blob: b,
+    });
+  }
+
+  // o blob que SAIU DA LISTA do frescor fecha o alarme dele com o que de fato aconteceu
+  for (const b of sairamF) {
+    await alerta({
+      tipo: 'relogio_frescor_fora_da_lista', resolve: true,
+      chave: 'frescor:' + b,
+      titulo: b + ' sem rodada completa',
+      assunto: 'ℹ️ Mauriti · ' + b + ' saiu da lista do vigia de frescor',
+      corpo: '<b>' + b + ' deixou de ser vigiado</b>. O alarme fecha por isso, nao porque o dado voltou a ser gravado.',
+      blob: b,
+    });
+  }
+
   // o workflow que SAIU DA AGENDA nao voltou nem se recuperou: as duas familias fecham com o que de fato aconteceu
   for (const w of sairam) {
     for (const [fam, tit] of [['cadencia', ' fora da cadencia'], ['resultado', ' roda e falha']]) {
@@ -298,6 +357,7 @@ function gh(caminho) {
   }
 
   console.log('\n  ' + linhas.length + ' workflows julgados · '
-    + (atrasados.length ? '🔴 ' + atrasados.length + ' fora da cadencia' : 'todos dentro da cadencia') + ' · ' + (quebrados.length ? '🔴 ' + quebrados.length + ' rodando e falhando (' + quebrados.map((q) => q.wf).join(', ') + ')' : 'todos com sucesso recente'));
+    + (atrasados.length ? '🔴 ' + atrasados.length + ' fora da cadencia' : 'todos dentro da cadencia') + ' · ' + (quebrados.length ? '🔴 ' + quebrados.length + ' rodando e falhando (' + quebrados.map((q) => q.wf).join(', ') + ')' : 'todos com sucesso recente')
+    + ' · ' + (R.velhos.length ? '🔴 dado velho: ' + R.velhos.map((v) => v.blob).join(', ') : 'dado fresco'));
   // 🔴 NAO derruba o job: o vigia informa, nao interrompe a coleta que ele acompanha.
 })().catch((e) => { console.error('ERRO ' + e.message); process.exit(1); });

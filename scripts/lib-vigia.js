@@ -35,6 +35,17 @@
  *     e o aviso proprio (`vigia:estado`) e pedido em TODA rodada ilegivel, com `soSeNova`: o dedup e a issue aberta, que
  *     nao depende do storage nem da ordem dos passos. Na rodada legivel, o aviso e fechado (sem issue aberta, nada sai).
  *     Antes deste acompanhamento o vigia parava antes de ler o GitHub e ficava mudo (revisor-ensaio, RE-014 a RE-023).
+ *   - FRESCOR DO DADO (`frescor:<blob>`, PROMOVER vigia-frescor, 11/10/2026): as duas familias julgam o WORKFLOW; esta julga
+ *     o DADO, pela ancora que so a rodada completa grava (`executivo.json` -> `atualizado`). De 08 a 10/10 o executivo ficou
+ *     sem gravar a rodada completa e o selo "ao vivo ate" seguia fresco, porque o remendo de 5 min o move; e um job VERDE
+ *     que nao grava nao acende nada nas outras familias. O limite e o mesmo da cadencia do workflow que grava o blob (o
+ *     maior vao do cron x tolerancia + margem). Abre com a ancora alem do limite, fecha com ela de volta; nao lido mantem.
+ *     O blob LIDO sem a ancora valida (campo ausente ou que nao e data) e CONTRATO QUEBRADO, nao "nao lido": conta como
+ *     velho, com o motivo, e a saude diz `fresco: null` — senao uma mudanca no gerador calaria a familia para sempre e a
+ *     saude diria "dado fresco" por omissao. Chave de blob que saiu da lista FRESCOR fecha com aviso proprio e sai do
+ *     estado. LIMITES DECLARADOS: (1) o limite vem do MAIOR vao do cron (22:13 a 04:13 no executivo: 920 min), entao
+ *     de dia a parada so e notada depois de ~15 h; (2) o `atualizado` mede a RODADA, nao a completude dos dias: uma
+ *     guarda que retenha dias em vez de abortar a rodada deixa a ancora andar com os dias parados.
  */
 const ms = (r) => Date.parse(r.run_started_at || r.created_at);
 const cri = (r) => Date.parse(r.created_at);
@@ -43,7 +54,7 @@ const cri = (r) => Date.parse(r.created_at);
    como "nada aberto" (ou derrubariam a rodada seguinte) */
 function estadoValido(x) {
   return !!x && typeof x === 'object' && !Array.isArray(x)
-    && Object.entries(x).every(([k, v]) => /^(cadencia|resultado):.+/.test(k) && typeof v === 'string');
+    && Object.entries(x).every(([k, v]) => /^(cadencia|resultado|frescor):.+/.test(k) && typeof v === 'string');
 }
 
 function ultimoSucesso(runs, filtrado) {
@@ -69,8 +80,9 @@ function veredito(agora, ult, suc, limite) {
    entradas: [{ wf, gap (min, ou null se o cron foi recusado), lista (runs da chamada per_page=100), filtrado (run ou null),
                erro (texto, se a leitura falhou) }]
    agenda: os workflows da agenda; estado: { 'cadencia:<wf>': iso, 'resultado:<wf>': iso }
-   estadoLegivel: false quando o blob de estado existe e nao se le (ou nao e valido) */
-function rodada({ agora, agoraIso, agenda, entradas, estado, tolerancia, margem, estadoLegivel = true }) {
+   estadoLegivel: false quando o blob de estado existe e nao se le (ou nao e valido)
+   frescor: [{ blob, campo, wf, ancoraMs (ou null), erro }] — o dado que so a rodada completa do `wf` grava */
+function rodada({ agora, agoraIso, agenda, entradas, estado, tolerancia, margem, estadoLegivel = true, frescor = [] }) {
   const linhas = [], atrasados = [], quebrados = [], saudaveis = [], lidos = [], indecididos = [];
   for (const e of entradas) {
     if (e.erro) { indecididos.push(e.wf + ' (' + e.erro + ')'); continue; }
@@ -91,11 +103,29 @@ function rodada({ agora, agoraIso, agenda, entradas, estado, tolerancia, margem,
     if (v.saudavel === 1) saudaveis.push(e.wf);
   }
   linhas.sort((a, b) => (b.idade_min / b.limite_min) - (a.idade_min / a.limite_min));
+  // o FRESCOR do dado: idade da ancora contra o limite da cadencia do workflow que o grava
+  const frescos = [], velhos = [], frescorLinhas = [];
+  for (const fr of frescor) {
+    const e = entradas.find((x) => x.wf === fr.wf);
+    if (fr.erro) { indecididos.push('frescor ' + fr.blob + ' (' + fr.erro + ')'); continue; }
+    if (!e || e.gap == null) { indecididos.push('frescor ' + fr.blob + ' (sem a cadencia de ' + fr.wf + ')'); continue; }
+    const limite = Math.round(e.gap * tolerancia + margem);
+    // o blob foi LIDO e nao traz a ancora valida: contrato quebrado, conta como velho com o motivo
+    if (fr.ancoraMs == null || !Number.isFinite(fr.ancoraMs)) {
+      const motivo = fr.campo + (fr.ancoraMs == null ? ' ausente no blob' : ' no blob nao e data');
+      frescorLinhas.push({ blob: fr.blob, campo: fr.campo, wf: fr.wf, ancora: null, idade_min: null, limite_min: limite, fresco: null, motivo });
+      velhos.push({ blob: fr.blob, campo: fr.campo, wf: fr.wf, idade: null, limite, motivo }); continue;
+    }
+    const idade = Math.max(0, Math.round((agora - fr.ancoraMs) / 60000));
+    const fresco = idade <= limite;
+    frescorLinhas.push({ blob: fr.blob, campo: fr.campo, wf: fr.wf, ancora: new Date(fr.ancoraMs).toISOString(), idade_min: idade, limite_min: limite, fresco: fresco ? 1 : 0 });
+    (fresco ? frescos : velhos).push({ blob: fr.blob, campo: fr.campo, wf: fr.wf, idade, limite });
+  }
   const saude = { gerado_em: agoraIso, tolerancia, margem_min: margem, estado_legivel: estadoLegivel ? 1 : 0,
-    atrasados: atrasados.length, sem_sucesso: quebrados.length, workflows: linhas };
+    atrasados: atrasados.length, sem_sucesso: quebrados.length, dado_velho: velhos.length, workflows: linhas, frescor: frescorLinhas };
   const avisoEstado = estadoLegivel ? 'fecha' : 'abre';
-  const nada = { novos: [], voltaram: [], novosQ: [], voltaramQ: [], sairam: [] };
-  if (!estadoLegivel) return Object.assign({ linhas, atrasados, quebrados, saudaveis, indecididos, saude, avisoEstado, estado: null }, nada);
+  const nada = { novos: [], voltaram: [], novosQ: [], voltaramQ: [], sairam: [], novosF: [], voltaramF: [], sairamF: [] };
+  if (!estadoLegivel) return Object.assign({ linhas, atrasados, quebrados, saudaveis, indecididos, velhos, saude, avisoEstado, estado: null }, nada);
 
   const naAgenda = new Set(agenda);
   const tem = (lista, w) => lista.some((a) => (a.wf || a) === w);
@@ -111,7 +141,15 @@ function rodada({ agora, agoraIso, agenda, entradas, estado, tolerancia, margem,
   // o que nao foi decidido nesta rodada fica como estava: cadencia de quem nao foi lido, resultado pendente ou sem veredito
   chaves('cadencia:').filter((w) => naAgenda.has(w) && !tem(lidos, w)).forEach((w) => { st['cadencia:' + w] = estado['cadencia:' + w]; });
   chaves('resultado:').filter((w) => naAgenda.has(w) && !tem(quebrados, w) && !tem(saudaveis, w)).forEach((w) => { st['resultado:' + w] = estado['resultado:' + w]; });
-  return { linhas, atrasados, quebrados, saudaveis, indecididos, saude, avisoEstado, novos, voltaram, novosQ, voltaramQ, sairam, estado: st };
+  // frescor: abre o velho que nao estava aberto, fecha o aberto que voltou a fresco; o nao lido (ou que saiu da lista) fica
+  const temB = (lista, b) => lista.some((x) => x.blob === b);
+  const naLista = new Set(frescor.map((x) => x.blob));
+  const sairamF = chaves('frescor:').filter((b) => !naLista.has(b));
+  const novosF = velhos.filter((v) => !estado['frescor:' + v.blob]);
+  const voltaramF = chaves('frescor:').filter((b) => temB(frescos, b));
+  velhos.forEach((v) => { const k = 'frescor:' + v.blob; st[k] = estado[k] || agoraIso; });
+  chaves('frescor:').filter((b) => naLista.has(b) && !temB(frescos, b) && !temB(velhos, b)).forEach((b) => { st['frescor:' + b] = estado['frescor:' + b]; });
+  return { linhas, atrasados, quebrados, saudaveis, indecididos, velhos, saude, avisoEstado, novos, voltaram, novosQ, voltaramQ, sairam, novosF, voltaramF, sairamF, estado: st };
 }
 
 module.exports = { ultimoSucesso, veredito, rodada, estadoValido };
