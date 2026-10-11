@@ -13,6 +13,8 @@
  * congelada, e, dali, CA e CC com o MESMO passo (diferenca entre passos ate RAMPA_TOL = 4 x 0,005, o arredondamento de
  * duas casas do export somado nos tres pontos) em 2+ passos seguidos; os pontos da reta viram ausencia. A ausencia
  * simples NAO e repouso: um inversor que volta de um vao perto do meio-dia pode estar em reta de verdade.
+ * A RETA DEPOIS DA RETA (PROMOVER rampa-depois-da-rampa, 11/10/2026): o ponto que a regra anulou tambem abre reta, mas so
+ * sai com o CONTADOR diario de energia desmentindo a potencia (M2/TS2/INV14 em 09/10: 0,30 contra 27,5 kWh).
  *
  * O que este ensaio exige:
  *   A · a regra, COMPILADA DO GERADOR, contra casos forjados com os numeros medidos: a reta do amanhecer sai inteira e
@@ -37,18 +39,21 @@ const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
 const SRC = fs.readFileSync(path.join(__dirname, 'gen-perdas.js'), 'utf8').replace(/\r\n/g, '\n');
-const RAMPA_TOL = (() => { const m = SRC.match(/const RAMPA_TOL = ([\d.]+);/); if (!m) throw new Error('o gerador nao tem RAMPA_TOL'); return +m[1]; })();
+const constante = (nome) => { const m = SRC.match(new RegExp('const ' + nome + ' = ([\\d.]+);')); if (!m) throw new Error('o gerador nao tem ' + nome); return +m[1]; };
+const RAMPA_TOL = constante('RAMPA_TOL'), CONTA_FRACAO = constante('CONTA_FRACAO'), CONTA_MIN_KWH = constante('CONTA_MIN_KWH');
 function regraDoGerador() {
   const i = SRC.indexOf('function rampasDoRepouso(');
   if (i < 0) throw new Error('o gerador nao tem mais rampasDoRepouso');
   const fim = SRC.indexOf('\n}\n', i);
   // eslint-disable-next-line no-new-func
-  return new Function('const RAMPA_TOL = ' + RAMPA_TOL + ';\n' + SRC.slice(i, fim + 3) + '; return rampasDoRepouso;')();
+  return new Function('const RAMPA_TOL = ' + RAMPA_TOL + ', CONTA_FRACAO = ' + CONTA_FRACAO + ', CONTA_MIN_KWH = ' + CONTA_MIN_KWH + ';\n'
+    + SRC.slice(i, fim + 3) + '; return rampasDoRepouso;')();
 }
 
-/* um inversor forjado: `ca` e `cc` a partir do carimbo 0; `cong` sao os carimbos que a regra da leitura congelada anulou */
-function anulados(regra, ca, cc, cong) {
-  const o = { ts: 'TS2', inv: 'INV19', serie: { p_ca: ca.slice(), p_cc: cc.slice(), temp: ca.map(() => 30) } };
+/* um inversor forjado: `ca` e `cc` a partir do carimbo 0; `cong` sao os carimbos que a regra da leitura congelada anulou;
+   `e` e o contador diario de energia (kWh), quando o caso precisa dele */
+function anulados(regra, ca, cc, cong, e) {
+  const o = { ts: 'TS2', inv: 'INV19', serie: { p_ca: ca.slice(), p_cc: cc.slice(), temp: ca.map(() => 30), e_conta: e ? e.slice() : undefined } };
   const d = { linhas: new Array(ca.length).fill(0), inv: new Map([['x', o]]) };
   const congeladas = new Map((cong || []).map((i) => [i, new Set([o])]));
   return [...regra(d, congeladas).keys()].sort((a, b) => a - b).join(',');
@@ -114,6 +119,16 @@ function abreEmReta(serie) {
     'CA e CC paradas depois do primeiro passo (patamar, nao reta): nada sai');
   ok(anulados(regra, [0, 0, 0, 0, 20.4, 60.2], [0, 0.3, 1.2, 4.5, 22.1, 62.3]) === '',
     'CA parada e CC acelerando (amanhecer que conecta tarde): nada sai');
+
+  // M2/TS2/INV14, 09/10 (export bruto): 06:30 = indice 0 ... 10:30 = indice 8. O inversor parado ate ~09:45 e DUAS retas
+  // desenhadas: 07:00–08:00 saindo do zero e 08:30–09:30 saindo do ponto anulado, com o contador andando 0,15 kWh por meia hora
+  const CA0910 = [0, 2.79, 18.47, 34.15, 9.67, 27.5, 45.33, 130.64, 173.92], CC0910 = [0, 4.04, 26.75, 49.45, 23.82, 67.74, 111.66, 135.38, 175.75];
+  ok(anulados(regra, CA0910, CC0910, [], [0, 0, 0.21, 0.42, 4.48, 4.63, 4.78, 18.31, 85.53]) === '1,2,3,4,5,6',
+    'M2/TS2/INV14 em 09/10: as duas retas saem (a segunda com o contador em 0,30 contra 27,5 kWh) e as 10:00 (130,64 kW) fica');
+  ok(anulados(regra, CA0910, CC0910, [], [0, 0, 0.21, 0.42, 4.48, 13.77, 31.98, 75.97, 152.11]) === '1,2,3',
+    'a mesma segunda reta com o contador CONCORDANDO (9,29 + 18,21 kWh): e leitura real e fica');
+  ok(anulados(regra, CA0910, CC0910) === '1,2,3',
+    'a mesma sequencia SEM contador: a segunda reta fica (sem a prova fisica, nada sai)');
 
   console.log('B · o produto: pvstr_hora das nove usinas' + (process.env.LOCAL_DIR ? ' (saida local)' : ''));
   let n = 0, primeiro = null;

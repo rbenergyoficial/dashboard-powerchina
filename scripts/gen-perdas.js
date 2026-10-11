@@ -326,23 +326,44 @@ function carimbosCongelados(d) {
 //    O passo exige que CA OU CC mudem, e as DUAS em reta: a reta pode sair com a CA PARADA em zero (M3/TS8/INV14 em
 //    28/09: CA 0 · 0 · 0,01 · 0,01 e CC 0,16 · 1,16 · 2,16 · 3,16 kW de 04:00 a 05:30, 0,82 °C as 04:00). A versao
 //    anterior exigia que a CA mudasse no primeiro passo, e a reta ficou na curva publicada (PROMOVER rampa-ca-parada).
+//    🔴 A RETA DEPOIS DA RETA (PROMOVER rampa-depois-da-rampa, 11/10/2026). M2/TS2/INV14 em 09/10 ficou parado ate ~09:45
+//    (o contador diario andou 0,15 kWh por meia hora) e o export desenhou DUAS retas: 07:00–08:00 saindo do zero das
+//    06:30 (2,79 · 18,47 · 34,15 kW, pega) e 08:30–09:30 saindo do ponto que a regra acabara de anular (9,67 · 27,50 ·
+//    45,33 kW CA, 23,82 · 67,74 · 111,66 kW CC: a razao CA/CC fixa em 40,6 %, impossivel num inversor). A segunda ficou na
+//    curva publicada e o produto do ensaio reprovou o `perdas.yml` desde 10/10. Ela so sai com o CONTADOR desmentindo a
+//    potencia — a mesma prova fisica do primeiro caso (0,09 contra 3,17 kWh): o ponto anulado nao e repouso por si, porque
+//    uma leitura real em reta logo depois perderia hora e meia (1,1 % das janelas de 3 pontos perto do meio-dia estao em
+//    reta de verdade). CONTA_FRACAO: em 09/10 o contador andou 0,30 kWh contra 27,5 kWh da potencia (1 %); numa reta
+//    real ele concorda (M2/TS2/INV08 em 23/09: 263,01 contra 263,24 kWh). A metade fica longe dos dois. CONTA_MIN_KWH tira
+//    o trecho em que a potencia e pequena demais para o contador de duas casas dizer alguma coisa.
 //    `congeladas` e o Map que `carimbosCongelados` devolveu. Devolve Map(indice do carimbo -> Set de inversores).
 const RAMPA_TOL = 0.02;
+const CONTA_FRACAO = 0.5;
+const CONTA_MIN_KWH = 1;
 const RAMPAS = [];
 function rampasDoRepouso(d, congeladas) {
   const n = d.linhas.length, fora = new Map();
   for (const o of d.inv.values()) {
-    const P = o.serie.p_ca || [], C = o.serie.p_cc || [];
+    const P = o.serie.p_ca || [], C = o.serie.p_cc || [], E = o.serie.e_conta || [];
     const repouso = (i) => (P[i] === 0 && C[i] === 0) || !!(congeladas && congeladas.has(i) && congeladas.get(i).has(o));
+    const anulado = (i) => fora.has(i) && fora.get(i).has(o);
     const gera = (i) => P[i] > 0 || C[i] > 0;
     const passo = (i) => P[i] != null && P[i + 1] != null && P[i + 2] != null && C[i] != null && C[i + 1] != null && C[i + 2] != null
       && (P[i + 1] !== P[i] || C[i + 1] !== C[i]) && Math.abs((P[i + 2] - P[i + 1]) - (P[i + 1] - P[i])) <= RAMPA_TOL + 1e-9
       && Math.abs((C[i + 2] - C[i + 1]) - (C[i + 1] - C[i])) <= RAMPA_TOL + 1e-9;
+    // o contador diario de energia desmente a potencia no trecho a..b (pontos), com potencia bastante para medir
+    const contaDesmente = (a, b) => {
+      if (E[a] == null || E[b] == null) return false;
+      let pot = 0; for (let k = a; k < b; k += 1) pot += (P[k] + P[k + 1]) / 2 * 0.5;
+      return pot >= CONTA_MIN_KWH && (E[b] - E[a]) < CONTA_FRACAO * pot;
+    };
     for (let i = 1; i < n; i += 1) {
-      if (!repouso(i - 1) || !gera(i)) continue;
+      const doRepouso = repouso(i - 1);
+      if (!(doRepouso || anulado(i - 1)) || !gera(i)) continue;
       let j = i;
       while (j + 2 < n && passo(j)) j += 1;
       if (j === i) continue;
+      if (!doRepouso && !contaDesmente(i, j + 1)) continue;   // depois de reta anulada, so com o contador desmentindo
       for (let k = i; k <= j + 1; k += 1) { if (!fora.has(k)) fora.set(k, new Set()); fora.get(k).add(o); }
       i = j + 1;
     }
