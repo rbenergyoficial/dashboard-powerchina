@@ -12,6 +12,8 @@
  *     leitura (nulo, e contado como sol sem logger), patamar sem irradiancia (fora do dia), 50 W/m² entra e 49,9 nao,
  *     nominal diferente (352 kW) e nominal ilegivel (320 kW), inversor retirado que continua lendo depois do sucessor,
  *     serie sem posicao, a regra da leitura (a do calculo local) e a janela que reinicia a heranca, Complexo pela Capu.
+ *     Por POSICAO (sg_disp_inv_dia, sungrow-disp-inv): a conta a mao de cada posicao nas meias horas de sol, sem a serie sem
+ *     posicao, e o blob compacto (dias x posicoes).
  * 2 · plantios na lib (uma copia mudada, os mesmos casos): cada um reprova na sua checagem.
  * 3 · o gerador de ponta a ponta (identificacao semeada no sg_ident, sem SCADA): o arquivo do proprio logger FORJADO com as
  *     tres colunas (pior caso: um firmware que as tenha) nao entra no historico; idempotencia; sem historico e com esquema
@@ -105,6 +107,11 @@ const DL = DEN + P5, lo1 = DEN / DL, DL2 = P1 + P2 + P3 + P4, lo2 = (P1 + P2 + P
 const ESPL = { [D1]: { sol: (P2 / DL + ((2 / 3) * P1 + P2 + P3) / DL + ((1 / 2) * P1 + P2 + P3) / DL) / 3,
   h24: (P2 / DL + ((2 / 3) * P1 + P2 + P3) / DL + ((1 / 2) * P1 + P2 + P3) / DL + ((5 / 6) * P1 + P2 + P3) / DL + 42 * lo1) / 46, inv: 4 },
 [D2]: { sol: lo2, h24: ((P2 + P4) / DL2 + 47 * lo2) / 48, inv: 4 } };
+/* por POSICAO (porInv, sungrow-disp-inv): so as meias horas de sol com leitura. D1 no M1 = patamares 20, 21 e 22 (o 23 tem 49,9, o 24
+   nao tem irradiancia, o 25 nao tem leitura): INV01 0, 2/3 e 3/6; INV02 1, 1 e 1; INV03 (X3) 0, 1 e 1. No M7 os patamares 20 e 21:
+   0 e 1. D2: um patamar (24) com tudo disponivel; o INV03 e o X4 (o X3 saiu da posicao); o X5, sem posicao, nao aparece */
+const ESPI = { 'M1/TS1/INV01': { [D1]: [(0 + 2 / 3 + 1 / 2) / 3, 3], [D2]: [1, 1] }, 'M1/TS1/INV02': { [D1]: [1, 3], [D2]: [1, 1] },
+  'M1/TS1/INV03': { [D1]: [2 / 3, 3], [D2]: [1, 1] }, 'M7/TS1/INV01': { [D1]: [0.5, 2], [D2]: [1, 1] } };
 const CAPU1 = 49.110, CAPU7 = 14.733;
 const cx = (a, b) => (CAPU1 * a + CAPU7 * b) / (CAPU1 + CAPU7);
 ok(f20 < 1 && f21 < 1 && f22 < 1 && f47 < 1 && ESPL[D1].sol !== ESP.M1[D1].sol && ESPL[D2].h24 !== ESP.M1[D2].h24 && cx(0.9, 0.5) !== (0.9 + 0.5) / 2,
@@ -178,11 +185,18 @@ function casosLib(Dx) {
     && j4.A.fim === '2026-01-10' && j4.B.ini === '2026-01-10' && j4.B.fim === '2026-01-19' && j4.C.ini === '2026-01-19'
     && j5.A.fim === '2026-09-30' && j5.B.ini === '2026-09-30';
   R.txt.trocajan = JSON.stringify({ normal: j1, duplicado: j2.B, puro: j3.B });
+  // por posicao (porInv): a conta a mao, as mesmas linhas da usina, e o blob compacto
+  const ri = Dx.calcula(H, E, { regra: 'posicao', posNoDia, porInv: true }), I = ri.inv || {};
+  const confI = Object.keys(ESPI).every((p) => [D1, D2].every((d) => I[p] && I[p][d] && perto(I[p][d].s / I[p][d].n, ESPI[p][d][0]) && I[p][d].n === ESPI[p][d][1]));
+  const pi = Dx.produtoInv ? Dx.produtoInv(I, 'agora') : { dias: [], inv: {} }, a1 = pi.inv['M1/TS1/INV01'] || {};
+  R.okInv = confI && Object.keys(I).sort().join() === Object.keys(ESPI).sort().join() && JSON.stringify(ri.linhas) === JSON.stringify(rp.linhas)
+    && JSON.stringify(pi.dias) === JSON.stringify([D1, D2]) && JSON.stringify(a1.d) === JSON.stringify([pct(ESPI['M1/TS1/INV01'][D1][0]), 100]) && JSON.stringify(a1.m) === JSON.stringify([3, 1]);
+  R.txt.inv = JSON.stringify(Object.fromEntries(Object.entries(pi.inv).map(([p, x]) => [p, x.d])));
   return R;
 }
 console.log('1 · lib-sungrow-disp');
 const ATUAL = casosLib(require('./lib-sungrow-disp.js'));
-const CHAVES = ['okTabela2', 'okNome', 'okSemColuna', 'okGrade', 'okJunta', 'okD1', 'okD2', 'okM7', 'okLeitura', 'okJanela', 'okProduto', 'okTrocaJan'];
+const CHAVES = ['okTabela2', 'okNome', 'okSemColuna', 'okGrade', 'okJunta', 'okD1', 'okD2', 'okM7', 'okLeitura', 'okJanela', 'okProduto', 'okTrocaJan', 'okInv'];
 for (const k of CHAVES) ok(ATUAL[k], k + (ATUAL.txt[k.slice(2).toLowerCase()] ? ' ' + ATUAL.txt[k.slice(2).toLowerCase()] : ''));
 
 /* ---------- 2 · plantios na lib ---------- */
@@ -220,6 +234,9 @@ plantaLib('carimbo fora da grade conta como amostra', [["if (m[4] !== '00' || Nu
 plantaLib('janela que nao reinicia a heranca', [['.filter(naJanela).sort();', '.sort();']], 'okJanela');
 plantaLib('duplicado ignorado (troca no primeiro dia do sucessor)', [['const e = x.ds.find((d) => !eDup(x.s, dono.s, d));', 'const e = x.ds[0];']], 'okTrocaJan');
 plantaLib('troca so depois do ultimo dia do antigo', [['const e = x.ds.find((d) => !eDup(x.s, dono.s, d));', 'const e = x.ds.find((d) => d >= dono.ds[dono.ds.length - 1]);']], 'okTrocaJan');
+plantaLib('por inversor: patamar sem sol entra', [['if (g != null && g >= LIMIAR_SOL) { const p = inv[pos]', 'if (g != null) { const p = inv[pos]']], 'okInv');
+plantaLib('por inversor: amostra ausente contada como indisponivel', [['c.s += ok / n; c.n += 1;', 'c.s += ok / POR_MEIA; c.n += 1;']], 'okInv');
+plantaLib('por inversor: inversor sem posicao entra pela pasta', [['if (opc.porInv && pos && n) {', 'if (opc.porInv && n) { const pos = opc.posNoDia(sn, d) || o.ufv + "/TS1/INV" + sn.slice(-2), u = pos.split("/")[0];']], 'okInv');
 plantaLib('duplicado puro passa a valer', [["if (!e) { J[x.s] = { ini: null, fim: null }; continue; }", "if (!e) { J[x.s] = { ini: x.ds[0], fim: null }; continue; }"]], 'okTrocaJan');
 
 /* ---------- 3 · o gerador de ponta a ponta ---------- */
@@ -292,6 +309,10 @@ function cenarioGen1(gen, R) {
   R.okGen = P.esquema === 1 && P.serie.length === 2 && conf(linha(D1), 'M1', ESP.M1[D1]) && conf(linha(D2), 'M1', ESP.M1[D2]) && conf(linha(D1), 'M7', ESP.M7[D1])
     && linha(D1).CX_disp_sol_pct === pct(cx(ESP.M1[D1].sol, 0.5)) && linha(D1).M2_disp_sol_pct === null && linha(D1).M5_inv_logger === 0;
   R.txt.gen = JSON.stringify({ M1: [linha(D1).M1_disp_sol_pct, linha(D1).M1_disp_24h_pct, linha(D2).M1_disp_24h_pct], inv: [linha(D1).M1_inv_logger, linha(D2).M1_inv_logger] });
+  const PI = le('sg_disp_inv_dia.json') || { dias: [], inv: {} }, gi = (p, d) => { const x = PI.inv[p], i = PI.dias.indexOf(d); return x && i >= 0 ? [x.d[i], x.m[i]] : null; };
+  R.okInvGen = PI.esquema === 1 && JSON.stringify(PI.dias) === JSON.stringify([D1, D2]) && Object.keys(PI.inv).sort().join() === Object.keys(ESPI).sort().join()
+    && Object.keys(ESPI).every((p) => [D1, D2].every((d) => { const v = gi(p, d); return v && v[0] === pct(ESPI[p][d][0]) && v[1] === ESPI[p][d][1]; }));
+  R.txt.invgen = JSON.stringify(PI.inv['M1/TS1/INV01'] || null);
   R.okSoInversor = JSON.stringify(Object.keys(H.inv).sort()) === JSON.stringify([X1, X2, X3, X4, X5, X6, Y1].sort()) && H.esquema === 1;
   R.txt.soinversor = Object.keys(H.inv).sort().join(' ');
   const antesP = semGerado('sg_disp_dia.json'), antesH = semGerado('sg_disp_hist.json');
@@ -315,7 +336,7 @@ const GEN = path.join(__dirname, 'gen-sungrow.js');
 const srcGen = fs.readFileSync(GEN, 'utf8').replace(/\r\n/g, '\n');
 const G = cenarioGen(GEN);
 if (G.erro) ok(false, 'o gerador estourou: ' + G.erro);
-const CG = ['okGen', 'okSoInversor', 'okIdem', 'okRecarga', 'okSemEstacao'];
+const CG = ['okGen', 'okInvGen', 'okSoInversor', 'okIdem', 'okRecarga', 'okSemEstacao'];
 for (const k of CG) ok(G[k], k + (G.txt[k.slice(2).toLowerCase()] ? ' ' + G.txt[k.slice(2).toLowerCase()] : ''));
 
 console.log('\n4 · plantios no gerador (cada um roda o cenario inteiro)');
@@ -329,8 +350,9 @@ function planta(nome, de, para, chave) {
 }
 planta('arquivo do logger contado como inversor', "if (t === 'inversor') { const dd = D.diaDisp(", "if (t === 'inversor' || t === 'estacao') { const dd = D.diaDisp(", 'okSoInversor');
 planta('arquivo duplicado antecipa a troca (contador de vida ignorado)', 'return !!(a && b && a.vida != null', 'return false && !!(a && b && a.vida != null', 'okGen');
-planta('publicado pela regra da leitura (todos com leitura)', "{ regra: 'posicao', posNoDia }", "{ regra: 'leitura', posNoDia }", 'okGen');
+planta('publicado pela regra da leitura (todos com leitura)', "{ regra: 'posicao', posNoDia, porInv: true }", "{ regra: 'leitura', posNoDia, porInv: true }", 'okGen');
 planta('sem historico nao relê os zips', 'const novos = releDisp ? raw : raw.filter(', 'const novos = raw.filter(', 'okRecarga');
+planta('blob por inversor nao gravado', "pesos['sg_disp_inv_dia.json'] = await escreve('sg_disp_inv_dia.json', dInv);", '', 'okInvGen');
 planta('historico da disponibilidade nao gravado', "pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);", '', 'okIdem');
 planta('estacao ausente calada', "if (!estLog || !Array.isArray(estLog.serie) || !estLog.serie.length) throw", 'if (false) throw', 'okSemEstacao');
 

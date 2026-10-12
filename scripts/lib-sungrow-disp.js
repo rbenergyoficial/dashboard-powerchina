@@ -97,7 +97,9 @@ const irrDe = (E, d, k, u) => { const x = E.get(d + 'T' + hm(k)); const v = x ? 
 /* o calculo. opc.regra 'posicao' (publicada, exige opc.posNoDia(sn, d) -> 'Mn/TSn/INVnn' | null) ou 'leitura';
    opc.janela [d0, d1] (so a conferencia: como o calculo local, le so esses dias, a heranca comeca em d0 como disponivel e
    a nominal e a maior da janela); opc.meias = true devolve tambem os patamares. Devolve as linhas por usina e dia, sem
-   arredondar */
+   arredondar. opc.porInv = true (so na regra da posicao) devolve tambem, por POSICAO e dia, a soma das fracoes disponiveis
+   nas meias horas de sol (irradiancia de LIMIAR_SOL ou mais) com leitura e quantas foram: { linhas, inv: { pos: { d: { s, n } } } },
+   a mesma conta da usina sem a ponderacao pela nominal (o inversor e um so) */
 function calcula(H, E, opc) {
   const regra = opc.regra;
   if (regra !== 'posicao' && regra !== 'leitura') throw new Error('regra desconhecida: ' + regra);
@@ -111,7 +113,7 @@ function calcula(H, E, opc) {
   }
   const dias = [...new Set(Object.values(H.inv).flatMap((o) => Object.keys(o.dias)))].filter(naJanela).sort();
   const ult = {};                                        // ultimo estado valido de cada inversor: true disponivel
-  const linhas = [], meias = [];
+  const linhas = [], meias = [], inv = {};
   for (const d of dias) {
     const acc = {};                                      // usina -> { num[48], den[48], inv:Set }
     for (const [sn, o] of Object.entries(H.inv)) {
@@ -125,6 +127,10 @@ function calcula(H, E, opc) {
           const ch = a[i]; if (ch === '.') continue;
           n += 1;
           if (ch === 'D') { ult[sn] = true; ok += 1; } else if (ch === 'I') ult[sn] = false; else if (ult[sn] !== false) ok += 1;
+        }
+        if (opc.porInv && pos && n) {                     // a posicao no dia: so as meias horas de sol com leitura
+          const g = irrDe(E, d, k, u);
+          if (g != null && g >= LIMIAR_SOL) { const p = inv[pos] || (inv[pos] = {}), c = p[d] || (p[d] = { s: 0, n: 0 }); c.s += ok / n; c.n += 1; }
         }
         if (!n || !u) continue;                          // sem leitura no patamar (ou fora da posicao): fora da conta
         const s = acc[u] || (acc[u] = { num: new Array(48).fill(0), den: new Array(48).fill(0), inv: new Set() });
@@ -147,6 +153,7 @@ function calcula(H, E, opc) {
         meias_sol_sem_logger: semLog, inv_logger: s ? s.inv.size : 0 });
     }
   }
+  if (opc.porInv) return opc.meias ? { linhas, meias, inv } : { linhas, inv };
   return opc.meias ? { linhas, meias } : linhas;
 }
 
@@ -199,6 +206,26 @@ function produto(linhas, agora) {
     serie };
 }
 
+/* o blob publico POR INVERSOR (sg_disp_inv_dia.json): uma grade dias x posicoes, compacta (1.155 posicoes x centenas de dias).
+   d = % disponivel da posicao nas meias horas de sol com leitura (5 casas da fracao); m = quantas meias horas entraram (0 e d nulo:
+   a posicao nao teve leitura com sol no dia) */
+function produtoInv(inv, agora) {
+  const dias = [...new Set(Object.values(inv).flatMap((p) => Object.keys(p)))].sort();
+  const out = {};
+  for (const pos of Object.keys(inv).sort()) {
+    const p = inv[pos];
+    out[pos] = { d: dias.map((x) => (p[x] && p[x].n ? pct(p[x].s / p[x].n) : null)), m: dias.map((x) => (p[x] ? p[x].n : 0)) };
+  }
+  return { gerado_em: agora, esquema: 1,
+    metodo: 'Por posicao de inversor e dia, a mesma regra da disponibilidade da usina (sg_disp_dia): estado a cada 5 min no registrador de'
+      + ' dados do fabricante, fracao disponivel das leituras presentes em cada meia hora, so as meias horas com irradiancia no plano da'
+      + ' estacao da usina de ' + LIMIAR_SOL + ' W/m2 ou mais e com leitura do inversor; o dia e a media dessas meias horas. Conta o'
+      + ' inversor que ocupa a posicao no dia (troca de inversor pelo contador de vida).',
+    limiar_sol_wm2: LIMIAR_SOL,
+    campos: { dias: 'dias (horario de Brasilia)', inv: 'posicao Mn/TSnn/INVnn -> { d: % disponivel por dia (nulo sem leitura com sol), m: meias horas de sol com leitura }' },
+    dias, inv: out };
+}
+
 /* troca de inversor: cada numero de serie de uma posicao vale do seu INICIO EFETIVO ate o do sucessor (fim exclusivo; nulo = aberto).
    Inicio efetivo do sucessor = o primeiro dia dele que NAO e duplicado do dono da posicao. Dia duplicado = o sucessor repete, no
    mesmo dia, o contador de vida e a energia do dono (dup(novo, dono, d), do gerador): e o arquivo do antigo gravado com o numero de
@@ -221,5 +248,5 @@ function janelasTroca(series, dup) {
   return J;
 }
 
-module.exports = { janelasTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
+module.exports = { produtoInv, janelasTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
   diaDisp, histVazio, junta, estacaoPorMeia, calcula, produto, pct };

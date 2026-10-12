@@ -19,7 +19,8 @@
  * 🔴 SO O 404 E "PRIMEIRA RODADA". Falha ao ler o historico publicado aborta: regravar sem ele apagaria o acumulado.
  *
  * 🔴 DISPONIBILIDADE (lib-sungrow-disp, 11/10/2026): o estado de cada inversor a cada 5 min vai para um historico proprio
- *    (`sg_disp_hist.json`, interno) e sai `sg_disp_dia.json` (publico: por usina e Complexo, dia a dia), refeito do
+ *    (`sg_disp_hist.json`, interno) e sai `sg_disp_dia.json` (publico: por usina e Complexo, dia a dia) e `sg_disp_inv_dia.json`
+ *    (publico: por posicao de inversor, dia a dia, so as meias horas de sol), refeitos do
  *    historico inteiro a cada rodada com a irradiancia do `estacao_logger_30min.json`.
  *
  * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1
@@ -359,9 +360,14 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
      05:23 BRT, antes deste): sem ela nao ha dia, e a ausencia aborta em vez de publicar vazio -------- */
   const estLog = await leAnterior('estacao_logger_30min.json');
   if (!estLog || !Array.isArray(estLog.serie) || !estLog.serie.length) throw new Error('estacao_logger_30min.json ausente ou vazio: a disponibilidade do dia precisa da irradiancia');
-  const dLinhas = D.calcula(DH, D.estacaoPorMeia(estLog), { regra: 'posicao', posNoDia });
-  const dProd = D.produto(dLinhas, agora);
+  const dCalc = D.calcula(DH, D.estacaoPorMeia(estLog), { regra: 'posicao', posNoDia, porInv: true });
+  const dProd = D.produto(dCalc.linhas, agora);
   pesos['sg_disp_dia.json'] = await escreve('sg_disp_dia.json', dProd);
+  /* e POR INVERSOR (sungrow-disp-inv, pedido de 11/10/2026: o mapa e a Visao Executiva pela disponibilidade do logger): a mesma
+     conta, por posicao e dia, so as meias horas de sol com leitura */
+  const dInv = D.produtoInv(dCalc.inv, agora);
+  pesos['sg_disp_inv_dia.json'] = await escreve('sg_disp_inv_dia.json', dInv);
+  console.log('  disponibilidade por inversor: ' + Object.keys(dInv.inv).length + ' posicoes x ' + dInv.dias.length + ' dias');
   const dUlt = dProd.serie.filter((r) => r.CX_disp_sol_pct != null).pop();
   console.log('  disponibilidade: ' + dProd.serie.length + ' dias, ' + Object.keys(DH.inv).length + ' inversores no historico · '
     + dispFora + ' carimbo(s) fora da grade de 5 min nesta rodada · ultimo dia com Complexo: '
