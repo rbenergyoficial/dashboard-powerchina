@@ -2,6 +2,7 @@ name: Estacoes solarimetricas (datalogger) -> estacao_logger_30min.json, estacao
 on:
   schedule:
     - cron: '23 8 * * *' # 05:23 BRT — o arquivo do dia chega ao computador as 02:00 e sobe ao backup-dados-scada as 04:00
+    - cron: '33 15 * * *' # 12:33 BRT — segunda rodada: o backup do PC roda tambem as 12:00 (quando dorme as 04:00, ou o arquivo sincroniza depois)
   workflow_dispatch:
 concurrency:
   group: gen-estacao-logger
