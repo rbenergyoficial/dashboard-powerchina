@@ -2,6 +2,7 @@ name: SAGER (ONS) disponibilidade por usina -> sager_disp_30min.json
 on:
   schedule:
     - cron: '47 7 * * *' # 04:47 BRT — o historico do SAGER sobe do computador da usina ao backup-dados-scada as 04:00
+    - cron: '47 13 * * *' # 10:47 BRT — segunda leitura: quando o computador dorme as 04:00 a rodada so acontece ao acordar (07:09 em 13/10, 09:37 em 10/10)
   workflow_dispatch:
 concurrency:
   group: gen-sager-disp
