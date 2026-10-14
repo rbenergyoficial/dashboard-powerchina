@@ -1,4 +1,4 @@
-name: Estacoes solarimetricas (datalogger) -> estacao_logger_30min.json
+name: Estacoes solarimetricas (datalogger) -> estacao_logger_30min.json, estacao_dia.json e estacao_10min_M<usina>.json
 on:
   schedule:
     - cron: '23 8 * * *' # 05:23 BRT — o arquivo do dia chega ao computador as 02:00 e sobe ao backup-dados-scada as 04:00
@@ -18,6 +18,10 @@ jobs:
       # campo pelo nome, meia hora T = media de T+10, T+20 e T+30 (tudo-ou-nada), M10 = usina 1, duplicados e 3 s fora; com plantios
       - name: Ensaio · leitura do datalogger e a meia hora (sem rede)
         run: node scripts/ensaio-estacao-logger.js
+      # todas as grandezas (lib-estacao-tudo, estacao-tudo): campo pelo nome, dia pelo rotulo do fim, irradiacao x 1/6 h, albedo e modulo e sujeira
+      # so com sol, vento no teto e faixa fisica fora das contas, direcao vetorial, noite, 10 min recente; com plantios
+      - name: Ensaio · todas as grandezas do datalogger (sem rede)
+        run: node scripts/ensaio-estacao-tudo.js
       # 💰 ~4 mil arquivos de 128 KB: so o arquivo novo vem pela rede (lib-cache-blob.js); cache proprio deste workflow
       - name: Restaurar a copia do backup-dados-scada
         uses: actions/cache/restore@v4

@@ -13,6 +13,11 @@
  *   · o mesmo instante com valores diferentes em dois arquivos (mais de 1 W/m2) em mais de 0,5 % dos registros;
  *   · menos de nove estacoes; leitura acima de 1.800 W/m2 (fora da faixa fisica do piranometro).
  *
+ * 🔴 TODAS AS GRANDEZAS (lib-estacao-tudo, 14/10/2026, PROMOVER estacao-tudo): dos mesmos arquivos sai tambem `estacao_dia.json`
+ *    (o resumo de cada dia de cada estacao: irradiacao no plano, global, difusa, direta e refletida, albedo, temperaturas do ar e do
+ *    modulo, umidade, orvalho, vento, chuva, sujeira, bateria, e as leituras fora da faixa fisica) e `estacao_10min_M<usina>.json`
+ *    (o registro de 10 min dos ultimos DIAS_10MIN dias). A pagina Estacao Meteorologica do portal so le o datalogger.
+ *
  * Env: DADOS_STORAGE · RAW=backup-dados-scada · PREFIXO=Estacao_Meteorologica_Logger/ · OUT=dados
  *      LOCAL_DIR=<pasta> le os arquivos de uma pasta local em vez do container · LOCAL_OUT_DIR=<pasta> grava ali
  *      CACHE_BLOB_DIR (lib-cache-blob): so o arquivo novo vem pela rede
@@ -21,6 +26,8 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const L = require('./lib-estacao-logger');
+const T = require('./lib-estacao-tudo');
+const DIAS_10MIN = 14;   // o registro de 10 min publicado por estacao (o resto vai no resumo do dia)
 
 const RAW = process.env.RAW || 'backup-dados-scada';
 const PREFIXO = process.env.PREFIXO || 'Estacao_Meteorologica_Logger/';
@@ -59,11 +66,16 @@ async function main() {
   // por nome: o nome por dia ("..._2026-10-08.dat") vem antes do antigo ("..._Day398.dat"); o primeiro visto de cada instante fica
   const sel = lista.map((a) => ({ ...a, u: L.usinaDoArquivo(a.nome) })).filter((a) => a.u).sort((a, b) => (a.nome < b.nome ? -1 : 1));
   const R = new Map(), conflito = { n: 0, total: 0, ex: [] };
+  const RT = new Map();   // todas as grandezas: usina -> Map(instante -> [valores, marcas]); o primeiro visto de cada instante fica
   let maior = 0;
   for (const a of sel) {
     const buf = await a.ler();
-    let reg;
-    try { reg = L.leArquivo(buf.toString('utf8')); } catch (e) { throw new Error(a.nome + ': ' + e.message); }
+    let reg, tudo;
+    const txt = buf.toString('utf8');
+    try { reg = L.leArquivo(txt); } catch (e) { throw new Error(a.nome + ': ' + e.message); }
+    tudo = T.leTudo(txt, a.nome);
+    const mt = RT.get(a.u) || new Map(); RT.set(a.u, mt);
+    for (const [t, val, fl] of tudo) if (!mt.has(t)) mt.set(t, [val, fl]);
     const m = R.get(a.u) || new Map(); R.set(a.u, m);
     for (const [t, x] of reg) {
       conflito.total++;
@@ -96,6 +108,27 @@ async function main() {
     serie,
   };
   const kb = await escreve(NOME, obj);
+  /* o resumo do dia e o 10 min recente de cada estacao (lib-estacao-tudo) */
+  const serieDia = [], est10 = {};
+  for (const [u, m] of [...RT].sort((a, b) => a[0] - b[0])) {
+    for (const o of T.resumos(m)) serieDia.push(Object.assign({ u: 'M' + u, ms: Date.parse(o.d + 'T00:00:00-03:00') }, o));
+    const rc = T.recente(m, DIAS_10MIN);
+    est10['M' + u] = await escreve('estacao_10min_M' + u + '.json', { gerado_em: obj.gerado_em, usina: 'M' + u, fonte: 'Datalogger da estacao solarimetrica (CR1000X), registro de 10 min.',
+      rotulo_de_tempo: 'v[grandeza][i*144 + j]: dia dias[i], intervalo que comeca em j x 10 min (horario de Brasilia); o datalogger rotula o fim',
+      unidade: 'irradiancias W/m2; temperaturas °C; ur %; vento m/s e graus (0 = norte); chuva mm em 10 min; s1/s2 perda de sujeira %; bat V',
+      dias: rc.dias, v: rc.v });
+  }
+  serieDia.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : a.u < b.u ? -1 : 1));
+  const kbD = await escreve('estacao_dia.json', { gerado_em: obj.gerado_em, esquema: 1, fonte: 'Datalogger das estacoes solarimetricas (CR1000X), registro de 10 min.',
+    unidade: 'poa ghi dif dni refl kWh/m2 no dia (irradiancia de 10 min x 1/6 h); poa_max W/m2; alb razao das somas refletida/global com a global'
+      + ' acima de ' + T.SOL_ALB + ' W/m2; ta (media) ta_max ta_min po °C; ur ur_min %; tm_sol media dos 4 sensores do modulo com o plano acima de ' + T.SOL_FORTE
+      + ' W/m2, tm1..tm4 cada sensor, dt_sol modulo menos ar, tm_max °C; ws ws_max m/s; wd graus (media vetorial pela velocidade); chuva mm, chuva_10'
+      + ' maior em 10 min; s1 s2 perda de sujeira mediana com sol forte %; bat V minima; tl_max °C do datalogger; n registros (144 = dia inteiro),'
+      + ' n_poa com irradiancia valida; noite registros com mais de 20 W/m2 entre 19:00 e 05:00; fora leituras fora da faixa fisica; teto vento no'
+      + ' teto do anemometro (' + T.TETO_VENTO + ' m/s)',
+    faixas: Object.fromEntries(T.VARS.map(([k, c, f]) => [k, f])), serie: serieDia });
+  console.log('estacao_dia.json: ' + serieDia.length + ' estacao-dias · ' + Math.round(kbD / 1024) + ' KB gzip · 10 min: '
+    + Object.entries(est10).map(([k, b]) => k + ' ' + Math.round(b / 1024) + ' KB').join(', '));
   console.log(NOME + ': ' + serie.length + ' meias horas · ' + Object.keys(est).length + ' estacoes · ' + sel.length + ' arquivos · '
     + conflito.n + ' conflitos · ' + Math.round(kb / 1024) + ' KB gzip');
   for (const [k, e] of Object.entries(est)) console.log('  ' + k + ' (' + e.arquivo + '): ' + e.meias_horas + ' meias horas, ' + e.primeira + ' a ' + e.ultima);
