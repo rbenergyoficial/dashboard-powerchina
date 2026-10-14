@@ -23,6 +23,10 @@
  *    (publico: por posicao de inversor, dia a dia, so as meias horas de sol), refeitos do
  *    historico inteiro a cada rodada com a irradiancia do `estacao_logger_30min.json`.
  *
+ * 🔴 AS STRINGS E A CURVA DE 5 MIN (lib-sungrow-str, 13/10/2026, PROMOVER sg-logger-str): por eletrocentro sg_str_dia_<k> (o pico e a
+ *    razao do dia de cada entrada, 180 dias), sg_str_<k> e sg_curva_<k> (5 min, 7 dias), e sg_str_alarme (sem corrente e fracas pela
+ *    lib-strings) e sg_str_entradas (interno). Esquema 7 do historico: a primeira rodada rele todos os zips.
+ *
  * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1
  *      ensaio: LOCAL_RAW_DIR (pasta com a mesma arvore M05/TS01/...) · LOCAL_SCADA_DIR · LOCAL_OUT_DIR · LOCAL_INV_SCADA
  *      · LOCAL_RAW_LISTA (recorte da pasta local, um caminho relativo por linha)
@@ -34,6 +38,7 @@ const https = require('https');
 const { entradas } = require('./lib-zip.js');
 const S = require('./lib-sungrow.js');
 const D = require('./lib-sungrow-disp.js');
+const SS = require('./lib-sungrow-str.js');
 const { casaCru } = require('./lib-inversor-cru.js');
 
 const RAW = process.env.RAW || 'sungrow-raw';
@@ -42,10 +47,12 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 6;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
+const ESQ_HIST = 7;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
                                                             // 4: PT100 de 5 min por eletrocentro com o historico inteiro (so relendo se constroi)
                                                             // 5: eletrocentro de 5 min (potencia, capacidade, inversores na rede) e horas fora
                                                             // 6: tensao dos MPPT por inversor-dia, com o historico inteiro
+                                                            // 7: as strings e a curva de 5 min do logger (sg-logger-str), com o historico inteiro
+const DIAS_STR = 180;                                       // o arquivo diario das strings por eletrocentro (o logger guarda ~180 dias)
 const DIAS_MPPT = 30;                                       // a janela do ranking dos MPPT (o arquivo por eletrocentro guarda DIAS_PT)
 const MPPT_DIAS_MIN = 5;                                    // dias com a razao do MPPT para ele entrar no ranking
 // modulos por string: a placa do parque (1.155 inversores, strings de 29 modulos). Um modulo a menos = 1/29 da tensao
@@ -179,6 +186,10 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const ptRodada = {};                                     // PT100 de 5 min de TUDO o que esta rodada leu, por logger
   const etcRodada = {};                                    // e o eletrocentro de 5 min (potencia, capacidade, rede), idem
   const mpptRodada = {};                                   // e a tensao dos MPPT de cada inversor-dia, por numero de serie
+  /* as STRINGS do logger (sg-logger-str, 13/10/2026): o pico e a razao do dia de cada entrada, de todo dia lido (strRodada), e a
+     corrente de 5 min com a curva do inversor so dos ultimos DIAS_5MIN dias de cada numero de serie (g5Rodada, cortado DURANTE a
+     leitura, como a potencia de 5 min: guardar o 5 min de seis meses e cortar depois estoura a memoria) */
+  const strRodada = {}, g5Rodada = {};
   /* 🔴 A DISPONIBILIDADE (lib-sungrow-disp) tem historico PROPRIO, sg_disp_hist.json: a classe de cada 5 min de cada
      inversor-dia. Ausente (404) ou de esquema velho = reler TODOS os zips uma vez (a primeira rodada constroi o historico
      inteiro; o sg_hist fica, e os dias relidos saem iguais). Outra falha de leitura aborta, como o sg_hist */
@@ -224,6 +235,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         const mr = mpptRodada[m[1]] || (mpptRodada[m[1]] = {});
         for (const x of dl) { const v = x._mppt; delete x._mppt; if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v; }
         junta(o.dias, dl);
+        // as strings e a curva: no mesmo dia vindo de dois zips, fica o de mais amostras com potencia lida
+        SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), DIAS_5MIN);
       } else if (t === 'pid') {
         const end = m[1].split('_')[0];
         const id = (logger || (u + '/' + tsPasta)) + '/' + end;
@@ -431,6 +444,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     modulos_por_string: MOD_STRING, unidade: 'r mediana diaria da razao da tensao do MPPT contra os irmaos, na janela; i idem para a corrente;'
       + ' mod = (1 - r) x modulos por string (positivo: tensao abaixo dos irmaos); dias com a razao', serie: rank });
   console.log('  MPPT: ' + mEscritos + ' eletrocentro(s) gravado(s), ' + mLinhas + ' linhas · ranking ' + rank.length + ' MPPT de ' + mDe + ' a ' + mUlt);
+  const STRB = await SS.produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, escreve, pesos, agora, dias5: DIAS_5MIN, diasStr: DIAS_STR });
   /* -------- SAUDE DO INVERSOR (lote 3): o sg_inv_dia passa do teto de ~1.100 KB que a pagina baixa (M1: 1.325 KB). Aqui
      sai o recorte que a pagina de saude usa, por usina (73 a 333 KB gzipado com o historico inteiro), e um resumo do
      conjunto por usina e dia. Familia, tipo (alarme/falha) e origem (rede/equipamento) de cada codigo: lib-sungrow,
@@ -444,6 +458,9 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   for (const [u, L] of Object.entries(porU)) {
     const linhas = L.map((x) => { const r = { d: x.d, ms: msBrt(x.d), ts: x.ts, inv: x.inv, p: x.parcial == null ? null : (x.parcial ? 1 : 0), e: x.e,
       tm: x.t_max, ef: x.ef_med, iso: x.iso_min, lim: x.lim_pct, ini: x.ini, fim: x.fim };
+      /* as strings do dia (sg-logger-str): a mais fraca em % da mediana das reais no pico, quantas lidas e quantas sem corrente */
+      const sd = STRB.disp.get(x.chave + '|' + x.d);
+      if (sd) { r.smin = sd.min_pct; r.smax = sd.max_pct; r.sn = sd.n; r.smo = sd.mortas; r.sw = sd.min_n; }
       if (Object.keys(x.falha || {}).length) { r.f = x.falha; r.ev = evDe(x.falha); }
       /* 🔴 O TIPO DO DIA, em bits, pela tabela do manual (FAIXAS): 1 teve alarme, 2 teve falha, 4 teve codigo FORA do
          manual (tipo desconhecido). A regra mora aqui; a pagina so le o numero (lote sungrow-saude-tipo, 06/10/2026) */
@@ -453,7 +470,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       unidade: 'e kWh; tm °C (temperatura interna maxima); ef % (eficiencia mediana gerando); iso kΩ (isolamento minimo gerando);'
         + ' lim % dos instantes gerando com potencia limitada; ini/fim primeira e ultima amostra gerando; p 1 = dia parcial do logger;'
         + ' f codigo de falha -> amostras de 5 min; ev familia -> amostras (sg_saude.json, familias); tp bits do dia (OU, so nas linhas com f): 1 alarme,'
-        + ' 2 falha, 4 codigo fora do manual', serie: linhas });
+        + ' 2 falha, 4 codigo fora do manual; strings no pico do dia (logger, so as reais): smin e smax a mais fraca e a mais forte em % da mediana,'
+        + ' sn quantas lidas, smo quantas sem corrente (ate 0,5 A), sw qual e a mais fraca', serie: linhas });
     const porD = new Map();
     for (const r of linhas) (porD.get(r.d) || porD.set(r.d, []).get(r.d)).push(r);
     for (const [d, R] of porD) {

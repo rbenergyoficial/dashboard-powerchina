@@ -39,6 +39,10 @@ jobs:
       # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 240 min)
       - name: Ensaio · disponibilidade dos inversores pelo logger (sem rede)
         run: node scripts/ensaio-sungrow-disp.js
+      # as strings e a curva de 5 min do logger (lib-sungrow-str, sg-logger-str): escala, pico, razao sem a limitacao e sem o piso,
+      # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios
+      - name: Ensaio · strings e curva de 5 min do logger (sem rede)
+        run: node scripts/ensaio-sungrow-str.js
       - name: Gerar sg_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -46,6 +50,8 @@ jobs:
           SCADA_RAW: scada-raw
           OUT: dados
           REFAZER: ${{ github.event.inputs.refazer }}
+          # a primeira rodada do esquema 7 (sg-logger-str) rele todos os zips e guarda o pico das strings de cada inversor-dia: folga de memoria
+          NODE_OPTIONS: --max-old-space-size=6144
         run: node scripts/gen-sungrow.js
       # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora, gen-perdas) guarda 7 dias,
       # entao um dia sem rodar nao perde nada

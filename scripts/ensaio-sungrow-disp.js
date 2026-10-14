@@ -42,7 +42,8 @@ const REAL36 = ['Horário', 'Potência ativa nominal', 'Potência reativa nomina
   'Status de operação do inversor_Ningxia', 'Status de operação do inversor', 'Código de falha', 'Impedância paralela em relação à terra',
   'Status', 'Tempo de operação diário'];
 const CAB = [...REAL36, 'Eficiência do inversor', 'Estado de trabalho PID', 'Código de falha PID', 'Tensão do barramento',
-  'Tensão de pólo negativo / terra', ...Array.from({ length: 12 }, (_, k) => 'Tensão MPPT' + (k + 1)), ...Array.from({ length: 12 }, (_, k) => 'Corrente MPPT' + (k + 1))];
+  'Tensão de pólo negativo / terra', ...Array.from({ length: 12 }, (_, k) => 'Tensão MPPT' + (k + 1)), ...Array.from({ length: 12 }, (_, k) => 'Corrente MPPT' + (k + 1)),
+  ...Array.from({ length: 24 }, (_, k) => 'Corrente na string ' + (k + 1))];   // as 24 entradas que a lib-sungrow-str exige (sg-logger-str)
 ok(CAB[1] === 'Potência ativa nominal' && CAB[28] === 'Status do dispositivo' && CAB[31] === 'Status de operação do inversor' && CAB[32] === 'Código de falha',
   'o cabecalho sintetico tem as colunas nas posicoes reais (1, 28, 31, 32)');
 const hhmm = (i) => String(Math.floor(i / 12)).padStart(2, '0') + ':' + String((i % 12) * 5).padStart(2, '0');
