@@ -47,11 +47,12 @@ const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
-const ESQ_HIST = 7;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
+const ESQ_HIST = 8;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
                                                             // 4: PT100 de 5 min por eletrocentro com o historico inteiro (so relendo se constroi)
                                                             // 5: eletrocentro de 5 min (potencia, capacidade, inversores na rede) e horas fora
                                                             // 6: tensao dos MPPT por inversor-dia, com o historico inteiro
                                                             // 7: as strings e a curva de 5 min do logger (sg-logger-str), com o historico inteiro
+                                                            // 8: a energia CC do inversor-dia (ecc, sg-frota-dia), com o historico inteiro
 const DIAS_STR = 180;                                       // o arquivo diario das strings por eletrocentro (o logger guarda ~180 dias)
 const DIAS_MPPT = 30;                                       // a janela do ranking dos MPPT (o arquivo por eletrocentro guarda DIAS_PT)
 const MPPT_DIAS_MIN = 5;                                    // dias com a razao do MPPT para ele entrar no ranking
@@ -457,7 +458,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const usinaDia = [], famDia = [];
   for (const [u, L] of Object.entries(porU)) {
     const linhas = L.map((x) => { const r = { d: x.d, ms: msBrt(x.d), ts: x.ts, inv: x.inv, p: x.parcial == null ? null : (x.parcial ? 1 : 0), e: x.e,
-      tm: x.t_max, ef: x.ef_med, iso: x.iso_min, lim: x.lim_pct, ini: x.ini, fim: x.fim };
+      tm: x.t_max, ef: x.ef_med, iso: x.iso_min, lim: x.lim_pct, ini: x.ini, fim: x.fim, ecc: x.ecc == null ? null : x.ecc, eca: x.eca == null ? null : x.eca };
       /* as strings do dia (sg-logger-str): a mais fraca em % da mediana das reais no pico, quantas lidas e quantas sem corrente */
       const sd = STRB.disp.get(x.chave + '|' + x.d);
       if (sd) { r.smin = sd.min_pct; r.smax = sd.max_pct; r.sn = sd.n; r.smo = sd.mortas; r.sw = sd.min_n; }
@@ -471,7 +472,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         + ' lim % dos instantes gerando com potencia limitada; ini/fim primeira e ultima amostra gerando; p 1 = dia parcial do logger;'
         + ' f codigo de falha -> amostras de 5 min; ev familia -> amostras (sg_saude.json, familias); tp bits do dia (OU, so nas linhas com f): 1 alarme,'
         + ' 2 falha, 4 codigo fora do manual; strings no pico do dia (logger, so as reais): smin e smax a mais fraca e a mais forte em % da mediana,'
-        + ' sn quantas lidas, smo quantas sem corrente (ate 0,5 A), sw qual e a mais fraca', serie: linhas });
+        + ' sn quantas lidas, smo quantas sem corrente (ate 0,5 A), sw qual e a mais fraca; ecc e eca kWh, a energia CC e CA do dia integradas da potencia de 5 min x 5/60 h (comparaveis entre si no dia inteiro)', serie: linhas });
     const porD = new Map();
     for (const r of linhas) (porD.get(r.d) || porD.set(r.d, []).get(r.d)).push(r);
     for (const [d, R] of porD) {
@@ -496,6 +497,26 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     fonte: 'familias, tipo e origem: manual do usuario do SG350HX, secao 8.1 (p. 105 a 113)',
     familias: S.FAIXAS.map(([fam, tipo, origem, fx]) => ({ fam, tipo, origem, codigos: fx.map(([a, b]) => (a === b ? String(a) : a + '-' + b)).join(', ') })),
     usina_dia: usinaDia, familia_dia: famDia });
+  /* -------- A FROTA DIA A DIA (sg-frota-dia, 14/10/2026): o que a pagina PV · Sungrow precisa de TODOS os inversores do parque num arquivo so,
+     sem baixar os 9 sg_saude_<usina> (~650 KB cada): por posicao e dia (os ultimos DIAS_STR dias), em inteiros. e e ec kWh (energia CA pelo
+     contador), cv a conversao CA/CC x 1000 (os dois lados da potencia de 5 min, so dia inteiro), sm a string mais fraca no pico (% das reais,
+     inteiro), p um caractere por dia (1 parcial, 0 inteiro, - sem leitura). So o inversor que ocupa a posicao no dia (porU, a regra do sg_inv_dia) -------- */
+  { const fDias = [...new Set(Object.values(porU).flat().map((x) => x.d))].sort().slice(-DIAS_STR), fIx = new Map(fDias.map((d, i) => [d, i])), F = {};
+    const ri = (x, k) => (x == null ? null : Math.round(x * k));
+    for (const L of Object.values(porU)) for (const x of L) {
+      const i = fIx.get(x.d); if (i == null) continue;
+      const o = F[x.chave] || (F[x.chave] = { e: new Array(fDias.length).fill(null), cv: new Array(fDias.length).fill(null), sm: new Array(fDias.length).fill(null), p: '-'.repeat(fDias.length) });
+      const sd = STRB.disp.get(x.chave + '|' + x.d);
+      o.e[i] = ri(x.e, 1); o.sm[i] = sd ? ri(sd.min_pct, 1) : null;
+      // a conversao CA/CC so no dia INTEIRO e com os dois lados integrados da potencia de 5 min (o mesmo metodo)
+      o.cv[i] = x.parcial === false && x.ecc > 0 && x.eca != null ? ri(x.eca / x.ecc, 1000) : null;
+      o.p = o.p.slice(0, i) + (x.parcial == null ? '-' : x.parcial ? '1' : '0') + o.p.slice(i + 1);
+    }
+    pesos['sg_frota_dia.json'] = await escreve('sg_frota_dia.json', { gerado_em: agora, esquema: 1, janela_dias: DIAS_STR, dias: fDias,
+      unidade: 'por posicao (usina/TS/inversor), um valor por dia de `dias`: e energia CA do dia, kWh (subida do contador); cv conversao CA/CC'
+        + ' x 1000, as duas da potencia de 5 min x 5/60 h, so no dia inteiro; sm a string mais fraca no pico em % da mediana das reais (inteiro);'
+        + ' p um caractere por dia: 1 parcial, 0 inteiro, - sem leitura', inv: F });
+    console.log('  frota dia a dia: ' + Object.keys(F).length + ' posicoes x ' + fDias.length + ' dias'); }
   /* -------- o TS de cada LOGGER: a potencia dele a cada 5 min e a SOMA dos inversores que ele le, no mesmo carimbo.
      Contra o TS certo bate em quase todo instante; contra o vizinho erra por kW a cada instante (os TS de uma usina geram
      quase igual no dia, entao a energia do dia nao separa). Folga: 22 arredondamentos de 0,05 kW, ou 0,2 % ------- */

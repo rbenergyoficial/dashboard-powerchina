@@ -480,6 +480,15 @@ function cenario(gen, lib) {
     // uma linha inteira, campo a campo, contra o sg_inv_dia da mesma rodada; e a limitacao contra a conta feita aqui
     R.okSaudeCampos = s601.e === i601.e && s601.tm === i601.t_max && s601.ef === i601.ef_med && s601.iso === i601.iso_min && s601.lim === i601.lim_pct
       && s601.ini === i601.ini && s601.fim === i601.fim && s601.tm === 52 && s601.ef === 98.8 && s601.iso === 800 && s601.lim === limEsp(0.95, 120, 180) && s601.lim > 0;
+    /* a energia CC e CA integradas da potencia de 5 min (sg-frota-dia) e o resumo da frota: o 601 inteiro em 29/09 e o 505 parcial no mesmo dia */
+    { const r2 = (x) => Math.round(x * 100) / 100, eca = r2(HH.reduce((t, h, k) => { const p = perfil(k, 0.95) / 1000; return p > 0 ? t + p * 5 / 60 : t; }, 0)),
+        ecc = r2(HH.reduce((t, h, k) => { const p = Math.round(perfil(k, 0.95) * 1.015) * 0.001; return p > 0 ? t + p * 5 / 60 : t; }, 0));
+      const FR = leOu('sg_frota_dia.json'), i29 = (FR.dias || []).indexOf('2026-09-29'), f601 = (FR.inv || {})['M1/TS6/INV01'] || { e: [], cv: [], sm: [], p: '' }, f505 = (FR.inv || {})['M1/TS5/INV05'] || { cv: [], p: '' };
+      R.okFrota = Math.abs(s601.eca - eca) <= 0.01 && Math.abs(s601.ecc - ecc) <= 0.01 && i29 >= 0 && f601.e[i29] === Math.round(s601.e)
+        && f601.cv[i29] === Math.round(1000 * s601.eca / s601.ecc) && f601.p[i29] === '0' && f601.sm[i29] === (s601.smin == null ? null : Math.round(s601.smin))
+        && f505.p[i29] === '1' && f505.cv[i29] === null && FR.janela_dias === 180;
+      R.txt.frota = 'eca ' + s601.eca + ' (esp ' + eca + ') ecc ' + s601.ecc + ' (esp ' + ecc + ') · frota 601 ' + JSON.stringify(i29 >= 0 ? [f601.e[i29], f601.cv[i29], f601.sm[i29], f601.p[i29]] : null)
+        + ' · 505 ' + JSON.stringify(i29 >= 0 ? [f505.cv[i29], f505.p[i29]] : null); }
     R.txt.campos = 'e ' + s601.e + ' tm ' + s601.tm + ' ef ' + s601.ef + ' iso ' + s601.iso + ' lim ' + s601.lim + ' (esperado ' + limEsp(0.95, 120, 180) + ') ' + s601.ini + '-' + s601.fim;
     const conta = (d, n_ev, n_alarme, n_falha, n_rede, n_equip) => { const x = ud(d);
       return x.n_ev === n_ev && x.n_alarme === n_alarme && x.n_falha === n_falha && x.n_rede === n_rede && x.n_equip === n_equip; };
@@ -501,11 +510,11 @@ function cenario(gen, lib) {
     R.okNaoRepete = lidosFundo(log) === 0;
     // 3 · migracao por MARCA, com o esquema 6 FIEL (o que esta no ar desde os MPPT): o historico igual (as strings nunca foram para
     //     ele), e SEM os arquivos das strings e da curva (sg-logger-str, 13/10/2026; os demais ja existem e ficam)
-    const h = le('sg_hist.json'); h.esquema = 6;
-    for (const n of fs.readdirSync(OUT)) if (/^sg_(str|curva)(_dia)?(_M\d+_TS\d+)?\.json$|^sg_str_(entradas|alarme)\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
+    const h = le('sg_hist.json'); h.esquema = 7;   // o esquema 7 (sg-logger-str) e o que esta no ar; o 8 traz a energia CC e CA de 5 min (sg-frota-dia)
+    for (const n of fs.readdirSync(OUT)) if (/^sg_frota_dia\.json$/.test(n)) fs.unlinkSync(path.join(OUT, n));
     grava('sg_hist.json', h);
     log = roda(gen);
-    R.okMigra = /esquema 6 -> 7: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
+    R.okMigra = /esquema 7 -> 8: relendo todos os zips/.test(log) && /novos ou mudados: [1-9]/.test(log)
       && Object.keys(antes).length > 0 && Object.keys(antes).every((n) => fs.existsSync(path.join(OUT, n)) && semGerado(n) === antes[n]);
     // 4 · dia novo do inversor sem posicao: a busca VOLTA (1 export do M6) e a memoria anda para o dia novo
     fs.writeFileSync(novo, zipNunca('2026-09-26'));
@@ -616,12 +625,13 @@ ok(R.okPidCampos, 'PID: tensao maxima 300 V, sem os minutos com tensao (esquema 
 ok(R.okConf, 'conferencia (folga ' + TOL_R.toFixed(6) + '): dias inteiros com razao 1; 01, 02 e 03/10 fora (n_parcial 2, razao nula): ' + R.txt.conf);
 ok(R.okInv, 'sg_inv_dia_M1: 24 inversor-dias, parcial exatamente nos 7 (01 a 03/10 no TS5 e o 505 em 29/09: ' + R.txt.inv + '), energia dos inteiros a ' + TOL_E.toFixed(2) + ' kWh do SCADA');
 ok(R.okSaudeLinhas, 'sg_saude_M1: 24 linhas; 532 vira reversa_fv, 532+532+533 somam 3 amostras na familia, 10 vira ilhamento, 639 fora do manual, 39 no dia parcial; parcial e ms BRT');
+ok(R.okFrota, 'energia CC e CA de 5 min na saude e o resumo da frota (conversao so no dia inteiro, o parcial marcado): ' + R.txt.frota);
 ok(R.okSaudeCampos, 'sg_saude_M1: a linha do 601 em 29/09 campo a campo igual ao sg_inv_dia, com a limitacao contada do perfil: ' + R.txt.campos);
 ok(R.okSaudeResumo, 'sg_saude: alarme x falha e rede x equipamento contados em separado, evento em qualquer dia, grandeza fisica so do dia inteiro (dia misto 29/09): ' + R.txt.saude);
 ok(R.okParado, 'o inversor parado o dia inteiro, lido inteiro, num dia em que a usina gerou: parcial = false');
 ok(R.okIdem, 'segunda rodada: nenhum zip novo, produtos identicos');
 ok(R.okNaoRepete, 'segunda rodada: a busca funda nao se repete (nenhum dado novo do inversor sem posicao)');
-ok(R.okMigra, 'historico de esquema 6 FIEL (sem os arquivos das strings e da curva): relido inteiro, produtos identicos (os arquivos refeitos)');
+ok(R.okMigra, 'historico de esquema 7 FIEL (sem o resumo da frota): relido inteiro, produtos identicos (os arquivos refeitos)');
 ok(R.okBuscaVolta, 'dia novo do inversor sem posicao: a busca volta (1 export) e a memoria anda para 26/09');
 ok(R.okNula, 'linha sem t0/t1: parcial nula, fora da conferencia (29/09 com 3 + 1) e fora dos inteiros do resumo da saude');
 
@@ -672,6 +682,7 @@ planta('isolamento com a limitacao', 'iso: x.iso_min, lim: x.lim_pct', 'iso: x.l
 planta('historico guarda o pt5 antigo', "H.pest = H.pest || {}; delete H.pt5;", "H.pest = H.pest || {};", 'okSemPt5');
 // so o PT100 pela pasta (o 'eletrocentro pela pasta' abaixo pega os dois juntos)
 planta('temperatura de 5 min pela pasta', "const k = o.ufv + '_' + tsDoLogger[sn].ts;", "const k = o.ufv + '_' + (pref === 'sg_pt_' ? o.pasta : tsDoLogger[sn].ts);", 'okPtEtc');
+plantaLib('energia CC pela potencia CA', 'ecc: r(PDC.reduce(', 'ecc: r(P.reduce(', 'okFrota');
 plantaLib('zero do PT100 como temperatura', 'return x != null && x > 0 ? x : null;', 'return x != null ? x : null;', 'okPt');
 planta('eletrocentro pela pasta', "const k = o.ufv + '_' + tsDoLogger[sn].ts;\n      const m = porEtc[k]", "const k = o.ufv + '_' + o.pasta;\n      const m = porEtc[k]", 'okEtc');
 plantaLib('horas fora contando a noite', 'const fora = L.filter((v) => (num(v[c.p]) || 0) > 1000).map', 'const fora = L.map', 'okEtc');
@@ -717,9 +728,12 @@ planta('corrente do ranking pela tensao', 'i: med(L.map((l) => l.i[m]))', 'i: me
 planta('eletrocentro sem MPPT sem arquivo', 'if (!novo.length && ant && !tirados) continue;', 'if (!novo.length) continue;', 'okMpptVazio');
 planta('strings: 5 min de 1 dia so', 'SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), DIAS_5MIN);', 'SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), 1);', 'okStr5');
 planta('strings: diario de 1 dia', 'dias5: DIAS_5MIN, diasStr: DIAS_STR });', 'dias5: DIAS_5MIN, diasStr: 1 });', 'okStr');
-planta('saude com a chave da dispersao errada', "const sd = STRB.disp.get(x.chave + '|' + x.d);", "const sd = STRB.disp.get(x.chave + '/' + x.d);", 'okStrSaude');
+planta('saude com a chave da dispersao errada', "const sd = STRB.disp.get(x.chave + '|' + x.d);\n      if (sd) { r.smin", "const sd = STRB.disp.get(x.chave + '/' + x.d);\n      if (sd) { r.smin", 'okStrSaude');
 planta('saude com a mais forte no lugar da mais fraca', 'if (sd) { r.smin = sd.min_pct; r.smax = sd.max_pct;', 'if (sd) { r.smin = sd.max_pct; r.smax = sd.max_pct;', 'okStrSaude');
-planta('migracao sem as strings', 'const STRB = await SS.produtos({ strRodada, g5Rodada,', 'const STRB = await SS.produtos({ strRodada: migra ? {} : strRodada, g5Rodada: migra ? {} : g5Rodada,', 'okMigra');
+planta('frota: conversao no dia parcial', 'o.cv[i] = x.parcial === false && x.ecc > 0', 'o.cv[i] = x.ecc > 0', 'okFrota');
+// (o contador do forjado sobe exatamente a potencia de 5 min, entao 'conversao pelo contador' nao se distingue aqui: o plantio e a razao invertida)
+planta('frota: conversao invertida (CC sobre CA)', 'ri(x.eca / x.ecc, 1000)', 'ri(x.ecc / x.eca, 1000)', 'okFrota');
+planta('migracao sem o resumo da frota', "pesos['sg_frota_dia.json'] = await escreve(", "if (!migra) pesos['sg_frota_dia.json'] = await escreve(", 'okMigra');
 planta('tipo do dia pela origem', "(FAM[f] || {}).tipo === 'alarme' ? 1 :", "(FAM[f] || {}).origem === 'rede' ? 1 :", 'okSaudeTipo');
 planta('codigo fora do manual vira falha', "(FAM[f] || {}).tipo === 'falha' ? 2 : 4), 0);", "(FAM[f] || {}).tipo === 'falha' ? 2 : 2), 0);", 'okSaudeTipo');
 planta('tipo do dia soma os bits em vez de OU', "reduce((b, f) => b | ((FAM[f]", "reduce((b, f) => b + ((FAM[f]", 'okSaudeTipo');

@@ -114,6 +114,10 @@ function diaInversor(cab, linhas, onde) {
       vida: vida.length ? r(vida[vida.length - 1], 1) : null,   // contador de vida no fim do dia: identifica o inversor
       p_max: r(Math.max(...P.filter((x) => x != null), 0), 2),
       pdc_max: r(Math.max(...PDC.filter((x) => x != null), 0), 2),
+      // a energia CC do dia (sg-frota-dia, 14/10/2026): a potencia CC de 5 min x 5/60 h, kWh; so e comparavel a CA no dia inteiro
+      ecc: r(PDC.reduce((t, x) => (x != null && x > 0 ? t + x * 5 / 60 : t), 0), 2),
+      // e a CA integrada DA MESMA FORMA (potencia CA de 5 min x 5/60 h): a razao CA/CC so faz sentido com os dois lados pelo mesmo metodo
+      eca: r(P.reduce((t, x) => (x != null && x > 0 ? t + x * 5 / 60 : t), 0), 2),
       t_max: r(Math.max(...g(c.t, 0.1).filter((x) => x != null), -99), 1),
       t_med: r(med(so(g(c.t, 0.1))), 1),
       iso_min: r(Math.min(...so(g(c.iso, 1)).filter((x) => x != null && x > 0), 1e9), 0),
