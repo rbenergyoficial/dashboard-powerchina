@@ -49,6 +49,11 @@ jobs:
       - name: Ensaio · a leitura travada sai da serie (regra)
         run: node scripts/ensaio-irr-travada.js --lib
 
+      # o M7 da irradiancia do ONS (PROMOVER irr-ons-m7): o CEFMT7 e o M7 na irradiancia, conferido mes a mes contra o datalogger
+      # do M7 e do M3. So a REGRA aqui (casos forjados e sete plantios): o mes 'retirado' e a guarda funcionando, nao reprova o job
+      - name: Ensaio · o M7 da irradiancia do ONS (regra)
+        run: node scripts/ensaio-irr-ons-tag.js --lib
+
       # O historico da projecao (meta, gerado e o que a projecao diria com 5..25 dias fechados, por mes fechado) e o
       # registro do que a manchete publicou: a REGRA, em casos forjados, antes de gerar.
       - name: Ensaio · o historico da projecao (regra)
@@ -188,6 +193,11 @@ jobs:
       # e antes do PR, que le esta irradiancia (e refaz os dias com leitura retirada).
       - name: Ensaio · a leitura travada sai da serie (produto)
         run: node scripts/ensaio-irr-travada.js --produto
+
+      # ... e o M7 do ONS no produto: a conferencia publicada no irr_ufv.json e REFEITA da fonte crua e tem de bater mes a mes (o fio do
+      # gerador: chave, slot, referencia), e o irr_plano_30min tem ons_w_M7 em toda leitura do M7 nos meses conferidos e nenhum nos retirados
+      - name: Ensaio · o M7 da irradiancia do ONS (produto)
+        run: node scripts/ensaio-irr-ons-tag.js --produto
 
       # ... e o NOME da grandeza nas tres linguas (PROMOVER irr-rotulo): a regra em casos forjados e, no irr_ufv.json recem
       # gravado, toda linha de `qualidade` com `grandeza_pt`/`_en`/`_zh` da lib — a traducao da pagina troca o `_pt` pela

@@ -34,6 +34,7 @@
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
 const { travadas } = require('./lib-irr-travada.js');   // PROMOVER irr-travada
 const { rotulaQualidade, confereCobertura } = require('./lib-irr-rotulo.js');   // PROMOVER irr-rotulo
+const { chaveOns, indiceDatalogger, confereM7, semReferencia } = require('./lib-irr-ons-tag.js');   // PROMOVER irr-ons-m7
 const OUT_CONTAINER = 'dados', OUT_BLOB = 'irr_ufv.json';
 // SAIDA EM DOIS GRUPOS:
 //   irr_ufv.json          - o blob principal: serie diaria, mensal, qualidade e a lista dias_hora.
@@ -796,14 +797,13 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // renderizacao. Com o ONS dentro dos MEUS arquivos, o comparativo fica simetrico com o resto da
   // pagina: mesmo filtro, mesmo arquivo, mesmo nivel de zoom.
   //
-  // MAPEAMENTO DAS TAGS — e aqui que mora o cuidado. CEFMTn = Mn, MENOS:
-  //   CEFMT7 nao e o M7: e o circuito 2 do M3 (defeito de tag conhecido do ONS, ja registrado no
-  //   projeto). Entao CEFMT7 fica FORA e o M7 simplesmente nao tem serie do ONS — melhor sem dado do
-  //   que com o dado do vizinho. O M3 usa so o CEFMT3.
+  // MAPEAMENTO DAS TAGS (lib-irr-ons-tag.js, PROMOVER irr-ons-m7, 15/10/2026): CEFMTn = Mn, INCLUSIVE o CEFMT7.
+  //   Ate 15/10 o CEFMT7 ficava fora ("e o circuito 2 do M3"), um defeito que era da GERACAO ate 16/07/2026; na
+  //   irradiancia o CEFMT7 bate com o datalogger do M7 a 1-3 W/m2 desde nov/25 e com o do M3 a 43-121 (set-out/25, antes da
+  //   operacao comercial, a 55-64 W/m2: todas as tags do ONS ficam longe ali, e ainda e o mais perto). A guarda
+  //   confereM7 ainda confere mes a mes contra o DATALOGGER do M7 e do M3 e tira o M7 do mes que nao bater.
   // O ONS tambem nao tem agosto/2025 (o arquivo nao existe), o que deixa o primeiro mes da janela sem
   // comparativo. Nao ha o que reconstruir ali, e forcar seria inventar.
-  const ONS_TAG = { CEFMT1: 'M1', CEFMT2: 'M2', CEFMT3: 'M3', CEFMT4: 'M4', CEFMT5: 'M5',
-    CEFMT6: 'M6', CEFMT8: 'M8', CEFMT9: 'M9' };
   const ONS_BASE = 'https://rbenergydata.blob.core.windows.net/dados/ons_irradiancia_';
   const getJSON = url => new Promise((res, rej) => {
     https.get(url, r => {
@@ -843,13 +843,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   for (const m of onsMes) {
     try {
       const j = await getJSON(ONS_BASE + m.replace('-', '_') + '.json');
-      (j.consolidado || []).forEach(r => {
-        const u = ONS_TAG[r.u]; if (!u) return;
-        if (String(r.inv) === 'True') return;              // o proprio ONS marcou a medida invalida
-        const v = Number(r.irr); if (!isFinite(v)) return;
-        const slot = +r.ts.slice(11, 13) * 2 + (+r.ts.slice(14, 16) >= 30 ? 1 : 0);
-        ons[r.ts.slice(0, 10) + '|' + u + '|' + slot] = v;
-      });
+      // a chave, o slot e o que fica de fora (tag, invalida, celula vazia) moram na lib-irr-ons-tag (PROMOVER irr-ons-m7)
+      (j.consolidado || []).forEach(r => { const c = chaveOns(r); if (c) ons[c[0]] = c[1]; });
       onsOk++;
     } catch (e) { onsFalta.push(m + ' (' + e.message + ')'); }
   }
@@ -861,6 +856,20 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     throw new Error('nenhum dos ' + onsMes.length + ' meses do ONS pode ser lido, e nem todos sao '
       + '404 — o leitor esta quebrado, nao a fonte. Primeiros: ' + onsFalta.slice(0, 3).join(' · '));
   }
+  // o M7 do ONS so fica no mes em que bate com o datalogger do proprio M7 melhor que com o do M3 (lib-irr-ons-tag). A
+  // referencia e o DATALOGGER (media da meia hora, a grandeza que o ONS publica), nunca o SCADA (amostra no inicio dela).
+  // Sem o arquivo do datalogger (HTTP 404) a guarda nao tem com o que conferir: o M7 do ONS sai INTEIRO ('sem_referencia', o
+  // comportamento de antes do lote). Qualquer OUTRA falha de leitura (503, gzip, formato) PARA o gerador: e o leitor quebrado,
+  // nao a fonte — a mesma familia do gzip que cegou o ONS em 26/08/2026 (revisor-ensaio RE-003).
+  let DL = null;
+  try { DL = await getJSON(ONS_BASE.replace(/ons_irradiancia_$/, '') + 'estacao_logger_30min.json'); }
+  catch (e) { if (!/HTTP 404/.test(e.message)) throw new Error('estacao_logger_30min.json ilegivel (' + e.message + '): a guarda do M7 do ONS nao tem referencia'); }
+  const DLI = DL ? indiceDatalogger(DL) : {};
+  if (DL && !Object.keys(DLI).length) throw new Error('estacao_logger_30min.json sem leitura: a guarda do M7 do ONS nao tem referencia');
+  const ONS_M7 = DL ? confereM7(ons, (d, u, slot) => (DLI[d + '|' + u + '|' + slot] == null ? null : DLI[d + '|' + u + '|' + slot])) : semReferencia(ons);
+  if (!DL) console.log('  ⚠️ estacao_logger_30min.json nao existe (404): o M7 do ONS sai inteiro');
+  console.log('ONS M7 por mes: ' + ONS_M7.map((x) => x.mes + ' ' + x.uso + ' (' + x.pares + ' pares, M7 ' + x.med_m7 + ' x M3 '
+    + x.med_m3 + ' W/m2' + (x.retiradas ? ', ' + x.retiradas + ' retiradas' : '') + ')').join(' · '));
   console.log('ONS: ' + onsOk + ' de ' + onsMes.length + ' meses lidos, ' + Object.keys(ons).length
     + ' leituras' + (onsFalta.length ? ' · sem arquivo: ' + onsFalta.join(', ') : ''));
 
@@ -963,8 +972,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // ⚠️ A linha NAO carrega os campos do sensor principal, nem cobertura, nem bandeira de qualidade:
   //    o painel de falhas filtra `suspeito = 1` e os demais filtram por tipo numerico, entao uma
   //    linha sem eles nao aparece la — que e o certo, porque nao houve medicao principal para julgar.
-  // 🔴 E o M7 so existe aqui pelo AUXILIAR: ele nao tem tag propria no operador nacional. Uma versao
-  //    que so olhasse o ONS deixaria justamente essa usina sem nenhum dado no periodo.
+  // ℹ️ Desde o irr-ons-m7 (15/10/2026) o M7 tambem vem do ONS (CEFMT7), conferido mes a mes; o AUXILIAR continua
+  //    sendo a fonte propria dele quando o SCADA principal nao tem o dia.
   {
     const jaTem = new Set(serie_dia.map(l => l.dia + '|' + l.ufv));
     const diasOutros = [...new Set([
@@ -1140,6 +1149,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     //    `gti_aux` — ou um leitor que compare os dois periodos — nao teria como saber que o
     //    instrumento mudou. Os dois medem a mesma grandeza no mesmo instante e divergem ~4,5%.
     dias_sensor_auxiliar: [...diasAux].sort(),
+    ons_tag_m7: ONS_M7,   // PROMOVER irr-ons-m7: a conferencia do CEFMT7 contra o datalogger do M7 e do M3, mes a mes
+    ons_tag_m7_ref: DL ? DL.gerado_em || null : null,   // o datalogger usado: o ensaio do produto so refaz a conta com o MESMO
     // os trechos de leitura TRAVADA retirados da serie de 30 min (PROMOVER irr-travada): declarados, para o leitor saber
     // por que a meia hora da estacao — e a do conjunto — esta vazia
     leituras_travadas: TRAVA.trechos.map((t) => ({ dia: t.dia, ufv: t.ufv, ini: t.ini / 2, fim: t.fim / 2, valor_w: t.valor, meias_horas: t.n })),
