@@ -485,6 +485,12 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         tm_med: mediana(inteiros.map((r) => r.tm)), ef_med: mediana(inteiros.map((r) => r.ef)),
         iso_min: inteiros.some((r) => r.iso != null) ? Math.min(...inteiros.map((r) => r.iso).filter((x) => x != null)) : null });
       const ud = usinaDia[usinaDia.length - 1]; if (ud.tm_max === -99) ud.tm_max = null;
+      /* a CASCATA da usina no dia (sg-perdas, 15/10/2026, pagina Confiabilidade e perdas): a energia CC e CA somadas dos inversores com o
+         dia INTEIRO e os dois lados (o mesmo metodo da conversao do sg_frota_dia), em MWh, e quantos entraram (n_cc). A pagina so usa o dia em
+         que n_cc e o parque inteiro: com inversor faltando, a soma do logger fica abaixo do medidor e a "perda" seria cobertura */
+      const cas = inteiros.filter((r) => r.ecc != null && r.eca != null && r.ecc > 0);
+      const somaM = (k) => Math.round(cas.reduce((a, r) => a + r[k], 0)) / 1000;
+      ud.n_cc = cas.length; ud.ecc = cas.length ? somaM('ecc') : null; ud.eca = cas.length ? somaM('eca') : null;
       const pf = {};
       for (const r of R) for (const [f, n] of Object.entries(r.ev || {})) { const o = pf[f] || (pf[f] = { n_inv: 0, amostras: 0 }); o.n_inv += 1; o.amostras += n; }
       for (const [f, o] of Object.entries(pf)) famDia.push({ d, ms: msBrt(d), ufv: u, fam: f, tipo: (FAM[f] || {}).tipo || null,
@@ -495,6 +501,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   usinaDia.sort(ordDU); famDia.sort(ordDU);
   pesos['sg_saude.json'] = await escreve('sg_saude.json', { gerado_em: agora, esquema: 1,
     fonte: 'familias, tipo e origem: manual do usuario do SG350HX, secao 8.1 (p. 105 a 113)',
+    unidade_cascata: 'usina_dia: ecc e eca MWh, a energia CC e CA somadas dos n_cc inversores com o dia inteiro e os dois lados integrados da potencia'
+      + ' de 5 min x 5/60 h (o kWh de cada inversor arredondado; a soma em MWh); n_inv inversores com o dia inteiro',
     familias: S.FAIXAS.map(([fam, tipo, origem, fx]) => ({ fam, tipo, origem, codigos: fx.map(([a, b]) => (a === b ? String(a) : a + '-' + b)).join(', ') })),
     usina_dia: usinaDia, familia_dia: famDia });
   /* -------- A FROTA DIA A DIA (sg-frota-dia, 14/10/2026): o que a pagina PV · Sungrow precisa de TODOS os inversores do parque num arquivo so,
