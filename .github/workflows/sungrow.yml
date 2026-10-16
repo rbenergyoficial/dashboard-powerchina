@@ -64,3 +64,18 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT: dados
         run: node scripts/gen-ts-setpoint.js
+      # PROMOVER assistente-portal: o resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
+      # roda mesmo se um ensaio anterior reprovou (le os blobs publicados), e o ensaio dele refaz cada numero por codigo proprio
+      - name: Ensaio · resumo do dia do assistente (lib, mundo forjado)
+        id: agente_lib
+        if: ${{ !cancelled() }}
+        run: node scripts/ensaio-agente-dia.js --lib
+      - name: Agente · resumo do dia do assistente
+        id: agente_dia
+        if: ${{ !cancelled() && steps.agente_lib.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-agente-dia.js
+      - name: Ensaio · resumo do dia do assistente (produto)
+        if: ${{ !cancelled() && steps.agente_dia.outcome == 'success' }}
+        run: node scripts/ensaio-agente-dia.js
