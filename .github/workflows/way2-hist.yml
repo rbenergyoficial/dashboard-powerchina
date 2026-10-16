@@ -80,7 +80,10 @@ jobs:
         if: ${{ !cancelled() && steps.agente_lib.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes
         run: node scripts/gen-agente-dia.js
       - name: Ensaio · resumo do dia do assistente (produto)
         if: ${{ !cancelled() && steps.agente_dia.outcome == 'success' }}
+        env:
+          FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
         run: node scripts/ensaio-agente-dia.js

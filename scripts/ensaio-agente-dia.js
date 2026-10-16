@@ -10,7 +10,12 @@
  *              sem mês fechado no ano, sem bloquear a gravação), um dia com a medição incompleta e a maior líquida (não é o melhor dia),
  *              um inversor faltando num dia (sai da cascata), o logger que ainda não chegou no último dia (sai dos códigos e da
  *              cascata), um dia do logger sem inversor inteiro (sai dos códigos e a família dele não conta), a estação com o último dia
- *              incompleto (o último completo é o da véspera), e um dia de hoje sem leitura (não é dia fechado). Depois o refaz tem de
+ *              incompleto (o último completo é o da véspera), e um dia de hoje sem leitura (não é dia fechado); no CORTE (agente-corte-cod),
+ *              um mês antes da operação comercial (fora), um mês do modelo (o Complexo com o número do modelo, não o do operador; as usinas
+ *              sem número), um mês do modelo SEM o número do modelo, um mês com base desconhecida no gêmeo (sem número em ninguém), um mês
+ *              do operador com uma usina sem linha, um mês fechado que o modelo ainda não rodou, o mês aberto (fora), as linhas do Complexo
+ *              FORA de ordem, e um segundo ano (2025) só com mês do modelo (as usinas sem número no ano); mês repetido aborta o gerador.
+ *              Depois o refaz tem de
  *              concordar com o gerador folha a folha nesse mundo, e cada PLANTIO no refaz tem de discordar (o caso existe por construção).
  *   --produto  (padrão) sobre o agente_dia.json publicado (ou LOCAL_DIR=<pasta>) e as fontes públicas:
  *              · só julga se as fontes lidas são as MESMAS versões que o produto leu (campo fontes); senão diz que a fonte mudou depois
@@ -18,13 +23,20 @@
  *              · o último dia fechado tirado do way2_daily por conta própria tem de ser o do produto, e mês, mês anterior e ano também;
  *              · comparação folha a folha com o refaz; conta os números não nulos comparados por bloco (nenhum bloco vazio);
  *              · a soma das usinas do PPA no PRODUTO contra o PPA do produto (folga escrita: 7 arredondamentos de 0,0005 MWh);
+ *              · no corte, identidades do PRODUTO que não passam pelo refaz: nos meses do operador, a soma das 9 usinas e PPA + ML são o
+ *                Complexo (folgas de 10 e 3 arredondamentos de 0,005 MWh); nos meses do modelo, o Complexo é o corte_final_gwh do gêmeo × 1000
+ *                (folga: meia unidade das 2 casas de GWh, 5 MWh); nos meses do operador, o gêmeo (apurado bruto) e o executivo (reconciliado)
+ *                diferem por uma folga ABSOLUTA: 5 MWh (meia unidade das 2 casas de GWh do gêmeo) + 0,005 MWh + 10 MWh de resíduo da
+ *                reconciliação (medido até 4,3 MWh em 7 meses, set/26): detector de unidade e de troca grosseira; a troca de mês fica com a
+ *                identidade; todos os meses do operador entram na conferência e os meses fora das identidades são listados;
+ *              · FONTES_DIR (o job do workflow): as fontes que o gerador leu, sempre as mesmas versões, então o produto é sempre julgado.
  *              · os plantios rodam também aqui; sem o caso no dado do momento dizem "não se aplica agora" (o --lib garante a cobertura).
  * Sem segredo: lê só blob público.
  */
 'use strict';
 const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
-const LOCAL = process.env.LOCAL_DIR || '';
+const LOCAL = process.env.LOCAL_DIR || process.env.FONTES_DIR || '';   /* no job: o produto que o gerador deste job gravou (FONTES_DIR) */
 const U9 = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const MEMBROS = { Complexo: U9, PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
 U9.forEach((u) => { MEMBROS[u] = [u]; });
@@ -47,7 +59,7 @@ function get(nome, local) {
 const r2 = (x) => Math.round(x * 100) / 100, r3 = (x) => Math.round(x * 1000) / 1000;
 
 /* ---------------------------------------------------------------- a segunda rota: o resumo refeito sem o codigo do gerador */
-function refaz(W, S, I, ED, X, P) {
+function refaz(W, S, I, ED, X, P, G) {
   P = P || {};
   const placa = (I.escopo || {}).inversores_por_parque || {};
   const porDia = new Map(W.dias.map((x) => [x.dia, x]));
@@ -119,6 +131,30 @@ function refaz(W, S, I, ED, X, P) {
     .sort((a, b) => (a.mes < b.mes ? -1 : 1));
   out.ppa = { ano, meses_fechados: L.length, meses_na_meta: L.filter((r) => r.liquida_gwh >= r.meta_gwh).length,
     folga_gwh: L.length ? r3(L.reduce((a, r) => a + r.liquida_gwh - r.meta_gwh, 0)) : null, de: L.length ? L[0].mes : null, ate: L.length ? L[L.length - 1].mes : null };
+  /* o corte desde a operacao comercial: o mes fechado da Visao Executiva; no Complexo o modelo quando o gemeo diz 'calculado'; nas usinas e
+     contratos esse mes fica nulo; mes sem linha no gemeo, nulo em todos */
+  const gm = new Map(((G && G.serie) || []).filter((s) => s.base === 'calculado' || s.base === 'apurado').map((s) => [s.mes, s]));
+  const fechadas = (X.serie_ufv || []).filter((r) => (P.corteMesAberto || !r.parcial) && (P.cortePreCOD || r.mes >= '2025-09'));
+  const mesesC = [...new Set(fechadas.filter((r) => r.ufv === 'Complexo').map((r) => r.mes))].sort();
+  const cm = mesesC.map((m) => {
+    const g = gm.get(m), mod = g ? g.base === 'calculado' : false, o = { mes: m, fonte: g ? (mod ? 'modelo' : 'operador') : null, confianca: mod ? (g.confianca || null) : null };
+    ENTS.forEach((e) => {
+      const lin = fechadas.find((r) => r.ufv === e && r.mes === m), opv = lin && lin.cortado_mwh != null ? r2(lin.cortado_mwh) : null;
+      if (!g) o[e] = null;
+      else if (e === 'Complexo') o[e] = mod && !P.corteOperadorNoModelo ? (g.corte_mwh == null ? null : r2(g.corte_mwh)) : opv;
+      else o[e] = mod && !P.corteUsinaNoModelo ? null : opv;
+    });
+    return o;
+  });
+  const soma = (ms) => {
+    const pe = {};
+    ENTS.forEach((e) => { const v = ms.filter((x) => x[e] != null); pe[e] = { mwh: v.length ? r2(v.reduce((a, x) => a + x[e], 0)) : null, de: v.length ? v[0].mes : null,
+      ate: v.length ? v[v.length - 1].mes : null, meses: v.length, meses_modelo: v.filter((x) => x.fonte === 'modelo').length, meses_sem_numero: ms.length - v.length }; });
+    return { de: ms.length ? ms[0].mes : null, ate: ms.length ? ms[ms.length - 1].mes : null, meses: ms.length, por_entidade: pe };
+  };
+  const anosC = [...new Set(mesesC.map((m) => m.slice(0, 4)))];
+  out.corte = { meses: cm, desde_cod: soma(cm), por_ano: {} };
+  anosC.forEach((a) => { out.corte.por_ano[a] = soma(cm.filter((x) => x.mes.slice(0, 4) === a)); });
   return out;
 }
 
@@ -144,7 +180,9 @@ function julga(A, Rf) {
 }
 const PLANTIOS = [['diaParcial', 'dia com inversor faltando entrando na cascata'], ['trocaML', 'M7 trocado por M9 no ML'], ['melhorIncompleto', 'o melhor dia pegando dia de medicao incompleta'],
   ['estacaoIncompleta', 'a estacao lendo dia incompleto'], ['estacaoForaDoMes', 'a media da estacao tirada fora do mes'], ['viradaJan', 'o mes anterior de janeiro no mesmo ano'],
-  ['codigosSemLogger', 'os codigos contando o dia que o logger nao trouxe']];
+  ['codigosSemLogger', 'os codigos contando o dia que o logger nao trouxe'], ['corteOperadorNoModelo', 'o corte do Complexo com o numero do operador no mes do modelo'],
+  ['corteUsinaNoModelo', 'a usina com o numero do operador no mes do modelo'], ['cortePreCOD', 'o corte contando mes antes da operacao comercial'],
+  ['corteMesAberto', 'o corte contando o mes aberto']];
 
 /* ---------------------------------------------------------------- --lib: o mundo forjado */
 function forja() {
@@ -169,12 +207,29 @@ function forja() {
   S.familia_dia.push({ d: '2027-01-11', ufv: 'M1', fam: 'isolacao_baixa', origem: 'equipamento', n_inv: 1 });
   S.familia_dia.push({ d: '2027-01-10', ufv: 'M2', fam: 'entrada_anormal', origem: 'equipamento', n_inv: 3 });
   const X = { atualizado: 'forjado', serie_ufv: [{ ufv: 'PPA', mes: '2026-11', liquida_gwh: 30, meta_gwh: 28 }, { ufv: 'PPA', mes: '2026-12', liquida_gwh: 29, meta_gwh: 30 }, { ufv: 'PPA', mes: '2027-01', liquida_gwh: 14, meta_gwh: 30, parcial: 1 }] };
+  /* o corte: 2025-08 antes da operacao comercial; 2026-10 mes do MODELO (o operador diz 100 no Complexo, o modelo 1234,5); 2026-11 do
+     operador; 2026-12 fechado e sem linha no gemeo; 2027-01 aberto. Cada usina com 10 + i no mes, o PPA e o ML com a soma das deles */
+  /* 2025-09 do modelo (500; 2025 so com ele: as usinas sem numero no ano), 2025-10 com base DESCONHECIDA no gemeo (sem numero em
+     ninguem), 2026-09 do modelo SEM o numero do modelo (o Complexo fica nulo, nunca o do operador), 2026-11 do operador com o M9 SEM linha.
+     As linhas do Complexo entram FORA de ordem (a lista de meses tem de sair ordenada) */
+  ['2026-11', '2025-08', '2026-10', '2025-10', '2026-12', '2025-09', '2026-09', '2027-01'].forEach((m) => {
+    const par = m === '2027-01' ? 1 : 0, cx = m === '2026-10' ? 100 : 90, uv = {};
+    U9.forEach((u, i) => { uv[u] = 10 + i; });
+    const linha = (ufv, v) => { const o = X.serie_ufv.find((r) => r.ufv === ufv && r.mes === m); if (o) o.cortado_mwh = v; else X.serie_ufv.push({ ufv, mes: m, cortado_mwh: v, parcial: par }); };
+    linha('Complexo', cx); U9.forEach((u) => { if (!(m === '2026-11' && u === 'M9')) linha(u, uv[u]); });
+    linha('PPA', ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'].reduce((a, u) => a + uv[u], 0)); linha('ML', ['M1', 'M7', 'M9'].reduce((a, u) => a + uv[u], 0));
+  });
+  const G = { gerado_em: 'forjado', serie: [{ mes: '2025-08', base: 'calculado', corte_mwh: 7, confianca: 'baixa' }, { mes: '2025-09', base: 'calculado', corte_mwh: 500, confianca: 'baixa' },
+    { mes: '2025-10', base: 'outra', corte_mwh: 600 }, { mes: '2026-09', base: 'calculado', corte_mwh: null, confianca: 'baixa' },
+    { mes: '2026-10', base: 'calculado', corte_mwh: 1234.5, confianca: 'media' }, { mes: '2026-11', base: 'apurado', corte_mwh: 95, confianca: 'alta' }, { mes: '2027-01', base: 'apurado', corte_mwh: 3 }] };
   const I = { atualizado: 'forjado', escopo: { inversores_por_parque: PL } };
-  return { W, S, I, ED, X };
+  return { W, S, I, ED, X, G };
 }
 function lib() {
   const G = require('./gen-agente-dia.js');
-  const F = forja(), R = G.monta(F.W, F.S, F.I, F.ED, F.X);
+  const F = forja(), R = G.monta(F.W, F.S, F.I, F.ED, F.X, F.G);
+  const C = R.corte || { meses: [], desde_cod: { por_entidade: {} }, por_ano: {} }, cm = (m) => C.meses.find((x) => x.mes === m) || {};
+  const ce = (b, e) => (b && b.por_entidade && b.por_entidade[e]) || {};
   const esperado = [
     ['ultimo dia fechado (hoje sem leitura nao conta)', R.ultimo_dia_fechado, '2027-01-15'], ['mes', R.mes, '2027-01'], ['mes anterior de janeiro = dezembro do ano anterior', R.mes_anterior, '2026-12'], ['ano', R.ano, '2027'],
     ['M3: o melhor dia pula o dia de medicao incompleta', R.historico.M3.mes.melhor.dia, '2027-01-15'], ['M3: dias completos no mes', R.historico.M3.mes.dias_completos, 14],
@@ -187,21 +242,46 @@ function lib() {
     ['M2: o ultimo dia completo da estacao e a vespera', R.estacao.M2.ultimo_dia && R.estacao.M2.ultimo_dia.dia, '2027-01-14'], ['M2: dias completos da estacao no mes', R.estacao.M2.mes.dias_completos, 14],
     ['M2: poa do mes so com os dias completos', R.estacao.M2.mes.poa, 8.1], ['PPA em janeiro: nenhum mes fechado no ano', R.ppa.meses_fechados, 0], ['PPA em janeiro: folga nula', R.ppa.folga_gwh, null],
     ['a guarda nao bloqueia o janeiro sem mes fechado', G.guarda(R).mau.join(' | '), ''],
+    ['corte: os meses fechados desde a operacao, em ordem (sem 2025-08 e sem o aberto)', C.meses.map((x) => x.mes).join(','), '2025-09,2025-10,2026-09,2026-10,2026-11,2026-12'],
+    ['corte: base desconhecida no gemeo: sem fonte', cm('2025-10').fonte, null], ['corte: base desconhecida: o Complexo sem numero (nem o 600 do gemeo nem o 90 do operador)', cm('2025-10').Complexo, null],
+    ['corte: base desconhecida: a usina sem numero', cm('2025-10').M3, null],
+    ['corte: mes do modelo sem o numero do modelo: o Complexo nulo, nao o operador (90)', cm('2026-09').Complexo, null], ['corte: e a fonte continua modelo', cm('2026-09').fonte, 'modelo'],
+    ['corte: usina sem linha no mes do operador fica nula, nao zero', cm('2026-11').M9, null], ['corte: o ML e a linha publicada do contrato (10+16+18)', cm('2026-11').ML, 44],
+    ['corte: 2025 so com o mes do modelo: Complexo 500', ce(C.por_ano['2025'], 'Complexo').mwh, 500], ['corte: 2025: o M3 sem numero no ano (nulo, nao zero)', ce(C.por_ano['2025'], 'M3').mwh, null],
+    ['corte: 2025: o M3 com 2 meses sem numero', ce(C.por_ano['2025'], 'M3').meses_sem_numero, 2], ['corte: 2025: os meses do ano', C.por_ano['2025'] && C.por_ano['2025'].meses, 2],
+    ['corte: 2026: o M9 sem numero no ano', ce(C.por_ano['2026'], 'M9').mwh, null], ['corte: 2026: o M9 com 4 meses sem numero', ce(C.por_ano['2026'], 'M9').meses_sem_numero, 4],
+    ['corte: 2026: o M3 so o mes do operador', ce(C.por_ano['2026'], 'M3').mwh, 12],
+    ['corte: no mes do modelo o Complexo e o modelo (1234,5), nao o operador (100)', cm('2026-10').Complexo, 1234.5], ['corte: o mes do modelo diz a fonte', cm('2026-10').fonte, 'modelo'],
+    ['corte: a confianca do modelo', cm('2026-10').confianca, 'media'], ['corte: no mes do modelo a usina fica sem numero', cm('2026-10').M3, null], ['corte: e o PPA tambem', cm('2026-10').PPA, null],
+    ['corte: no mes do operador o Complexo e o do operador (90), nao o do gemeo (95)', cm('2026-11').Complexo, 90], ['corte: no mes do operador o M3 e 12', cm('2026-11').M3, 12],
+    ['corte: o PPA no mes do operador (11+12+13+14+15+17)', cm('2026-11').PPA, 82], ['corte: o mes que o modelo nao rodou fica sem numero no Complexo', cm('2026-12').Complexo, null],
+    ['corte: desde a operacao, o Complexo soma o modelo e o operador (500 + 1234,5 + 90)', ce(C.desde_cod, 'Complexo').mwh, 1824.5], ['corte: com 2 meses do modelo', ce(C.desde_cod, 'Complexo').meses_modelo, 2],
+    ['corte: e 3 meses sem numero (base desconhecida, modelo sem numero, sem gemeo)', ce(C.desde_cod, 'Complexo').meses_sem_numero, 3], ['corte: o M3 desde a operacao so o mes do operador', ce(C.desde_cod, 'M3').mwh, 12],
+    ['corte: o M3 comeca no mes do operador', ce(C.desde_cod, 'M3').de, '2026-11'], ['corte: o M3 com 5 meses sem numero', ce(C.desde_cod, 'M3').meses_sem_numero, 5],
+    ['corte: 2025 e 2026 no por_ano (2027 so tem o mes aberto)', Object.keys(C.por_ano).join(','), '2025,2026'],
   ];
+  const rep = (f) => { try { f(); return 'nao abortou'; } catch (e) { return /repetido/.test(e.message) ? 'abortou' : 'abortou por outro motivo: ' + e.message; } };
+  const F2 = forja(); F2.X.serie_ufv.push({ ufv: 'M3', mes: '2026-11', cortado_mwh: 99, parcial: 0 });
+  const F3 = forja(); F3.G.serie.push({ mes: '2026-10', base: 'apurado', corte_mwh: 1 });
+  esperado.push(['corte: mes repetido na serie_ufv aborta o gerador', rep(() => G.monta(F2.W, F2.S, F2.I, F2.ED, F2.X, F2.G)), 'abortou'],
+    ['corte: mes repetido no gemeo aborta o gerador', rep(() => G.monta(F3.W, F3.S, F3.I, F3.ED, F3.X, F3.G)), 'abortou']);
   const ruins = esperado.filter((x) => x[1] !== x[2]);
   ok(!ruins.length, esperado.length + ' casos forjados com o valor escrito a mao' + (ruins.length ? ' — ' + ruins.map((x) => x[0] + ': ' + x[1] + ' (esperava ' + x[2] + ')').join('; ') : ''));
-  const j = julga(R, refaz(F.W, F.S, F.I, F.ED, F.X));
+  const j = julga(R, refaz(F.W, F.S, F.I, F.ED, F.X, {}, F.G));
   ok(!j.dif.length, 'o refaz concorda com o gerador folha a folha no mundo forjado (' + Object.values(j.cont).reduce((a, x) => a + x, 0) + ' numeros)' + (j.dif.length ? ' — ' + j.dif.slice(0, 4).join('; ') : ''));
   console.log('· plantios no mundo forjado (o caso existe por construcao: cada um TEM de reprovar)');
-  PLANTIOS.forEach((p) => { const o = {}; o[p[0]] = true; const n = julga(R, refaz(F.W, F.S, F.I, F.ED, F.X, o)).dif.length; ok(n > 0, 'plantio "' + p[1] + '" reprova (' + n + ')'); });
+  PLANTIOS.forEach((p) => { const o = {}; o[p[0]] = true; const n = julga(R, refaz(F.W, F.S, F.I, F.ED, F.X, o, F.G)).dif.length; ok(n > 0, 'plantio "' + p[1] + '" reprova (' + n + ')'); });
 }
 
 /* ---------------------------------------------------------------- --produto */
 async function produto() {
   const A = await get('agente_dia.json', LOCAL);
-  const [W, S, I, ED, X] = await Promise.all(['way2_daily.json', 'sg_saude.json', 'inversores.json', 'estacao_dia.json', 'executivo.json'].map((n) => get(n)));
+  const FD = process.env.FONTES_DIR || '';
+  if (FD) console.log('· as fontes que o gerador deste job leu (' + FD + ')');
+  const [W, S, I, ED, X, G] = await Promise.all(['way2_daily.json', 'sg_saude.json', 'inversores.json', 'estacao_dia.json', 'executivo.json', 'corte_gemeo.json'].map((n) => get(n, FD)));
   console.log('· agente_dia.json de ' + A.gerado + ' · ultimo dia fechado ' + A.ultimo_dia_fechado);
-  const lidas = { way2_daily: W.atualizado || null, sg_saude: S.gerado_em || null, estacao_dia: ED.gerado_em || null, executivo: X.atualizado || null, inversores: I.atualizado || null };
+  const lidas = { way2_daily: W.atualizado || null, sg_saude: S.gerado_em || null, estacao_dia: ED.gerado_em || null, executivo: X.atualizado || null, inversores: I.atualizado || null,
+    corte_gemeo: G.gerado_em || null };
   const mudou = Object.keys(lidas).filter((k) => !A.fontes || A.fontes[k] !== lidas[k]);
   if (mudou.length) {
     console.log('  ⚠️ NAO JULGADO: a fonte mudou depois do produto (' + mudou.map((k) => k + ' ' + (A.fontes && A.fontes[k]) + ' -> ' + lidas[k]).join('; ') + '); a proxima rodada julga');
@@ -209,14 +289,42 @@ async function produto() {
   }
   const ult = W.dias.filter((x) => x.slots > 0).map((x) => x.dia).sort().pop();
   ok(ult === A.ultimo_dia_fechado, 'o ultimo dia fechado tirado do medidor por conta propria e o do produto (' + ult + ')');
-  const Rf = refaz(W, S, I, ED, X), j = julga(A, Rf);
+  const Rf = refaz(W, S, I, ED, X, {}, G), j = julga(A, Rf);
   ok(!j.dif.length, 'o produto inteiro bate folha a folha com o refeito' + (j.dif.length ? ' — difere (' + j.dif.length + '): ' + j.dif.slice(0, 5).join('; ') : ''));
-  const vazios = ['historico', 'perdas', 'codigos', 'estacao'].filter((b) => !(j.cont[b] > 0));
+  const vazios = ['historico', 'perdas', 'codigos', 'estacao', 'corte'].filter((b) => !(j.cont[b] > 0));
   ok(!vazios.length, 'numeros nao nulos comparados por bloco: ' + JSON.stringify(j.cont) + (vazios.length ? ' — bloco vazio: ' + vazios.join(' ') : ''));
   const soma = MEMBROS.PPA.reduce((a, u) => a + A.historico[u].mes.liq_mwh, 0);
   ok(Math.abs(soma - A.historico.PPA.mes.liq_mwh) <= TOL_PPA + 1e-9, 'no produto, a soma das 6 usinas do PPA e a liquida do contrato no mes (' + r3(soma) + ' x ' + A.historico.PPA.mes.liq_mwh + ' MWh; folga ' + TOL_PPA + ')');
   console.log('· plantios no dado do momento (sem o caso no periodo: nao se aplica agora; o --lib cobre por construcao)');
-  PLANTIOS.forEach((p) => { const o = {}; o[p[0]] = true; const n = julga(A, refaz(W, S, I, ED, X, o)).dif.length; console.log('  ' + (n ? '✓' : '·') + ' plantio "' + p[1] + '": ' + (n ? 'reprova (' + n + ')' : 'nao se aplica agora')); });
+  const gm = new Map((G.serie || []).map((s) => [s.mes, s]));
+  const opM = A.corte.meses.filter((m) => m.fonte === 'operador' && gm.get(m.mes) && gm.get(m.mes).corte_final_gwh != null);
+  /* o executivo publica o corte RECONCILIADO (rateio da auditoria de 09/08/2026) e o gemeo le o apurado bruto do operador. O erro e
+     ABSOLUTO (revisor, RE-006): 5 MWh de arredondamento do corte_final_gwh (2 casas de GWh) + 0,005 MWh do executivo + o residuo da
+     reconciliacao, medido ate 4,3 MWh em 7 meses (set/26: 21459,26 x 21,45 GWh = 9,26 MWh), com folga de 10 MWh. E detector de unidade
+     e de troca grosseira (nao encolhe em mes pequeno); a troca de mes e pega pela identidade da soma das usinas, abaixo.
+     TODOS os meses do operador do produto entram (nenhum descartado em silencio) */
+  const FOLGA_GEMEO = 5 + 0.005 + 10;
+  const nOp = A.corte.meses.filter((m) => m.fonte === 'operador').length;
+  const longe = opM.filter((m) => Math.abs(m.Complexo - 1000 * gm.get(m.mes).corte_final_gwh) > FOLGA_GEMEO + 1e-9);
+  ok(opM.length > 0 && opM.length === nOp && !longe.length, 'no produto, o corte do Complexo nos ' + opM.length + ' de ' + nOp + ' meses do operador e o corte_final_gwh do gemeo x 1000 (folga ' + FOLGA_GEMEO.toFixed(3) + ' MWh)'
+    + (longe.length ? ' — difere: ' + longe.map((m) => m.mes + ' ' + m.Complexo + ' x ' + gm.get(m.mes).corte_final_gwh).join('; ') : ''));
+  /* identidades do PRODUTO que nao passam pelo refaz (revisor, RE-005): nos meses do operador, soma das 9 = Complexo e PPA + ML = Complexo
+     (cada numero com 2 casas: 10 e 3 arredondamentos de 0,005 MWh); nos meses do modelo, Complexo = corte_final_gwh x 1000 (meia unidade das
+     2 casas de GWh = 5 MWh, mais 0,005 MWh) */
+  const U9P = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+  const opsT = A.corte.meses.filter((m) => m.fonte === 'operador');
+  const falta = (m) => ['Complexo'].concat(U9P, ['PPA', 'ML']).filter((e) => m[e] == null);
+  const ops = opsT.filter((m) => !falta(m).length), fora = opsT.filter((m) => falta(m).length);
+  const fu = ops.filter((m) => Math.abs(U9P.reduce((a, u) => a + m[u], 0) - m.Complexo) > 10 * 0.005 + 1e-9 || Math.abs(m.PPA + m.ML - m.Complexo) > 3 * 0.005 + 1e-9);
+  ok(ops.length > 0 && !fu.length, 'no produto, nos ' + ops.length + ' de ' + opsT.length + ' meses do operador, a soma das 9 usinas e PPA + ML sao o Complexo'
+    + (fora.length ? ' (fora, sem numero: ' + fora.map((m) => m.mes + ' ' + falta(m).join('/')).join('; ') + ')' : '') + (fu.length ? ' — difere: ' + fu.map((m) => m.mes).join(' ') : ''));
+  const modsT = A.corte.meses.filter((m) => m.fonte === 'modelo' && m.Complexo != null);
+  const mods = modsT.filter((m) => gm.get(m.mes) && gm.get(m.mes).corte_final_gwh != null);
+  const fm = mods.filter((m) => Math.abs(m.Complexo - 1000 * gm.get(m.mes).corte_final_gwh) > 5 + 0.005 + 1e-9);
+  /* os 6 meses do modelo (set/25 a fev/26) sao fechados para sempre: a conferencia nunca pode passar vazia */
+  ok(mods.length > 0 && mods.length === modsT.length && !fm.length, 'no produto, nos ' + mods.length + ' de ' + modsT.length + ' meses do modelo o Complexo e o corte_final_gwh do gemeo x 1000 (folga 5 MWh)'
+    + (fm.length ? ' — difere: ' + fm.map((m) => m.mes + ' ' + m.Complexo + ' x ' + gm.get(m.mes).corte_final_gwh).join('; ') : ''));
+  PLANTIOS.forEach((p) => { const o = {}; o[p[0]] = true; const n = julga(A, refaz(W, S, I, ED, X, o, G)).dif.length; console.log('  ' + (n ? '✓' : '·') + ' plantio "' + p[1] + '": ' + (n ? 'reprova (' + n + ')' : 'nao se aplica agora')); });
   const B = JSON.parse(JSON.stringify(A)); delete B.perdas.Complexo;
   ok(julga(B, Rf).dif.length > 0, 'plantio "bloco de perdas sem o Complexo" reprova');
 }

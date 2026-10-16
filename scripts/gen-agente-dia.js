@@ -18,6 +18,11 @@
  *   estacao     estacao_dia.json: por estação, o último dia completo (144 registros) e a média do mês (irradiação no plano e global,
  *               temperatura, vento, chuva).
  *   ppa         executivo.json serie_ufv: folga acumulada contra a meta e meses na meta, nos meses FECHADOS do ano.
+ *   corte       o corte do operador desde a operação comercial (set/25), mês FECHADO a mês, e os acumulados (desde o início e por ano).
+ *               No Complexo, a melhor fonte de cada mês (corte_gemeo.json): de set/25 a fev/26 a referência do operador não fecha com a
+ *               medição e o mês vem do MODELO gêmeo (base 'calculado', com a confiança); nos outros, do operador (executivo.json, o número
+ *               da Visão Executiva). Nas usinas e nos contratos não há modelo: o mês do modelo fica SEM número, porque o do operador é
+ *               subestimado nele (pedido do humano, 16/10/2026: "pode seguir com o corte desde set/25").
  * A placa (inversores por usina) vem do inversores.json; a potência de cada usina é a outorga (a mesma do lib-sungrow-disp).
  *
  *   node scripts/gen-agente-dia.js            grava o blob (DADOS_STORAGE)
@@ -72,6 +77,10 @@ const LEGENDA = {
     + 'ws = vento médio, ws_max a rajada; chuva = soma), tudo sobre os mesmos dias completos.',
   ppa: 'O contrato de PPA com a MBRF (M2, M3, M4, M5, M6, M8): folga_gwh = soma de (líquida − meta) nos meses FECHADOS do ano; '
     + 'meses_na_meta de meses_fechados. Em janeiro ainda não há mês fechado no ano: meses_fechados = 0 e folga_gwh nula.',
+  corte: 'O corte do operador (energia impedida pela restrição) em MWh, mês fechado a mês desde set/25 (meses). fonte = operador '
+    + '(o número da Visão Executiva) ou modelo (de set/25 a fev/26 a referência do operador não fecha com a medição; no Complexo o mês vem do '
+    + 'modelo gêmeo de irradiância, com a confiança dele). Nas usinas e nos contratos o mês do modelo fica nulo: não há modelo por usina e o '
+    + 'número do operador nele é subestimado. desde_cod e por_ano somam só os meses com número (meses, meses_modelo, meses_sem_numero).',
   fontes: 'A versão de cada arquivo de origem lida (data de geração): o ensaio só julga o resumo contra as mesmas versões.',
 };
 
@@ -168,15 +177,48 @@ function ppa(X, ano, mesAberto) {
     de: L.length ? L[0].mes : null, ate: L.length ? L[L.length - 1].mes : null };
 }
 
-function monta(W, S, I, ED, X) {
+/* o corte do operador desde a operacao comercial: cada mes FECHADO da Visao Executiva (serie_ufv sem parcial), na melhor fonte do
+   corte_gemeo.json. So duas bases tem regra: 'calculado' (o modelo, no Complexo) e 'apurado' (o operador). Mes sem linha no gemeo (o
+   modelo ainda nao rodou nele) ou com outra base fica sem numero em todas as entidades: nada se presume (revisor de ensaio, 16/10/2026).
+   Mes REPETIDO na serie_ufv ou no gemeo aborta: escolher uma das linhas seria arbitrario */
+function corte(X, G) {
+  const GM = {}; ((G && G.serie) || []).forEach((s) => { if (GM[s.mes]) throw new Error('corte_gemeo com o mes ' + s.mes + ' repetido'); GM[s.mes] = s; });
+  const SU = (X.serie_ufv || []).filter((r) => !r.parcial && r.mes >= COD.slice(0, 7));
+  const vistos = new Set();
+  SU.forEach((r) => { const k = r.ufv + '|' + r.mes; if (vistos.has(k)) throw new Error('serie_ufv com o mes ' + r.mes + ' repetido em ' + r.ufv); vistos.add(k); });
+  const linha = (e, m) => SU.find((r) => r.ufv === e && r.mes === m);
+  const meses = [...new Set(SU.filter((r) => r.ufv === 'Complexo').map((r) => r.mes))].sort();
+  const M = meses.map((m) => {
+    const g0 = GM[m], g = g0 && (g0.base === 'calculado' || g0.base === 'apurado') ? g0 : null, modelo = !!g && g.base === 'calculado';
+    const o = { mes: m, fonte: !g ? null : modelo ? 'modelo' : 'operador', confianca: modelo ? (g.confianca || null) : null };
+    ENTIDADES.forEach((e) => {
+      const r = linha(e, m), op = r && r.cortado_mwh != null ? r2(r.cortado_mwh) : null;
+      o[e] = !g ? null : e === 'Complexo' ? (modelo ? (g.corte_mwh != null ? r2(g.corte_mwh) : null) : op) : (modelo ? null : op);
+    });
+    return o;
+  });
+  const acum = (ms) => {
+    const A = {};
+    ENTIDADES.forEach((e) => {
+      const v = ms.filter((x) => x[e] != null);
+      A[e] = { mwh: v.length ? r2(v.reduce((a, x) => a + x[e], 0)) : null, de: v.length ? v[0].mes : null, ate: v.length ? v[v.length - 1].mes : null,
+        meses: v.length, meses_modelo: v.filter((x) => x.fonte === 'modelo').length, meses_sem_numero: ms.length - v.length };
+    });
+    return { de: ms.length ? ms[0].mes : null, ate: ms.length ? ms[ms.length - 1].mes : null, meses: ms.length, por_entidade: A };
+  };
+  const anos = [...new Set(meses.map((m) => m.slice(0, 4)))];
+  return { meses: M, desde_cod: acum(M), por_ano: Object.fromEntries(anos.map((a) => [a, acum(M.filter((x) => x.mes.slice(0, 4) === a))])) };
+}
+
+function monta(W, S, I, ED, X, G) {
   const WD = {}; W.dias.forEach((x) => { WD[x.dia] = x; });
   const SG = {}; (S.usina_dia || []).forEach((r) => { SG[r.ufv + '|' + r.d] = r; });
   const PL = (I.escopo || {}).inversores_por_parque || {};
   const T = datas(W);
   const R = { gerado: new Date().toISOString(), fontes: { way2_daily: W.atualizado || null, sg_saude: S.gerado_em || null, estacao_dia: ED.gerado_em || null,
-      executivo: X.atualizado || null, inversores: I.atualizado || null },
+      executivo: X.atualizado || null, inversores: I.atualizado || null, corte_gemeo: (G && G.gerado_em) || null },
     ultimo_dia_fechado: T.ult, mes: T.mes, mes_anterior: T.mesAnt, ano: T.ano, legenda: LEGENDA,
-    historico: {}, perdas: {}, codigos: {}, estacao: {}, ppa: ppa(X, T.ano, T.mes) };   /* o mes do ultimo dia fechado ainda esta aberto */
+    historico: {}, perdas: {}, codigos: {}, estacao: {}, ppa: ppa(X, T.ano, T.mes), corte: corte(X, G) };   /* o mes do ultimo dia fechado ainda esta aberto */
   ENTIDADES.forEach((e) => {
     R.historico[e] = { mes: historico(WD, e, T.J.mes), mes_anterior: historico(WD, e, T.J.mes_anterior), ano: historico(WD, e, T.J.ano) };
     R.perdas[e] = { mes: perdas(WD, SG, PL, e, T.J.mes), mes_anterior: perdas(WD, SG, PL, e, T.J.mes_anterior), ano: perdas(WD, SG, PL, e, T.J.ano) };
@@ -193,6 +235,8 @@ function guarda(R) {
   ['historico', 'perdas', 'codigos'].forEach((b) => ENTIDADES.forEach((e) => { if (!R[b] || !R[b][e]) mau.push(b + ' sem a entidade ' + e); }));
   U9.forEach((u) => { if (!R.estacao || !R.estacao[u]) mau.push('estacao sem a usina ' + u); });
   if (!R.ppa || R.ppa.meses_fechados == null) mau.push('ppa sem o bloco');
+  if (!R.corte || !R.corte.meses.length) mau.push('corte sem mes fechado desde a operacao comercial');
+  else if (R.corte.desde_cod.por_entidade.Complexo.mwh == null) mau.push('corte do Complexo sem numero em nenhum mes: o corte_gemeo veio vazio?');
   if (R.historico && R.historico.Complexo && !(R.historico.Complexo.mes.dias > 0)) mau.push('o Complexo sem dia fechado no mes: o medidor parou?');
   const kb = Buffer.byteLength(JSON.stringify(R)) / 1024;
   if (kb > TETO_KB) mau.push('tamanho ' + kb.toFixed(1) + ' KB acima do teto de ' + TETO_KB);
@@ -208,14 +252,23 @@ async function grava(R) {
 }
 
 async function main() {
-  const [W, S, I, ED, X] = await Promise.all(['way2_daily.json', 'sg_saude.json', 'inversores.json', 'estacao_dia.json', 'executivo.json'].map((n) => puxa(BASE + n)));
-  const R = monta(W, S, I, ED, X);
+  const [W, S, I, ED, X, G] = await Promise.all(['way2_daily.json', 'sg_saude.json', 'inversores.json', 'estacao_dia.json', 'executivo.json', 'corte_gemeo.json'].map((n) => puxa(BASE + n)));
+  /* FONTES_DIR (revisor de ensaio, 16/10/2026): as fontes que ESTA rodada leu ficam no disco do job, e o --produto do mesmo job julga
+     contra elas; sem isso, uma fonte regravada entre o gerador e o ensaio (o executivo roda toda hora) deixava o produto sem julgamento */
+  if (process.env.FONTES_DIR) {
+    const fs = require('fs'), path = require('path'); fs.mkdirSync(process.env.FONTES_DIR, { recursive: true });
+    [['way2_daily.json', W], ['sg_saude.json', S], ['inversores.json', I], ['estacao_dia.json', ED], ['executivo.json', X], ['corte_gemeo.json', G]]
+      .forEach(([n, o]) => fs.writeFileSync(path.join(process.env.FONTES_DIR, n), JSON.stringify(o)));
+  }
+  const R = monta(W, S, I, ED, X, G);
   const { mau, kb } = guarda(R);
   if (mau.length) { console.error('agente_dia: NAO gravado\n  ' + mau.join('\n  ')); process.exit(1); }
   await grava(R);
+  /* e o produto desta rodada, no mesmo lugar: o --produto do job julga o que ESTE job gerou (outro workflow pode regravar o blob no meio) */
+  if (process.env.FONTES_DIR) require('fs').writeFileSync(require('path').join(process.env.FONTES_DIR, OUT_BLOB), JSON.stringify(R));
   console.log('agente_dia: ' + kb.toFixed(1) + ' KB · ultimo dia ' + R.ultimo_dia_fechado + ' · mes ' + R.mes + ' · Complexo: liquida ' + R.historico.Complexo.mes.liq_mwh
-    + ' MWh, perda do inversor a entrega ' + R.perdas.Complexo.mes.tot_pct + ' %');
+    + ' MWh, perda do inversor a entrega ' + R.perdas.Complexo.mes.tot_pct + ' %, corte desde a operacao ' + R.corte.desde_cod.por_entidade.Complexo.mwh + ' MWh');
 }
 
-module.exports = { monta, guarda, historico, perdas, codigos, estacao, ppa, diaMedidor, GRUPO, ENTIDADES, CAP, LOG0, COD };
+module.exports = { monta, guarda, historico, perdas, codigos, estacao, ppa, corte, diaMedidor, GRUPO, ENTIDADES, CAP, LOG0, COD };
 if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
