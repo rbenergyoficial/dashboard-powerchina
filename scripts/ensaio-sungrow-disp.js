@@ -14,10 +14,18 @@
  *     serie sem posicao, a regra da leitura (a do calculo local) e a janela que reinicia a heranca, Complexo pela Capu.
  *     Por POSICAO (sg_disp_inv_dia, sungrow-disp-inv): a conta a mao de cada posicao nas meias horas de sol, sem a serie sem
  *     posicao, e o blob compacto (dias x posicoes).
+ *     A troca pelo CONTADOR DE VIDA (sg-troca-contador, 16/10/2026): o caso real de M1/TS4 INV01 em 30/09 (o arquivo do dono
+ *     cortado as 11:20 e o "rec" do mesmo dia com o numero novo e o contador do dono), o dono sem arquivo no dia, as bordas do
+ *     intervalo, o empate de amostras e o contador novo; o espelho (o "rec" do sucessor cortado), os nomes trocados, tres series, os
+ *     dias do dono fora de ordem e o sucessor so com dias duplicados. FORA (declarado): o duplicado do sucessor ANTERIOR ao primeiro
+ *     dia do dono no historico; sem leitura do dono antes dele o contador nao decide, e a lib antecipa a troca (comentario do
+ *     janelasTroca: o acerto depende de o sg_hist acumulado comecar antes do primeiro duplicado).
  * 2 · plantios na lib (uma copia mudada, os mesmos casos): cada um reprova na sua checagem.
  * 3 · o gerador de ponta a ponta (identificacao semeada no sg_ident, sem SCADA): o arquivo do proprio logger FORJADO com as
  *     tres colunas (pior caso: um firmware que as tenha) nao entra no historico; idempotencia; sem historico e com esquema
- *     velho relê os zips e publica o mesmo; sem a estacao aborta. Plantios no gerador, cada um reprovando.
+ *     velho relê os zips e publica o mesmo; sem a estacao aborta. E a troca com o dono cortado de ponta a ponta (uma posicao, quatro
+ *     dias): o dia do arquivo cortado fica com o arquivo inteiro e o dono segue valendo ate o contador novo. Plantios no gerador,
+ *     cada um reprovando.
  */
 const fs = require('fs');
 const os = require('os');
@@ -186,6 +194,54 @@ function casosLib(Dx) {
     && j4.A.fim === '2026-01-10' && j4.B.ini === '2026-01-10' && j4.B.fim === '2026-01-19' && j4.C.ini === '2026-01-19'
     && j5.A.fim === '2026-09-30' && j5.B.ini === '2026-09-30';
   R.txt.trocajan = JSON.stringify({ normal: j1, duplicado: j2.B, puro: j3.B });
+  /* a troca pelo CONTADOR DE VIDA (sg-troca-contador; casos ESPELHO, NOMES TROCADOS, TRES SERIES e FORA DE ORDEM do revisor): o caso real de M1/TS4 INV01. A (dono): 15/07 inteiro, 29/09 inteiro 814628,4,
+     30/09 CORTADO (137 amostras, ate 11:20) 815615,6, 01/10 818969,8, 08/10 830278,5. B (sucessor): 15/07 duplicado exato do A, 30/09
+     o dia inteiro (288) com o contador do A (816983,8), 09/10 contador novo 1334,8. Esperado: a troca em 09/10; em 30/09 vale o B (mais
+     amostras) e o A sai; em 15/07 (288 e 288) fica o A */
+  const dA = { '2026-07-15': { vida: 707702, e: 996.3, n: 288 }, '2026-09-29': { vida: 814628.4, e: 2041.8, n: 288 },
+    '2026-09-30': { vida: 815615.6, e: 987.2, n: 137 }, '2026-10-01': { vida: 818969.8, e: 1986, n: 288 }, '2026-10-08': { vida: 830278.5, e: 1755.4, n: 288 } };
+  const dB = { '2026-07-15': { vida: 707702, e: 996.3, n: 288 }, '2026-09-30': { vida: 816983.8, e: 2355.4, n: 288 }, '2026-10-09': { vida: 1334.8, e: 1345.2, n: 288 } };
+  const dA2 = Object.fromEntries(Object.entries(dA).filter(([d]) => d !== '2026-09-30'));     // o dono SEM arquivo em 30/09 (o resto do historico igual)
+  /* ESPELHO (revisor, RE-005 e RE-004): o dono com o dia INTEIRO (288, contador do fim do dia 816983,8) e o "rec" do sucessor CORTADO
+     (137, 815000, abaixo do dono no mesmo dia): duplicado, e fica o dono (mais amostras); a troca segue em 09/10 */
+  const dA3 = Object.assign({}, dA, { '2026-09-30': { vida: 816983.8, e: 2355.4, n: 288 } });
+  const dB3 = { '2026-09-30': { vida: 815000, e: 900, n: 137 }, '2026-10-09': dB['2026-10-09'] };
+  /* OS NOMES TROCADOS (RE-007): o caso real com o numero de serie do sucessor ordenando ANTES do dono; os dois comecam em 15/07 */
+  /* TRES SERIES (RE-006): A -> B (contador novo em 10/01) -> C (contador novo em 20/01); em 15/01 o arquivo do B esta cortado (100) e o
+     "rec" do C traz o dia inteiro com o contador do B (entre 50 e 80): em 15/01 vale o C, julgado contra o B (o dono do dia), nao o A */
+  const dAt = { '2027-01-01': { vida: 5000, e: 10, n: 288 }, '2027-01-05': { vida: 5100, e: 10, n: 288 }, '2027-01-09': { vida: 5200, e: 10, n: 288 } };
+  const dBt = { '2027-01-10': { vida: 10, e: 10, n: 288 }, '2027-01-14': { vida: 50, e: 10, n: 288 }, '2027-01-15': { vida: 60, e: 5, n: 100 },
+    '2027-01-16': { vida: 80, e: 10, n: 288 }, '2027-01-19': { vida: 100, e: 10, n: 288 } };
+  const dCt = { '2027-01-15': { vida: 70, e: 10, n: 288 }, '2027-01-20': { vida: 3, e: 3, n: 288 } };
+  /* FORA DE ORDEM (RE-008): os dias do dono chegam na ordem de leitura dos zips, nao na do calendario */
+  const dAo = {}; for (const d of ['2026-10-01', '2026-07-15', '2026-10-08', '2026-09-30', '2026-09-29']) dAo[d] = dA[d];
+  /* SO DUPLICADOS (revisor, RE-007a): o sucessor de M1/TS4 entre 15/04 e 08/10, antes do contador novo: o dono segue aberto desde 15/07,
+     o sucessor nao vale (ini nulo), e em 30/09 vale o arquivo inteiro dele */
+  const dBd = { '2026-07-15': dB['2026-07-15'], '2026-09-30': dB['2026-09-30'] };
+  const HH = { A: dA, B: dB, A2: dA2, A3: dA3, B3: dB3, Z: dA, Ab: dB, At: dAt, Bt: dBt, Ct: dCt, Ao: dAo, Bd: dBd };
+  const dupC = (n, o, d) => Dx.dupContador(HH[n], HH[o], d), am = (s, d) => (HH[s][d] ? HH[s][d].n : 0);
+  /* as bordas NA GRADE do contador publicado (0,1 kWh): o piso e a leitura do dono ANTES do dia (29/09, 814628,4), o teto a primeira
+     depois (01/10, 818969,8); a leitura do dono no proprio dia (815615,6) nao e piso */
+  const v30 = (v) => Dx.dupContador({ '2026-09-30': { vida: v } }, dA, '2026-09-30');
+  const fn = typeof Dx.dupContador === 'function' && typeof Dx.substitutosTroca === 'function';
+  const caso = (ser) => { const s = Object.fromEntries(Object.entries(ser).map(([k, v]) => [k, Object.keys(v)])); const J = fn ? Dx.janelasTroca(s, dupC) : {};
+    return { J, S: fn ? Dx.substitutosTroca(s, J, dupC, am) : {} }; };
+  const c1 = caso({ A: dA, B: dB }), c2 = caso({ A2: dA2, B: dB }), c3 = caso({ A3: dA3, B3: dB3 }), c4 = caso({ Z: dA, Ab: dB }), c5 = caso({ At: dAt, Bt: dBt, Ct: dCt }), c6 = caso({ Ao: dAo, B: dB }), c7 = caso({ A: dA, Bd: dBd });
+  const jf = (c, s, k) => !!c.J[s] && c.J[s][k];
+  R.okTrocaContador = fn
+    && Dx.dupContador(dB, dA, '2026-07-15') === true && Dx.dupContador(dB, dA, '2026-09-30') === true && Dx.dupContador(dB, dA, '2026-10-09') === false
+    && v30(814628.4) === true && v30(814628.3) === false && v30(818969.8) === true && v30(818969.9) === false && v30(815615.5) === true
+    && Dx.dupContador({ '2026-10-09': { vida: 830300 } }, dA, '2026-10-09') === false
+    && jf(c1, 'A', 'fim') === '2026-10-09' && jf(c1, 'B', 'ini') === '2026-10-09'
+    && !!c1.S.B && c1.S.B['2026-09-30'] === true && !!c1.S.A && c1.S.A['2026-09-30'] === false && !('2026-07-15' in c1.S.B) && Object.keys(c1.S.B).length === 1
+    && jf(c2, 'A2', 'fim') === '2026-10-09' && !!c2.S.B && c2.S.B['2026-09-30'] === true && !c2.S.A2
+    && Dx.dupContador(dB3, dA3, '2026-09-30') === true && jf(c3, 'A3', 'fim') === '2026-10-09' && jf(c3, 'B3', 'ini') === '2026-10-09' && Object.keys(c3.S).length === 0
+    && jf(c4, 'Z', 'fim') === '2026-10-09' && jf(c4, 'Ab', 'ini') === '2026-10-09' && !!c4.S.Ab && c4.S.Ab['2026-09-30'] === true && !!c4.S.Z && c4.S.Z['2026-09-30'] === false
+    && jf(c5, 'At', 'fim') === '2027-01-10' && jf(c5, 'Bt', 'ini') === '2027-01-10' && jf(c5, 'Bt', 'fim') === '2027-01-20' && jf(c5, 'Ct', 'ini') === '2027-01-20'
+    && !!c5.S.Ct && c5.S.Ct['2027-01-15'] === true && !!c5.S.Bt && c5.S.Bt['2027-01-15'] === false && Object.keys(c5.S).length === 2
+    && Dx.dupContador(dB, dAo, '2026-09-30') === true && jf(c6, 'Ao', 'fim') === '2026-10-09' && !!c6.S.B && c6.S.B['2026-09-30'] === true
+    && jf(c7, 'A', 'ini') === '2026-07-15' && jf(c7, 'A', 'fim') === null && !!c7.J.Bd && c7.J.Bd.ini === null && !!c7.S.Bd && c7.S.Bd['2026-09-30'] === true;
+  R.txt.trocacontador = JSON.stringify({ real: c1, orfao: c2.S, espelho: c3, nomes: c4.J, tres: c5, foraDeOrdem: c6.J, soDuplicados: c7 });
   // por posicao (porInv): a conta a mao, as mesmas linhas da usina, e o blob compacto
   const ri = Dx.calcula(H, E, { regra: 'posicao', posNoDia, porInv: true }), I = ri.inv || {};
   const confI = Object.keys(ESPI).every((p) => [D1, D2].every((d) => I[p] && I[p][d] && perto(I[p][d].s / I[p][d].n, ESPI[p][d][0]) && I[p][d].n === ESPI[p][d][1]));
@@ -197,7 +253,7 @@ function casosLib(Dx) {
 }
 console.log('1 · lib-sungrow-disp');
 const ATUAL = casosLib(require('./lib-sungrow-disp.js'));
-const CHAVES = ['okTabela2', 'okNome', 'okSemColuna', 'okGrade', 'okJunta', 'okD1', 'okD2', 'okM7', 'okLeitura', 'okJanela', 'okProduto', 'okTrocaJan', 'okInv'];
+const CHAVES = ['okTabela2', 'okNome', 'okSemColuna', 'okGrade', 'okJunta', 'okD1', 'okD2', 'okM7', 'okLeitura', 'okJanela', 'okProduto', 'okTrocaJan', 'okTrocaContador', 'okInv'];
 for (const k of CHAVES) ok(ATUAL[k], k + (ATUAL.txt[k.slice(2).toLowerCase()] ? ' ' + ATUAL.txt[k.slice(2).toLowerCase()] : ''));
 
 /* ---------- 2 · plantios na lib ---------- */
@@ -238,6 +294,16 @@ plantaLib('troca so depois do ultimo dia do antigo', [['const e = x.ds.find((d) 
 plantaLib('por inversor: patamar sem sol entra', [['if (g != null && g >= LIMIAR_SOL) { const p = inv[pos]', 'if (g != null) { const p = inv[pos]']], 'okInv');
 plantaLib('por inversor: amostra ausente contada como indisponivel', [['c.s += ok / n; c.n += 1;', 'c.s += ok / POR_MEIA; c.n += 1;']], 'okInv');
 plantaLib('por inversor: inversor sem posicao entra pela pasta', [['if (opc.porInv && pos && n) {', 'if (opc.porInv && n) { const pos = opc.posNoDia(sn, d) || o.ufv + "/TS1/INV" + sn.slice(-2), u = pos.split("/")[0];']], 'okInv');
+plantaLib('contador do dono ignorado (so o duplicado exato, a regra de antes)', [['return lo != null && hi != null && b.vida >= lo - TOL_DUP && b.vida <= hi + TOL_DUP;', 'return false;']], 'okTrocaContador');
+plantaLib('contador sem o teto da leitura seguinte', [['b.vida <= hi + TOL_DUP;', 'true;']], 'okTrocaContador');
+plantaLib('piso com a leitura do dono no proprio dia', [['if (x < d) lo = v; else if (x > d)', 'if (x <= d) lo = v; else if (x > d)']], 'okTrocaContador');
+plantaLib('dias do dono na ordem de leitura (sem ordenar)', [['for (const x of Object.keys(diasDono).sort())', 'for (const x of Object.keys(diasDono))']], 'okTrocaContador');
+plantaLib('serie so com duplicados ordenada pelo primeiro arquivo', [["|| '9999-99-99' };", '|| ds[0] };']], 'okTrocaContador');
+plantaLib('ordem das series pelo primeiro arquivo (sem o dia proprio)', [['(a.own !== b.own ?', '(false ?']], 'okTrocaContador');
+plantaLib('sucessor com menos amostras tira o dono', [['if (amostras(s, d) > nd)', 'if (amostras(s, d) !== nd)']], 'okTrocaContador');
+plantaLib('dono do dia = a primeira outra serie', [['ss.find((o) => o !== s && dentro(o, d))', 'ss.find((o) => o !== s)']], 'okTrocaContador');
+plantaLib('empate de amostras vira o sucessor', [['if (amostras(s, d) > nd)', 'if (amostras(s, d) >= nd)']], 'okTrocaContador');
+plantaLib('o dono nao sai no dia substituido', [['if (nd >= 0) (S[dono] || (S[dono] = {}))[d] = false;', '']], 'okTrocaContador');
 plantaLib('duplicado puro passa a valer', [["if (!e) { J[x.s] = { ini: null, fim: null }; continue; }", "if (!e) { J[x.s] = { ini: x.ds[0], fim: null }; continue; }"]], 'okTrocaJan');
 
 /* ---------- 3 · o gerador de ponta a ponta ---------- */
@@ -340,6 +406,50 @@ if (G.erro) ok(false, 'o gerador estourou: ' + G.erro);
 const CG = ['okGen', 'okInvGen', 'okSoInversor', 'okIdem', 'okRecarga', 'okSemEstacao'];
 for (const k of CG) ok(G[k], k + (G.txt[k.slice(2).toLowerCase()] ? ' ' + G.txt[k.slice(2).toLowerCase()] : ''));
 
+/* a troca com o DONO CORTADO, de ponta a ponta (sg-troca-contador, 16/10/2026; o caso de M1/TS4 em 30/09/2026). Uma posicao
+   (M1/TS1/INV01), dois numeros de serie, quatro dias, cada arquivo no seu zip: Z inteiro em T1; em T2 o Z CORTADO (137 amostras, ate
+   11:20) e o W inteiro com o contador do Z (entre o do Z em T2 e em T3); Z inteiro em T3; W com contador novo em T4. Esperado no
+   sg_inv_dia: uma linha por dia, T1 Z, T2 W (288 amostras), T3 Z, T4 W; e o usina-dia de T3 no sg_saude (a regra de antes o perdia) */
+const ZT = 'A0000000301', WT = 'A0000000302', T1 = '2026-09-28', T2 = '2026-09-29', T3 = '2026-09-30', T4 = '2026-10-01';
+const RAWT = path.join(raiz, 'raw_troca'), OUTT = path.join(raiz, 'out_troca'), SCT = path.join(raiz, 'scada_troca');
+const pastaT = path.join(RAWT, 'M10', 'TS01', '01 A 05');
+fs.mkdirSync(pastaT, { recursive: true }); fs.mkdirSync(OUTT, { recursive: true }); fs.mkdirSync(SCT, { recursive: true });
+const arqT = (sn, d, fim, L, vida) => ({ nome: 'hiscsv/HIS_' + sn + '_' + d.replace(/-/g, '') + '0000_' + d.replace(/-/g, '') + fim + '.csv', dados: csv(CAB, L, vida) });
+const cheio = (d) => dia(d, () => [0x0, 0], 3200);
+fs.writeFileSync(path.join(pastaT, 'z1.zip'), zip([arqT(ZT, T1, '2355', cheio(T1), 1000000)]));
+fs.writeFileSync(path.join(pastaT, 'z2.zip'), zip([arqT(ZT, T2, '1120', dia(T2, (i) => (i <= 136 ? [0x0, 0] : null), 3200), 1010000)]));
+fs.writeFileSync(path.join(pastaT, 'w2 rec.zip'), zip([arqT(WT, T2, '2355', cheio(T2), 1015000)]));
+fs.writeFileSync(path.join(pastaT, 'z3.zip'), zip([arqT(ZT, T3, '2355', cheio(T3), 1030000)]));
+fs.writeFileSync(path.join(pastaT, 'w4.zip'), zip([arqT(WT, T4, '2355', cheio(T4), 500)]));
+// a irradiancia dos quatro dias: so a meia hora das 12:00 com sol no M1 (depois do corte do Z em T2, as 11:20)
+const ESTT = { serie: [T1, T2, T3, T4].flatMap((d) => Array.from({ length: 48 }, (_, k) => { const t = d + 'T' + hm(k) + ':00-03:00';
+  return { t, ms: Date.parse(t), e7: 0, e1: k === 24 ? 700 : 0 }; })) };
+const IDENTT = { esquema: 2, ident: { [ZT]: { pos: 'M1/TS1/INV01', d: T1, metodo: 'ensaio' }, [WT]: { pos: 'M1/TS1/INV01', d: T4, metodo: 'ensaio' } }, busca: {}, sem_posicao: [] };
+function cenarioTroca(gen) {
+  const R = { txt: {} };
+  for (const n of fs.readdirSync(OUTT)) fs.unlinkSync(path.join(OUTT, n));
+  const gT = (n, o) => fs.writeFileSync(path.join(OUTT, n), zlib.gzipSync(JSON.stringify(o)));
+  const lT = (n) => (fs.existsSync(path.join(OUTT, n)) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUTT, n))).toString('utf8')) : null);
+  gT('sg_ident.json', IDENTT); gT('estacao_logger_30min.json', ESTT);
+  const env = Object.assign({}, process.env, { LOCAL_RAW_DIR: RAWT, LOCAL_SCADA_DIR: SCT, LOCAL_OUT_DIR: OUTT, LOCAL_INV_SCADA: path.join(raiz, 'inv_scada.json') });
+  delete env.LOCAL_RAW_LISTA; delete env.REFAZER;
+  try { execFileSync('node', [gen], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+  catch (e) { R.erro = (String(e.stderr || '') + String(e.stdout || '')).split('\n').filter(Boolean).slice(-2).join(' | '); return R; }
+  const L = ((lT('sg_inv_dia_M1.json') || {}).serie || []).filter((x) => x.chave === 'M1/TS1/INV01');
+  const um = (d) => { const r = L.filter((x) => x.d === d); return r.length === 1 ? r[0] : null; };
+  const ud = ((lT('sg_saude.json') || {}).usina_dia || []).find((x) => x.ufv === 'M1' && x.d === T3) || {};
+  // e a disponibilidade por posicao (D.calcula com o mesmo posNoDia): os quatro dias na posicao, cada um com a meia hora de sol lida
+  const PIt = lT('sg_disp_inv_dia.json') || { dias: [], inv: {} }, pt = PIt.inv['M1/TS1/INV01'] || { d: [], m: [] };
+  const mT = [T1, T2, T3, T4].map((d) => { const i = PIt.dias.indexOf(d); return i >= 0 ? pt.m[i] : null; });
+  R.okTrocaParcial = L.length === 4 && !!um(T1) && um(T1).sn === ZT && !!um(T2) && um(T2).sn === WT && um(T2).n === 288
+    && !!um(T3) && um(T3).sn === ZT && !!um(T4) && um(T4).sn === WT && ud.d === T3 && JSON.stringify(mT) === JSON.stringify([1, 1, 1, 1]);
+  R.txt.trocaparcial = L.map((x) => x.d.slice(5) + ' ' + x.sn.slice(-3) + ' n' + x.n).join(' · ') + ' · usina-dia M1 em ' + T3.slice(5) + ' ' + (ud.d ? 'presente' : 'ausente') + ' · disp m ' + JSON.stringify(mT);
+  return R;
+}
+const GT = cenarioTroca(GEN);
+if (GT.erro) ok(false, 'o gerador estourou na troca com o dono cortado: ' + GT.erro);
+ok(GT.okTrocaParcial, 'okTrocaParcial a troca com o dono cortado: ' + GT.txt.trocaparcial);
+
 console.log('\n4 · plantios no gerador (cada um roda o cenario inteiro)');
 function planta(nome, de, para, chave) {
   if (srcGen.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou no gerador'); return; }
@@ -350,11 +460,24 @@ function planta(nome, de, para, chave) {
   } finally { if (fs.existsSync(GENP)) fs.unlinkSync(GENP); }
 }
 planta('arquivo do logger contado como inversor', "if (t === 'inversor') { const dd = D.diaDisp(", "if (t === 'inversor' || t === 'estacao') { const dd = D.diaDisp(", 'okSoInversor');
-planta('arquivo duplicado antecipa a troca (contador de vida ignorado)', 'return !!(a && b && a.vida != null', 'return false && !!(a && b && a.vida != null', 'okGen');
+planta('arquivo duplicado antecipa a troca (contador de vida ignorado)', 'const dupDia = (novo, dono, d) => D.dupContador(H.inv[novo].dias, H.inv[dono].dias, d);', 'const dupDia = () => false;', 'okGen');
 planta('publicado pela regra da leitura (todos com leitura)', "{ regra: 'posicao', posNoDia, porInv: true }", "{ regra: 'leitura', posNoDia, porInv: true }", 'okGen');
 planta('sem historico nao relê os zips', 'const novos = releDisp ? raw : raw.filter(', 'const novos = raw.filter(', 'okRecarga');
 planta('blob por inversor nao gravado', "pesos['sg_disp_inv_dia.json'] = await escreve('sg_disp_inv_dia.json', dInv);", '', 'okInvGen');
 planta('historico da disponibilidade nao gravado', "pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);", '', 'okIdem');
+function plantaT(nome, de, para) {
+  if (srcGen.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou no gerador'); return; }
+  try {
+    fs.writeFileSync(GENP, srcGen.split(de).join(para));
+    const R = cenarioTroca(GENP);
+    ok(!R.erro && R.okTrocaParcial === false, 'plantio "' + nome + '" reprova em okTrocaParcial' + (R.erro ? ' (estourou: ' + R.erro.slice(0, 120) + ')' : ': ' + R.txt.trocaparcial));
+  } finally { if (fs.existsSync(GENP)) fs.unlinkSync(GENP); }
+}
+plantaT('disponibilidade sem os substitutos', "{ regra: 'posicao', posNoDia, porInv: true }",
+  "{ regra: 'posicao', posNoDia: (sn, d) => { const a = ident[sn], w = janela[sn]; if (!a || !w || !w.ini) return null; return d >= w.ini && (!w.fim || d < w.fim) ? a.pos : null; }, porInv: true }");
+plantaT('o dia do arquivo inteiro ignorado (sem os substitutos)', 'const t = subst[sn] && subst[sn][d];', 'const t = undefined;');
+plantaT('a regra de antes (so o duplicado exato no mesmo dia)', 'const dupDia = (novo, dono, d) => D.dupContador(H.inv[novo].dias, H.inv[dono].dias, d);',
+  'const dupDia = (novo, dono, d) => { const a = H.inv[dono].dias[d], b = H.inv[novo].dias[d]; return !!(a && b && a.vida != null && b.vida != null && Math.abs(a.vida - b.vida) < 0.05 && Math.abs((a.e || 0) - (b.e || 0)) < 0.05); };');
 planta('estacao ausente calada', "if (!estLog || !Array.isArray(estLog.serie) || !estLog.serie.length) throw", 'if (false) throw', 'okSemEstacao');
 
 console.log(falhas.length ? '\n' + falhas.length + ' FALHA(S)' : '\nensaio da disponibilidade pelo logger: tudo ok');

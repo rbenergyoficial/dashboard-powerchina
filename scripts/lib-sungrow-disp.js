@@ -232,11 +232,20 @@ function produtoInv(inv, agora) {
    serie do novo, e nao antecipa a troca (M1/TS4 INV01, INV07 e INV08 em 15/04 e 15/07/2026, M6/TS6 INV20 em 29/04/2026: o antigo
    seguiu lendo; a regra anterior, "a partir do primeiro dia do sucessor", esvaziava a posicao). A partir do inicio efetivo o antigo
    sai, mesmo com registro depois. Serie so com dias duplicados nao vale.
+   A ORDEM das series e a do primeiro dia PROPRIO de cada uma (o primeiro que nao e duplicado de nenhuma outra da posicao), e nao a do
+   primeiro arquivo nem a do numero de serie (revisor de ensaio, 16/10/2026): o arquivo do antigo gravado com o numero novo pode ser
+   o mais antigo da posicao, e o numero de serie de reposicao pode ordenar antes do retirado. Empate: o primeiro arquivo, e o nome.
+   🔴 FORA (declarado, nao coberto): o arquivo duplicado do sucessor ANTERIOR ao primeiro dia do dono no historico. Sem leitura do dono
+   antes dele, o contador nao decide de quem e o dia, o sucessor fica com o primeiro dia proprio e vira dono (a troca e antecipada).
+   O acerto depende de o historico do dono comecar antes do primeiro duplicado: em M1/TS4 o dono comeca em 03/04/2026 e o primeiro
+   duplicado e 15/04. O sg_hist.json ACUMULA; refaze-lo so com a janela movel de 180 dias do logger pode quebrar essa premissa.
    series: { sn: [dias 'AAAA-MM-DD'] } de UMA posicao; dup(novo, dono, d) -> booleano. */
 function janelasTroca(series, dup) {
   const eDup = typeof dup === 'function' ? dup : () => false;
-  const ord = Object.keys(series).filter((s) => series[s] && series[s].length).map((s) => ({ s, ds: series[s].slice().sort() }))
-    .sort((a, b) => (a.ds[0] < b.ds[0] ? -1 : a.ds[0] > b.ds[0] ? 1 : (a.s < b.s ? -1 : 1)));
+  const ss = Object.keys(series).filter((s) => series[s] && series[s].length);
+  const ord = ss.map((s) => { const ds = series[s].slice().sort();
+    return { s, ds, own: ds.find((d) => !ss.some((o) => o !== s && eDup(s, o, d))) || '9999-99-99' }; })
+    .sort((a, b) => (a.own !== b.own ? (a.own < b.own ? -1 : 1) : a.ds[0] !== b.ds[0] ? (a.ds[0] < b.ds[0] ? -1 : 1) : (a.s < b.s ? -1 : 1)));
   const J = {};
   let dono = null;
   for (const x of ord) {
@@ -248,5 +257,40 @@ function janelasTroca(series, dup) {
   return J;
 }
 
-module.exports = { produtoInv, janelasTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
+/* o dia do sucessor que e dado do DONO gravado com o numero de serie novo (sg-troca-contador, 16/10/2026): o contador de vida
+   do sucessor naquele dia CONTINUA o do dono, entre a ultima leitura do dono ANTES do dia e a primeira DEPOIS dele (o proprio dia
+   do dono fica fora do intervalo: cortado, ele esta abaixo do contador inteiro do sucessor; inteiro, acima do sucessor cortado).
+   A regra anterior (o mesmo contador e a mesma energia no mesmo dia) nao via o dia em que o arquivo do dono esta CORTADO: em
+   30/09/2026 a exportacao manual de M1/TS4 parou as 11:20 e o "rec" do mesmo dia trouxe o dia inteiro com o numero novo e o
+   contador do antigo; a troca caia em 30/09 e o INV01 e o INV07 sumiam de 01 a 08/10 (a troca real e 09/10, contador do novo em
+   1.334,8 kWh). Sem leitura do dono antes ou depois do dia, so vale a regra anterior. diasNovo e diasDono: { d: { vida, e } }
+   TOL_DUP: o contador e publicado com uma casa (0,1 kWh, lib-sungrow `r(vida, 1)`); meia unidade dessa casa separa o mesmo valor
+   arredondado de dois valores vizinhos da grade. */
+const TOL_DUP = 0.05;
+function dupContador(diasNovo, diasDono, d) {
+  const b = diasNovo && diasNovo[d]; if (!b || b.vida == null || !diasDono) return false;
+  const a = diasDono[d];
+  if (a && a.vida != null && Math.abs(a.vida - b.vida) < TOL_DUP && Math.abs((a.e || 0) - (b.e || 0)) < TOL_DUP) return true;
+  let lo = null, hi = null;
+  for (const x of Object.keys(diasDono).sort()) { const v = diasDono[x] && diasDono[x].vida; if (v == null) continue; if (x < d) lo = v; else if (x > d) { hi = v; break; } }
+  return lo != null && hi != null && b.vida >= lo - TOL_DUP && b.vida <= hi + TOL_DUP;
+}
+
+/* quem representa a posicao no dia DUPLICADO fora da janela da serie: o arquivo do sucessor (o dado do dono com o numero novo) vale
+   no lugar do dono quando tem MAIS amostras que o do dono no mesmo dia, ou quando o dono nao tem arquivo; empate fica o dono (M1/TS4
+   em 15/07/2026, 288 e 288). series, J e dup como no janelasTroca; amostras(sn, d) -> n. Devolve { sn: { d: true | false } }:
+   true = a serie vale no dia fora da sua janela, false = o dono sai no dia dentro da sua janela */
+function substitutosTroca(series, J, dup, amostras) {
+  const S = {}, ss = Object.keys(series).filter((s) => series[s] && series[s].length);
+  const dentro = (s, d) => { const w = J[s]; return !!(w && w.ini && d >= w.ini && (!w.fim || d < w.fim)); };
+  for (const s of ss) for (const d of series[s]) {
+    if (dentro(s, d)) continue;
+    const dono = ss.find((o) => o !== s && dentro(o, d)); if (!dono || !dup(s, dono, d)) continue;
+    const nd = series[dono].indexOf(d) >= 0 ? amostras(dono, d) : -1;
+    if (amostras(s, d) > nd) { (S[s] || (S[s] = {}))[d] = true; if (nd >= 0) (S[dono] || (S[dono] = {}))[d] = false; }
+  }
+  return S;
+}
+
+module.exports = { produtoInv, janelasTroca, dupContador, substitutosTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
   diaDisp, histVazio, junta, estacaoPorMeia, calcula, produto, pct };

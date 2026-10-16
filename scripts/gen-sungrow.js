@@ -329,11 +329,18 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const porU = {};
   // com troca, cada serie vale do seu inicio efetivo ao do sucessor (D.janelasTroca, sungrow-disp 11/10/2026): o sucessor comeca no
   // primeiro dia que NAO repete o contador de vida e a energia do dono no mesmo dia (arquivo duplicado nao antecipa a troca)
-  const dupDia = (novo, dono, d) => { const a = H.inv[dono].dias[d], b = H.inv[novo].dias[d];
-    return !!(a && b && a.vida != null && b.vida != null && Math.abs(a.vida - b.vida) < 0.05 && Math.abs((a.e || 0) - (b.e || 0)) < 0.05); };
-  const janela = {};
-  for (const lista of porPos.values()) Object.assign(janela, D.janelasTroca(Object.fromEntries(lista.filter((s) => H.inv[s]).map((s) => [s, Object.values(H.inv[s].dias).map((x) => x.d)])), dupDia));
-  const posNoDia = (sn, d) => { const a = ident[sn], w = janela[sn]; if (!a || !H.inv[sn] || !w || !w.ini) return null; return d >= w.ini && (!w.fim || d < w.fim) ? a.pos : null; };
+  // e o dia do sucessor que CONTINUA o contador do dono e do dono (D.dupContador, sg-troca-contador 16/10/2026): o arquivo do dono
+  // cortado no mesmo dia nao antecipa mais a troca; nesse dia vale o arquivo com mais amostras (D.substitutosTroca)
+  const dupDia = (novo, dono, d) => D.dupContador(H.inv[novo].dias, H.inv[dono].dias, d);
+  const janela = {}, subst = {};
+  for (const lista of porPos.values()) {
+    const ser = Object.fromEntries(lista.filter((s) => H.inv[s]).map((s) => [s, Object.values(H.inv[s].dias).map((x) => x.d)]));
+    const J = D.janelasTroca(ser, dupDia); Object.assign(janela, J);
+    Object.assign(subst, D.substitutosTroca(ser, J, dupDia, (s, d) => (H.inv[s].dias[d] && H.inv[s].dias[d].n) || 0));
+  }
+  const posNoDia = (sn, d) => { const a = ident[sn], w = janela[sn]; if (!a || !H.inv[sn]) return null;
+    const t = subst[sn] && subst[sn][d]; if (t === true) return a.pos; if (t === false) return null;
+    if (!w || !w.ini) return null; return d >= w.ini && (!w.fim || d < w.fim) ? a.pos : null; };
   for (const [sn, o] of Object.entries(H.inv)) {
     const a = ident[sn]; if (!a) continue;
     const [u, ts, inv] = a.pos.split('/');
