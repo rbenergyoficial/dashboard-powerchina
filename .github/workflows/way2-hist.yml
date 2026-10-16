@@ -39,6 +39,9 @@ jobs:
       # PROMOVER med-entidade: o rollup conta a cobertura por usina num dia sintetico ANTES de reescrever o diario.
       - name: Ensaio · cobertura da medicao por usina (lib)
         run: node scripts/ensaio-med-ufv.js --lib
+      # PROMOVER w2-bruta-usina: a bruta de 34,5 kV por usina num dia sintetico ANTES de reescrever o diario.
+      - name: Ensaio · bruta por usina (lib)
+        run: node scripts/ensaio-w2-bruta-usina.js --lib
       # O rollup e reescrito INTEIRO pelo passo seguinte, e o container nao tem versionamento nem
       # soft-delete confirmado. O backup roda na MESMA execucao, imediatamente antes — backup de
       # ontem nao protege a reescrita de hoje. Se ele falhar, o job para e o rollup nao e tocado.
@@ -48,6 +51,7 @@ jobs:
           BLOBS: way2_daily.json
         run: node scripts/backup-blob.js
       - name: Arquivar histórico Way2 + rollup diário
+        id: rollup
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
@@ -59,3 +63,9 @@ jobs:
       # recente recontado por codigo proprio (segunda rota).
       - name: Ensaio · cobertura da medicao por usina (blob publicado)
         run: node scripts/ensaio-med-ufv.js --produto
+      # PROMOVER w2-bruta-usina: a bruta por usina no blob recem-gravado, todo dia desde o comeco do logger do fabricante, com o
+      # snapshot do dia mais recente recontado por codigo proprio (segunda rota).
+      - name: Ensaio · bruta por usina (blob publicado)
+        # roda mesmo se o ensaio da cobertura (passo anterior) reprovar: cada um relata o seu defeito
+        if: ${{ !cancelled() && steps.rollup.outcome == 'success' }}
+        run: node scripts/ensaio-w2-bruta-usina.js --produto

@@ -146,6 +146,16 @@ function rollupDia(j, day) {
   }
   const ufv_liq_mwh = {}; for (const u in ufvLiq) ufv_liq_mwh[u] = r(ufvLiq[u], 3);
 
+  // BRUTA POR UFV (PROMOVER w2-bruta-usina, 16/10/2026): a soma dos circuitos de 34,5 kV da usina em cada registro, só a parte
+  // positiva (o mesmo critério da bruta do conjunto, somaPos do 6233: o consumo noturno não é geração negativa), integrada no
+  // dia. É o ponto de 34,5 kV da cascata de perdas por usina (logger CC -> CA -> 34,5 kV -> 230 kV). Reconstruí-la do rateio
+  // da líquida (ufv_liq × bruta/líquida do conjunto) errava a usina pequena: 10/09/2026 M7 109,4 contra 112,2 MWh medidos.
+  // O 6233 é a soma dos 22 circuitos registro a registro (medido em 20/05, 10/09 e 13/10/2026: diferença 0,00 kW), então a
+  // soma das nove fica >= a bruta do conjunto, maior só no registro em que uma usina gera e outra consome.
+  const ufvGer = {}; for (const u in UFV_CIRC) ufvGer[u] = 0;
+  for (const t of tset) for (const u in UFV_CIRC) { let bu = 0; for (const pid of UFV_CIRC[u]) bu += (smap[pid][t] || 0); if (bu > 0) ufvGer[u] += bu * 5 / 60 / 1000; }
+  const ufv_ger_mwh = {}; for (const u in ufvGer) ufv_ger_mwh[u] = r(ufvGer[u], 3);
+
   // COBERTURA DA MEDIÇÃO POR USINA (PROMOVER med-entidade): registros de 5 min em que TODOS os circuitos da usina têm
   // valor. O contrato (PPA, ML) conta o instante em que todos os circuitos de todas as suas usinas têm valor: a
   // interseção, e não a menor das usinas, porque um furo em cada usina em horas diferentes deixa o contrato sem leitura
@@ -164,6 +174,7 @@ function rollupDia(j, day) {
     tr1_ene_mwh: r(eneTr1, 3),
     tr2_ene_mwh: r(eneTr2, 3),
     ufv_liq_mwh,                                   // energia líquida por UFV (rateio MUST) — p/ PPA×ML
+    ufv_ger_mwh,                                   // bruta por UFV nos circuitos de 34,5 kV (só a parte positiva) — cascata de perdas
     pico_mw: r(maxVal(g6233) / 1000, 3),
     tr1_pico_mw: r(maxVal(g6196) / 1000, 3),
     tr2_pico_mw: r(maxVal(g6197) / 1000, 3),
