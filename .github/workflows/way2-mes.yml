@@ -1,0 +1,34 @@
+name: Way2 · energia do mês e demanda do mês (substituto do fluxo do Power Automate)
+
+# Substitui o fluxo "Way2 → Azure Blob Sync" do Power Automate (10 min), que sai com o Premium em 09/11/2026: as mesmas tres
+# chamadas, gravando way2_energia_mes.json, way2_energia_antmes.json e way2_must.json com o corpo da resposta como veio.
+#
+# 🔴 EM SOMBRA (PROMOVER pa-way2-mes-sombra): SOMBRA=1 nao grava nada. Le os tres blobs que o fluxo gravou e compara ponto x
+# dia, e fica VERMELHO se um dia fechado diferir ou faltar ponto ou dia. Depois de 48 h verdes, o lote pa-way2-mes tira o SOMBRA
+# e desliga o fluxo no mesmo ato (um escritor so por blob).
+on:
+  schedule:
+    - cron: '4,14,24,34,44,54 * * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: gen-way2-mes
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - name: Ensaio do substituto (forma, comparacao, sombra e gravacao)
+        run: node scripts/ensaio-way2-mes.js
+      - run: npm i @azure/storage-blob@12
+      - name: Energia e demanda do mes (SOMBRA=1 compara com o fluxo, nao grava)
+        env:
+          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          SOMBRA: '1'
+        run: node scripts/gen-way2-mes.js

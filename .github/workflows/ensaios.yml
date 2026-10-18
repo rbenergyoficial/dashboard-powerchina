@@ -92,6 +92,12 @@ jobs:
         if: always()
         run: node scripts/ensaio-alerta-must.js
 
+      # O substituto do fluxo "Way2 → Azure Blob Sync" (gen-way2-mes.js; PROMOVER pa-way2-mes-sombra / pa-way2-mes): as tres
+      # chamadas do fluxo, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.
+      - name: Ensaio · energia e demanda do mes da Way2 (substituto do fluxo)
+        if: always()
+        run: node scripts/ensaio-way2-mes.js
+
       # A guarda da EneatLiquida (lib-guarda-liquida.js) pela mesma funcao que o gen-executivo usa: o dia julgado nao
       # entra no proprio teto, sem catraca, comeco de mes decidido pela janela guardada, aceito pelo sinal nao vai para a
       # janela. So dados plantados.
