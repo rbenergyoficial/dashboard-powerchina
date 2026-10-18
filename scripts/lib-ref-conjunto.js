@@ -23,7 +23,9 @@
  * nao pode parar o executivo (revisor-ensaio, 10/10/2026: com o teto contando esses, um dia correto derrubava tudo).
  * E o TETO, no dia que nao fecha: no maximo MAX_POR_DIA patamar(es). Ele NAO e medida, e o limite de risco: varridos mar/26
  * a 09/10 (10.704 patamares do conjunto, 223 dias), so 01/10 09:00 nao fecha com as nove usinas, nunca dois no mesmo dia.
- * Mais de um e um arquivo do conjunto quebrado em atacado: o corte do Complexo usa o `gref` dele, e aceitar calado
+ * 17/10/2026 (ref-teto-2, decisao do humano): o arquivo de 15/10 trouxe DOIS patamares zerados (09:00 e 13:00, gref 0 e disp 0 com
+ * ~340 MW gerados; soma das usinas 320,19 e 322,66), sem restricao. O teto passou a 2; tres no mesmo dia seguem derrubando.
+ * Acima do teto e um arquivo do conjunto quebrado em atacado: o corte do Complexo usa o `gref` dele, e aceitar calado
  * publicaria corte perto de zero. Ele derruba, e o humano olha.
  *
  * E O CORTE (PROMOVER ref-parcela-corte, 11/10/2026, decisao do humano): o patamar absorvido entra no corte do conjunto
@@ -33,7 +35,7 @@
 const H = 0.5;                 // patamar do ONS: 30 min
 const FOLGA_MW = 0.03;         // por patamar: o maximo medido entre o conjunto e a soma das usinas
 const FOLGA_DIA = 0.75;        // no dia: FOLGA_MW x 48 x 0,5 h = 0,72 MWh, arredondada
-const MAX_POR_DIA = 1;         // limite de risco, no dia que nao fecha: o maximo visto em 223 dias
+const MAX_POR_DIA = 2;         // limite de risco, no dia que nao fecha (PROMOVER ref-teto-2, 17/10/2026, decisao do humano: 15/10 trouxe dois)
 
 const num = (v) => { const x = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(x) ? 0 : x; };
 const r2 = (x) => Math.round(x * 100) / 100;

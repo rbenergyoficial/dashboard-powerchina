@@ -66,9 +66,15 @@ const CASOS = [
     muda: (C) => Object.assign(linha(C, 18), { gref: String(47.25 + 47.11), disp: '49.105', ger: '245.594' }) },
   { nome: 'uma parcela com disp coerente (o conjunto nao se contradiz)', espera: 'reprova',
     muda: (C) => Object.assign(linha(C, 18), { gref: '47.246', disp: '343.482', ger: '245.594' }) },
-  { nome: 'atacado: dois patamares do dia com uma parcela', espera: 'reprova',
+  { nome: 'dois patamares do dia com uma parcela (o teto e 2 desde 17/10/2026)', espera: 'passa', absorve: 2,
     muda: (C) => { Object.assign(linha(C, 18), { gref: '47.246', disp: '49.105', ger: '245.594' });
       Object.assign(linha(C, 20), { gref: String(C.refHora[DIA].M8.ge[20]), disp: '49.105', ger: '250' }); } },
+  { nome: '15/10 real: dois patamares zerados no dia (gref e disp 0, ~340 MW gerados)', espera: 'passa', absorve: 2,
+    muda: (C) => { Object.assign(linha(C, 18), { gref: '0', disp: '0', ger: '340.151' }); Object.assign(linha(C, 26), { gref: '0', disp: '0', ger: '338.732' }); } },
+  { nome: 'atacado: tres patamares do dia com uma parcela', espera: 'reprova',
+    muda: (C) => { Object.assign(linha(C, 18), { gref: '47.246', disp: '49.105', ger: '245.594' });
+      Object.assign(linha(C, 20), { gref: String(C.refHora[DIA].M8.ge[20]), disp: '49.105', ger: '250' });
+      Object.assign(linha(C, 22), { gref: '0', disp: '0', ger: '260' }); } },
   { nome: 'usina DUPLICADA do nosso lado as 09:00', espera: 'reprova', muda: (C) => { C.refHora[DIA].M6.ge[18] *= 2; } },
   { nome: 'usina AUSENTE do nosso lado as 09:00', espera: 'reprova', muda: (C) => { C.refHora[DIA].M6.ge[18] = null; } },
   { nome: 'o conjunto de outra revisao: o dia inteiro a um quarto', espera: 'reprova',
@@ -232,7 +238,8 @@ const PLANTIOS = [
   ['o desde ilegivel nao vence', '!(Date.parse(x.desde) > 0) || ', ''],
   ['sem a condicao da parcela', '(g === 0 || parc.some((x) => Math.abs(g - x) <= FOLGA_MW))', 'true'],
   ['sem a condicao disp < ger', 'num(r.disp) < num(r.ger) && refHora[dd]', 'refHora[dd]'],
-  ['sem o teto por dia', 'const MAX_POR_DIA = 1;', 'const MAX_POR_DIA = 1e9;'],
+  ['sem o teto por dia', 'const MAX_POR_DIA = 2;', 'const MAX_POR_DIA = 1e9;'],
+  ['o teto antigo (1) derruba o 15/10 real', 'const MAX_POR_DIA = 2;', 'const MAX_POR_DIA = 1;'],
   ['a regra de 03/10 (so nenhuma parcela)', '(g === 0 || parc.some((x) => Math.abs(g - x) <= FOLGA_MW))', 'g === 0'],
   ['sem a condicao de fechamento', 'Math.abs(g - soma) > FOLGA_MW && (g === 0', '(g === 0'],
   ['troca e conta tambem no dia que fecha cru', 'if (c.troca != null && !naoFechaCru(c.dd)) c.troca = null;', ''],
