@@ -84,6 +84,10 @@ caso('forma do blob: parque sem contrato e ms fora do t estouram', () => {
   let chamadas = [];
   const falso = (email, issue) => async (a) => { chamadas.push(a); return { email, issue: issue || 'abriu #1' }; };
   const roda = async (agora, alerta) => { chamadas = []; return M.main({ alerta: alerta || falso('enviado para x'), agora }); };
+  /* as mensagens do main() sao do cenario simulado: caladas, para o '::error::' delas nao virar anotacao de erro em toda rodada do
+     must-intra.yml (o veredito do ensaio e o assert, nao o texto) */
+  const erroOrig = console.error, logOrig = console.log;
+  console.error = () => {}; console.log = (...a) => { if (!/^alerta-must:/.test(String(a[0]))) logOrig(...a); };
   try {
     process.env.MUST_ARQ = tmp;
     grava([linha('2026-10-18T10:15:00-03:00', { M2: 24.9 }), linha('2026-10-17T12:00:00-03:00', { M9: 10.1 }), linha('2026-10-16T12:00:00-03:00', { M1: 60 })]);
@@ -119,6 +123,7 @@ caso('forma do blob: parque sem contrato e ms fora do t estouram', () => {
     await assert.rejects(roda(AS('14:00')), /resolucao 5 min/);
     n++; console.log('ok · main: canal incompleto, entrega falha e janela vazia ficam vermelhos; dedup e janela BRT certos');
   } finally {
+    console.error = erroOrig; console.log = logOrig;
     try { fs.unlinkSync(tmp); } catch (e) { /* nada */ }
     Object.keys(guardado).forEach((k) => { if (guardado[k] === undefined) delete process.env[k]; else process.env[k] = guardado[k]; });
   }
