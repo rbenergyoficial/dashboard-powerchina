@@ -51,5 +51,5 @@ https.get = (url, opts, cb) => {
   else if (fs.existsSync(f)) { r.statusCode = 200; r.push(fs.readFileSync(f)); } else { r.statusCode = 404; }
   r.push(null);
   process.nextTick(() => cb(r));
-  return { on() { return this; } };
+  return { on() { return this; }, setTimeout() { return this; } };   /* custo-a: a lib-le-blob arma o timeout do pedido */
 };

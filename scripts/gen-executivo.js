@@ -247,7 +247,15 @@ const num = v => { const x = parseFloat(String(v == null ? '' : v).replace(',', 
 // exatamente os bytes gravados), e concatenar bytes comprimidos numa string produz lixo que o
 // JSON.parse recusa. Foi assim que o detalhe do ONS parou de ser lido, calado, por vinte horas.
 // A deteccao e pelos bytes magicos, nao pelo cabecalho: quem grava pode esquecer de declarar.
+// 💰 custo-a (17/10/2026): o historico do medidor (`hist/way2_<dia>`) vem pela leitura condicional (`lib-le-blob.js`): uma vez por
+//    rodada e 304 sem corpo quando o dia nao mudou desde a execucao anterior. A mensagem do 404 e a mesma de antes.
+const LB = require('./lib-le-blob');
 function getJSON(url) {
+  if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => {
+    if (b == null) throw new Error('404 ' + url);
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
+  });
   return new Promise((res, rej) => {
     https.get(url, x => {
       if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }

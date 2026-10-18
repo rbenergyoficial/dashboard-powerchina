@@ -146,6 +146,13 @@ async function grava(json) {
   await container.getBlockBlobClient(OUT_BLOB).upload(buf, buf.length, {
     blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' }
   });
+  // 💰 custo-a (17/10/2026): a copia local dos MESMOS bytes que subiram, para os passos seguintes do job (snapshot, dia em curso,
+  //    ensaios do produto) nao baixarem de volta o arquivo que acabou de ser gravado. So depois do upload: copia sem upload nao existe.
+  if (process.env.ELET_LOCAL_DIR) {
+    const fs = require('fs'), path = require('path'), d = process.env.ELET_LOCAL_DIR;
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'way2_eletrico.json'), buf);
+  }
   return buf.length;
 }
 

@@ -15,6 +15,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      # 💰 custo-a (17/10/2026): a copia do historico do medidor (hist/way2_<dia>) da execucao anterior. O gerador pede cada dia com
+      #    If-None-Match (`lib-le-blob.js`) e o storage responde 304 sem corpo quando o dia nao mudou: antes o mesmo arquivo de ~4 MB
+      #    saia do storage a cada execucao, e a saida de dados e a fatura do Azure. Sem copia (primeira vez, cache expirado), baixa tudo.
+      - name: Restaurar a copia do historico do medidor
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-executivo-${{ github.run_id }}
+          restore-keys: hist-publico-executivo-
 
       # ANTES de gerar, e de proposito: regra quebrada nao pode chegar ao blob. Ele julga a REGRA em
       # casos FORJADOS (nao o arquivo do dia), entao vale em qualquer estado do mundo — a licao do
@@ -84,6 +93,7 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
           OUT_BLOB: executivo.json
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-executivo.js
 
       # A guarda da energia liquidada sobre o PRODUTO: a janela que o gerador acabou de gravar (guarda_liquida.json)
@@ -212,6 +222,7 @@ jobs:
         if: always()
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-pr.js
 
       - name: Ensaio · o PR confere com o executivo e com o medidor
@@ -238,3 +249,12 @@ jobs:
       - name: Ensaio · o registro da projecao
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-historico-projecao.js --registro
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
+      #    dia novo nao regrava o cache.
+      - name: Guardar a copia do historico do medidor
+        if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-executivo-${{ hashFiles('.cache-blob/publico/*.meta') }}

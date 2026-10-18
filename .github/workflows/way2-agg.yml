@@ -22,9 +22,23 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      # 💰 custo-a (17/10/2026): a copia do historico do medidor (hist/way2_<dia>) da execucao anterior. O gerador pede cada dia com
+      #    If-None-Match (`lib-le-blob.js`) e o storage responde 304 sem corpo quando o dia nao mudou: antes o mesmo arquivo de ~4 MB
+      #    saia do storage a cada execucao, e a saida de dados e a fatura do Azure. Sem copia (primeira vez, cache expirado), baixa tudo.
+      # O ensaio da leitura condicional (sem rede): a lib que deixa de mandar o If-None-Match, ou que devolve a copia velha com
+      # arquivo novo, para aqui, antes de ler qualquer dia.
+      - name: Ensaio · leitura condicional do historico do medidor
+        run: node scripts/ensaio-le-blob.js
+      - name: Restaurar a copia do historico do medidor
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-way2-agg-${{ github.run_id }}
+          restore-keys: hist-publico-way2-agg-
       - name: Gerar agregados
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
           FORCAR: ${{ github.event.inputs.forcar }}
           RESOLUCOES: ${{ github.event.inputs.resolucoes }}
         run: node --max-old-space-size=4096 scripts/gen-way2-agg.js
@@ -38,3 +52,12 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-fontes-saude.js
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
+      #    dia novo nao regrava o cache.
+      - name: Guardar a copia do historico do medidor
+        if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-way2-agg-${{ hashFiles('.cache-blob/publico/*.meta') }}

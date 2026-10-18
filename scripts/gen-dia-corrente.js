@@ -53,7 +53,19 @@ function valoresDia(linha) {
 // 545,25 publicado, 476,53 no grafico).
 const parte = (x, v) => ((x.parcial && !x.encerrado) ? [null, v] : [v, null]);
 
+// 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`); o dia de HOJE, quando o job da
+//    mesma rodada deixou a copia local (ELET_LOCAL_DIR, gravada pelo gen-way2-eletrico com os bytes que subiram), sai do disco: era o
+//    mesmo arquivo de ~4 MB baixado de volta a cada 5 min. As mensagens de erro sao as mesmas de antes.
+const LB = require('./lib-le-blob');
+function decodifica(x) {
+  if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
+  return JSON.parse(x.toString('utf8').replace(/^﻿/, ''));
+}
 function baixa(url) {
+  const m = /\/hist\/way2_(\d{4}-\d{2}-\d{2})\.json$/.exec(url), dl = process.env.ELET_LOCAL_DIR;
+  if (m && dl) { const f = require('path').join(dl, 'way2_' + m[1] + '.json'); if (require('fs').existsSync(f)) { console.log('  ' + m[1] + ': copia local da rodada'); return Promise.resolve(decodifica(require('fs').readFileSync(f))); } }
+  if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => { if (b == null) throw new Error('HTTP 404 em ' + url); return decodifica(b); },
+    (e) => { throw new Error(String(e.message).replace(/^HTTP (\d+) .*$/, 'HTTP $1 em ' + url)); });   /* a mesma mensagem de antes */
   return new Promise((ok, err) => https.get(url, { family: 4 }, (r) => {
     if (r.statusCode !== 200) { r.resume(); return err(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
     const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => {

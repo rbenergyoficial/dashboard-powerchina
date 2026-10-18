@@ -54,6 +54,7 @@ function rangeDias(fromDia, toDia) {                 // lista inclusiva, crescen
 }
 const round = (x, d = DEC) => { const p = Math.pow(10, d); return Math.round(x * p) / p; };
 const parseJson = (buf) => JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
+const LB = require('./lib-le-blob');
 const diaDe = (bucketISO) => bucketISO.slice(0, 10);
 
 // Bucket = borda esquerda, manipulando a string naive (SEM Date → sem deslocamento de fuso).
@@ -67,7 +68,10 @@ function bucketKey(data, bucketMin) {
 }
 
 // GET público de um blob (hist imutável → cache ok). Resolve null em 404; timeout + error handler.
+// 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`): uma vez por rodada (antes uma vez por
+//    resolucao, tres vezes o mesmo dia) e 304 sem corpo quando o dia nao mudou desde a execucao anterior.
 function fetchBlob(url) {
+  if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => (b == null ? null : parseJson(b)));
   return new Promise((resolve, reject) => {
     const req = https.get(url, (res) => {
       if (res.statusCode === 404) { res.resume(); return resolve(null); }
@@ -207,5 +211,5 @@ async function main() {
   }
 }
 
-module.exports = { bucketKey, acumular, acumularFile, mediasPorSerie, montarBlob, maxDiaBlob, diaBRT, diaMais, rangeDias };
-if (require.main === module) main().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+module.exports = { bucketKey, acumular, acumularFile, mediasPorSerie, montarBlob, maxDiaBlob, diaBRT, diaMais, rangeDias, fetchBlob };
+if (require.main === module) main().then(() => LB.resumo()).catch(e => { console.error('ERRO:', e.message); process.exit(1); });

@@ -34,6 +34,13 @@ const LOTE_MEIAS = Number(process.env.PR_LOTE_MEIAS || 60);   /* dias sem meia h
 
 function puxa(url) {
   const https = require('https');
+  /* 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`); a mensagem do 404 e a mesma */
+  const LB = require('./lib-le-blob');
+  if (LB.ALVO.test(url)) return LB.bytes(url, { 'Accept-Encoding': 'gzip' }).then((b) => {
+    if (b == null) throw new Error('HTTP 404 ' + url.split('/').pop());
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    try { return JSON.parse(b.toString('utf8').replace(/^\uFEFF/, '')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
+  });
   return new Promise((ok, erro) => {
     https.get(url, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => {
       if (res.statusCode !== 200) { erro(new Error('HTTP ' + res.statusCode + ' ' + url.split('/').pop())); res.resume(); return; }

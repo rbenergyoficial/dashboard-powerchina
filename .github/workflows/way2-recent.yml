@@ -25,6 +25,15 @@ jobs:
         with:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
+      # 💰 custo-a (17/10/2026): a copia do historico do medidor (hist/way2_<dia>) da execucao anterior. O gerador pede cada dia com
+      #    If-None-Match (`lib-le-blob.js`) e o storage responde 304 sem corpo quando o dia nao mudou: antes o mesmo arquivo de ~4 MB
+      #    saia do storage a cada execucao, e a saida de dados e a fatura do Azure. Sem copia (primeira vez, cache expirado), baixa tudo.
+      - name: Restaurar a copia do historico do medidor
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-way2-recent-${{ github.run_id }}
+          restore-keys: hist-publico-way2-recent-
       # 🔴 A COLETA. Ate aqui `way2_eletrico.json` era o unico blob que nascia FORA do GitHub:
       # quem o escrevia era o fluxo do Power Automate "Way2 Eletrico 5min", e todo o ao-vivo
       # deriva dele. Isso prendia a entrada de dado a uma licenca Premium com prazo. O repo ja
@@ -39,6 +48,7 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
         run: node scripts/gen-way2-eletrico.js
 
       # Os 22 circuitos do portal_vivo (curva so com os instantes medidos, retrato num instante so, tensao de LINHA, Q em MVAr,
@@ -48,9 +58,14 @@ jobs:
       - name: Ensaio · circuitos do portal_vivo (regra)
         run: node scripts/ensaio-portal-vivo-circuitos.js --lib
 
+      # O ensaio da leitura condicional (sem rede, ~1 s): a lib quebrada para aqui, antes do snapshot e do dia em curso que a usam.
+      - name: Ensaio · leitura condicional do historico do medidor
+        run: node scripts/ensaio-le-blob.js
       - name: Snapshot hoje + way2_recent.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-way2-recent.js
       # O executivo declara 15 execucoes/dia no cron e o agendador do GitHub entrega 5,6
       # (medido em 45 execucoes: mediana de 91 min entre elas, p90 de 615). Este passo custa
@@ -71,6 +86,8 @@ jobs:
       - name: Dia em curso no executivo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-dia-corrente.js
       # As perdas de PV alimentam o card de cobertura da medicao, e o `perdas.yml` declara
       # uma execucao por dia no cron — que o agendador do GitHub as vezes simplesmente nao
@@ -102,7 +119,8 @@ jobs:
         run: node scripts/ensaio-manchete-noite.js --produto
       - name: Ensaio · circuitos do portal_vivo (produto)
         if: always()
-        run: node scripts/ensaio-portal-vivo-circuitos.js --produto
+        # 💰 custo-a: o way2_eletrico.json da MESMA rodada vem da copia local (os bytes que subiram); sem ela, do blob, como antes
+        run: if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-vivo-circuitos.js --produto; else node scripts/ensaio-portal-vivo-circuitos.js --produto; fi
       # As oito grandezas do dia, medidor a medidor (portal_eletrico.json). Quem SEGURA o blob e o proprio gerador: ele confere o
       # arquivo montado contra a mesma fonte, pela referencia deste ensaio, e nao grava com achado (sem parar o passo, que segura o
       # remendo do executivo). Aqui, no fim e com always(): a REGRA em casos forjados (valores a mao, defeitos plantados com a
@@ -113,7 +131,7 @@ jobs:
         run: node scripts/ensaio-portal-eletrico.js --lib
       - name: Ensaio · grandezas eletricas do dia (produto)
         if: always()
-        run: node scripts/ensaio-portal-eletrico.js --produto
+        run: if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-eletrico.js --produto; else node scripts/ensaio-portal-eletrico.js --produto; fi
       # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
       # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
       # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com always():
@@ -152,3 +170,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           LIMIAR_MIN: '30'
         run: node scripts/gen-way2-watchdog.js
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
+      #    dia novo nao regrava o cache.
+      - name: Guardar a copia do historico do medidor
+        if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-blob
+          key: hist-publico-way2-recent-${{ hashFiles('.cache-blob/publico/*.meta') }}

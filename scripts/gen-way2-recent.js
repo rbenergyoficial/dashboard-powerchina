@@ -14,6 +14,8 @@ const SELO = require('./lib-selo.js');
 
 const CONTAINER = 'dados';
 const LIVE_BLOB = 'way2_eletrico.json';
+const LB = require('./lib-le-blob');
+const BASE_PUB = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const N_RECENT = 2;                              // dias no blob rolante (ontem+hoje = "≤2d"; menor = download mais leve)
 
 function diaBRT(offset = 0) {                    // dia-calendário BRT (UTC-3), independente do fuso do runner
@@ -239,11 +241,15 @@ function gerarSaude(dados, agoraMs) {
   // cada 5 min isso vira ruído, e ruído ensina a ignorar o alarme.
   let eletJson = null;
   const live = container.getBlockBlobClient(LIVE_BLOB);
-  if (await live.exists()) {
+  // 💰 custo-a (17/10/2026): com a copia local que o gen-way2-eletrico deixou NESTA rodada (os mesmos bytes que subiram), o arquivo nao
+  //    e baixado de volta. Sem a copia (passo rodado sozinho, ou a coleta falhou), le o blob como antes.
+  const fsL = require('fs'), copiaL = process.env.ELET_LOCAL_DIR ? require('path').join(process.env.ELET_LOCAL_DIR, LIVE_BLOB) : null, temL = !!(copiaL && fsL.existsSync(copiaL));
+  if (temL) console.log(`  ${LIVE_BLOB}: copia local da rodada`);
+  if (temL || await live.exists()) {
     let buf = null, ultimo = null;
     for (let t = 1; t <= 3 && !buf; t++) {
       try {
-        const b = await live.downloadToBuffer();
+        const b = temL ? fsL.readFileSync(copiaL) : await live.downloadToBuffer();
         const j = parseJson(b);                                  // valida ANTES de gravar
         if (!Array.isArray(j.dados) || !j.dados.length) throw new Error('JSON sem o campo dados');
         buf = b; eletJson = j;
@@ -256,6 +262,9 @@ function gerarSaude(dados, agoraMs) {
     if (!buf) throw ultimo;
     await container.getBlockBlobClient(`hist/way2_${day}.json`).upload(buf, buf.length, { blobHTTPHeaders: { blobContentType: 'application/json' } });
     console.log(`snapshot hist/way2_${day}.json OK · ${(buf.length / 1048576).toFixed(1)} MB`);
+    // 💰 custo-a: a copia local com o MESMO nome e os MESMOS bytes do hist que acabou de subir (o gen-dia-corrente le daqui). Nomeada
+    //    pelo `day` deste passo, a copia e o blob por construcao, inclusive na virada da meia-noite.
+    if (process.env.ELET_LOCAL_DIR) try { fsL.mkdirSync(process.env.ELET_LOCAL_DIR, { recursive: true }); fsL.writeFileSync(require('path').join(process.env.ELET_LOCAL_DIR, `way2_${day}.json`), buf); } catch (e) { console.log('  copia local nao gravada (' + e.message + '): o dia em curso le o blob'); }
   } else {
     console.log(`${LIVE_BLOB} não existe — snapshot pulado`);
   }
@@ -295,11 +304,13 @@ function gerarSaude(dados, agoraMs) {
     let jb = null;
     if (dd === day) { jb = eletJson; }
     else {
-      const bc = container.getBlockBlobClient(`hist/way2_${dd}.json`);
       // snapshot antigo corrompido tem de DIZER qual arquivo é: a mensagem crua do JSON.parse
       // manda procurar em cinco arquivos diferentes.
-      if (await bc.exists()) {
-        try { jb = parseJson(await bc.downloadToBuffer()); }
+      // 💰 custo-a (17/10/2026): o dia fechado vem pela leitura condicional (`lib-le-blob.js`): 304 sem corpo quando nao mudou desde a
+      //    execucao anterior (antes ~4 MB a cada 5 min). 404 = o dia nao existe, como o `exists()` de antes.
+      const bb = await LB.bytes(BASE_PUB + `hist/way2_${dd}.json`);
+      if (bb) {
+        try { jb = parseJson(bb); }
         catch (e) { throw new Error(`hist/way2_${dd}.json está corrompido (${e.message}) — regravar o dia`); }
       }
     }
