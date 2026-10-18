@@ -13,13 +13,15 @@
  *
  * DOIS MODOS
  *   SOMBRA=1  não grava nada: lê o blob do fluxo e compara, ponto × dia, valor e qualidade. A diferença aceita é a de um dia
- *             que ainda pode mudar entre as duas leituras (hoje e ontem, em BRT; no dia 1º, ontem é o último dia do mês
- *             anterior, e vale também para o `antmes`), e ela é NOMEADA no log.
+ *             que ainda pode mudar entre as duas leituras (da véspera da gravação do fluxo até hoje, em BRT; no dia 1º a
+ *             véspera cai no mês anterior e vale também para o `antmes`), e ela é NOMEADA no log. Fluxo ainda no mês anterior
+ *             (virada) não é comparado nessa rodada.
  *             Diferença em dia fechado, ponto ausente, dia ausente ou forma diferente -> exit 1.
  *   (padrão)  grava os três blobs, depois da guarda de forma.
  *
- * 🔴 GUARDA DE FORMA, nos dois modos: a resposta tem `dados` com UM item por ponto pedido, cada um com `valores` em lista. Corpo
- *    de erro, lista vazia ou ponto faltando NUNCA vira blob (o executivo leria um mês zerado). Falhou a guarda -> exit 1 e o blob
+ * 🔴 GUARDA DE FORMA E DE CONTEÚDO, nos dois modos: a resposta tem `dados` com UM item por ponto pedido, cada um com `valores`
+ *    em lista e com valor em pelo menos metade dos dias fechados do mês pedido. Corpo de erro, ponto faltando ou grade nula
+ *    NUNCA vira blob (o executivo leria um mês zerado). Falhou a guarda -> exit 1 e o blob
  *    anterior fica.
  *
  * Env: WAY2_TOKEN · DADOS_STORAGE (modo padrão) · SOMBRA=1 · BLOB_BASE (leitura pública)
@@ -41,7 +43,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const semBom = (t) => t.replace(/^﻿/, '');
 
 /** Confere a forma; devolve o objeto ou estoura dizendo o que falta. */
-function confere(texto, ids, nome) {
+function confere(texto, ids, nome, hoje) {
   let j;
   try { j = JSON.parse(semBom(texto)); } catch (e) { throw new Error(nome + ': resposta nao e JSON (' + e.message + ')'); }
   if (!j || !Array.isArray(j.dados)) throw new Error(nome + ': resposta sem a lista `dados`');
@@ -50,6 +52,18 @@ function confere(texto, ids, nome) {
   const faltam = pedidos.filter((p) => !tem.has(p));
   if (faltam.length || j.dados.length !== pedidos.length) throw new Error(nome + ': ' + j.dados.length + ' pontos, faltam ' + (faltam.join(',') || 'nenhum') + ' (esperados ' + pedidos.length + ')');
   for (const d of j.dados) if (!Array.isArray(d.valores) || !d.valores.length) throw new Error(nome + ': ponto ' + d.pontoId + ' sem valores');
+  /* 🔴 CONTEUDO, nao so forma: com ConsiderarMesCheio a API devolve SEMPRE a grade cheia (61 dias por ponto, os futuros sem
+     valor), entao "ponto com lista" nao prova nada. Cada ponto precisa de valor em pelo menos METADE dos dias fechados do mes
+     pedido (dia < hoje BRT). Grade toda nula (pane que responde 200) reprova; falha parcial de medidor passa. Medido em 18/10:
+     nenhum dia fechado sem valor nos tres blobs reais. No dia 1, o mes corrente ainda nao tem dia fechado: nada a exigir. */
+  if (hoje) {
+    const mes = String(j.dataInicio || '').slice(0, 7);
+    for (const d of j.dados) {
+      const fech = d.valores.filter((v) => { const dia = String(v.data).slice(0, 10); return dia.slice(0, 7) === mes && dia < hoje; });
+      const com = fech.filter((v) => typeof v.valor === 'number' && isFinite(v.valor)).length;
+      if (fech.length && com * 2 < fech.length) throw new Error(nome + ': ponto ' + d.pontoId + ' com valor em so ' + com + ' de ' + fech.length + ' dias fechados de ' + mes);
+    }
+  }
   return j;
 }
 
@@ -76,6 +90,15 @@ function compara(novo, fluxo, vivos) {
 }
 
 function diaBRT(ms) { return new Date(ms - 3 * 3600 * 1000).toISOString().slice(0, 10); }
+
+/** Dias que podem mudar entre a leitura do fluxo (Last-Modified) e a nossa: da vespera da gravacao do fluxo ate hoje, em BRT.
+ *  Fluxo velho alarga a janela em vez de culpar o substituto; a idade dele sai no log. */
+function diasVivos(fluxoMs, agora) {
+  const ini = Math.min(isFinite(fluxoMs) ? fluxoMs : agora, agora) - 86400000, out = [];
+  for (let t = ini; diaBRT(t) <= diaBRT(agora); t += 86400000) out.push(diaBRT(t));
+  if (!out.includes(diaBRT(agora))) out.push(diaBRT(agora));
+  return out;
+}
 
 function apiTexto(q, token, timeout = 60000) {
   return new Promise((ok, ko) => {
@@ -111,15 +134,23 @@ function lePublico(nome) {
 async function main({ api = apiComRetry, le = lePublico, grava, agora = Date.now(), sombra = process.env.SOMBRA === '1' } = {}) {
   const token = (process.env.WAY2_TOKEN || '').trim();
   if (!token && api === apiComRetry) throw new Error('WAY2_TOKEN ausente');
-  const vivos = [diaBRT(agora), diaBRT(agora - 86400000)];
+  const hoje = diaBRT(agora);
   let reprovou = 0;
   for (const c of CHAMADAS) {
     const texto = await api(c.q, token);
-    const j = confere(texto, c.ids, c.blob);
+    const j = confere(texto, c.ids, c.blob, hoje);
     const dias = new Set(j.dados.flatMap((d) => d.valores.filter((v) => v.valor != null).map((v) => String(v.data).slice(0, 10))));
     if (sombra) {
       const f = await le(c.blob);
-      const r = compara(j, confere(f.texto, c.ids, c.blob + ' (fluxo)'), vivos);
+      const fj = confere(f.texto, c.ids, c.blob + ' (fluxo)');
+      /* virada do mes: o gatilho do fluxo dispara em hh:m9:59, entao a rodada dele da meia-noite do dia 1 ainda le o mes velho
+         e a nossa ja le o novo. Mes diferente nao e divergencia: e o fluxo atrasado, e a rodada seguinte compara */
+      if (String(fj.dataInicio).slice(0, 7) !== String(j.dataInicio).slice(0, 7)) {
+        console.log('… ' + c.blob + ': o fluxo ainda esta em ' + String(fj.dataInicio).slice(0, 7) + ' e a leitura nova em ' + String(j.dataInicio).slice(0, 7) + ' (gravou ' + f.modificado + ') — sem comparacao nesta rodada');
+        continue;
+      }
+      const vivos = diasVivos(Date.parse(f.modificado), agora);
+      const r = compara(j, fj, vivos);
       const ruim = r.fechados.length + r.ausentes.length;
       console.log((ruim ? '✗ ' : '✓ ') + c.blob + ': ' + r.iguais + ' ponto×dia iguais · ' + r.vivos.length + ' em dia vivo (' + vivos.join(', ')
         + ') · ' + r.fechados.length + ' em dia fechado · ' + r.ausentes.length + ' ausentes · fluxo gravou ' + f.modificado);
@@ -138,10 +169,11 @@ async function gravaBlob(nome, texto) {
   const { BlobServiceClient } = require('@azure/storage-blob');
   if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE ausente');
   const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados').getBlockBlobClient(nome);
-  await c.upload(texto, Buffer.byteLength(texto), { blobHTTPHeaders: { blobContentType: 'application/json' } });
+  /* o mesmo Content-Type do fluxo (o painel do Grafana le o way2_must.json pelo Infinity; nada a provar se nao muda) */
+  await c.upload(texto, Buffer.byteLength(texto), { blobHTTPHeaders: { blobContentType: 'application/octet-stream' } });
 }
 
-module.exports = { CHAMADAS, confere, compara, mapa, diaBRT, main };
+module.exports = { CHAMADAS, confere, compara, mapa, diaBRT, diasVivos, main };
 
 if (require.main === module) {
   main({ grava: gravaBlob }).then((c) => process.exit(c)).catch((e) => { console.error('::error::gen-way2-mes: ' + e.message); process.exit(1); });
