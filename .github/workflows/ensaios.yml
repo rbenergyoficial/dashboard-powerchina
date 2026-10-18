@@ -85,6 +85,13 @@ jobs:
         if: always()
         run: node scripts/ensaio-must-watchdog.js
 
+      # O alerta de ultrapassagem do MUST no quarto de hora (alerta-must.js, PROMOVER pa-alerta): janela por dia BRT,
+      # fronteira do balde das 00:00, dedup, e vermelho quando o canal esta incompleto ou nada foi julgado. So casos
+      # fabricados; o mesmo ensaio roda tambem antes do alerta no must-intra.yml, e o alerta so roda se ele passar.
+      - name: Ensaio · o alerta de ultrapassagem do MUST (15 min)
+        if: always()
+        run: node scripts/ensaio-alerta-must.js
+
       # A guarda da EneatLiquida (lib-guarda-liquida.js) pela mesma funcao que o gen-executivo usa: o dia julgado nao
       # entra no proprio teto, sem catraca, comeco de mes decidido pela janela guardada, aceito pelo sinal nao vai para a
       # janela. So dados plantados.

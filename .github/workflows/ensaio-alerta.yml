@@ -28,7 +28,6 @@ jobs:
         with: { node-version: '20' }
       - name: Mandar um alerta de teste
         env:
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}

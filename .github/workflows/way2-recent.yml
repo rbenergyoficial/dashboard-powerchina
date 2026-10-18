@@ -161,7 +161,6 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}

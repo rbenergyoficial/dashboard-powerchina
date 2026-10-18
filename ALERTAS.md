@@ -5,7 +5,7 @@ mandam tudo por `scripts/lib-alerta.js`, que entrega em **três destinos indepen
 
 | destino | como | depende de |
 |---|---|---|
-| **webhook** | POST num fluxo do Power Automate | 🔴 licença Premium, **vence 15/09/2026** |
+| ~~webhook~~ | POST num fluxo do Power Automate | **retirado** dos workflows no lote `pa-alerta` (o Premium acaba em 09/11/2026) |
 | **issue** | issue no próprio repositório | `GITHUB_TOKEN` do Actions + `issues: write` |
 | **email** | Microsoft Graph `sendMail` | OIDC + `id-token: write` — **sem segredo** |
 
@@ -35,7 +35,7 @@ repo:<owner>/<repo>:ref:refs/heads/main
 Nenhum outro repositório, branch, tag ou pull request consegue usá-la. Como não existe senha, não
 há o que vazar, girar ou expirar.
 
-A configuração vem de quatro **variables** do repositório — identificadores, não credenciais:
+A configuração vem de quatro **variables** do repositório (cinco, com o destinatário do aviso do MUST) — identificadores, não credenciais:
 
 | variável | o que é |
 |---|---|
@@ -43,6 +43,7 @@ A configuração vem de quatro **variables** do repositório — identificadores
 | `AZ_MAIL_CLIENT_ID` | aplicativo com `Mail.Send` (aplicação), consentido |
 | `MAIL_DE` | caixa remetente |
 | `MAIL_PARA` | destinatário (aceita vários, separados por `,` ou `;`) |
+| `MAIL_PARA_MUST` | destinatário do aviso de ultrapassagem do MUST (`alerta-must.js`); o mesmo do antigo fluxo |
 
 ## ⚠️ DÍVIDA: restringir o `Mail.Send` a uma caixa só
 
@@ -100,6 +101,11 @@ espera e repete.
 **Só depois** de um alerta de verdade ter saído por e-mail pelo canal novo. Alerta é justamente o
 que não se migra no escuro: se o canal novo falhar em silêncio, some o alerta **e** some a notícia
 de que ele sumiu.
+
+✅ **Feito no lote `pa-alerta`**: o `PA_ALERT_WEBHOOK` saiu de `way2-recent`, `scada`, `vigia` e `ensaio-alerta`; sem
+ele a `lib-alerta` deixa o canal `webhook` como `-` e entrega por issue e e-mail. O e-mail de ultrapassagem do MUST, que
+o fluxo "Way2 MUST Intradia" mandaria (e nunca mandou: o filtro comparava hora local com UTC), passou para o
+`alerta-must.js`, com destinatário na variável `MAIL_PARA_MUST`.
 
 ⚠️ O fluxo também é o dono do `PA_ALERT_WEBHOOK`. Desligá-lo faz o canal `webhook` responder
 `FALHOU` — o que é **correto e visível** no log de cada vigia, e não derruba os outros dois.

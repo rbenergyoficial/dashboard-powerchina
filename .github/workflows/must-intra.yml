@@ -43,6 +43,12 @@ concurrency:
   # exatamente o erro cometido na primeira tentativa de consertar isto. O correto e o
   # inverso: o cron chega com false e ESPERA; o dispatch chega com true e limpa a fila.
   cancel-in-progress: ${{ github.event_name != 'schedule' }}
+# o alerta de ultrapassagem (alerta-must.js) abre ISSUE como memoria do dedup e manda e-mail pela
+# identidade do proprio job, sem segredo (lib-alerta)
+permissions:
+  contents: read
+  issues: write
+  id-token: write
 jobs:
   gen:
     runs-on: ubuntu-latest
@@ -93,3 +99,25 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
         run: node scripts/gen-must-watchdog.js
+      # 🔴 ULTRAPASSAGEM DO MUST NO QUARTO DE HORA (PROMOVER pa-alerta, decisao D2 de 18/10/2026).
+      # Substitui o e-mail do fluxo "Way2 MUST Intradia" do Power Automate, que sai com o Premium em
+      # 09/11 e nunca avisou: o filtro dele comparava hora local com UTC (300 execucoes, zero e-mail).
+      # Le o must_15min.json que o passo de cima acabou de gravar. O ensaio vem antes e e barato, e o
+      # alerta SO RODA SE ELE PASSAR: regra quebrada nao manda e-mail falso nem cala em silencio (o
+      # vermelho do ensaio ja e o aviso). O alerta roda mesmo com o gerador falho (o dado de ontem
+      # ainda vale) e FALHA se o canal estiver incompleto (MAIL_PARA_MUST), se a entrega falhar ou se
+      # a janela de hoje e ontem nao tiver nenhum intervalo julgado.
+      - name: Ensaio do alerta de ultrapassagem do MUST
+        id: ensaio_must
+        if: always() && (github.event_name == 'schedule' || (inputs.dias || '2') == '2')
+        run: node scripts/ensaio-alerta-must.js
+      - name: Alerta de ultrapassagem do MUST (15 min)
+        if: always() && steps.ensaio_must.outcome == 'success' && (github.event_name == 'schedule' || (inputs.dias || '2') == '2')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA_MUST }}
+        run: node scripts/alerta-must.js

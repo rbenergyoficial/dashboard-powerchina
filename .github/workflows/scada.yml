@@ -77,7 +77,6 @@ jobs:
           RAW_CONTAINER: ${{ github.event.inputs.vigia_container || 'scada-raw' }}
           MODO: ${{ github.event.inputs.vigia_modo || 'vigiar' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}
@@ -98,7 +97,6 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: inversores-raw
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PA_ALERT_WEBHOOK: ${{ secrets.PA_ALERT_WEBHOOK }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}
