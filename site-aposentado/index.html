@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Endereço aposentado · Mauriti</title>
+<style>
+  :root { --canvas: #111217; --painel: #181B1F; --borda: #2E3036; --forte: #F2F4F7; --medio: #C6CBD3; }
+  html, body { margin: 0; height: 100%; background: var(--canvas); color: var(--medio);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px 16px; box-sizing: border-box; }
+  section { max-width: 520px; background: var(--painel); border: 1px solid var(--borda); border-radius: 8px; padding: 28px 28px 24px; }
+  h1 { margin: 0 0 12px; font-size: 20px; font-weight: 600; color: var(--forte); }
+  p { margin: 0 0 12px; }
+  a { color: var(--forte); text-underline-offset: 3px; }
+</style>
+</head>
+<body>
+<main><section>
+  <h1>Este endereço foi aposentado</h1>
+  <p>O antigo painel de indicadores do Conjunto Fotovoltaico Mauriti saiu do ar em outubro de 2026.</p>
+  <p>Os indicadores agora ficam no <a href="https://powerchinabrasil.rbenergy.com.br/">Portal Corporativo</a>, com acesso por convite.</p>
+</section></main>
+<script>
+  /* quem instalou o painel antigo como aplicativo ainda tem o service worker e o cache dele:
+     o sw.js deste endereco se desinstala; aqui a pagina tambem limpa o que estiver guardado */
+  if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); }).catch(function () {});
+  if (window.caches) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); }).catch(function () {});
+</script>
+</body>
+</html>

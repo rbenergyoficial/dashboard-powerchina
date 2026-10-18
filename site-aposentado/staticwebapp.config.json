@@ -1,0 +1,9 @@
+{
+  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/sw.js"] },
+  "responseOverrides": { "404": { "rewrite": "/index.html", "statusCode": 200 } },
+  "globalHeaders": {
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  }
+}
