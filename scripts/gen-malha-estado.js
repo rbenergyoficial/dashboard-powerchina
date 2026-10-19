@@ -391,13 +391,28 @@ async function leExecucoes(agenda) {
   const api = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, '');
   return Promise.all(Object.keys(agenda).sort().map(async (wf) => {
     const j = await gh(api + '/repos/' + repo + '/actions/workflows/' + encodeURIComponent(wf) + '/runs?status=completed&per_page=2&exclude_pull_requests=true', tk);
-    const runs = (j.workflow_runs || []).slice(0, 2).map((r) => {
-      const c = r.conclusion;
+    const runs = await Promise.all((j.workflow_runs || []).slice(0, 2).map(async (r) => {
+      let c = r.conclusion;
       if (![...GH_OK, ...GH_VERMELHO, ...GH_NEUTRO].includes(c)) throw new Error('GitHub: conclusao desconhecida em ' + wf);
+      if (GH_VERMELHO.includes(c) && CONFERENCIAS_FORA[wf]) c = await semConferenciaFora(api, repo, tk, r.id, CONFERENCIAS_FORA[wf], c);
       return { c, t: Date.parse(r.updated_at) };
-    });
+    }));
     return { wf, runs };
   }));
+}
+/* malha-sem-mesa (19/10/2026, decisão do humano): conferências que NÃO entram na Malha de Dados. A auditoria do registro da mesa de
+ * operação contra o ONS reprova por divergência de dado real, e isso vai para um painel próprio; aqui, uma execução vermelha SÓ por
+ * esses passos conta como verde. Qualquer outro passo vermelho no mesmo workflow continua vermelho. */
+const CONFERENCIAS_FORA = { 'ons-consolidado.yml': ['Auditar o registro do PPC contra o ONS'] };
+async function semConferenciaFora(api, repo, tk, runId, passos, c) {
+  const jj = await gh(api + '/repos/' + repo + '/actions/runs/' + runId + '/jobs?per_page=50', tk);
+  const falhos = [];
+  for (const job of jj.jobs || []) {
+    const st = (job.steps || []).filter((s) => GH_VERMELHO.includes(s.conclusion)).map((s) => s.name);
+    if (GH_VERMELHO.includes(job.conclusion) && !st.length) return c;   // job vermelho sem passo vermelho (cancelado, sem runner): fica vermelho
+    falhos.push(...st);
+  }
+  return falhos.length && falhos.every((n) => passos.includes(n)) ? 'success' : c;
 }
 /* proc (lote malha-v2, regra aprovada pelo humano em 19/10/2026): vermelho sozinho NAO derruba a etapa. Um passo de auditoria
  * que reprova por dado real pinta o workflow de vermelho enquanto o gerador dele gravou normalmente (no ar em 19/10: `fa` com

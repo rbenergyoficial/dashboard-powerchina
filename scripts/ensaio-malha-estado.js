@@ -120,7 +120,9 @@ const blobsDados = {};
 for (const [n, m] of Object.entries(PUB)) blobsDados[n] = { mod: m };
 
 /* execucoes: 2 verdes por workflow; o executivo com 1 vermelha das 2 */
-const run = (c, u) => ({ conclusion: c, status: 'completed', updated_at: u });
+/* malha-sem-mesa: cada execucao tem id e os passos do job; vermelha sem passos declarados falha no passo 'Gerar' */
+const RUNS = {}; let idRun = 1000;
+const run = (c, u, passos) => { const r = { id: ++idRun, conclusion: c, status: 'completed', updated_at: u }; RUNS[r.id] = { c, passos }; return r; };
 const GH_PADRAO = [run('success', '2026-10-19T15:20:00Z'), run('success', '2026-10-19T14:20:00Z')];
 const GH_PRINCIPAL = { 'executivo.yml': [run('failure', '2026-10-19T15:10:00Z'), run('success', '2026-10-19T14:10:00Z')] };
 
@@ -181,6 +183,14 @@ const servidor = http.createServer((q, r) => {
     const runs = MUNDO_HTTP.gh[decodeURIComponent(m[1])] || GH_PADRAO;
     r.writeHead(200, { 'content-type': 'application/json' });
     return r.end(JSON.stringify({ total_count: runs.length, workflow_runs: runs }));
+  }
+  m = /^\/repos\/o\/r\/actions\/runs\/(\d+)\/jobs$/.exec(u.pathname);
+  if (m) {
+    if (q.headers.authorization !== 'Bearer tk-ensaio') { r.writeHead(401); return r.end('{}'); }
+    const R = RUNS[m[1]]; if (!R) { r.writeHead(404); return r.end('{}'); }
+    const passos = R.passos || (R.c === 'success' ? [{ name: 'Gerar', conclusion: 'success' }] : [{ name: 'Gerar', conclusion: R.c }]);
+    r.writeHead(200, { 'content-type': 'application/json' });
+    return r.end(JSON.stringify({ total_count: 1, jobs: [{ conclusion: R.c, steps: passos }] }));
   }
   m = /^\/dados\/(.+)$/.exec(u.pathname);
   if (m) {
@@ -524,6 +534,15 @@ async function processos() {
     'vermelho nas 2 com o arquivo no prazo (ppc)': [{ 'ppc.yml': verm2('failure', 'failure') }, { st: 'at', motivo: 'workflow_vermelho_grava', n: nProc(0, 0) }],
     'vermelho nas 2 sem arquivo no frescor (must-intra)': [{ 'must-intra.yml': verm2('failure', 'failure') }, { st: 'at', motivo: 'workflow_vermelho', n: nProc(0, 0) }],
     'todas verdes': [{}, { st: 'ok', motivo: null, n: { ok: 2 * W, total: 2 * W, vermelhos: 0, parados: 0 } }],
+    /* malha-sem-mesa: a auditoria da mesa contra o ONS nao entra na Malha (decisao do humano, 19/10) */
+    'ons vermelho SO pela auditoria da mesa': [{ 'ons-consolidado.yml': [
+      run('failure', '2026-10-19T15:10:00Z', [{ name: 'Consolidar ONS restricao + irradiancia', conclusion: 'success' }, { name: 'Auditar o registro do PPC contra o ONS', conclusion: 'failure' }]),
+      run('failure', '2026-10-19T14:10:00Z', [{ name: 'Auditar o registro do PPC contra o ONS', conclusion: 'failure' }])] },
+      { st: 'ok', motivo: null, n: { ok: 2 * W, total: 2 * W, vermelhos: 0, parados: 0 } }],
+    'ons vermelho pela auditoria E pelo consolidado': [{ 'ons-consolidado.yml': [
+      run('failure', '2026-10-19T15:10:00Z', [{ name: 'Consolidar ONS restricao + irradiancia', conclusion: 'failure' }, { name: 'Auditar o registro do PPC contra o ONS', conclusion: 'failure' }]),
+      run('failure', '2026-10-19T14:10:00Z', [{ name: 'Consolidar ONS restricao + irradiancia', conclusion: 'failure' }])] },
+      { st: 'fa', motivo: 'workflow_vermelho', n: nProc(0, 1) }],
   };
   const chkProc = (esp) => (r) => {
     if (r.code !== 0 || !r.out) return ['o gerador nao terminou (codigo ' + r.code + '): ' + String(r.stderr).trim().split('\n').slice(-1)];
