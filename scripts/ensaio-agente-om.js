@@ -13,6 +13,8 @@
  * PRODUTO · o resumo publicado passa (e tem o que julgar: vacuidade).
  * PLANTIO · cada defeito tem de reprovar com a mensagem dele: (1) meta do mes no lugar da rateada; (2) energia inflada;
  *   (3) entidade a menos (a guarda do gerador); (4) o mes em curso dentro dos fechados.
+ * CASOS DO RENDIMENTO (19/10/2026): um dia forjado com buraco no meio e outro com buraco na ponta, montados pela lib do
+ *   portal_vivo e pelo gerador; valores a mao; plantios com a regra de antes de cada lado (ver casosRendimento).
  *
  *   node scripts/ensaio-agente-om.js            (BASE_DADOS=<pasta> le uma rodada local; sem ela, o blob publico)
  */
@@ -20,7 +22,10 @@ const fs = require('fs');
 const path = require('path');
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
-const { guarda, ENTIDADES } = require('./gen-agente-om.js');
+const GA = require('./gen-agente-om.js');
+const { guarda, ENTIDADES } = GA;
+/* a lib do portal_vivo, para os casos forjados do rendimento (LIBPV aponta outra versao: a do HEAD reprova o caso do meio) */
+const LV = require(process.env.LIBPV || './lib/portal-vivo.js');
 
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf).toString('utf8')); }
@@ -40,7 +45,9 @@ const EPS = 1e-9;
 /* folga de 100 x E / D com E e D arredondados a 2 casas (meio centesimo cada) e o percentual a 2 casas */
 const folgaPct = (E, D) => 0.005 + 100 * 0.005 * (1 / D + Math.abs(E) / (D * D)) + EPS;
 
-function julga(R) {
+function julga(R, cont) {
+  cont = cont || {};
+  cont.rend_mesmo = 0; cont.rend_atrasado = 0;
   const mau = [];
   let julgados = 0;
   const pct = (rot, E, D, P) => {
@@ -130,15 +137,26 @@ function julga(R) {
       /* mwh com 1 casa e mwh_por_mw com 3: folga de meio decimo sobre a capacidade mais meio milesimo */
       if (Math.abs(r.mwh / CAP[r.ufv] - r.mwh_por_mw) > 0.0005 + 0.05 / CAP[r.ufv] + EPS) mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh_por_mw + ' MWh/MW contra ' + r.mwh + ' / ' + CAP[r.ufv]);
       const a = ((R.agora || {}).por_entidade || {})[r.ufv];
-      /* os dois com 1 casa, de somas diferentes do mesmo medidor: dois arredondamentos de meio decimo (medido: 0,1 no M6).
-         IGUAIS so no mesmo horizonte: o rendimento vai ate o ultimo instante que TODOS os circuitos mediram, e o agora da
-         usina ate o ultimo dela. Com um medidor atrasado (16:40 x 16:50 em 03/10/2026, o way2-recent ficou vermelho por
-         isso) o rendimento cobre menos instantes e so nao pode passar do agora. */
+      /* o rendimento (1 casa) e a energia do agora (2 casas) saem da MESMA conta, a energia lida da lib do portal_vivo, cada
+         um ate o seu horizonte (lote rendimento-lida, 19/10/2026): no mesmo horizonte a diferenca e so a dos dois
+         arredondamentos, meio decimo mais meio centesimo (era 0,1 quando os dois tinham 1 casa).
+         O HORIZONTE da energia do agora e `energia_ate`, nao a `hora` da usina: com um circuito atrasado a energia vai ate o
+         ultimo instante lido e a `hora` fica no ultimo em que TODOS leram. Julgado pela `hora`, o agora de 19/10/2026 as 15:45
+         (M8 com hora 15:30 e energia ate 15:40) parecia "mesmo horizonte" e o way2-recent ficou vermelho duas vezes. Resumo
+         sem `energia_ate` (o de antes) cai na `hora`, como antes. Fora do mesmo horizonte (16:40 x 16:50 em 03/10/2026) o
+         rendimento cobre menos instantes e so nao pode passar do agora. */
       if (a && a.energia_hoje_mwh != null) {
-        const mesmo = a.hora == null || a.hora === T.rendimento.ate;
-        if (mesmo ? Math.abs(a.energia_hoje_mwh - r.mwh) > 0.1 + 1e-6 : r.mwh > a.energia_hoje_mwh + 0.1 + 1e-6)
+        const ha = a.energia_ate != null ? a.energia_ate : a.hora;
+        /* o horizonte da energia nunca fica antes do comum aos 22 (todos leram ate la) nem antes da hora da propria usina */
+        if (a.energia_ate != null && T.rendimento.ate && a.energia_ate < T.rendimento.ate)
+          mau.push('tempo real: energia do ' + r.ufv + ' ate ' + a.energia_ate + ', antes do horizonte comum ' + T.rendimento.ate);
+        if (a.energia_ate != null && a.hora != null && a.energia_ate < a.hora)
+          mau.push('tempo real: energia do ' + r.ufv + ' ate ' + a.energia_ate + ', antes da hora da usina ' + a.hora);
+        const mesmo = ha == null || ha === T.rendimento.ate;
+        if (mesmo) cont.rend_mesmo++; else cont.rend_atrasado++;
+        if (mesmo ? Math.abs(a.energia_hoje_mwh - r.mwh) > 0.05 + 0.005 + 1e-6 : r.mwh > a.energia_hoje_mwh + 0.1 + 1e-6)
           mau.push('tempo real: rendimento ' + r.ufv + ' ' + r.mwh + ' MWh contra ' + a.energia_hoje_mwh + ' do agora'
-            + (mesmo ? '' : ' (ate ' + T.rendimento.ate + ' x ' + a.hora + ': o rendimento cobre menos instantes e passou do agora)'));
+            + (mesmo ? '' : ' (ate ' + T.rendimento.ate + ' x ' + ha + ': o rendimento cobre menos instantes e passou do agora)'));
       }
     });
     /* o instante publicado tem de ter leitura do conjunto (o intervalo vazio do fim da serie nao e "agora") */
@@ -224,6 +242,80 @@ function julga(R) {
   return mau;
 }
 
+/* ---- CASOS FORJADOS DO RENDIMENTO x AGORA (lote rendimento-lida, 19/10/2026): nao dependem da hora nem do dado do dia ----
+   A lib do portal_vivo (LV) monta o agora e o rendimento de um dia FORJADO, o gerador do resumo (GA) seleciona os dois como no
+   job, e a julga acima confere. Quatro instantes (10:00 a 10:15); o circuito de ordem k no mapa (M1 · C1 = 1 ... M9 = 22) gera
+   k MW constantes; o complexo e a soma. Valores conferidos A MAO, para a lib e a julga nao errarem juntas.
+     meio   M2 · C1 (k = 4) sem a leitura de 10:05. Horizonte comum 10:15. M1 = 6 MW x 4 x 5 min = 2,0 MWh; M2 = (4 x 3 + 5 x 4)
+            x 5 min = 2,667 (rendimento 2,7; agora 2,67). Nove usinas julgadas no mesmo horizonte. PLANTIO: o rendimento pela
+            regra de antes (so os instantes em que os 22 mediram: o 10:05 sai das nove usinas) da M1 = 1,5 e reprova.
+     ponta  M8 · C1 (k = 19) e o M9 (k = 22) sem a leitura de 10:15. Horizonte comum 10:10. M8: rendimento 60 x 3 x 5 min = 15,0;
+            agora 15 + (20 + 21) x 5 min = 18,42, hora 10:10, energia ate 10:15. M9: 5,5 nos dois, energia ate 10:10 = o
+            horizonte comum (julgado igual). PLANTIO: o agora sem o horizonte da energia (o resumo de antes, so com a hora) julga
+            o M8 como mesmo horizonte e reprova: e o vermelho de 19/10/2026 as 15:45. */
+const HF = ['10:00', '10:05', '10:10', '10:15'];
+function forjaDia(falta) {
+  const CIRC = LV.mapaCircuitos();
+  if (!CIRC) throw new Error('o mapa de circuitos do gen-executivo.js nao leu');
+  const dados = [], tot = HF.map(() => 0);
+  let k = 0;
+  for (const ps of Object.values(CIRC)) for (const p of ps) {
+    k++;
+    const kw = 1000 * k;
+    dados.push({ pontoId: p, nomeGrandeza: 'Demat', valores: HF.map((h, i) => {
+      if (falta(p, h)) return { data: '2026-10-19T' + h + ':00', valor: null };
+      tot[i] += kw; return { data: '2026-10-19T' + h + ':00', valor: kw }; }) });
+  }
+  dados.push({ pontoId: LV.COMPLEXO, nomeGrandeza: 'Demat', valores: HF.map((h, i) => ({ data: '2026-10-19T' + h + ':00', valor: tot[i] })) });
+  return { elet: { dataInicio: '2026-10-19T00:00:00', dados }, CIRC };
+}
+function resumoDoDia(R, elet) {
+  const V = LV.monta(elet, null);
+  const Y = copia(R);
+  Y.agora = GA.monta(V, {}).agora;
+  Y.tempo_real.rendimento = GA.montaTempoReal(V, {}, {}, {}).rendimento;
+  return Y;
+}
+const doRendimento = (ms) => ms.filter((m) => /^tempo real: (rendimento|energia)/.test(m));
+function casosRendimento(R, falhas) {
+  const q = (nome, a, b, tol) => { if (a == null || typeof a !== typeof b || (typeof b === 'number' ? Math.abs(a - b) > tol : a !== b)) falhas.push('caso ' + nome + ': ' + a + ' (a mao: ' + b + ')'); };
+  const rd = (Y, u) => (Y.tempo_real.rendimento.por_usina.find((x) => x.ufv === u) || {}).mwh;
+  /* meio */
+  const M = forjaDia((p, h) => p === 6201 && h === '10:05');
+  const Ym = resumoDoDia(R, M.elet), cm = {};
+  doRendimento(julga(Ym, cm)).forEach((m) => falhas.push('caso buraco no meio: ' + m));
+  q('meio · horizonte comum', Ym.tempo_real.rendimento.ate, '10:15'); q('meio · rendimento M1', rd(Ym, 'M1'), 2.0, 1e-9);
+  q('meio · rendimento M2', rd(Ym, 'M2'), 2.7, 1e-9); q('meio · agora M2', Ym.agora.por_entidade.M2.energia_hoje_mwh, 2.67, 1e-9);
+  q('meio · usinas julgadas no mesmo horizonte', cm.rend_mesmo, 9, 0);
+  /* plantio: a regra de antes do rendimento (so os instantes em que os 22 mediram), refeita aqui do dia forjado */
+  const Pm = copia(Ym), sc = new Map(M.elet.dados.map((s) => [s.pontoId, new Map(s.valores.filter((v) => v.valor != null).map((v) => [v.data.slice(11, 16), v.valor / 1000]))]));
+  const ids = Object.values(M.CIRC).flat(), comuns = HF.filter((h) => ids.every((p) => sc.get(p).has(h)));
+  Pm.tempo_real.rendimento.por_usina.forEach((x) => {
+    const e = comuns.reduce((s, h) => s + M.CIRC[x.ufv].reduce((a, p) => a + sc.get(p).get(h), 0), 0) * 5 / 60;
+    x.mwh = Math.round(10 * e) / 10; x.mwh_por_mw = Math.round(1000 * e / LV.CAP[x.ufv]) / 1000; });
+  if (JSON.stringify(Pm) === JSON.stringify(Ym)) falhas.push('plantio "rendimento so nos instantes comuns aos 22" nao mudou nada');
+  else if (!doRendimento(julga(Pm)).some((m) => /^tempo real: rendimento M1 1\.5 MWh contra 2 do agora$/.test(m)))
+    falhas.push('plantio "rendimento so nos instantes comuns aos 22" NAO reprovou o M1 (1,5 contra 2,0)');
+  else console.log('  caso buraco no meio: ' + cm.rend_mesmo + ' usinas no mesmo horizonte, iguais; plantio "rendimento so nos instantes comuns aos 22": reprovou');
+  /* ponta */
+  const P = forjaDia((p, h) => (p === 6216 || p === 6219) && h === '10:15');
+  const Yp = resumoDoDia(R, P.elet), cp = {};
+  doRendimento(julga(Yp, cp)).forEach((m) => falhas.push('caso buraco na ponta: ' + m));
+  const a8 = Yp.agora.por_entidade.M8, a9 = Yp.agora.por_entidade.M9;
+  q('ponta · horizonte comum', Yp.tempo_real.rendimento.ate, '10:10'); q('ponta · rendimento M8', rd(Yp, 'M8'), 15, 1e-9);
+  q('ponta · agora M8', a8.energia_hoje_mwh, 18.42, 1e-9); q('ponta · hora M8', a8.hora, '10:10'); q('ponta · energia do M8 ate', a8.energia_ate, '10:15');
+  q('ponta · rendimento M9', rd(Yp, 'M9'), 5.5, 1e-9); q('ponta · agora M9', a9.energia_hoje_mwh, 5.5, 1e-9); q('ponta · energia do M9 ate', a9.energia_ate, '10:10');
+  q('ponta · usinas julgadas no mesmo horizonte', cp.rend_mesmo, 1, 0); q('ponta · usinas julgadas pelo atraso', cp.rend_atrasado, 8, 0);
+  /* plantio: o agora sem o horizonte da energia (o resumo de antes) */
+  const Pp = copia(Yp); Object.values(Pp.agora.por_entidade).forEach((x) => { delete x.energia_ate; });
+  if (!doRendimento(julga(Pp)).some((m) => /^tempo real: rendimento M8 15 MWh contra 18\.42 do agora$/.test(m)))
+    falhas.push('plantio "agora sem o horizonte da energia" NAO reprovou o M8 (15 contra 18,42)');
+  else console.log('  caso buraco na ponta: ' + cp.rend_mesmo + ' usina no mesmo horizonte e ' + cp.rend_atrasado + ' pelo atraso; plantio "agora sem o horizonte da energia": reprovou');
+  /* plantio: a energia do agora com horizonte antes do comum (impossivel: os 22 leram ate la) */
+  const Pq = copia(Yp); Pq.agora.por_entidade.M9.energia_ate = '10:05';
+  if (!doRendimento(julga(Pq)).some((m) => /energia do M9 ate 10:05, antes do horizonte comum/.test(m))) falhas.push('plantio "energia antes do horizonte comum" NAO reprovou');
+}
+
 (async () => {
   const falhas = [];
   const R = await le('agente_om.json');
@@ -299,7 +391,7 @@ function julga(R) {
      um do outro e o plantio recusou o job. De madrugada todas estao em zero: ai o caso nao se aplica, e o ensaio diz por que */
   /* rendimento contra o agora (PROMOVER ensaio-par-extremo): no mesmo horizonte tem de ser igual; atrasado, nao pode passar */
   const infla = (Y, mesmo) => { const T = Y.tempo_real.rendimento, r = T.por_usina.find((x) => x.ufv === 'M5'), a = Y.agora.por_entidade.M5;
-    if (!r || !a || !T.ate) return false; a.hora = mesmo ? T.ate : '23:59';
+    if (!r || !a || !T.ate) return false; a.hora = mesmo ? T.ate : '23:59'; a.energia_ate = a.hora;
     r.mwh = Math.round((a.energia_hoje_mwh + 2) * 10) / 10; r.mwh_por_mw = Math.round(1000 * r.mwh / 49.11) / 1000; return true; };
   /* de madrugada a energia do dia e NEGATIVA (consumo do trafo): o numero da mensagem aceita o sinal (06/10/2026, 41 runs
      vermelhas das 02:25 as 05:40 com o detector certo e "reprovou pelo motivo errado" so porque [\d.]+ nao casa "-0.1") */
@@ -350,6 +442,8 @@ function julga(R) {
   plantio('oleo conforme com laudo nao conforme', (Y) => { if (!Y.ativos || Y.ativos.oleo.conforme !== true) return false; Y.ativos.oleo.nao_conformes = 1; return true; }, /oleo conforme/);
   plantio('capacidade de uma usina trocada', (Y) => { Y.agora.por_entidade.M9.cap_mw = 14.733; return true; }, /usinas somam/);
 
+  casosRendimento(R, falhas);
+
   if (falhas.length) { console.log(falhas.map((f) => '  RECUSA: ' + f).join('\n')); process.exit(1); }
-  console.log('ensaio-agente-om: produto e plantios OK');
+  console.log('ensaio-agente-om: produto, plantios e casos do rendimento OK');
 })().catch((e) => { console.error(e); process.exit(1); });

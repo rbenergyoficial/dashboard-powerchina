@@ -63,7 +63,10 @@ const GRUPO = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'
 //    buraco nao vira queda. O arquivo marca `energia_regra: 'lida'`; o portal (vivLida) e o resumo dos dias (gen-portal-dia) refazem
 //    a mesma conta nos arquivos sem a marca, com os `circuitos[].pts` (energiaLidaDoArquivo).
 //    grupos: entidade -> pids dos circuitos dela; leitura(pid, h) -> MW ou undefined
-function energiaLida(curvas, grupos, horas, leitura) {
+//    🔴 E A REGRA UNICA DA ENERGIA DE USINA E CONTRATO NO DIA EM CURSO (lote rendimento-lida, 19/10/2026): o kpis E o
+//    rendimento saem desta conta, cada um ate o seu horizonte (`horas` cortado). E a regra do dia fechado (rollupDia do
+//    gen-way2-hist: cada circuito entra nos instantes que leu; o que nao leu nao entra, nada e estimado).
+function somaLida(curvas, grupos, horas, leitura) {
   const out = {};
   for (const [e, ps] of Object.entries(grupos)) {
     const ce = new Map(curvas[e] || []);
@@ -72,9 +75,21 @@ function energiaLida(curvas, grupos, horas, leitura) {
       if (ce.has(h)) s += ce.get(h);
       else for (const p of ps) { const v = leitura(p, h); if (v != null) s += v; }
     }
-    out[e] = r(s * 5 / 60, 2);
+    out[e] = s * 5 / 60;
   }
   return out;
+}
+function energiaLida(curvas, grupos, horas, leitura) {
+  const out = {}, s = somaLida(curvas, grupos, horas, leitura);
+  for (const e of Object.keys(s)) out[e] = r(s[e], 2);
+  return out;
+}
+// O HORIZONTE da energia lida de uma entidade: o ultimo instante da curva do complexo em que ALGUM circuito dela leu. Com um
+// circuito atrasado ele passa da `hora` da entidade (o ultimo instante em que TODOS os circuitos dela leram): em 19/10/2026 as
+// 15:45, M8 · C2 leu 15:35 e 15:40 e o C1 e o C3 nao; a `hora` do M8 era 15:30 e a energia ia ate 15:40 (rendimento-lida).
+function horizonteLido(ps, horas, leitura) {
+  for (let i = horas.length - 1; i >= 0; i--) if (ps.some(p => leitura(p, horas[i]) != null)) return horas[i];
+  return null;
 }
 function energiaLidaDoArquivo(pv) {
   if (!pv || !pv.curvas || !(pv.circuitos || []).length) return {};
@@ -137,8 +152,7 @@ function monta(elet, saude) {
   const t1 = serie(elet, TRAFOS[0]), t2 = serie(elet, TRAFOS[1]);
   const alta = horas.filter(h => t1.has(h) && t2.has(h)).map(h => [h, r(t1.get(h) + t2.get(h), 3)]);
 
-  // Rendimento por usina, na janela COMUM aos 22 circuitos. Sem a janela comum a comparacao mede
-  // cobertura em vez de geracao: uma usina cujos circuitos pararam antes pareceria pior.
+  // Rendimento por usina, ate o horizonte COMUM aos 22 circuitos (a energia dentro dele e a lida: ver abaixo).
   let rend = null, rendAte = null, curvas = null, kpis = null, circuitos = null;
   const CIRC = mapaCircuitos();
   if (CIRC) {
@@ -181,16 +195,25 @@ function monta(elet, saude) {
         pts: [...sc[p].keys()].sort().map(h => [h, r(sc[p].get(h), 2)]), agora: retrato(elet, p) });
     });
     const G = Object.assign({}, CIRC); for (const [g, us] of Object.entries(GRUPO)) G[g] = us.flatMap(u => CIRC[u]);
-    const EL = energiaLida(curvas, G, horas, (p, h) => sc[p].get(h));   // vivo-sem-leitura
-    for (const e of Object.keys(kpis)) if (kpis[e] && EL[e] != null) kpis[e].energia_mwh = EL[e];
+    const le = (p, h) => sc[p].get(h);
+    const EL = energiaLida(curvas, G, horas, le);   // vivo-sem-leitura
+    // `energia_ate` (campo novo, rendimento-lida): o horizonte da energia publicada, que pode passar da `hora` (ver horizonteLido)
+    for (const e of Object.keys(kpis)) if (kpis[e]) {
+      if (EL[e] != null) kpis[e].energia_mwh = EL[e];
+      kpis[e].energia_ate = horizonteLido(G[e], horas, le);
+    }
+    // 🔴 O HORIZONTE do rendimento e COMUM as nove usinas: o ultimo instante em que os 22 circuitos mediram. Sem ele a
+    //    comparacao mede cobertura em vez de geracao (uma usina com circuito atrasado pareceria pior).
+    //    DENTRO do horizonte, a energia e a LIDA, a mesma conta do kpis (rendimento-lida, 19/10/2026). Antes somava so os
+    //    instantes em que os 22 mediram: um circuito sem leitura num instante do meio tirava esse instante das NOVE usinas, e
+    //    o rendimento de cada uma ficava abaixo da energia que a tela mostra no mesmo horizonte.
     const todos = Object.values(sc);
     const comuns = horas.filter(h => todos.every(m => m.has(h)));
     if (comuns.length) {
       rendAte = comuns[comuns.length - 1];
-      rend = Object.entries(CIRC).map(([u, ps]) => {
-        const e = comuns.reduce((s, h) => s + ps.reduce((a, p) => a + sc[p].get(h), 0), 0) * 5 / 60;
-        return { ufv: u, mwh: r(e, 1), mwh_mw: r(e / CAP[u], 3) };
-      }).sort((a, b) => b.mwh_mw - a.mwh_mw);
+      const ER = somaLida(curvas, CIRC, horas.filter(h => h <= rendAte), le);
+      rend = Object.keys(CIRC).map((u) => ({ ufv: u, mwh: r(ER[u], 1), mwh_mw: r(ER[u] / CAP[u], 3) }))
+        .sort((a, b) => b.mwh_mw - a.mwh_mw);
     }
   }
 
@@ -221,4 +244,4 @@ function monta(elet, saude) {
   };
 }
 
-module.exports = { monta, mapaCircuitos, retrato, energiaLida, energiaLidaDoArquivo, GRUPO, COMPLEXO, TRAFOS, OUTORGA, CAP, CAP_CIRC };
+module.exports = { monta, mapaCircuitos, retrato, energiaLida, energiaLidaDoArquivo, horizonteLido, GRUPO, COMPLEXO, TRAFOS, OUTORGA, CAP, CAP_CIRC };

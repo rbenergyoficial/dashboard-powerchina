@@ -49,8 +49,9 @@ const LEGENDA = {
   unidades: 'Energia em MWh, potencia em MW, percentuais em %. Hora de Brasilia.',
   agora: 'Medicao ao vivo do dia de hoje, de 5 em 5 minutos, no medidor de faturamento. agora_mw e a potencia no ultimo '
     + 'instante medido; valor negativo e o consumo noturno da instalacao (sem geracao). pico_mw e pico_hora sao o maior valor '
-    + 'do dia ate agora. pct_cap e o pico em relacao a capacidade. energia_hoje_mwh e a energia liquida do dia ate a hora '
-    + 'informada. fc_pct e o fator de capacidade do dia ate agora.',
+    + 'do dia ate agora. pct_cap e o pico em relacao a capacidade. energia_hoje_mwh e a energia liquida do dia lida ate '
+    + 'energia_ate (no Complexo, ate a hora informada); com um circuito atrasado, energia_ate passa da hora da usina e o '
+    + 'circuito atrasado entra so ate onde mediu. fc_pct e o fator de capacidade do dia ate agora.',
   mes_em_curso: 'O mes mais recente. Se fechado = true, ele acabou de fechar e o mes novo ainda nao tem dado; nesse caso '
     + 'a meta rateada e a do mes inteiro e nao ha projecao a fazer. liquida_mwh e a energia liquida entregue no mes ate agora. meta_mes_mwh e a meta '
     + 'contratual do mes inteiro; meta_rateada_mwh e a parte dela que corresponde aos dias ja decorridos. '
@@ -68,7 +69,8 @@ const LEGENDA = {
     + 'indisponibilidade de equipamento externo. ano.complexo compara o corte do conjunto com o da regiao Nordeste (solar) e '
     + 'com o do parque vizinho Abaiara, na mesma janela; vantagem_pp positiva = Mauriti cortou menos que o Nordeste.',
   tempo_real: 'medidores: dos 24 medidores (2 de 230 kV e 22 de circuito de 34,5 kV), quantos chegaram em dia e quais estao fora (idade em minutos). '
-    + 'rendimento: energia de hoje por usina e por MW instalado (compara usinas de tamanhos diferentes). operador: registro '
+    + 'rendimento: energia de hoje por usina e por MW instalado (compara usinas de tamanhos diferentes), todas ate o mesmo '
+    + 'instante (ate: o ultimo em que os 22 circuitos mediram). operador: registro '
     + 'da mesa do controlador de potencia, PRELIMINAR: a fonte confiavel de restricao e o dado aberto do operador nacional '
     + '(bloco corte), publicado com cerca de um dia de atraso; a mesa serve para o dia corrente e para achar erro de registro, e '
     + 'quando as duas divergem vale o operador nacional. ultima_ordem e o limite pedido pelo operador nacional na ultima mudanca '
@@ -104,10 +106,12 @@ function monta(V, X) {
   for (const e of ENTIDADES.slice(1)) {
     const k = (V.kpis || {})[e];
     if (!k) continue;
-    /* `hora` da entidade (o ultimo instante que ELA mediu): o rendimento de `tempo_real` vai so ate o ultimo instante
-       que TODOS os circuitos mediram, e com um medidor atrasado os dois horizontes diferem (16:40 x 16:50 em 03/10/2026) */
+    /* `hora` da entidade (o ultimo instante que TODOS os circuitos dela mediram; e o instante do agora_mw) e `energia_ate`
+       (o horizonte da energia: o ultimo instante com leitura de ALGUM circuito dela; lote rendimento-lida, 19/10/2026). O
+       rendimento de `tempo_real` vai ate o ultimo instante que os 22 circuitos mediram; com um medidor atrasado os horizontes
+       diferem (16:40 x 16:50 em 03/10/2026; em 19/10 as 15:45 a hora do M8 era 15:30 e a energia dele ia ate 15:40) */
     agoraPor[e] = { cap_mw: k.cap_mw, hora: k.hora, agora_mw: k.agora_mw, pico_mw: k.pico_mw, pico_hora: k.pico_hora,
-      pct_cap: k.pct_cap, energia_hoje_mwh: k.energia_mwh, fc_pct: k.fc_pct };
+      pct_cap: k.pct_cap, energia_hoje_mwh: k.energia_mwh, energia_ate: k.energia_ate, fc_pct: k.fc_pct };
   }
 
   const S = X.serie_ufv || [], M = X.manchete_ufv || [];

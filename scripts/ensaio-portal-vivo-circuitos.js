@@ -15,6 +15,9 @@
  * (refeito da fonte crua, sem arredondar no caminho) — o fator de potencia de madrugada (P de -9 kW, Q de 192 kVAr) nao estoura
  * por arredondamento em cadeia. Soma de n circuitos (2 casas) contra a usina (3 casas): n·0,005 + 0,0005.
  *
+ * RENDIMENTO (19/10/2026): o rendimento por usina e a energia LIDA dela ate o horizonte comum aos 22, e cada entidade publica o
+ * horizonte da propria energia (`energia_ate`); os dois refeitos do bruto, num dia com buraco no meio e noutro com buraco na ponta.
+ *
  * NADA A JULGAR NAO E PASSAR: cada modo conta o que comparou e reprova com contagem zero havendo dado.
  *
  *   node scripts/ensaio-portal-vivo-circuitos.js --lib       casos forjados + defeitos plantados (ANTES de gravar o blob)
@@ -152,7 +155,43 @@ function confere(pv, elet, CIRC) {
     lidaE[e] = s * 5 / 60;
   }
   for (const [e, o] of Object.entries(pv.kpis || {})) kp(e, (pv.curvas || {})[e], o && o.cap_mw, o, 'pct_cap', lidaE[e]);
+  // rendimento-lida (19/10/2026), refeito do BRUTO sem a lib e sem a curva publicada:
+  //  · o horizonte da energia de cada entidade (`energia_ate`) = o ultimo instante do complexo em que ALGUM circuito dela leu;
+  //  · o horizonte do rendimento = o ultimo instante do complexo em que os 22 leram (comum as nove usinas);
+  //  · o rendimento de cada usina = a energia LIDA dela ate esse horizonte (cada circuito nos instantes que leu, nada estimado).
+  //    Antes a lib somava so os instantes em que os 22 leram, e um circuito sem leitura no meio tirava o instante das nove.
+  //  Folga: 1 casa no MWh e 3 no MWh/MW, mais o arredondamento da curva da usina (3 casas) que a lib soma onde ela existe.
+  const dm = p => ((I.get(p) || new Map()).get('Demat') || new Map());
+  cont.rend = 0; cont.ate = 0;
+  for (const [e, ps] of Object.entries(ENTS)) {
+    const o = (pv.kpis || {})[e]; if (!o) continue;
+    let ate = null; for (let i = hc.length - 1; i >= 0 && ate == null; i--) if (ps.some(p => dm(p).has(hc[i]))) ate = hc[i];
+    if (o.energia_ate !== ate) f.push(e + ': energia ate ' + o.energia_ate + ', o ultimo instante lido de um circuito dela e ' + ate); else cont.ate++;
+  }
+  const todos = Object.values(CIRC).flat(), comuns = hc.filter(h => todos.every(p => dm(p).has(h)));
+  const rAte = comuns.length ? comuns[comuns.length - 1] : null;
+  if ((pv.rendimento_ate == null ? null : pv.rendimento_ate) !== rAte) f.push('rendimento ate ' + pv.rendimento_ate + ', os 22 circuitos leram ate ' + rAte);
+  if (rAte) {
+    const R = pv.rendimento || [];
+    if (R.length !== Object.keys(CIRC).length) f.push('rendimento com ' + R.length + ' usinas');
+    for (const [u, ps] of Object.entries(CIRC)) {
+      const x = R.find(y => y.ufv === u); if (!x) { f.push('rendimento sem ' + u); continue; }
+      let s = 0, n = 0;
+      for (const h of hc) { if (h > rAte) break; let todosLeram = true; for (const p of ps) { const v = dm(p).get(h); if (v != null) s += v / 1000; else todosLeram = false; } if (todosLeram) n++; }
+      const e = s * 5 / 60, folga = n * 0.0005 * 5 / 60;
+      if (Math.abs(x.mwh - e) > 0.05 + folga + 1e-6) f.push('rendimento ' + u + ' ' + x.mwh + ' MWh, a energia lida ate ' + rAte + ' e ' + e.toFixed(3));
+      if (Math.abs(x.mwh_mw - e / L.CAP[u]) > 0.0005 + folga / L.CAP[u] + 1e-6) f.push('rendimento ' + u + ' ' + x.mwh_mw + ' MWh/MW, refeito ' + (e / L.CAP[u]).toFixed(4));
+      cont.rend++;
+    }
+  } else if (pv.rendimento) f.push('rendimento publicado sem instante em que os 22 circuitos leram');
   return { f, cont };
+}
+// a regra de ANTES do rendimento (so os instantes em que os 22 leram), para o plantio: refeita aqui do bruto
+function rendimentoAntigo(elet, CIRC) {
+  const I = indexa(elet), dm = p => ((I.get(p) || new Map()).get('Demat') || new Map());
+  const hc = [...dm(L.COMPLEXO).keys()].sort(), ids = Object.values(CIRC).flat(), comuns = hc.filter(h => ids.every(p => dm(p).has(h)));
+  return Object.entries(CIRC).map(([u, ps]) => { const e = comuns.reduce((s, h) => s + ps.reduce((a, p) => a + dm(p).get(h) / 1000, 0), 0) * 5 / 60;
+    return { ufv: u, mwh: Math.round(10 * e) / 10, mwh_mw: Math.round(1000 * e / L.CAP[u]) / 1000 }; });
 }
 
 // ── casos forjados ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -160,7 +199,11 @@ function confere(pv, elet, CIRC) {
 // A ou a soma das tres nao passam. 6201 (M2 · C1) nao mede 10:05; 6198 (M1 · C1) perde a TensaoB em 10:10; 6202 (M2 · C2)
 // perde a Demre em 10:10; 6203 (M3 · C1) gera NEGATIVO de madrugada (P -9 kW, Q 192 kVAr); o TR2 perde a Demre em 10:05.
 const H = ['10:00', '10:05', '10:10'], DIA = '2026-10-03';
-function forja() {
+// PONTA (rendimento-lida): alem das faltas acima, M8 · C1 (6216) sem nada em 10:10 e o M9 (6219) sem nada em 10:05 e 10:10.
+// O horizonte comum fica em 10:00 (o 6201 nao mede 10:05); o M8 tem hora 10:05 e energia ate 10:10 (C2 e C3 leram);
+// o M9, energia ate 10:00 = o horizonte comum.
+const PONTA = (p, n, h) => (p === 6216 && h === '10:10') || (p === 6219 && h !== '10:00');
+function forja(extra) {
   const CIRC = L.mapaCircuitos();
   if (!CIRC) throw new Error('o mapa de circuitos do gen-executivo.js nao leu');
   const dados = [];
@@ -172,8 +215,9 @@ function forja() {
   let k = 0;
   for (const ps of Object.values(CIRC)) for (const p of ps) {
     k++;
-    const falta = p === 6201 ? (n, h) => h === '10:05' : p === 6198 ? (n, h) => n === 'TensaoB' && h === '10:10'
+    const f0 = p === 6201 ? (n, h) => h === '10:05' : p === 6198 ? (n, h) => n === 'TensaoB' && h === '10:10'
       : p === 6202 ? (n, h) => n === 'Demre' && h === '10:10' : null;
+    const falta = extra ? (n, h) => (f0 ? f0(n, h) : false) || extra(p, n, h) : f0;
     if (p === 6203) ponto(p, -9, 192, 19900, 2, null); else ponto(p, 1000 * k, 300, 19900, 40, falta);
   }
   ponto(L.TRAFOS[0], 50000, 9000, 136700, 120, null);
@@ -202,6 +246,26 @@ function aMao(pv) {
   const aq = new Map(pv.alta_q);
   if (aq.size !== 2 || aq.has('10:05')) f.push('a mao · alta_q: 2 instantes, sem 10:05 (so um trafo mediu a reativa)');
   q(aq.get('10:10'), 21.6, 1e-9, 'alta_q 10:10 (9000 + 9000) x 1,2 / 1000');
+  // rendimento-lida · buraco no MEIO (6201 sem 10:05): horizonte comum 10:10, e o 10:05 conta para as outras usinas e para o C2
+  // do M2. M3 = (7 + 8 - 0,009) x (1,0 + 1,1 + 1,2) MW x 5 min = 4,122 → 4,1 (a regra de antes, sem o 10:05: 2,748 → 2,7);
+  // M2 = (4 x 2,2 + 5 x 3,3) x 5 min = 2,108 → 2,1
+  if (pv.rendimento_ate !== '10:10') f.push('a mao · rendimento ate ' + pv.rendimento_ate + ' (esperava 10:10)');
+  const rd = u => (pv.rendimento.find(x => x.ufv === u) || {}).mwh;
+  q(rd('M3'), 4.1, 1e-9, 'rendimento M3 lido (4,122 → 4,1)'); q(rd('M2'), 2.1, 1e-9, 'rendimento M2 lido (2,108 → 2,1)');
+  if (pv.kpis.M2.energia_ate !== '10:10') f.push('a mao · M2: energia ate ' + pv.kpis.M2.energia_ate + ' (esperava 10:10)');
+  return f;
+}
+// valores a mao do caso da PONTA
+function aMaoPonta(pv) {
+  const f = [], q = (a, b, nome) => { if (a !== b) f.push('a mao · ponta · ' + nome + ': ' + a + ' (esperava ' + b + ')'); };
+  q(pv.rendimento_ate, '10:00', 'horizonte comum');
+  q(pv.kpis.M8.hora, '10:05', 'hora do M8'); q(pv.kpis.M8.energia_ate, '10:10', 'energia do M8 ate');
+  q(pv.kpis.M9.energia_ate, '10:00', 'energia do M9 ate');
+  const rd = u => (pv.rendimento.find(x => x.ufv === u) || {}).mwh;
+  q(rd('M8'), 5, 'rendimento M8 = (19 + 20 + 21) MW x 5 min');   // so o 10:00
+  q(rd('M9'), 1.8, 'rendimento M9 = 22 MW x 5 min = 1,833');
+  // energia do M8 = 60 x (1,0 + 1,1) + (20 + 21) x 1,2 = 175,2 MW x 5 min = 14,6
+  q(pv.kpis.M8.energia_mwh, 14.6, 'energia do M8 (C2 e C3 em 10:10)'); q(pv.kpis.M9.energia_mwh, 1.83, 'energia do M9');
   return f;
 }
 
@@ -227,7 +291,26 @@ async function main() {
     if (!f.length && (cont.pontos < 60 || cont.campos < 100 || cont.soma < 1 || cont.altaq !== 2 || cont.kpis < 48 || cont.cap !== 22))
       f.push('julgou pouco: ' + JSON.stringify(cont));
     if (f.length) { console.error('REPROVADO (lib):\n  ' + f.slice(0, 20).join('\n  ')); process.exit(1); }
-    console.log('lib: ' + JSON.stringify(cont) + ' · referencia refeita do bruto e valores a mao conferem');
+    if (!f.length && (cont.rend !== 9 || cont.ate !== 11)) f.push('rendimento julgou pouco: ' + JSON.stringify(cont));
+    const fp = forja(PONTA), pvP = L.monta(fp.elet, null), cP = confere(pvP, fp.elet, CIRC);
+    f.push(...cP.f.map(x => 'ponta · ' + x));
+    if (!cP.f.length) f.push(...aMaoPonta(pvP));
+    if (!f.length && (cP.cont.rend !== 9 || cP.cont.ate !== 11)) f.push('ponta · rendimento julgou pouco: ' + JSON.stringify(cP.cont));
+    if (f.length) { console.error('REPROVADO (lib):\n  ' + f.slice(0, 20).join('\n  ')); process.exit(1); }
+    console.log('lib: ' + JSON.stringify(cont) + ' · referencia refeita do bruto e valores a mao conferem · caso da ponta: ' + JSON.stringify(cP.cont));
+    // rendimento-lida: os defeitos de antes, cada um tem de reprovar (no caso do meio e no da ponta)
+    const plantR = [
+      ['rendimento so nos instantes em que os 22 leram (a regra de antes)', pv, elet, p => { p.rendimento = rendimentoAntigo(elet, CIRC); }],
+      ['rendimento ate o fim do complexo (sem o horizonte comum)', pvP, fp.elet, p => { p.rendimento_ate = p.hora; }],
+      ['energia da usina declarada ate a hora dela (o horizonte de antes)', pvP, fp.elet, p => { p.kpis.M8.energia_ate = p.kpis.M8.hora; }],
+      ['energia sem o horizonte', pvP, fp.elet, p => { delete p.kpis.M2.energia_ate; }],
+    ];
+    for (const [nome, base, el, estraga] of plantR) {
+      const p = JSON.parse(JSON.stringify(base)); estraga(p);
+      if (JSON.stringify(p) === JSON.stringify(base)) { console.error('REPROVADO: o plantio "' + nome + '" nao mudou nada'); process.exit(1); }
+      if (!confere(p, el, CIRC).f.length) { console.error('REPROVADO: o defeito plantado "' + nome + '" passou'); process.exit(1); }
+    }
+    console.log('  ' + plantR.length + ' defeitos do rendimento e do horizonte plantados, todos reprovam');
     // defeitos plantados NO PRODUTO da lib: cada um tem de reprovar
     const plant = [
       ['zero no instante que nao mediu', p => { p.circuitos.find(x => x.pid === 6201).pts.splice(1, 0, ['10:05', 0]); }],
