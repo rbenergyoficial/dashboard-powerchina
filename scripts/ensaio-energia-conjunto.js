@@ -39,7 +39,7 @@ const le = async (nome) => {
 };
 
 (async () => {
-  const [diario, inv] = await Promise.all([le('perdas_diario.json'), le('perdas_inv.json')]);
+  const [diario, inv] = await Promise.all([le('perdas_diario_scada.json'), le('perdas_inv_scada.json')]);
   const D = new Map((diario.serie || []).map((o) => [o.dia, o]));
   // soma dos inversores por dia e usina, so nos dias recalculados sob a regra nova
   const S = new Map(); const diasNovos = new Set();

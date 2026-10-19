@@ -97,7 +97,8 @@ jobs:
       # pagina parada, gerar a toa custa tres minutos.
       - name: O blob de perdas está velho?
         id: idade_perdas
-        run: node scripts/idade-blob.js perdas_diario.json 3 5
+        # fonte-inv-logger (19/10/2026): o perdas_diario.json e do logger (sungrow.yml); o que o gen-perdas grava e a copia do supervisorio
+        run: node scripts/idade-blob.js perdas_diario_scada.json 3 5
       - name: Perdas de PV (cobre o agendador)
         if: steps.idade_perdas.outputs.velho == 'true'
         env:

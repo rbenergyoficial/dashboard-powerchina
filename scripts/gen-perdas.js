@@ -1,5 +1,12 @@
 /*
- * gen-perdas.js — a cascata de perdas do complexo -> dados/perdas_*.json
+ * gen-perdas.js — a cascata de perdas do complexo pelo SUPERVISORIO -> dados/perdas_*.json
+ *
+ * 🔴 DESDE 19/10/2026 (fonte-inv-logger) O DADO DE INVERSOR DAS TELAS VEM DO LOGGER SUNGROW: perdas_diario.json, perdas_inv.json e
+ *    strings_alarme.json sao do gen-inv-logger.js. Este gerador grava a copia do supervisorio com o sufixo `_scada`
+ *    (perdas_diario_scada, perdas_inv_scada, strings_alarme_scada; ver PUBLICA), que o Comparativo de Medicoes usa. Os produtos de
+ *    30 e 60 min (perdas_30min, perdas_60min) e a curva por inversor (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>) continuam com o
+ *    nome de sempre e do supervisorio: o logger ainda nao tem o equivalente com historico (lote seguinte), e o setpoint de despacho
+ *    do pvstr_hora so existe no export (gen-ts-setpoint).
  *
  * A PERGUNTA QUE ELE RESPONDE: onde a energia se perde entre o arranjo fotovoltaico e o ponto de
  * medicao, e quanto em cada degrau. Hoje a suite mostra o que ENTROU no medidor; ela nao mostra o
@@ -611,18 +618,38 @@ function migraIsolZero(j, nome) {
   return s;
 }
 
+// 🔴 O NOME PUBLICADO DO SUPERVISORIO MUDOU (fonte-inv-logger, 19/10/2026). Regra do humano: dado de inversor vem do logger Sungrow;
+//    o supervisorio fica so para comparar. Os nomes que as telas leem (perdas_diario, perdas_inv, strings_alarme) passam a ser do
+//    gen-inv-logger.js; este gerador grava a copia do supervisorio com o sufixo `_scada` (o Comparativo de Medicoes le a
+//    disponibilidade dela, pelo perdas_diario). Dentro do gerador o nome continua o LOGICO (as migracoes por nome nao mudam); so a
+//    leitura do anterior e a gravacao usam o fisico. Primeira rodada sem a copia: le o nome antigo, SO se ele nao tiver a marca do
+//    logger (`origem_inversor`); com a marca e sem a copia, aborta (o historico do supervisorio teria se perdido).
+const PUBLICA = { 'perdas_diario.json': 'perdas_diario_scada.json', 'perdas_inv.json': 'perdas_inv_scada.json',
+  'strings_alarme.json': 'strings_alarme_scada.json' };
+const fisico = (nome) => PUBLICA[nome] || nome;
+
 const _anterior = new Map();
 async function leAnterior(nome) {
   if (_anterior.has(nome)) return _anterior.get(nome);
+  const base = 'https://rbenergydata.blob.core.windows.net/dados/';
   try {
-    const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
+    let j;
+    try { j = await puxa(base + fisico(nome)); }
+    catch (e) {
+      if (!e.naoExiste || !PUBLICA[nome]) throw e;
+      j = await puxa(base + nome);
+      if (j && j.origem_inversor) {
+        throw new Error(nome + ' ja e do ' + j.origem_inversor + ' e ' + fisico(nome) + ' nao existe: a copia do supervisorio se perdeu');
+      }
+      console.log('  ' + fisico(nome) + ' ainda nao existe: o historico do supervisorio vem do ' + nome + ' (sem a marca do logger)');
+    }
     migraSetpoint(j, nome);
     const s = migraIsolZero(j, nome);
     _anterior.set(nome, s);
     return s;
   } catch (e) {
     if (e.naoExiste) { _anterior.set(nome, []); return []; }
-    throw new Error('nao consegui ler o ' + nome + ' publicado (' + e.message + '). Abortando: '
+    throw new Error('nao consegui ler o ' + fisico(nome) + ' publicado (' + e.message + '). Abortando: '
       + 'regravar sem o historico apagaria o que ja foi acumulado.');
   }
 }
@@ -652,7 +679,8 @@ function acumula(antigas, novas, chave, dias, diaDe) {
   return { serie: todas, novas: n, mantidas: todas.length - n };
 }
 
-async function grava(nome, obj) {
+async function grava(nomeLogico, obj) {
+  const nome = fisico(nomeLogico);   // perdas_diario -> perdas_diario_scada etc. (ver PUBLICA)
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, nome), gz);

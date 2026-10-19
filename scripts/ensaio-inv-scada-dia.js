@@ -37,6 +37,10 @@ const baixa = async (nome) => {
   if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
   return JSON.parse(b.toString('utf8'));
 };
+/* a copia do supervisorio (fonte-inv-logger, 19/10/2026): o inv-scada.yml roda antes do sungrow.yml e do perdas.yml, e ate a primeira
+   rodada nova ela pode nao existir; vale o nome antigo SO sem a marca do logger (a mesma regra do leAnterior do gen-perdas) */
+const leScada = async (n) => { try { return await baixa(n + '_scada.json'); } catch (e) { if (!/: HTTP 404$/.test(e.message)) throw e;
+  const j = await baixa(n + '.json'); if (j.origem_inversor) throw new Error(n + '.json ja e do logger e ' + n + '_scada.json nao existe'); return j; } };
 const leHist = () => {
   if (!process.env.LOCAL_DIR) return baixa('inv_scada_hist.json');
   let b = fs.readFileSync(path.join(process.env.LOCAL_DIR, 'inv_scada_hist.json'));
@@ -79,7 +83,7 @@ function julga(hist, perdas) {
 }
 
 (async () => {
-  const [h, p] = await Promise.all([leHist(), baixa('perdas_inv.json')]);
+  const [h, p] = await Promise.all([leHist(), leScada('perdas_inv')]);
   const hist = h.serie || [], perdas = p.serie || [];
   let mau = 0;
   const R = julga(hist, perdas);

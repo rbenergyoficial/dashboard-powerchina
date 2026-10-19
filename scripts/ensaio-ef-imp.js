@@ -71,7 +71,7 @@ function daCurva(c, piso) {
 }
 
 (async () => {
-  const j = await le('perdas_inv.json');
+  const j = await le('perdas_inv_scada.json');
   const s = Array.isArray(j.serie) ? j.serie : [];
   const com = s.filter((l) => 'ef_imp' in l);
   console.log('perdas_inv · ' + s.length + ' linhas · ' + com.length + ' com ef_imp · piso ' + PISO_KW + ' kW');

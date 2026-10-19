@@ -15,11 +15,19 @@
  *   - o mes soma energia e irradiacao (nunca a media dos PR diarios)
  *   - nos meses apurados e com TODOS os dias corrigidos, a impedida somada e a do executivo (outra rota)
  *   - a energia injetada do dia fica ACIMA da liquida do medidor e a diferenca e pequena (consumo)
- * MEIA HORA (pr_hora.json, 24/09/2026):
- *   - REGRA: o instante rotulado 10:30 cai na meia hora 10:00; a irradiacao e o TRAPEZIO de T e T+30; abaixo de
- *     100 W/m2 nao ha PR; acima de 110 % a meia hora sai vazia e contada; o corrigido so no dia que tem corrigido
+ * MEIA HORA (pr_hora.json, 24/09/2026; irradiancia do datalogger desde 19/10/2026, lote fonte-pr-logger):
+ *   - REGRA: o instante rotulado 10:30 cai na meia hora 10:00; a irradiacao da meia hora e a MEDIA [T, T+30) do datalogger,
+ *     direta (sem trapezio); abaixo de 100 W/m2 nao ha PR; acima de 110 % a meia hora sai vazia e contada; o corrigido so no dia
+ *     que tem corrigido
  *   - PRODUTO: a soma das meias horas fecha com o dia; cada PR sai da energia e da irradiacao publicadas ao lado; e
  *     MANHA e TARDE ficam simetricas nas meias horas sem limitacao - e isso que a janela errada quebra (87 x 54 %)
+ * FONTE DA IRRADIACAO (lote fonte-pr-logger, 19/10/2026):
+ *   - REGRA: `confereFonte` aceita so `fonte_estacao: 'datalogger'` (SCADA e marca ausente param o gerador); o dia sem 22 horas
+ *     com energia E irradiacao nao tem PR. PLANTIOS compilados da fonte da lib (e provados plantados): o trapezio de volta na meia
+ *     hora, o confereFonte que aceita qualquer fonte, e o piso de horas rebaixado (o dia incompleto contado) - cada um reprova.
+ *   - PRODUTO: a irradiacao de cada meia hora do pr_hora e a `gti_w_Complexo` do irr_plano_30min no MESMO instante (a media, sem
+ *     trapezio; plantio do trapezio reprova); toda linha marcada traz `irr_fonte` = datalogger (a linha sem marca e a da migracao,
+ *     contada e declarada); dia com menos de 22 horas validas sem PR.
  */
 'use strict';
 const zlib = require('zlib');
@@ -74,18 +82,19 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
   const eM = L.energiaMeias(hist);
   exige(!eM.has(dia + 'T12:00'), 'meia hora com 5 instantes deveria ficar de fora');
   exige(eM.get(dia + 'T10:00') && perto(eM.get(dia + 'T10:00').inj_mwh, 100, 1e-9), 'meia hora 10:00: 2 x 100 MW por 0,5 h = 100 MWh');
-  /* amostras: 0 ate 05:30, 800 de 06:00 a 17:30, 60 as 18:00 (abaixo do piso), 0 depois */
+  /* a media de cada meia hora [T, T+30): 0 ate 05:30, 800 de 06:00 a 17:30, 60 as 18:00 (abaixo do piso), 0 depois */
   const sM = new Map();
   for (let i = 0; i < 49; i++) { const ms = Date.parse(dia + 'T00:00:00Z') + i * 18e5, k = new Date(ms).toISOString().slice(0, 16), hh = i / 2;
     sM.set(k, hh >= 6 && hh < 18 ? 800 : hh === 18 ? 60 : 0); }
   const impM = L.impedidaMeias(consolidado);
   exige(perto(impM.get(dia + 'T10:00'), 50, 1e-9) && perto(impM.get(dia + 'T10:30'), 50, 1e-9), 'impedida por meia hora: (250-150) x 0,5 = 50 MWh em cada');
   const m = L.prMeias(dia, eM, sM, impM, d);
-  exige(m.irr[11] === 400, 'meia hora 05:30: trapezio de 0 e 800 = 400 W/m2 (veio ' + m.irr[11] + ') - a amostra em T daria 0');
+  exige(m.irr[11] === 0, 'meia hora 05:30: a media dela e 0 W/m2 (veio ' + m.irr[11] + ') - o trapezio com a de 06:00 daria 400');
   exige(m.irr[20] === 800 && perto(m.pr[20], 100 * 100 / (L.P_CC_MWP * 0.4), 0.051), 'meia hora 10:00: PR = 100 / (425,677 x 0,4) (veio ' + m.pr[20] + ')');
   exige(m.prc != null && perto(m.prc[20], 100 * 150 / (L.P_CC_MWP * 0.4), 0.051), 'corrigido das 10:00 soma os 50 MWh impedidos (veio ' + (m.prc && m.prc[20]) + ')');
-  exige(m.irr[35] === 430, '17:30: trapezio de 800 e 60 = 430 W/m2 (veio ' + m.irr[35] + ')');
-  exige(m.irr[36] === 30 && m.pr[36] === null, '18:00 com 30 W/m2 (abaixo de 100) nao pode ter PR');
+  exige(m.irr[35] === 800, '17:30: a media dela e 800 W/m2 (veio ' + m.irr[35] + ') - o trapezio com a de 18:00 daria 430');
+  exige(m.irr[36] === 60 && m.pr[36] === null, '18:00 com 60 W/m2 (abaixo de 100) nao pode ter PR');
+  exige(m.irr[47] === 0, '23:30: a ultima meia hora do dia tem a propria media (o trapezio pedia a 00:00 do dia seguinte)');
   const semC = L.prMeias(dia, eM, sM, impM, semAp);
   exige(semC.prc === null && semC.imp === null && semC.pr[20] != null, 'dia sem corrigido: a meia hora nao reabre a pergunta');
   const muito = new Map(eM); muito.set(dia + 'T08:00', { inj_mwh: 500, n: 6 });
@@ -125,6 +134,59 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
   }
 })();
 
+/* ── A FONTE DA IRRADIACAO E OS PLANTIOS NA LIB (lote fonte-pr-logger, 19/10/2026) ─────────────────────────────────────
+   Os casos rodam contra a lib de verdade (tem de passar) e contra mutantes COMPILADOS da fonte dela (cada um tem de reprovar
+   por pelo menos um caso; e o mutante tem de ser diferente da fonte: o plantio provado plantado). */
+function compilaLib(troca) {
+  const fs = require('fs'), path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'lib-pr.js'), 'utf8').replace(/\r\n/g, '\n');
+  let mut = src;
+  if (troca) { mut = src.split(troca[0]).join(troca[1]); if (mut === src) throw new Error('plantio nao plantado: "' + troca[0].slice(0, 60) + '" nao esta na lib-pr'); }
+  const m = { exports: {} };
+  new Function('module', 'exports', 'require', '__dirname', mut)(m, m.exports, (q) => require(q.startsWith('.') ? path.join(__dirname, q) : q), __dirname);
+  return m.exports;
+}
+function casosFonte(Lx) {
+  const f = [];
+  const x = (c, msg) => { if (!c) f.push(msg); };
+  const lanca = (fn) => { try { fn(); return false; } catch (e) { return true; } };
+  x(!lanca(() => Lx.confereFonte({ fonte_estacao: 'datalogger' }, 'irr')), 'confereFonte recusou o datalogger');
+  x(lanca(() => Lx.confereFonte({ fonte_estacao: 'SCADA' }, 'irr')), 'confereFonte aceitou o SCADA de volta como fonte da tela');
+  x(lanca(() => Lx.confereFonte({ fonte: 'SCADA · export IIRR' }, 'irr')), 'confereFonte aceitou o blob sem a marca da fonte');
+  x(Lx.IRR_FONTE === 'datalogger', 'a marca da fonte deixou de ser o datalogger');
+  // a meia hora e a MEDIA direta: degrau de 0 para 800 entre 05:30 e 06:00 nao aparece em 05:30
+  const dia = '2026-10-16', sM = new Map(), eM = new Map();
+  for (let i = 0; i < 48; i++) { const k = dia + 'T' + String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00');
+    sM.set(k, i >= 12 && i < 36 ? 800 : 0); eM.set(k, { inj_mwh: i >= 12 && i < 36 ? 120 : 0, n: 6 }); }
+  const mm = Lx.prMeias(dia, eM, sM, new Map(), null);
+  x(mm.irr[11] === 0 && mm.irr[12] === 800 && mm.irr[35] === 800 && mm.irr[36] === 0, 'meia hora: a media do intervalo nao saiu direta ('
+    + [mm.irr[11], mm.irr[12], mm.irr[35], mm.irr[36]].join(', ') + ')');
+  // o dia com 3 horas sem a irradiancia do conjunto (estacao incompleta): 21 de 24 horas, sem PR
+  const eH = new Map(), gH = new Map();
+  for (let h = 0; h < 24; h++) { const k = dia + 'T' + String(h).padStart(2, '0'); eH.set(k, { inj_mwh: h >= 6 && h < 18 ? 240 : 0, n: 12 });
+    if (h < 9 || h > 11) gH.set(k, h >= 6 && h < 18 ? 0.8 : 0); }
+  const di = Lx.prDia(dia, eH, gH, { impedida: new Map(), linhasDia: new Map() }, new Set());
+  x(di.horas_validas === 21 && di.pr_pct === null && /incompleto/.test(di.nota || ''), 'dia com a estacao incompleta (21 h) foi contado: ' + JSON.stringify(di));
+  const du = Lx.prDiaUfv(dia, eH, gH, 50, null);
+  x(du.pr_pct === null && /incompleto/.test(du.nota || ''), 'dia da usina com a estacao incompleta (21 h) foi contado');
+  return f;
+}
+(function fonte() {
+  const real = casosFonte(L);
+  real.forEach((m) => exige(false, 'fonte/lib: ' + m));
+  const PLANTIOS = [
+    ['trapezio de volta na meia hora (aplicado a media)', ['const w = s0 != null ? s0 : null', "const s1 = sM.get(new Date(Date.parse(k + ':00Z') + 18e5).toISOString().slice(0, 16)); const w = s0 != null && s1 != null ? (s0 + s1) / 2 : null"]],
+    ['confereFonte que aceita qualquer fonte (SCADA de volta)', ["if (f !== IRR_FONTE) throw new Error(", "if (false) throw new Error("]],
+    ['piso de horas rebaixado (dia incompleto contado)', ['const PISO_HORAS = 22;', 'const PISO_HORAS = 20;']],
+  ];
+  for (const [nome, troca] of PLANTIOS) {
+    let f;
+    try { f = casosFonte(compilaLib(troca)); } catch (e) { exige(false, 'plantio "' + nome + '": ' + e.message); continue; }
+    exige(f.length > 0, 'plantio "' + nome + '" nao reprovou nenhum caso');
+    console.log('   plantio (' + nome + '): ' + f.length + ' caso(s) reprovado(s)');
+  }
+})();
+
 /* ── PRODUTO ───────────────────────────────────────────────────────────────────────────────────── */
 /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira 'HTTP 404' (o "ainda nao
    publicado"); o que a lib estoura (o 404 de conteiner sumido, 403, 409, 5xx, rede) sai sem casar com /HTTP 404/ */
@@ -134,7 +196,9 @@ function puxa(url) {
     .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); })
     .then((res) => {
       if (res.status !== 200) throw new Error('HTTP ' + res.status + ' ' + url);
-      let b = res.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8'));
+      /* arquivos antigos do medidor vem com BOM (o gen-pr ja o tira): o dia com leitura travada de 13/08/2026 (M9, achado com o
+         datalogger) e um deles, e o ensaio estourava "Unexpected token" no lugar de julgar o dia */
+      let b = res.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
     });
 }
 
@@ -205,6 +269,32 @@ function puxa(url) {
   if (process.env.PR_HORA_ARQ) ph = JSON.parse(zlib.gunzipSync(require('fs').readFileSync(process.env.PR_HORA_ARQ)).toString('utf8'));
   else { try { ph = await puxa(BASE + 'pr_hora.json'); } catch (e) { if (!/HTTP 404/.test(e.message)) throw e; } }
   if (!ph) { console.log('pr_hora.json ainda nao publicado: a meia hora so foi julgada na regra'); return fim(); }
+  /* lote fonte-pr-logger: a meia hora do pr_hora e a `gti_w_Complexo` do irr_plano_30min no MESMO instante (a media do datalogger,
+     sem trapezio). So nos dias marcados com `irr_fonte` (a linha sem marca e a da migracao, contada). Plantio: o trapezio aplicado a
+     essas medias tem de reprovar pela mesma conta. */
+  {
+    let p30 = null; try { p30 = await puxa(BASE + 'irr_plano_30min.json'); } catch (e) { if (!/HTTP 404/.test(e.message)) throw e; }
+    if (p30) {
+      exige(p30.fonte_estacao === L.IRR_FONTE, 'irr_plano_30min com a estacao de fonte "' + p30.fonte_estacao + '"');
+      const G = new Map((p30.serie || []).map((x) => [String(x.t).slice(0, 16), x.gti_w_Complexo]));
+      const ch = (dia, i) => dia + 'T' + String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00');
+      const confere = (irrDe) => { let n = 0, d = 0; const ex = [];
+        for (const m of ph.dias) { if (m.irr_fonte !== L.IRR_FONTE) continue;
+          for (let i = 0; i < 48; i++) { const g = G.get(ch(m.dia, i)); if (g == null || m.irr[i] == null) continue; n++;
+            const v = irrDe(m, i, g); if (v == null || Math.abs(m.irr[i] - Math.round(v * 10) / 10) > 0.051) { d++; if (ex.length < 3) ex.push(m.dia + ' ' + i + ': ' + m.irr[i] + ' x ' + v); } } }
+        return { n, d, ex }; };
+      const r = confere((m, i, g) => g);
+      exige(r.n >= 200, 'so ' + r.n + ' meias horas do pr_hora com a irradiancia do datalogger conferida');
+      exige(r.d === 0, r.d + ' meia(s) hora(s) do pr_hora fora da media do datalogger no mesmo instante (' + r.ex.join('; ') + ')');
+      const t = confere((m, i, g) => { const g1 = G.get(new Date(Date.parse(ch(m.dia, i) + ':00Z') + 18e5).toISOString().slice(0, 16)); return g1 == null ? null : (g + g1) / 2; });
+      exige(t.d > 0.2 * t.n, 'plantio (trapezio aplicado a media): so ' + t.d + ' de ' + t.n + ' meias horas diferentes - a conferencia nao pega o trapezio');
+      const semMarca = ph.dias.filter((m) => m.irr_fonte !== L.IRR_FONTE).length, semMarcaD = pr.dias.filter((d) => d.irr_fonte !== L.IRR_FONTE).length;
+      console.log('fonte: ' + r.n + ' meias horas = media do datalogger no instante · plantio do trapezio: ' + t.d + ' de ' + t.n + ' diferentes'
+        + ' · linhas sem a marca (migracao em curso): ' + semMarcaD + ' dia(s) no pr, ' + semMarca + ' no pr_hora');
+      for (const d of pr.dias.concat(ph.dias)) if (d.irr_fonte != null) exige(d.irr_fonte === L.IRR_FONTE, d.dia + ': irr_fonte ' + d.irr_fonte);
+    } else console.log('irr_plano_30min ainda nao publicado: a fonte da meia hora nao foi julgada no produto');
+    for (const d of pr.dias) exige(d.horas_validas >= L.PISO_HORAS || d.pr_pct == null, d.dia + ': PR com ' + d.horas_validas + ' horas validas (dia incompleto contado)');
+  }
   const ons = await puxa(BASE + 'ons_restricao_all.json');
   const lim = new Set((ons.consolidado || []).filter(x => parseFloat(String(x.lim || '').replace(',', '.')) > 0).map(x => String(x.ts).slice(0, 16).replace(' ', 'T')));
   const porDia = new Map(pr.dias.map(d => [d.dia, d]));

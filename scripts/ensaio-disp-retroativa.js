@@ -35,12 +35,17 @@ const puxa = async (u) => {
   return JSON.parse(x.toString('utf8'));
 };
 
+/* a copia do supervisorio (fonte-inv-logger, 19/10/2026): roda ANTES de gerar, e ate a primeira rodada nova ela pode nao existir;
+   vale o nome antigo SO sem a marca do logger (a mesma regra do leAnterior do gen-perdas) */
+const leScada = async (n) => { try { return await puxa(BASE + n + '_scada.json'); } catch (e) { if (!/^HTTP 404$/.test(e.message)) throw e;
+  const j = await puxa(BASE + n + '.json'); if (j.origem_inversor) throw new Error(n + '.json ja e do logger e ' + n + '_scada.json nao existe'); return j; } };
+
 const campos = (o) => Object.keys(o).filter((k) => /_disp_pct$|_inv_parados$|_inv_parciais$|_inv_contador_24h$|^janela_h$|^CX_disp_pct$/.test(k));
 
 (async () => {
   const falhas = [];
-  const inv = await puxa(BASE + 'perdas_inv.json');
-  const dia = await puxa(BASE + 'perdas_diario.json');
+  const inv = await leScada('perdas_inv');
+  const dia = await leScada('perdas_diario');
   const linhasInv = (inv.serie || []).map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, horas: o.horas }));
   console.log('perdas_inv: ' + linhasInv.length + ' linhas · perdas_diario: ' + (dia.serie || []).length + ' dias');
 

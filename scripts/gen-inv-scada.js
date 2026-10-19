@@ -1,5 +1,6 @@
 /*
- * gen-inv-scada.js — SCADA por INVERSOR -> dados/inv_scada.json
+ * gen-inv-scada.js — SCADA por INVERSOR -> dados/inv_scada_supervisorio.json (desde 19/10/2026, fonte-inv-logger: o inv_scada.json
+ *   que as telas leem e do logger Sungrow, gen-inv-logger.js; este fica para comparar, e o inv_scada_hist alimenta o sg_conf)
  *
  * A PERGUNTA QUE ELE RESPONDE: qual inversor esta rendendo abaixo dos seus pares, HOJE, antes de
  * queimar. A pagina de Confiabilidade ja mostra o inversor DEPOIS da troca (P1) e os alarmes do
@@ -34,13 +35,13 @@
  *   TS com menos de MIN_PARES inversores reportando cai para a mediana da USINA — mediana de tres
  *   nao separa defeito de acaso.
  *
- * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · OUT_BLOB=inv_scada.json
+ * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · OUT_BLOB=inv_scada_supervisorio.json
  *      DIAS=60 (janela) · LOCAL_DIR / LOCAL_OUT para ensaio.
  */
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const CACHE = require('./lib-cache-blob').abre(RAW_CONTAINER);
-const OUT_BLOB = process.env.OUT_BLOB || 'inv_scada.json';
+const OUT_BLOB = process.env.OUT_BLOB || 'inv_scada_supervisorio.json';   // o inv_scada.json das telas e do logger desde 19/10/2026 (gen-inv-logger)
 const DIAS = Number(process.env.DIAS || 60);          // quanto do BRUTO reprocessar a cada rodada
 // 🔴 A FONTE SO GUARDA ~38 DIAS. Enquanto o gerador reescrevia o blob inteiro a cada rodada, o
 //    historico ficava PRESO nesse tanto para sempre — nao por escolha, por construcao. Acumulando,

@@ -96,6 +96,14 @@ function julga(U, C, X) {
   else if (modo === '--produto') {
     const [U, C, X] = await Promise.all([getJSON('pr_ufv.json'), getJSON('pr.json'), getJSON('executivo.json')]);
     const r = julga(U, C, X); f = r.f;
+    /* lote fonte-pr-logger (19/10/2026): a irradiancia e a do datalogger. O blob declara `irr_fonte`; cada linha refeita traz a
+       marca, e a linha sem marca e a da migracao (refeita aos lotes, dos recentes para tras), contada e declarada no log. */
+    if (U.irr_fonte !== 'datalogger') f.push('pr_ufv.json com irr_fonte "' + U.irr_fonte + '" (esperado datalogger)');
+    let semMarca = 0;
+    for (const [e, v] of Object.entries(U.entidades)) for (const d of v.dias || []) {
+      if (d.irr_fonte == null) semMarca++; else if (d.irr_fonte !== 'datalogger') f.push(e + ' ' + d.dia + ': irr_fonte ' + d.irr_fonte);
+    }
+    console.log('   fonte da irradiancia: datalogger · ' + semMarca + ' linha(s) entidade-dia ainda sem a marca (migracao em curso)');
     console.log('   ' + Object.keys(U.entidades).length + ' entidades · ' + U.entidades.M1.dias.length + ' dias · corte conferido em ' + r.nCorte + ' usina-dias · ' + r.nFecha + ' dias contra o 230 kV');
     const base = new Set(f);
     const planta = (nome, fn, espera) => { const P = JSON.parse(JSON.stringify(U)); fn(P); const nv = julga(P, C, X).f.filter((x) => !base.has(x));

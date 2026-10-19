@@ -1,6 +1,6 @@
 /*
  * ensaio-disponibilidade.js — prova a lib de disponibilidade por usina contra DADO REAL (o blob
- * publico perdas_inv.json, sem segredo nenhum) e contra casos forjados.
+ * publicado perdas_inv_scada.json: a copia do supervisorio, desde 19/10/2026; o perdas_inv.json passou ao logger) e contra casos forjados.
  *
  * O que ele exige, cada linha por um modo de falhar visto na analise de 06/09/2026:
  *   1. a janela do dia acompanha o dia ASTRONOMICO de Mauriti (−0,5 a +1,5 h) em TODOS os dias — se sair 23 h, o p90
@@ -26,11 +26,15 @@ const get = (u) => LD.pede(u).then(async (r) => {
   if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
   return JSON.parse(b.toString('utf8'));
 });
+/* a copia do supervisorio (fonte-inv-logger, 19/10/2026): roda ANTES de gerar, e ate a primeira rodada nova ela pode nao existir;
+   vale o nome antigo SO sem a marca do logger (a mesma regra do leAnterior do gen-perdas) */
+const leScada = async (n) => { try { return await get(BASE + n + '_scada.json'); } catch (e) { if (!/^404 /.test(e.message)) throw e;
+  const j = await get(BASE + n + '.json'); if (j.origem_inversor) throw new Error(n + '.json ja e do logger e ' + n + '_scada.json nao existe'); return j; } };
 const falhas = [];
 const ok = (c, m) => { console.log((c ? '  ok   ' : '  FALHA ') + m); if (!c) falhas.push(m); };
 
 (async () => {
-  const pi = await get(BASE + 'perdas_inv.json');
+  const pi = await leScada('perdas_inv');
   const { porDia } = disponibilidade(pi.serie);
   const dias = [...porDia.keys()].sort();
   console.log('1 · janela do dia, ' + dias.length + ' dias');

@@ -69,7 +69,7 @@ function le(nome) {
 function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf).toString('utf8')); }
 
 (async () => {
-  const D = await le('perdas_diario.json'), I = await le('perdas_inv.json');
+  const D = await le('perdas_diario_scada.json'), I = await le('perdas_inv_scada.json');
   const dias = D.serie.filter((r) => (r.M9_n_inv || 0) > 23);
   let julgados = 0;
   for (const r of dias) {

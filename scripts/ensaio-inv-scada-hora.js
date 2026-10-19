@@ -79,7 +79,7 @@ function roda(extra) {
   const le = (n) => { let b = fs.readFileSync(path.join(SAI, n));
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     return JSON.parse(b.toString('utf8')); };
-  return { log: out, pub: le('inv_scada.json'), hora: le('inv_scada_hora.json') };
+  return { log: out, pub: le('inv_scada_supervisorio.json'), hora: le('inv_scada_hora.json') };
 }
 
 const falhas = [];

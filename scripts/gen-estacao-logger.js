@@ -18,6 +18,13 @@
  *    modulo, umidade, orvalho, vento, chuva, sujeira, bateria, e as leituras fora da faixa fisica) e `estacao_10min_M<usina>.json`
  *    (o registro de 10 min dos ultimos DIAS_10MIN dias). A pagina Estacao Meteorologica do portal so le o datalogger.
  *
+ * 🔴 A SOLARIMETRIA EM MEIA HORA, COM O HISTORICO INTEIRO (lib-estacao-30min, 19/10/2026, lote fonte-pr-logger): `estacao_tudo_30min.json`
+ *    traz as 22 grandezas da solarimetria por estacao, meia hora = media das tres medias de 10 min (soma na chuva, minimo na bateria,
+ *    media vetorial na direcao do vento), tudo-ou-nada por grandeza. E a fonte da estacao do `gen-irradiancia` (irr_ufv, irr_<res>,
+ *    irr_<familia>_<res>), que alimenta a Solarimetria, a Visao Executiva e o PR: regra do humano de 19/10/2026, o SCADA so no
+ *    Comparativo. Guarda: a irradiancia no plano dele e a do `estacao_logger_30min.json` (duas leituras do mesmo arquivo) sao a
+ *    mesma meia hora a meia hora; divergiu, nada e gravado.
+ *
  * Env: DADOS_STORAGE · RAW=backup-dados-scada · PREFIXO=Estacao_Meteorologica_Logger/ · OUT=dados
  *      LOCAL_DIR=<pasta> le os arquivos de uma pasta local em vez do container · LOCAL_OUT_DIR=<pasta> grava ali
  *      CACHE_BLOB_DIR (lib-cache-blob): so o arquivo novo vem pela rede
@@ -27,6 +34,7 @@ const path = require('path');
 const zlib = require('zlib');
 const L = require('./lib-estacao-logger');
 const T = require('./lib-estacao-tudo');
+const S30 = require('./lib-estacao-30min');   // lote fonte-pr-logger: a solarimetria inteira em meia hora, para o gen-irradiancia
 const DIAS_10MIN = 14;   // o registro de 10 min publicado por estacao (o resto vai no resumo do dia)
 
 const RAW = process.env.RAW || 'backup-dados-scada';
@@ -67,6 +75,7 @@ async function main() {
   const sel = lista.map((a) => ({ ...a, u: L.usinaDoArquivo(a.nome) })).filter((a) => a.u).sort((a, b) => (a.nome < b.nome ? -1 : 1));
   const R = new Map(), conflito = { n: 0, total: 0, ex: [] };
   const RT = new Map();   // todas as grandezas: usina -> Map(instante -> [valores, marcas]); o primeiro visto de cada instante fica
+  const R30 = new Map();  // a solarimetria crua de 10 min (lib-estacao-30min): usina -> Map(instante -> {chave: valor}); o primeiro visto fica
   let maior = 0;
   for (const a of sel) {
     const buf = await a.ler();
@@ -76,6 +85,8 @@ async function main() {
     tudo = T.leTudo(txt, a.nome);
     const mt = RT.get(a.u) || new Map(); RT.set(a.u, mt);
     for (const [t, val, fl] of tudo) if (!mt.has(t)) mt.set(t, [val, fl]);
+    const m3 = R30.get(a.u) || new Map(); R30.set(a.u, m3);
+    for (const [t, o] of S30.le10(txt, a.nome)) if (!m3.has(t)) m3.set(t, o);
     const m = R.get(a.u) || new Map(); R.set(a.u, m);
     for (const [t, x] of reg) {
       conflito.total++;
@@ -107,6 +118,30 @@ async function main() {
     maior_leitura_w: maior,
     serie,
   };
+  /* a solarimetria inteira em meia hora (lib-estacao-30min). 🔴 GUARDA DE DUAS LEITURAS: a irradiancia no plano daqui e a do
+     estacao_logger_30min (outro leitor do mesmo arquivo, a mesma regra da meia hora) tem de ser a MESMA em toda meia hora das duas;
+     divergir e um dos dois leitores errado, e nada e gravado. Folga 0,1 W/m2: os dois publicam 1 casa, e a mesma media somada em outra
+     ordem pode cair do outro lado de um empate (medido: 127 de 192.931 meias horas a 0,1 com o arredondamento por Math.round). */
+  const P30 = new Map();
+  for (const [u, m] of R30) P30.set(u, S30.meias(m));
+  { let n = 0, dif = 0; const ex = [];
+    for (const [t, o] of MH) for (const [k, v] of Object.entries(o)) {
+      const u = +k.slice(1), x = P30.get(u) && P30.get(u).get(t); const g = x ? x.gti : null; n++;
+      if (g == null || Math.abs(g - v) > 0.1001) { dif++; if (ex.length < 3) ex.push('M' + u + ' ' + t + ' ' + v + ' x ' + g); } }
+    let sobra = 0; for (const [u, mh] of P30) for (const [t, x] of mh) if (x.gti != null && !(MH.get(t) && MH.get(t)['e' + u] != null)) sobra++;
+    if (dif || sobra) throw new Error('estacao_tudo_30min x ' + NOME + ': ' + dif + ' de ' + n + ' meias horas diferentes, ' + sobra + ' a mais (' + ex.join('; ') + ')');
+    console.log('estacao_tudo_30min x ' + NOME + ': ' + n + ' meias horas iguais na irradiancia no plano'); }
+  const col = S30.colunar(P30);
+  const kb30 = await escreve('estacao_tudo_30min.json', { gerado_em: obj.gerado_em, esquema: 1,
+    fonte: 'Datalogger das estacoes solarimetricas (CR1000X), registro de 10 min.',
+    rotulo_de_tempo: 'inicio da meia hora, horario de Brasilia: o indice i e o instante inicio + 30 min x i; o valor cobre [T, T+30)',
+    regra_meia_hora: 'os registros de 10 min rotulados T+10, T+20 e T+30 (o datalogger rotula o fim), os tres presentes e com valor; senao nulo',
+    agregacao: S30.AGREGA, escala: S30.ESCALA,
+    campos: Object.fromEntries(S30.CAMPOS.map((c) => [c[0], c[1]])),
+    unidade: 'irradiancias W/m2 (media do intervalo); albedo razao; temperaturas °C; umid %; vento m/s; vento_dir graus (0 = norte); chuva mm na meia hora; suj e perda_suj %; bateria V (minimo)',
+    inicio: col.inicio, passo_min: 30, n: col.n, estacoes: col.estacoes });
+  console.log('estacao_tudo_30min.json: ' + col.n + ' meias horas desde ' + col.inicio + ' · ' + Object.keys(col.estacoes).length + ' estacoes · '
+    + S30.CHAVES.length + ' grandezas · ' + Math.round(kb30 / 1024) + ' KB gzip');
   const kb = await escreve(NOME, obj);
   /* o resumo do dia e o 10 min recente de cada estacao (lib-estacao-tudo) */
   const serieDia = [], est10 = {};

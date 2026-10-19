@@ -1,7 +1,12 @@
 /*
- * gen-irradiancia.js — solarimetria do SCADA por UFV, com AS FALHAS COMO DADO.
+ * gen-irradiancia.js — solarimetria das estacoes por UFV, com AS FALHAS COMO DADO.
  *
- * FONTE: export do SCADA "IIRR_<AAAAMMDD>_<HHMMSS>.csv" — `;` como separador, BOM no inicio,
+ * 🔴 FONTE DA ESTACAO = DATALOGGER (lote fonte-pr-logger, 19/10/2026; regra do humano): o datalogger CR1000X das estacoes, media
+ *   de 10 min, em meia hora pelo `estacao_tudo_30min.json` (gen-estacao-logger, lib-estacao-30min). Ver o bloco "A ESTACAO E O
+ *   DATALOGGER" antes do laco principal. O export do SCADA descrito abaixo continua LIDO, mas SO para o campo `scada_w` (a amostra
+ *   instantanea da irradiancia no plano em T), que o Comparativo de Medicoes usa; nenhuma outra saida sai dele.
+ *
+ * FONTE do campo `scada_w`: export do SCADA "IIRR_<AAAAMMDD>_<HHMMSS>.csv" — `;` como separador, BOM no inicio,
  *   coluna 1 = Timestamp e as demais no padrao
  *      UFV_<PARQUE>_WS_<ESTACAO> WS <GRANDEZA>[_2]
  *   As colunas com sufixo _2 sao duplicata do proprio export e vieram VAZIAS: ignoradas.
@@ -21,15 +26,15 @@
  *   ela mesma um indicador.
  *
  * Env: DADOS_STORAGE (RW no container dados).
+ *   ESTACAO_TUDO_ARQ = o `estacao_tudo_30min.json` de um arquivo local (ensaio e antes x depois); sem ele, o blob publicado.
+ *   O SCADA (so o campo `scada_w`), um dos tres abaixo; nenhum = a rodada sai sem `scada_w`.
  *   IIRR_LOCAL     = caminho de um CSV local (carga historica e testes)
  *   IIRR_CONTAINER = container do blob com os CSV crus (ex.: scada-raw). O gerador LISTA e pega o
  *     export MAIS RECENTE. E o modo definitivo: o nome do export e datado, entao URL fixa apodrece
  *     no proximo export — e foi exatamente a falta de endereco estavel que manteve este gerador
  *     preso na semente. Precisa de DADOS_STORAGE, que o workflow ja tem.
  *   IIRR_URL       = um CSV especifico por URL (util para apontar um export antigo a mao)
- *   nenhum dos dois = republica data/irr_seed.json, o historico ja processado que vive no repo.
- *     O seed existe para o painel funcionar ANTES da automacao; assim que IIRR_URL for definida,
- *     ele deixa de ser usado e o dado passa a vir do CSV.
+ *   (O modo semente, que republicava data/irr_seed.json do SCADA, saiu no lote fonte-pr-logger: ele punha o SCADA de volta na tela.)
  */
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial; o https fica so para o IIRR_URL (export do SCADA)
@@ -408,7 +413,8 @@ const TETO_LINHAS = 8800;
 //    exatamente as grandezas de uma row. `plano` serve o painel do topo E a row do comparativo,
 //    e `temp` serve as duas rows de temperatura — por isso sao 9 familias para 11 rows.
 const FAMILIAS = {
-  plano: ['gti_w', 'ons_w', 'gti_aux_w'],
+  // `scada_w` (lote fonte-pr-logger): a AMOSTRA do SCADA em T, so para o Comparativo de Medicoes; `gti_w` e o datalogger
+  plano: ['gti_w', 'ons_w', 'scada_w'],
   comp: ['dif_w', 'dni_w'],
   albedo: ['alb_cima_w', 'alb_baixo_w', 'albedo'],
   // as DUAS rows de temperatura sao familias separadas: juntas dariam 72 colunas e ~2,3 MB no
@@ -466,6 +472,9 @@ async function emiteFamilias(meta, semihora, resFonte) {
         const l = { t, ms: Date.parse(t) };
         for (const [kk, o] of Object.entries(a.v)) {
           if (o.trav || !o.n) continue;                   // PROMOVER irr-travada: a hora com meia hora retirada sai vazia
+          // 🔴 INTEGRALIZADO, NUNCA AMOSTRADO (regra do humano, 19/10/2026): o balde de `min` so existe com TODAS as meias horas
+          //    dele (a hora com as duas). A hora com uma meia hora so seria a media de metade dela posta no lugar da hora inteira.
+          if (o.n !== min / resFonte) continue;
           const nome = kk.slice(0, kk.lastIndexOf('_'));
           l[kk] = r2(CAMPO_SOMA.has(nome) ? o.s : o.s / o.n);
         }
@@ -484,6 +493,10 @@ async function emiteFamilias(meta, semihora, resFonte) {
         rotulo_de_tempo: 'inicio do intervalo',
         nota: 'Uma coluna por grandeza e entidade (<grandeza>_<entidade>). O recorte do periodo e '
           + 'do seletor de tempo do painel; este arquivo define o ALCANCE MAXIMO.',
+        valor: 'media do intervalo [T, T+' + min + ' min) medida pelo datalogger da estacao (chuva: soma)',
+        ...(fam === 'plano' ? { scada_w: 'amostra instantanea do supervisorio (SCADA) em T, irradiancia no plano; so para o Comparativo de '
+          + 'Medicoes (amostra, nao media: quem a compara com a media do intervalo usa o trapezio de T e T+30); na resolucao de 60 min, '
+          + 'a media das duas amostras da hora' } : {}),
         serie,
       }), nome, true);
       n++;
@@ -557,7 +570,9 @@ async function emiteResolucoes(meta, semihora, resFonte) {
       // derivar o instante no painel erraria em ate um dia — o mesmo defeito que ja custou caro
       // no MUST. Com `ms` o painel compara numero com numero.
       const l = { t, ms: Date.parse(t) };
-      for (const u of ufvs) { const c = a.v[u]; if (c && c.n && !c.trav) l[u] = r2(c.s / c.n); }
+      // 🔴 INTEGRALIZADO, NUNCA AMOSTRADO (regra do humano, 19/10/2026): o balde so existe com TODAS as meias horas dele — a hora
+      //    com as duas meias horas da estacao. E dessa hora que o PR le a irradiacao: uma meia hora so nao e a hora.
+      for (const u of ufvs) { const c = a.v[u]; if (c && c.n === min / resFonte && !c.trav) l[u] = r2(c.s / c.n); }
       return l;
     });
     if (serie.length > TETO_LINHAS) {
@@ -571,8 +586,8 @@ async function emiteResolucoes(meta, semihora, resFonte) {
     // `janela_dias_alvo` fica ao lado para a diferenca entre o pedido e o obtido ser visivel.
     const diasReais = new Set(serie.map((l) => l.t.slice(0, 10))).size;
     bytes += await writeOut({
-      gerado_em: meta.gerado_em, fonte: meta.fonte, modo: meta.modo,
-      grandeza: 'Irradiancia no plano dos modulos (GTI), W/m2',
+      gerado_em: meta.gerado_em, fonte: meta.fonte, modo: meta.modo, fonte_estacao: meta.fonte_estacao,
+      grandeza: 'Irradiancia no plano dos modulos (GTI), W/m2, media do intervalo medida pelo datalogger da estacao',
       resolucao_min: min, janela_dias: diasReais, janela_dias_alvo: janela,
       rotulo_de_tempo: 'O instante e o INICIO do intervalo: o valor em T cobre [T, T+' + min + ' min).',
       nota: 'Uma coluna por usina. As demais grandezas ficam nos arquivos por nivel de zoom '
@@ -587,57 +602,47 @@ async function emiteResolucoes(meta, semihora, resFonte) {
 }
 
 
-// os seeds vao GZIPADOS no repo: o semi-horario cru da 6 MB, e cada regeracao gravaria 6 MB novos no
-// historico do git (blob binario nao se delta-comprime). Gzipado da ~600 KB, e ler custa uma linha.
-const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString('utf8'));
+// 🔴 A ESTACAO E O DATALOGGER (lote fonte-pr-logger, 19/10/2026). Regra do humano: a irradiancia (e toda a solarimetria) vem do
+//    datalogger CR1000X das estacoes, 10 min ja integralizado; o SCADA (export IIRR, amostra instantanea a cada 30 min, parado desde
+//    14/10/2026) fica SO para o Comparativo de Medicoes. A estacao chega pronta em meia hora do `estacao_tudo_30min.json`
+//    (gen-estacao-logger + lib-estacao-30min: media das tres medias de 10 min, tudo-ou-nada por grandeza) e entra nos MESMOS
+//    acumuladores que o export do SCADA alimentava: o diario (soma x 0,5 h da media de cada meia hora, que e a integral exata), a
+//    faixa fisica, a qualidade, a leitura travada, o conjunto, os arquivos por resolucao e por familia. Os nomes de blob e de campo
+//    que as telas leem nao mudam (`gti_w_<usina>`, `gti`, `irr_60min`...): muda a fonte, declarada em `fonte_estacao`.
+//    Sem o arquivo do datalogger NAO HA volta ao SCADA: o gerador para (o SCADA de volta na tela e o defeito que este lote tira).
+const S30 = require('./lib-estacao-30min');
+const FONTE_ESTACAO = 'datalogger';
+async function fonteEstacao() {
+  let b;
+  if (process.env.ESTACAO_TUDO_ARQ) b = fs.readFileSync(process.env.ESTACAO_TUDO_ARQ);
+  else {
+    const x = await LD.pede('https://rbenergydata.blob.core.windows.net/dados/estacao_tudo_30min.json')
+      .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); });
+    if (x.status === 404) throw new Error('estacao_tudo_30min.json nao existe: sem o datalogger a solarimetria nao sai (o SCADA so serve ao Comparativo)');
+    if (x.status !== 200) throw new Error('estacao_tudo_30min.json: HTTP ' + x.status);
+    b = x.buf;
+  }
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  const j = JSON.parse(b.toString('utf8'));
+  if (j.esquema !== 1 || !j.inicio || !j.estacoes || !(j.n > 0)) throw new Error('estacao_tudo_30min.json fora do formato (esquema ' + j.esquema + ')');
+  const us = Object.keys(j.estacoes);
+  if (us.length !== 9) throw new Error('estacao_tudo_30min.json com ' + us.length + ' estacoes (esperadas 9)');
+  for (const u of us) for (const k of S30.CHAVES) {
+    const v = j.estacoes[u][k];
+    if (!Array.isArray(v) || v.length !== j.n) throw new Error('estacao_tudo_30min.json: ' + u + '.' + k + ' ausente ou fora da grade');
+  }
+  return j;
+}
 
 (async () => {
-  // modo seed: sem CSV nenhum, republica o historico do repo e sai
-  if (!process.env.IIRR_LOCAL && !process.env.IIRR_URL && !process.env.IIRR_CONTAINER) {
-    const seed = 'data/irr_seed.json.gz';
-    if (!fs.existsSync(seed)) throw new Error('sem IIRR_URL/IIRR_LOCAL e sem ' + seed);
-    const j = leSeed(seed);
-    rotulaQualidade(j.qualidade);   // PROMOVER irr-rotulo: o nome da grandeza nas três línguas, antes de qualquer gravação
-    j.modo = 'seed';
-    j.nota_seed = 'Historico processado do export IIRR de 08/08/2026, versionado no repo. '
-      + 'Enquanto a ponte SharePoint -> blob nao existir, e esta a fonte do painel. '
-      + 'Definir IIRR_URL no workflow faz o gerador voltar a ler o CSV cru.';
-    const seedH = 'data/irr_hora_seed.json.gz';
-    const hSeed = fs.existsSync(seedH) ? leSeed(seedH) : null;
-    // 🔴 O CONJUNTO ENTRA AQUI, ANTES DE QUALQUER EMISSAO, e nos TRES produtos de uma vez. Sao 27
-    //    paineis que filtram por usina; calcular a media no JSONata de cada um garantiria que uma
-    //    copia envelhecesse diferente das outras. Como todos ja filtram `ufv in $us`, o conjunto
-    //    chega a eles sem que nenhum painel mude.
-    j.serie_dia = j.serie_dia || []; j.serie_mes = j.serie_mes || [];
-    const linhas = (hSeed && hSeed.serie_semihora) || [];
-    const nc = comComplexo(j.serie_dia, j.serie_mes, linhas);
-    j.agregados = [COMPLEXO];
-    console.log('conjunto (media das ' + (j.ufvs || []).length + ' estacoes) · '
-      + nc.dia + ' dias · ' + nc.mes + ' meses · ' + nc.semihora + ' instantes de 30 min');
-    if (hSeed) {
-      const h = hSeed;
-      // dias_hora vai no blob PRINCIPAL: e dele que o filtro de dia se alimenta, e ele so pode
-      // oferecer dia que tenha curva horaria de verdade — dia oferecido sem dado = painel vazio.
-      j.dias_hora = [...new Set(linhas.map(x => x.dia))].sort();
-      const rl = await lapideNiveis(j.meses || [], j.dias_hora || []);
-      console.log('niveis por zoom: ' + rl + ' arquivo(s) com lapide (aposentados)');
-      const rr = await emiteResolucoes({ gerado_em: h.gerado_em, fonte: h.fonte, modo: 'seed' },
-        linhas, h.resolucao_min || 30);
-      console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
-        + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
-      (rr.detalhe || []).forEach(x => console.log('    ' + x));
-      const rf = await emiteFamilias({ gerado_em: h.gerado_em, fonte: h.fonte, modo: 'seed' },
-        linhas, h.resolucao_min || 30);
-      console.log('familias · ' + rf.arquivos + ' arquivo(s) · ' + Math.round(rf.bytes / 1024) + ' KB');
-      (rf.detalhe || []).forEach(x => console.log('    ' + x));
-    }
-    const t = await writeOut(j);
-    console.log('irr_ufv.json republicado do seed · ' + Math.round(t / 1024) + ' KB · '
-      + (j.serie_dia || []).length + ' linhas diarias · ' + (j.dias_hora || []).length
-      + ' dias com hora · janela ' + j.janela.ini + ' a ' + j.janela.fim);
-    return;
-  }
-  const FONTES = await fonteLinhas();
+  const EST = await fonteEstacao();
+  const linhasEst = S30.linhas(EST);
+  if (!linhasEst.length) throw new Error('estacao_tudo_30min.json sem nenhuma meia hora');
+  // o SCADA e OPCIONAL e so vai ao campo `scada_w` (a amostra da irradiancia no plano, para o Comparativo de Medicoes). O sensor
+  // auxiliar do SCADA (GER_IRR) nao e lido: ele preenchia a tela nos dias sem o principal, e na tela agora so entra o datalogger.
+  const temScada = !!(process.env.IIRR_LOCAL || process.env.IIRR_URL || process.env.IIRR_CONTAINER);
+  const FONTES = temScada ? (await fonteLinhas()).filter((f) => f.tipo !== 'aux') : [];
+  if (!temScada) console.log('  ⚠️ sem IIRR_*: a amostra do SCADA (campo scada_w, so do Comparativo) nao entra nesta rodada');
   let cab = null;
   let mapa = [];                   // { i, ufv, gr }
   const acc = {};                  // dia -> ufv -> gr -> {sB,nB,sL,nL,minL,maxL,fora,zd,nd}
@@ -650,23 +655,79 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   const accH = {};                 // dia|ufv|hora -> gr -> {s,n}
   const qual = {};                 // ufv -> gr -> {n,vazio,fora,zd,nd,min,max}
   let nLinhas = 0, tsIni = null, tsFim = null;
-  // 🔴 DEDUP POR INSTANTE, e ele e obrigatorio: os acumuladores SOMAM, entao um instante presente
-  //    no despejo historico E num diario entraria duas vezes e a media do dia sairia certa por
-  //    acidente (soma e contagem dobram juntas) mas o TOTAL do mes sairia dobrado. O historico e
-  //    lido primeiro; o diario que repetir um instante ja lido e descartado.
+  // 🔴 DEDUP POR INSTANTE no SCADA: o despejo historico e os diarios repetem instantes. O historico e lido primeiro; o diario que
+  //    repetir um instante ja lido e descartado. (O datalogger chega deduplicado do gen-estacao-logger: uma meia hora por estacao.)
   const vistos = new Set();
   const ufvsVistas = new Set(), grsVistas = new Set();
   let repetidos = 0;
-  // 🔴 ACUMULADOR SEPARADO, e a separacao E o requisito. O sensor auxiliar (grupo GER_IRR) mede a
-  //    MESMA grandeza no MESMO instante que o principal e diverge 12,7 W/m2 sobre um nivel de 283
-  //    (~4,5%) — medido na auditoria dos despejos. Somar os dois no mesmo campo emendaria duas
-  //    series fingindo que sao uma; e o painel nao teria como dizer qual e qual.
-  //    Ele so preenche o que o principal nao mediu, e sai em CAMPO PROPRIO (`gti_aux`).
+  // o sensor auxiliar do SCADA nao e mais lido (ver acima): os acumuladores dele ficam vazios, e os campos `gti_aux*` deixam de sair
   const accA = {};                 // dia -> ufv -> { s, n, max }
   const accHA = {};                // dia|ufv|slot -> { s, n }
   const diasAux = new Set();
   let nAux = 0;
+  const scadaH = {};               // dia|ufv|slot -> W/m2, a AMOSTRA do SCADA em T (so para o Comparativo)
+  let nScada = 0, scadaIni = null, scadaFim = null;
 
+  // uma leitura (meia hora) de uma grandeza de uma estacao nos acumuladores; x nulo = leitura vazia
+  function entra(d, hh, mi, ufv, gr, x) {
+    const diurno = hh >= DIURNO[0] && hh <= DIURNO[1];
+    // min/max em DUAS versoes: o que o sensor reportou (bruto) e o que passou na faixa (limpo).
+    // Na primeira versao eu so guardava o limpo — e ai a tabela de qualidade dizia "fora da faixa
+    // 8.619 leituras, max 0,99", que nao explica nada. O valor que denuncia o sensor e justamente
+    // o que a faixa recusou.
+    const q = ((qual[ufv] = qual[ufv] || {})[gr] = qual[ufv][gr]
+      || { n: 0, vazio: 0, fora: 0, foraBaixo: 0, foraAlto: 0, zd: 0, nd: 0,
+        min: null, max: null, minB: null, maxB: null });
+    const o = (((acc[d] = acc[d] || {})[ufv] = acc[d][ufv] || {})[gr] = acc[d][ufv][gr]
+      || { sB: 0, nB: 0, sL: 0, nL: 0, maxL: null, fora: 0, zd: 0, nd: 0 });
+    if (x == null || !isFinite(x)) { q.vazio++; return; }
+    q.n++;
+    if (q.minB == null || x < q.minB) q.minB = x;
+    if (q.maxB == null || x > q.maxB) q.maxB = x;
+    o.sB += x; o.nB++;
+    if (gr === 'IRRADIAÇÃO INCLINADA') {
+      // NOITE e VALORES DISTINTOS: os dois detectores de sensor travado. Ficam aqui, no BRUTO, antes
+      // do teste de faixa, porque sensor pinado passa na faixa fisica sem reclamar — 912,84 W/m2 e
+      // um valor perfeitamente possivel ao meio-dia.
+      if (hh >= 21 || hh <= 3) { o.sN = (o.sN || 0) + x; o.nN = (o.nN || 0) + 1; }
+      (o.vals = o.vals || new Set()).add(x);
+    }
+    if (diurno) { o.nd++; q.nd++; if (x === 0) { o.zd++; q.zd++; } }
+    const [lo, hi] = FAIXA[gr];
+    if (x < lo || x > hi) {
+      q.fora++; o.fora++;
+      if (x < lo) q.foraBaixo++; else q.foraAlto++;   // por que lado escapou: o lado e o diagnostico
+      return;                                         // suspeita: fica fora do LIMPO
+    }
+    o.sL += x; o.nL++;
+    if (gr === 'IRRADIAÇÃO INCLINADA' && x > SOL_MIN) { o.sS = (o.sS || 0) + x; o.nS = (o.nS || 0) + 1; }
+    if (HORA_GR.has(gr)) {
+      // SLOT de 30 min (0..47). Dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e ordenacao de
+      // TEXTO — com o indice cru, '10' vinha antes de '2' e o trend recusava a serie inteira com "Values must be in ascending order".
+      const slot = hh * 2 + (mi >= 30 ? 1 : 0);
+      const kh = d + '|' + ufv + '|' + String(slot).padStart(2, '0');
+      const oh = ((accH[kh] = accH[kh] || {})[gr] = accH[kh][gr] || { s: 0, n: 0 });
+      oh.s += x; oh.n++;
+    }
+    if (o.maxL == null || x > o.maxL) o.maxL = x;
+    if (q.min == null || x < q.min) q.min = x;
+    if (q.max == null || x > q.max) q.max = x;
+  }
+
+  // ---- a ESTACAO: o datalogger, meia hora a meia hora (o valor de T e a media de [T, T+30))
+  { const inst = new Set();
+    for (const r of linhasEst) {
+      const ts = r.ts; inst.add(ts);
+      if (!tsIni || ts < tsIni) tsIni = ts;
+      if (!tsFim || ts > tsFim) tsFim = ts;
+      const d = ts.slice(0, 10), hh = +ts.slice(11, 13), mi = +ts.slice(14, 16);
+      ufvsVistas.add(r.ufv);
+      for (const k of S30.CHAVES) { const gr = S30.GRANDEZA[k]; if (!FAIXA[gr]) continue; grsVistas.add(gr); entra(d, hh, mi, r.ufv, gr, r.v[k]); }
+    }
+    nLinhas = inst.size;
+    console.log('  estacao (datalogger): ' + linhasEst.length + ' meias horas de estacao · ' + nLinhas + ' instantes · ' + tsIni + ' a ' + tsFim); }
+
+  // ---- o SCADA, so a amostra da irradiancia no plano do sensor principal (campo `scada_w`, para o Comparativo de Medicoes)
   for (const fonte of FONTES) {
   // ⚠️ CABECALHO POR ARQUIVO. Cada CSV traz o proprio, e a ORDEM das colunas nao e garantida entre
   //    exports — remapear por arquivo e o que impede ler a coluna de uma estacao como se fosse de
@@ -678,111 +739,39 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     const cols = linha.replace(/^﻿/, '').split(';');
     if (!cab) {
       cab = cols;
-      // ⚠️ O AUXILIAR USA OUTRO PADRAO de nome de coluna: `UFV_<est>_GER_IRR_<est> WS <grandeza>`
-      //    contra `UFV_<est>_WS_<est> WS <grandeza>` do principal. Um regex so nao serve para os
-      //    dois, e usar o do principal no arquivo do auxiliar daria ZERO colunas reconhecidas —
-      //    que a guarda logo abaixo transforma em job vermelho, e nao em silencio.
-      // Do auxiliar interessa a IRRADIACAO INCLINADA: e a espinha da pagina e a unica grandeza
-      // cuja ausencia deixa o grafico principal vazio. As outras oito ele tem e nao sao emitidas
-      // de proposito — cada campo paralelo custa uma coluna num arquivo que todo leitor baixa.
-      const RE = fonte.tipo === 'aux'
-        ? /^UFV_([^_]+)_GER_IRR_\S+\s+WS\s+(.+?)(_\d+)?$/
-        : /^UFV_([^_]+)_WS_(?:\S+)\s+WS\s+(.+?)(_\d+)?$/;
+      const RE = /^UFV_([^_]+)_WS_(?:\S+)\s+WS\s+(.+?)(_\d+)?$/;
       cab.forEach((c, i) => {
         const m = c.match(RE);
         if (!m || m[3]) return;                       // _2 = duplicata vazia do export
         const ufv = EST_UFV[m[1]];
-        if (!ufv || !FAIXA[m[2]]) return;             // estacao ou grandeza que nao conheco
-        if (fonte.tipo === 'aux' && m[2] !== 'IRRADIAÇÃO INCLINADA') return;
+        if (!ufv || m[2] !== 'IRRADIAÇÃO INCLINADA') return;
         mapa.push({ i, ufv, gr: m[2] });
       });
       if (!mapa.length) {
         throw new Error('nenhuma coluna reconhecida em ' + fonte.nome + ' — o layout mudou?');
       }
-      for (const m of mapa) { ufvsVistas.add(m.ufv); grsVistas.add(m.gr); }
       continue;
     }
     const ts = cols[0];
     if (vistos.has(ts)) { repetidos++; continue; }
     vistos.add(ts);
-    if (fonte.tipo === 'aux') {
-      const d = ts.slice(0, 10);
-      const slot = +ts.slice(11, 13) * 2 + (+ts.slice(14, 16) >= 30 ? 1 : 0);
-      for (const m of mapa) {
-        const bruto = cols[m.i];
-        if (bruto === '' || bruto == null) continue;
-        const x = Number(String(bruto).replace(',', '.'));
-        if (!isFinite(x)) continue;
-        const f = FAIXA[m.gr];
-        if (f && (x < f[0] || x > f[1])) continue;
-        const o = ((accA[d] = accA[d] || {})[m.ufv] = accA[d][m.ufv] || { s: 0, n: 0, max: null });
-        o.s += x; o.n++; if (o.max == null || x > o.max) o.max = x;
-        const kh = d + '|' + m.ufv + '|' + String(slot).padStart(2, '0');
-        const oh = (accHA[kh] = accHA[kh] || { s: 0, n: 0 });
-        oh.s += x; oh.n++;
-        diasAux.add(d); nAux++;
-      }
-      continue;
-    }
-    nLinhas++;
-    if (!tsIni || ts < tsIni) tsIni = ts;
-    if (!tsFim || ts > tsFim) tsFim = ts;
-    const d = ts.slice(0, 10), hh = +ts.slice(11, 13);
-    const diurno = hh >= DIURNO[0] && hh <= DIURNO[1];
+    const d = ts.slice(0, 10);
+    const slot = +ts.slice(11, 13) * 2 + (+ts.slice(14, 16) >= 30 ? 1 : 0);
     for (const m of mapa) {
       const bruto = cols[m.i];
-      // min/max em DUAS versoes: o que o sensor reportou (bruto) e o que passou na faixa (limpo).
-      // Na primeira versao eu so guardava o limpo — e ai a tabela de qualidade dizia "fora da faixa
-      // 8.619 leituras, max 0,99", que nao explica nada. O valor que denuncia o sensor e justamente
-      // o que a faixa recusou.
-      const q = ((qual[m.ufv] = qual[m.ufv] || {})[m.gr] = qual[m.ufv][m.gr]
-        || { n: 0, vazio: 0, fora: 0, foraBaixo: 0, foraAlto: 0, zd: 0, nd: 0,
-          min: null, max: null, minB: null, maxB: null });
-      const o = (((acc[d] = acc[d] || {})[m.ufv] = acc[d][m.ufv] || {})[m.gr] = acc[d][m.ufv][m.gr]
-        || { sB: 0, nB: 0, sL: 0, nL: 0, maxL: null, fora: 0, zd: 0, nd: 0 });
-      if (bruto === '' || bruto == null) { q.vazio++; continue; }
+      if (bruto === '' || bruto == null) continue;
       const x = Number(String(bruto).replace(',', '.'));
-      if (!isFinite(x)) { q.vazio++; continue; }
-      q.n++;
-      if (q.minB == null || x < q.minB) q.minB = x;
-      if (q.maxB == null || x > q.maxB) q.maxB = x;
-      o.sB += x; o.nB++;
-      if (m.gr === 'IRRADIAÇÃO INCLINADA') {
-        // NOITE e VALORES DISTINTOS: os dois detectores de sensor travado. Ficam aqui, no BRUTO, antes
-        // do teste de faixa, porque sensor pinado passa na faixa fisica sem reclamar — 912,84 W/m2 e
-        // um valor perfeitamente possivel ao meio-dia.
-        if (hh >= 21 || hh <= 3) { o.sN = (o.sN || 0) + x; o.nN = (o.nN || 0) + 1; }
-        (o.vals = o.vals || new Set()).add(x);
-      }
-      if (diurno) { o.nd++; q.nd++; if (x === 0) { o.zd++; q.zd++; } }
       const [lo, hi] = FAIXA[m.gr];
-      if (x < lo || x > hi) {
-        q.fora++; o.fora++;
-        if (x < lo) q.foraBaixo++; else q.foraAlto++;   // por que lado escapou: o lado e o diagnostico
-        continue;                                       // suspeita: fica fora do LIMPO
-      }
-      o.sL += x; o.nL++;
-      if (m.gr === 'IRRADIAÇÃO INCLINADA' && x > SOL_MIN) { o.sS = (o.sS || 0) + x; o.nS = (o.nS || 0) + 1; }
-      if (HORA_GR.has(m.gr)) {
-        // SLOT de 30 min (0..47), nao a hora: e a resolucao nativa do export e a mesma que o ONS
-        // publica (semi-hora), entao a visao por dia nao agrega nada — mostra a leitura como ela veio.
-        // Dois digitos de proposito: a serie sai ordenada por Object.keys().sort(), que e ordenacao de
-        // TEXTO — com o indice cru, '10' vinha antes de '2' e o trend recusava a serie inteira com
-        // "Values must be in ascending order".
-        const slot = hh * 2 + (+ts.slice(14, 16) >= 30 ? 1 : 0);
-        const kh = d + '|' + m.ufv + '|' + String(slot).padStart(2, '0');
-        const oh = ((accH[kh] = accH[kh] || {})[m.gr] = accH[kh][m.gr] || { s: 0, n: 0 });
-        oh.s += x; oh.n++;
-      }
-      if (o.maxL == null || x > o.maxL) o.maxL = x;
-      if (q.min == null || x < q.min) q.min = x;
-      if (q.max == null || x > q.max) q.max = x;
+      if (!isFinite(x) || x < lo || x > hi) continue;
+      scadaH[d + '|' + m.ufv + '|' + String(slot).padStart(2, '0')] = x; nScada++;
+      if (!scadaIni || ts < scadaIni) scadaIni = ts;
+      if (!scadaFim || ts > scadaFim) scadaFim = ts;
     }
   }
   }   // fim do laco por FONTE
 
-  console.log('  lidos ' + FONTES.length + ' arquivo(s) · ' + nLinhas + ' instantes distintos'
-    + (repetidos ? ' · ' + repetidos + ' repetido(s) descartado(s)' : ''));
+  console.log('  SCADA (so o Comparativo): ' + FONTES.length + ' arquivo(s) · ' + nScada + ' amostras da irradiancia no plano'
+    + (nScada ? ' · ' + scadaIni + ' a ' + scadaFim : '') + (repetidos ? ' · ' + repetidos + ' instante(s) repetido(s) descartado(s)' : ''));
 
   // 🔴 O UNIVERSO DE ESTACOES E GRANDEZAS E A UNIAO, nao o do ULTIMO arquivo lido. Com `mapa`
   //    reiniciado a cada CSV, tirar `ufvs` dele depois do laco daria o mapa do ultimo diario — e
@@ -1070,7 +1059,7 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   TRAVA.retirar.forEach((k) => { if (accH[k]) delete accH[k]['IRRADIAÇÃO INCLINADA']; });
   console.log('  leituras travadas: ' + TRAVA.retirar.size + ' meia(s) hora(s) retiradas em ' + TRAVA.trechos.length + ' trecho(s)'
     + TRAVA.trechos.slice(0, 12).map((t) => ' · ' + t.dia + ' ' + t.ufv + ' ' + t.valor + ' W/m2 x' + t.n).join(''));
-  const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(accHA), ...Object.keys(ons).map((k) => {
+  const chavesH = [...new Set([...Object.keys(accH), ...Object.keys(accHA), ...Object.keys(scadaH), ...Object.keys(ons).map((k) => {
     const p = k.split('|'); return p[0] + '|' + p[1] + '|' + String(+p[2]).padStart(2, '0');
   })])].sort();
   const serie_semihora = [];
@@ -1087,12 +1076,14 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     //    sensor mudou — que e exatamente a mentira que este campo existe para evitar.
     const xa = accHA[k];
     if (xa && xa.n) l.gti_aux_w = r2(xa.s / xa.n);
+    // a AMOSTRA do SCADA em T (lote fonte-pr-logger): campo proprio, so para o Comparativo; nunca entra em `gti_w`
+    if (scadaH[k] != null) l.scada_w = r2(scadaH[k]);
     let algum = false;
     Object.entries(CAMPO_H).forEach(([gr, campo]) => {
       const o = g[gr];
       if (o && o.n) { l[campo] = r2(o.s / o.n); algum = true; }
     });
-    if (algum || l.ons_w != null || l.gti_aux_w != null) serie_semihora.push(l);
+    if (algum || l.ons_w != null || l.gti_aux_w != null || l.scada_w != null) serie_semihora.push(l);
   });
 
   // ---------- tabela de QUALIDADE: e o entregavel principal ----------
@@ -1138,11 +1129,17 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
 
   const out = {
     gerado_em: new Date().toISOString(),
-    fonte: 'SCADA · export IIRR (estações solarimétricas), 30 min. Energia = média da leitura × 0,5 h. '
+    fonte: 'Datalogger das estações solarimétricas (CR1000X), média de 10 min, em meia hora (média das três médias). '
+      + 'Irradiação = média da meia hora × 0,5 h. '
       + 'Duas versões de cada agregado: LIMPA (só o que passa na faixa física) e BRUTA (tudo). '
       + 'A diferença entre as duas é indicador de sensor.',
+    fonte_estacao: FONTE_ESTACAO,   // lote fonte-pr-logger: quem le (o PR) confere a fonte por esta marca
+    estacao_tudo_ref: EST.gerado_em || null,
+    scada: 'O supervisório (SCADA, export IIRR, amostra instantânea a cada 30 min) só aparece no campo scada_w do irr_plano_<res>, '
+      + 'para o Comparativo de Medições' + (nScada ? ' (amostras de ' + scadaIni + ' a ' + scadaFim + ').' : ' (nenhuma amostra nesta rodada).'),
     janela: { ini: tsIni, fim: tsFim }, resolucao_min: 30, linhas: nLinhas,
-    mapeamento: EST_UFV, faixa_fisica: FAIXA,
+    mapeamento: { M10: 'M1', M2: 'M2', M3: 'M3', M4: 'M4', M5: 'M5', M6: 'M6', M7: 'M7', M8: 'M8', M9: 'M9' },   // estacao do datalogger -> usina
+    faixa_fisica: FAIXA,
     ufvs, agregados: [COMPLEXO], grandezas: grs, dias: dias.length, meses,
     // 🔴 A LISTA DOS DIAS DE SENSOR AUXILIAR VAI DECLARADA. Sem ela, um painel que some `gti` com
     //    `gti_aux` — ou um leitor que compare os dois periodos — nao teria como saber que o
@@ -1153,8 +1150,8 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
     // os trechos de leitura TRAVADA retirados da serie de 30 min (PROMOVER irr-travada): declarados, para o leitor saber
     // por que a meia hora da estacao — e a do conjunto — esta vazia
     leituras_travadas: TRAVA.trechos.map((t) => ({ dia: t.dia, ufv: t.ufv, ini: t.ini / 2, fim: t.fim / 2, valor_w: t.valor, meias_horas: t.n })),
-    sensor_auxiliar: 'Grupo GER_IRR da mesma estação, sensor distinto do principal. Publicado em '
-      + 'campo próprio (gti_aux / gti_aux_w) e só nos dias em que o principal não mediu.',
+    sensor_auxiliar: 'Não usado desde 19/10/2026: o sensor auxiliar era do supervisório (grupo GER_IRR), e a estação na tela é o '
+      + 'datalogger. Os campos gti_aux / gti_aux_w deixam de sair.',
     serie_dia, serie_mes, qualidade,
   };
   // a horaria sai antes, em um arquivo por mes, so os ultimos HORA_DIAS dias
@@ -1168,14 +1165,14 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
 
   // ⚠️ Aqui vai a serie INTEIRA, nao a recortada em 120 dias que alimenta os niveis de zoom: o
   // arquivo de 60 min cobre um ano, e passar `hora` o deixaria com quatro meses sem nada avisar.
-  const rr = await emiteResolucoes({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'csv' },
+  const rr = await emiteResolucoes({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'datalogger', fonte_estacao: FONTE_ESTACAO },
     serie_semihora, 30);
   console.log('resolucoes · ' + rr.arquivos + ' arquivo(s) · ' + Math.round(rr.bytes / 1024) + ' KB'
     + (rr.pulados ? ' · ' + rr.pulados + ' pulada(s)' : ''));
   (rr.detalhe || []).forEach(x => console.log('    ' + x));
 
   // as familias saem da serie INTEIRA, como as resolucoes: sao elas que dao a pagina o passado
-  const rf = await emiteFamilias({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'csv' },
+  const rf = await emiteFamilias({ gerado_em: out.gerado_em, fonte: out.fonte, modo: 'datalogger', fonte_estacao: FONTE_ESTACAO },
     serie_semihora, 30);
   console.log('familias · ' + rf.arquivos + ' arquivo(s) · ' + Math.round(rf.bytes / 1024) + ' KB');
   (rf.detalhe || []).forEach(x => console.log('    ' + x));

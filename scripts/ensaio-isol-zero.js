@@ -48,7 +48,7 @@ const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
 /* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
 const le = async (nome) => {
-  if (process.env.LOCAL_BLOB && nome === 'perdas_inv.json') {
+  if (process.env.LOCAL_BLOB && nome === 'perdas_inv_scada.json') {
     return JSON.parse(fs.readFileSync(process.env.LOCAL_BLOB, 'utf8'));
   }
   const r = await LD.pede(BASE + nome);
@@ -73,7 +73,7 @@ function migracaoDoGerador() {
 }
 
 (async () => {
-  const j = await le('perdas_inv.json');
+  const j = await le('perdas_inv_scada.json');
   const s = Array.isArray(j.serie) ? j.serie : [];
   console.log('perdas_inv · ' + s.length + ' linhas · esquema declarado: ' + JSON.stringify(j.esquema));
 

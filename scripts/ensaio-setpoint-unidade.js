@@ -28,7 +28,7 @@
 const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 
-const URL = 'https://rbenergydata.blob.core.windows.net/dados/perdas_inv.json';
+const URL = 'https://rbenergydata.blob.core.windows.net/dados/perdas_inv_scada.json';
 const NOMINAL_KW = 320;          // POTÊNCIA ATIVA NOMINAL do SG350HX como o parque o configura
 const TETO_KW = 352;             // 110% da nominal — a sobrecarga configurada, medida no dado
 

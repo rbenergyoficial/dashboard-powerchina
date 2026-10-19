@@ -101,7 +101,7 @@ const le = async (nome) => {
 };
 
 (async () => {
-  const [diario, inv, irr] = await Promise.all([le('perdas_diario.json'), le('perdas_inv.json'), puxa('https://rbenergydata.blob.core.windows.net/dados/irr_30min.json')]);
+  const [diario, inv, irr] = await Promise.all([le('perdas_diario_scada.json'), le('perdas_inv_scada.json'), puxa('https://rbenergydata.blob.core.windows.net/dados/irr_30min.json')]);
   const S = diario.serie || [];
   const comCampo = S.filter((o) => o.CX_disp_contrato_pct != null);
   if (!comCampo.length) {

@@ -1,4 +1,4 @@
-name: Inversores SCADA -> inv_scada.json (subdesempenho por inversor)
+name: Inversores SCADA -> inv_scada_supervisorio.json (comparacao; o inv_scada.json das telas e do logger desde 19/10/2026)
 on:
   schedule:
     - cron: '47 12 * * *' # 09:47 BRT — depois do export do SCADA (~03:00 BRT) e do scada.yml
@@ -54,12 +54,12 @@ jobs:
           path: .cache-blob
           key: scada-raw-gen-inv-scada-${{ github.run_id }}
           restore-keys: scada-raw-gen-inv-scada-
-      - name: Gerar inv_scada.json
+      - name: Gerar inv_scada_supervisorio.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: scada-raw
           OUT_CONTAINER: dados
-          OUT_BLOB: inv_scada.json
+          OUT_BLOB: inv_scada_supervisorio.json
           DIAS: ${{ github.event.inputs.dias || '60' }}
           JANELA: ${{ github.event.inputs.janela || '365' }}
           HIST_BLOB: inv_scada_hist.json

@@ -79,7 +79,7 @@ const LEGENDA = {
     + 'gera penalidade). fontes: o selo de frescor de cada '
     + 'fonte de dado (em dia, atencao, atrasada). A irradiancia nao e em tempo real: a estacao chega por export diario.',
   ativos: 'inversores_dia: ultimo dia fechado; parados = menos da metade da janela de sol, parciais = entre 50 % e 90 %; '
-    + 'disponibilidade em %. abaixo_dos_pares: inversores cuja energia diaria fica abaixo da mediana dos vizinhos do mesmo '
+    + 'sem_leitura = sem leitura com sol (nao e parada); fonte: registrador de dados do fabricante; disponibilidade em %. abaixo_dos_pares: inversores cuja energia diaria fica abaixo da mediana dos vizinhos do mesmo '
     + 'eletrocentro (razao 1,00 = igual aos pares); sinal precoce, antes da falha. trocas: substituicoes de inversor registradas '
     + 'na planilha (termicas = capacitor estufado, carbonizado, superaquecimento); MTBF da frota em anos; estoque de inversores '
     + 'disponiveis. alarmes: export de alarmes do supervisorio, que vai so ate o mes ate_mes; alarmes de rede nao sao defeito do '
@@ -92,8 +92,8 @@ const LEGENDA = {
     + 'pr_corrigido_pct devolve a energia impedida pelo operador (estimativa; so nos meses em que ela e apurada). O conjunto e '
     + 'medido no 230 kV; usina e contrato nos circuitos de 34,5 kV, com a estacao da propria usina: o PR de uma usina nao se '
     + 'compara 1:1 com o do conjunto. dias_validos = dias com energia e irradiacao (a irradiacao chega um dia depois). '
-    + 'disponibilidade: declarada_pct = a disponibilidade do CONJUNTO declarada ao operador nacional; inversores = tempo de '
-    + 'operacao de cada inversor sobre a janela de sol, medido no supervisorio, por usina e grupo.',
+    + 'disponibilidade: declarada_pct = a disponibilidade do CONJUNTO declarada ao operador nacional; inversores = estado de '
+    + 'cada inversor a cada 5 min no registrador de dados do fabricante, nas meias horas de sol, por usina e grupo.',
   grupos: 'Complexo = as nove usinas (343,77 MW). PPA = contrato de longo prazo (M2, M3, M4, M5, M6 e M8). ML = mercado livre '
     + '(M1, M7 e M9); no ML a geracao e reduzida de proposito quando ha restricao, entao ficar abaixo da meta ali nao e '
     + 'defeito. M1 e a usina que a planilha comercial chama de Mauriti 10.',
@@ -256,8 +256,9 @@ function montaTempoReal(V, P, MU, F) {
 }
 
 /* ---- ATIVOS E SAUDE (02/10/2026): o que as telas Inversores, Confiabilidade, Transformadores e Oleo mostram ----
-   inversores_dia  perdas_diario (ultimo dia fechado): parados, parciais e disponibilidade por usina e do conjunto;
-   abaixo_dos_pares inv_scada.ranking: os inversores que rendem abaixo da mediana do proprio eletrocentro, ANTES de falhar;
+   inversores_dia  logger Sungrow (fonte-inv-logger, 19/10/2026): parados, parciais e cobertura do perdas_diario (gen-inv-logger) e
+                   disponibilidade por usina e do conjunto do sg_disp_dia, no ultimo dia que o logger apurou (o mesmo nos dois);
+   abaixo_dos_pares inv_scada.ranking (gen-inv-logger, logger): os inversores que rendem abaixo da mediana do proprio eletrocentro;
    trocas          portal_ativos.p1 (planilha de substituicoes): total, termicas, modos, pior parque, MTBF, reposicao, estoque;
    alarmes         portal_ativos.p2 (export de alarmes do supervisorio): classes, maior emissor; com a data ate onde vai;
    transformadores trafo_diario (ultimo dia): carga maxima contra ONAF2, temperaturas que existirem;
@@ -265,11 +266,16 @@ function montaTempoReal(V, P, MU, F) {
    Tudo selecao; o emoji dos modos de falha sai do texto (o assistente le em voz alta). */
 const USINAS9 = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const semEmoji = (s) => String(s == null ? '' : s).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]️?/gu, '').trim();
-function montaAtivos(A, P, I, T, O) {
-  const s = (P.serie || [])[(P.serie || []).length - 1] || {};
+function montaAtivos(A, P, I, T, O, SD) {
+  /* o ultimo dia que o logger apurou nas duas fontes (perdas_diario do gen-inv-logger e sg_disp_dia): a disponibilidade e do logger,
+     nunca o `_disp_pct` do perdas_diario (que ficou com o supervisorio, para o Comparativo) */
+  const disp = new Map(((SD && SD.serie) || []).map((r) => [r.dia, r]));
+  const s = (P.serie || []).filter((r) => USINAS9.some((u) => r[u + '_n_inv'] != null) && disp.has(r.dia)).pop() || {};
+  const d = disp.get(s.dia) || {};
   const porUsina = {};
-  USINAS9.forEach((u) => { porUsina[u] = { inversores: s[u + '_n_inv'], parados: s[u + '_inv_parados'], parciais: s[u + '_inv_parciais'], disp_pct: s[u + '_disp_pct'] }; });
-  const inversores_dia = { dia: s.dia, disp_conjunto_pct: s.CX_disp_pct, disp_contrato_pct: s.CX_disp_contrato_pct, por_usina: porUsina };
+  USINAS9.forEach((u) => { porUsina[u] = { inversores: s[u + '_n_inv'], parados: s[u + '_inv_parados'], parciais: s[u + '_inv_parciais'],
+    sem_leitura: s[u + '_inv_sem_leitura'], disp_pct: d[u + '_disp_sol_pct'] }; });
+  const inversores_dia = { dia: s.dia, fonte: 'logger do fabricante', disp_conjunto_pct: d.CX_disp_sol_pct, por_usina: porUsina };
   const esc = I.escopo || {};
   const abaixo = { de: esc.de, ate: esc.ate, lista: (I.ranking || []).slice(0, 10).map((r) => ({ inversor: r.chave, razao_mediana: r.razao_mediana, razao_min: r.razao_min, dias: r.dias })) };
   const p1 = A.p1 || {}, p2 = A.p2 || {}, est = (A.escopo || {}).estoque || {}, F = A.fontes || {};
@@ -353,8 +359,8 @@ function guarda(R) {
                       com a energia e a irradiacao do mes (o ensaio refaz o PR por elas: a conta nao e circular);
    pr.por_entidade    pr_ufv.json (usinas e contratos, circuitos de 34,5 kV): os ultimos MESES_PR_ENT meses, com energia e
                       denominador (placa x irradiacao da estacao da usina);
-   disponibilidade    executivo.serie (declarada ao operador, so o conjunto) e executivo.serie_ufv.disp_inv_pct (contadores
-                      dos inversores, por usina e grupo).
+   disponibilidade    executivo.serie (declarada ao operador, so o conjunto) e executivo.serie_ufv.disp_inv_pct (logger
+                      Sungrow desde 19/10/2026, por usina e grupo).
    Tudo selecao. O PR GARANTIDO do contrato de O&M nao entra: ele nao vai para o blob publico (fica na pagina do portal). */
 const MESES_PR = 7, MESES_PR_ENT = 3;   /* teto do resumo (TETO_KB): 3 meses por entidade bastam para "o mes passado" e o em curso */
 const ENT_DESEMPENHO = USINAS9.concat(['PPA', 'ML']);
@@ -393,11 +399,12 @@ async function grava(R) {
 }
 
 async function main() {
-  const [V, X, P, MU, F, AT, PD, IS, TD, OL, PR, PU] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json',
-    'fontes_saude.json', 'portal_ativos.json', 'perdas_diario.json', 'inv_scada.json', 'trafo_diario.json', 'oleo.json', 'pr.json', 'pr_ufv.json'].map((n) => puxa(BASE + n)));
+  const [V, X, P, MU, F, AT, PD, IS, TD, OL, PR, PU, SD] = await Promise.all(['portal_vivo.json', 'executivo.json', 'ppc_restricao.json', 'must_5min.json',
+    'fontes_saude.json', 'portal_ativos.json', 'perdas_diario.json', 'inv_scada.json', 'trafo_diario.json', 'oleo.json', 'pr.json', 'pr_ufv.json',
+    'sg_disp_dia.json'].map((n) => puxa(BASE + n)));
   const R = monta(V, X);
   R.tempo_real = montaTempoReal(V, P, MU, F);
-  R.ativos = montaAtivos(AT, PD, IS, TD, OL);
+  R.ativos = montaAtivos(AT, PD, IS, TD, OL, SD);
   R.desempenho = montaDesempenho(PR, PU, X);
   const { mau, kb } = guarda(R);
   if (mau.length) { console.error('agente_om: NAO gravado\n  ' + mau.join('\n  ')); process.exit(1); }

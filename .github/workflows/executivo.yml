@@ -58,6 +58,12 @@ jobs:
       - name: Ensaio · a leitura travada sai da serie (regra)
         run: node scripts/ensaio-irr-travada.js --lib
 
+      # lote fonte-pr-logger (19/10/2026): a estacao das telas e do PR e o DATALOGGER, integralizado (meia hora = media das tres medias
+      # de 10 min, tudo-ou-nada; chuva soma, bateria minimo, direcao vetorial). A REGRA em CSIXML forjado, com plantios (amostra no
+      # lugar da integral, meia hora incompleta contada, chuva promediada, direcao aritmetica), antes de gerar
+      - name: Ensaio · a solarimetria do datalogger, integralizada (regra)
+        run: node scripts/ensaio-irr-datalogger.js --lib
+
       # o M7 da irradiancia do ONS (PROMOVER irr-ons-m7): o CEFMT7 e o M7 na irradiancia, conferido mes a mes contra o datalogger
       # do M7 e do M3. So a REGRA aqui (casos forjados e sete plantios): o mes 'retirado' e a guarda funcionando, nao reprova o job
       - name: Ensaio · o M7 da irradiancia do ONS (regra)
@@ -196,8 +202,19 @@ jobs:
           # IIRR_CONTAINER faz o gerador LISTAR e usar o mais recente. Nao IIRR_URL: o nome e datado
           # E vem PREFIXADO pelo id do item (77884_IIRR_20260808_095901.csv) — nao ha endereco fixo.
           # 🔴 Falha de proposito se nao houver export: cair na semente congelaria o painel calado.
+          # 🔴 lote fonte-pr-logger (19/10/2026): a ESTACAO vem do estacao_tudo_30min.json (datalogger, gen-estacao-logger); o export do
+          #    SCADA lido daqui so vai ao campo scada_w (o Comparativo de Medicoes). Sem o arquivo do datalogger o passo FALHA: nao ha
+          #    volta ao SCADA na tela. A semente do repo saiu do gerador.
           IIRR_CONTAINER: scada-raw
         run: node scripts/gen-irradiancia.js
+
+      # ... e o PRODUTO da fonte: as quatro saidas declaram o datalogger; o gti_w e a meia hora do datalogger no mesmo instante
+      # (plantios: o SCADA de volta e o trapezio na media reprovam); a hora do irr_60min so com as duas meias horas e a media delas
+      # (plantio: a hora de uma meia hora so reprova); o scada_w nao e o gti_w sob outro nome. Antes do PR, que le esta irradiancia.
+      - name: Ensaio · a solarimetria do datalogger, integralizada (produto)
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/ensaio-irr-datalogger.js --produto
 
       # e o PRODUTO: nenhum trecho travado na serie de 30 min publicada; o M5 travado reinserido reprova. Depois de gerar
       # e antes do PR, que le esta irradiancia (e refaz os dias com leitura retirada).

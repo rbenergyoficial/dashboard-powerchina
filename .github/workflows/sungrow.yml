@@ -43,6 +43,11 @@ jobs:
       # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios
       - name: Ensaio · strings e curva de 5 min do logger (sem rede)
         run: node scripts/ensaio-sungrow-str.js
+      # fonte-inv-logger (19/10/2026): perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger (lib-inv-logger), e a posicao
+      # vaga no mesmo logger (o export do SCADA parou em 14/10). Mundo forjado com a conta a mao, o gen-sungrow de ponta a ponta sem
+      # SCADA e plantios (SCADA de volta como fonte, sem leitura contada como parado, parado do supervisorio contado). Sem rede
+      - name: Ensaio · dado de inversor das telas pelo logger (lib, sem rede)
+        run: node scripts/ensaio-inv-logger.js --lib
       - name: Gerar sg_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -57,6 +62,23 @@ jobs:
       # com o dia inteiro (sg_saude_<usina>.json); tres plantios em memoria reprovam. E o que a pagina Confiabilidade e perdas le
       - name: Ensaio · a cascata da usina no dia (produto)
         run: node scripts/ensaio-sungrow-cascata.js
+      # fonte-inv-logger (19/10/2026): os blobs de inversor que o portal, o Grafana e o assistente leem (perdas_diario, perdas_inv,
+      # strings_alarme, inv_scada), refeitos do que o gen-sungrow acabou de gravar. Na primeira rodada semeia a copia do supervisorio
+      # (perdas_diario_scada, perdas_inv_scada) que o gen-perdas passa a gravar e o Comparativo le
+      - name: Gerar perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger
+        id: inv_logger
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-inv-logger.js
+      # o produto: parados, parciais, lidos e sem leitura recontados do sg_disp_inv_dia, o supervisorio so nos dias da copia, nenhum
+      # campo do supervisorio no perdas_inv; plantios em memoria. Custo declarado: roda DEPOIS de gravar, entao se reprovar o dado ja esta
+      # no ar (job vermelho e melhor que dado ruim calado). Na PRIMEIRA rodada este job semeia as copias _scada: dispare-o antes do
+      # perdas.yml e do inv-scada.yml no dia da promocao
+      - name: Ensaio · dado de inversor das telas pelo logger (produto)
+        if: ${{ !cancelled() && steps.inv_logger.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/ensaio-inv-logger.js --produto
       # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora, gen-perdas) guarda 7 dias,
       # entao um dia sem rodar nao perde nada
       - name: Gerar sp_ts_<usina>_<ts>.json

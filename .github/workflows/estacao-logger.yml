@@ -23,6 +23,10 @@ jobs:
       # so com sol, vento no teto e faixa fisica fora das contas, direcao vetorial, noite, 10 min recente; com plantios
       - name: Ensaio · todas as grandezas do datalogger (sem rede)
         run: node scripts/ensaio-estacao-tudo.js
+      # lote fonte-pr-logger: a solarimetria inteira em meia hora (estacao_tudo_30min.json, lib-estacao-30min), que o gen-irradiancia
+      # le para as telas e o PR: media das tres medias de 10 min, tudo-ou-nada; com plantios (amostra, incompleta, chuva, direcao)
+      - name: Ensaio · a solarimetria do datalogger em meia hora (sem rede)
+        run: node scripts/ensaio-irr-datalogger.js --lib
       # 💰 ~4 mil arquivos de 128 KB: so o arquivo novo vem pela rede (lib-cache-blob.js); cache proprio deste workflow
       - name: Restaurar a copia do backup-dados-scada
         uses: actions/cache/restore@v4
@@ -30,7 +34,7 @@ jobs:
           path: .cache-blob
           key: backup-dados-scada-estacao-${{ github.run_id }}
           restore-keys: backup-dados-scada-estacao-
-      - name: Gerar estacao_logger_30min.json
+      - name: Gerar estacao_logger_30min.json, estacao_tudo_30min.json, estacao_dia.json e estacao_10min_M<usina>.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW: backup-dados-scada

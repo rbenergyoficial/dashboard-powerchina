@@ -12,7 +12,9 @@
  *                do operador, e so nos meses em que ela vale (antes de mar/26 ela vem quebrada e o corte do
  *                executivo sai de um modelo MENSAL, que nao se reparte por dia — ali o corrigido fica nulo).
  *   P_CC_placa   425,677 MWp (placa: modulos x Wp, conferida em tres rotas no gen-perdas).
- *   H_plano      irradiacao no plano dos modulos, media das estacoes do parque, kWh/m2.
+ *   H_plano      irradiacao no plano dos modulos, media das estacoes do parque, kWh/m2, medida pelo DATALOGGER das estacoes
+ *                (media de 10 min, em meia hora e em hora pela media das medias: a integral exata do intervalo). Desde
+ *                19/10/2026 (lote fonte-pr-logger, regra do humano); antes, a amostra instantanea do SCADA a cada 30 min.
  *
  * Por que nao "tirar as horas restritas": medido em 16/09/2026, o operador limita quase todo meio-dia e sobravam
  * so 5 a 28 % da irradiacao do mes — manha e fim de tarde, onde qualquer usina rende menos. O numero saia 10 a
@@ -115,19 +117,27 @@ function prMeses(dias) {
   });
 }
 
-/* ── O DIA EM MEIAS HORAS (24/09/2026) ────────────────────────────────────────────────────────────────────────────
- * O PR por hora ingenuo (energia da hora / irradiacao da hora) sai 87 % de manha e 54 % a tarde no mesmo dia: a
- * irradiacao da estacao e AMOSTRA INSTANTANEA em T, nao a media de [T, T+30). Medido em 15 dias contra o medidor de
- * 5 min, meias horas sem limitacao: janela [T,T+30) erra 20,5 MW; centrada [T-15,T+15), 7,2 MW; TRAPEZIO das amostras
- * T e T+30 contra a energia de [T,T+30), 9,8 MW, com manha e tarde simetricas (71,4 e 69,1 %). Fica o trapezio porque
- * poe as tres grandezas na MESMA meia hora em que o operador publica a limitacao — sem isso o corrigido somaria a
- * impedida de uma janela a energia de outra.
- * O dia soma as mesmas amostras: Sum trapezio = Sum amostras x 0,5 h, que e a irradiacao do dia do prDia.
+/* ── O DIA EM MEIAS HORAS (24/09/2026; fonte da irradiancia trocada em 19/10/2026) ────────────────────────────────
+ * A irradiancia da meia hora [T, T+30) e a MEDIA do intervalo medida pelo datalogger da estacao (`gti_w_Complexo` do
+ * irr_plano_30min no instante T: media das tres medias de 10 min). E a mesma janela da energia do medidor e da limitacao
+ * do operador, sem conta nenhuma. 🔴 NADA DE TRAPEZIO: o trapezio de T e T+30 existia (24/09 a 19/10/2026) porque a
+ * estacao era a AMOSTRA instantanea do SCADA em T; aplicado a uma media, ele mistura a meia hora seguinte e desloca a curva
+ * 15 min (manha acima, tarde abaixo). A regra tem marca propria (`IRR_FONTE`) e o gerador recusa irradiancia de outra fonte.
+ * O dia soma as mesmas medias: Sum (media da meia hora x 0,5 h) = Sum das horas (media das duas meias horas x 1 h), que e a
+ * irradiacao do dia do prDia.
  * Piso: a razao so existe com irradiancia de pelo menos 100 W/m2, o limiar do anexo do contrato (o mesmo da janela
  * da disponibilidade). Abaixo dele o amanhecer e o fim da tarde dividem numeros pequenos e a razao nao significa nada. */
 const PISO_IRR_MEIA = 100;   /* W/m2 */
 const chaveMeiaDoFim = rotulo => { const ms = Date.parse(rotulo + 'Z') - 60000; return new Date(Math.floor(ms / 18e5) * 18e5).toISOString().slice(0, 16); };
-const meiaSeguinte = k => new Date(Date.parse(k + ':00Z') + 18e5).toISOString().slice(0, 16);
+
+/* A FONTE DA IRRADIACAO (lote fonte-pr-logger, 19/10/2026): o PR so le irradiancia do DATALOGGER. O irr_60min e o
+   irr_plano_30min declaram a fonte em `fonte_estacao`; outra fonte (o SCADA de volta) ou a marca ausente param o gerador. Cada
+   linha publicada leva `irr_fonte`: a linha de outra fonte e refeita (migracao por MARCA, nunca por magnitude). */
+const IRR_FONTE = 'datalogger';
+function confereFonte(blob, nome) {
+  const f = blob && blob.fonte_estacao;
+  if (f !== IRR_FONTE) throw new Error(nome + ' com a estacao de fonte "' + (f || 'nao declarada') + '": o PR so le irradiancia do ' + IRR_FONTE);
+}
 
 /* energia por meia hora [T,T+30): so meia hora com os 6 instantes dos DOIS trafos */
 function energiaMeias(hist) {
@@ -145,8 +155,8 @@ function energiaMeias(hist) {
   return meias;
 }
 
-/* amostras instantaneas da media das estacoes, por instante 'AAAA-MM-DDTHH:MM' (hora local) */
-function amostrasIrr(serie, col) {
+/* a irradiancia media da meia hora [T, T+30) da media das estacoes, por instante T 'AAAA-MM-DDTHH:MM' (hora local) */
+function irrMeias(serie, col) {
   const m = new Map();
   for (const x of serie || []) { const v = x[col]; if (v != null && isFinite(v)) m.set(String(x.t).slice(0, 16), Math.max(0, v)); }
   return m;
@@ -169,14 +179,14 @@ function prMeias(dia, eM, sM, impM, diaRow) {
   const comC = !!(diaRow && diaRow.pr_corrigido_pct != null);
   for (let i = 0; i < 48; i++) {
     const k = dia + 'T' + String(Math.floor(i / 2)).padStart(2, '0') + ':' + (i % 2 ? '30' : '00');
-    const e = eM.get(k), s0 = sM.get(k), s1 = sM.get(meiaSeguinte(k));
-    const w = s0 != null && s1 != null ? (s0 + s1) / 2 : null, c = comC ? (impM.get(k) || 0) : null;
+    const e = eM.get(k), s0 = sM.get(k);
+    const w = s0 != null ? s0 : null, c = comC ? (impM.get(k) || 0) : null;   /* a media da meia hora, direta (sem trapezio) */
     inj.push(e ? r(e.inj_mwh, 3) : null); irr.push(w == null ? null : r(w, 1));   /* irradiacao da meia hora = irr / 2000 kWh/m2 */
     imp.push(c == null ? null : r(c, 3));
     const vale = e && w != null && w >= PISO_IRR_MEIA, den = P_CC_MWP * w / 2000;
     const p = vale ? 100 * e.inj_mwh / den : null, pc = vale && comC ? 100 * (e.inj_mwh + c) / den : null;
-    /* o mesmo teto do dia: acima de 110 % a meia hora sai VAZIA e e CONTADA (nuvem passando entre duas amostras
-       instantaneas faz isso; a tela diz quantas sairam em vez de desenhar um pico que nao e rendimento) */
+    /* o mesmo teto do dia: acima de 110 % a meia hora sai VAZIA e e CONTADA (a tela diz quantas sairam em vez de desenhar
+       um pico que nao e rendimento) */
     if (p != null && p > TETO_PR) acima++; if (pc != null && pc > TETO_PR) acimaC++;
     pr.push(p == null || p > TETO_PR ? null : r(p, 1)); prc.push(pc == null || pc > TETO_PR ? null : r(pc, 1));
   }
@@ -191,7 +201,7 @@ function prMeias(dia, eM, sM, impM, diaRow) {
  *                hora so com os 12 instantes de TODOS os circuitos da usina. E energia antes da transformacao: a soma
  *                das nove fica 0,32 a 0,47 % acima da do 230 kV (medido em 23 dias de ago-set/26) — o PR de uma usina
  *                nao se compara 1:1 com o do conjunto.
- *   irradiacao   a da estacao da propria usina (coluna Mx do irr_60min).
+ *   irradiacao   a da estacao da propria usina (coluna Mx do irr_60min), do datalogger.
  *   placa        potencia CC da usina (lib-placa, cc_kwp).
  *   impedida     o corte DIARIO reconciliado por usina do executivo (`corte_diario_ufv.cortado_mwh`): a mesma energia que
  *                o executivo atribui a cada usina, e que fecha com o corte do contrato.
@@ -302,5 +312,5 @@ function revistoConjunto(dia, v, op, gH, apurados) {
 }
 
 module.exports = { opImpedidaDia, revistoConjunto, FOLGA_REVISTO, P_CC_MWP, DIAS_EXCLUIDOS, chaveHoraDoFim, energiaHoras, operadorHoras, irradiacaoHoras, prDia, prMeses, PISO_HORAS, PISO_LINHAS_OPERADOR, TETO_PR, FAIXA_CORRIGIDO,
-  PISO_IRR_MEIA, chaveMeiaDoFim, energiaMeias, amostrasIrr, impedidaMeias, prMeias,
+  PISO_IRR_MEIA, chaveMeiaDoFim, energiaMeias, irrMeias, impedidaMeias, prMeias, IRR_FONTE, confereFonte,
   CIRC_UFV, GRUPOS, energiaHorasUfv, irradiacaoHorasUfv, prDiaUfv, prDiaGrupo, prMesesEnt };

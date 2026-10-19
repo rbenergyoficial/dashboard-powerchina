@@ -97,9 +97,9 @@ const FONTES = [
   { id: 'ons_indicadores', etapa: 'pub', blob: 'ons_kpis.json', wf: ['ons-consolidado.yml'] },
   { id: 'estacao_30min', etapa: 'pub', blob: 'estacao_logger_30min.json', wf: ['estacao-logger.yml'] },
   { id: 'estacao_dia', etapa: 'pub', blob: 'estacao_dia.json', wf: ['estacao-logger.yml'] },
-  { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv.json', wf: ['perdas.yml'] },
-  { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario.json', wf: ['perdas.yml'] },
-  { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada.json', wf: ['inv-scada.yml'] },
+  { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv_scada.json', wf: ['perdas.yml'] },   // supervisorio; o perdas_inv.json e do logger (sungrow.yml) desde 19/10/2026
+  { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario_scada.json', wf: ['perdas.yml'] },   // idem, fonte-inv-logger
+  { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada_supervisorio.json', wf: ['inv-scada.yml'] },   // o inv_scada.json e do logger (sungrow.yml)
   { id: 'inversores_registro', etapa: 'pub', blob: 'inversores.json', wf: ['inversores.yml'] },
   { id: 'ativos', etapa: 'pub', blob: 'portal_ativos.json', wf: ['inversores.yml'] },
   { id: 'registro_mesa', etapa: 'pub', blob: 'ppc_restricao.json', wf: ['ppc.yml'] },

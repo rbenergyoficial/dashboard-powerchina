@@ -292,5 +292,58 @@ function substitutosTroca(series, J, dup, amostras) {
   return S;
 }
 
-module.exports = { produtoInv, janelasTroca, dupContador, substitutosTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
+/* a POSICAO DO INVERSOR NOVO SEM O SCADA (fonte-inv-logger, 19/10/2026). A identificacao pelo contador de vida casa o logger com o
+   `ENERGIA TOTAL GERADA` do export do SCADA, e o export parou em 14/10/2026: o inversor que entra numa troca depois disso fica sem
+   posicao e sai de todo produto por posicao (M9/TS1/INV16: o A2431800098 leu ate 15/10, o sucessor comecou em 16/10 com o contador
+   em 1.277,5 kWh e ficou fora da disponibilidade e da frota). A regra pelo proprio logger: o numero de serie sem posicao assume a
+   posicao VAGA do mesmo logger (mesma usina e mesma pasta do sungrow-raw: o inversor novo e lido pelo mesmo registrador do retirado)
+   quando ha UMA so vaga e ele e o UNICO candidato a ela.
+   Vaga = a posicao identificada cujo dono atual (o numero de serie dela com o ultimo dia mais recente) NAO tem leitura em nenhum dia
+   a partir do primeiro dia proprio do novo (o primeiro que nao e duplicado do dono, `dup`, a mesma regra do janelasTroca), com o
+   dono lido ANTES desse dia e o logger lendo a pasta nesse dia (outro inversor identificado da mesma pasta com leitura nele: sem
+   isso, o novo do dia em que so ele chegou casaria com qualquer posicao da pasta).
+   Mais de uma vaga para o mesmo novo, ou mais de um novo para a mesma vaga: nada se atribui, e o caso volta em `ambiguos` (o
+   registro de substituicoes e o desempate, por decisao humana). A pasta nao e a posicao (M1/TS5 x TS6, M9/TS1 01-05 na pasta do TS2):
+   ela so restringe quem pode ocupar a vaga, a posicao vem do dono.
+   inv: { sn: { ufv, pasta, dias: { d: {...} } } } (o historico do gerador); ident: { sn: { pos, ... } }; dup(novo, dono, d) -> bool.
+   Devolve { atribui: { sn: { pos, d, metodo, dono } }, ambiguos: [{ sn, vagas: [pos] } | { pos, novos: [sn] }] } */
+const METODO_VAGA = 'posicao vaga no mesmo logger';
+function posicaoPelaVaga(inv, ident, dup) {
+  const eDup = typeof dup === 'function' ? dup : () => false;
+  const dias = (sn) => Object.keys((inv[sn] && inv[sn].dias) || {}).sort();
+  const porPos = new Map();
+  for (const [sn, a] of Object.entries(ident || {})) if (inv[sn] && dias(sn).length) (porPos.get(a.pos) || porPos.set(a.pos, []).get(a.pos)).push(sn);
+  const vagas = [];
+  for (const [pos, sns] of porPos) {
+    const dono = sns.slice().sort((x, y) => { const a = dias(x).pop(), b = dias(y).pop(); return a !== b ? (a < b ? 1 : -1) : (x < y ? -1 : 1); })[0];
+    vagas.push({ pos, dono, ufv: inv[dono].ufv, pasta: inv[dono].pasta, fim: dias(dono).pop() });
+  }
+  const lePasta = (ufv, pasta, d, fora) => Object.keys(ident || {}).some((s) => s !== fora && inv[s] && inv[s].ufv === ufv && inv[s].pasta === pasta && inv[s].dias[d]);
+  const cand = {};
+  for (const sn of Object.keys(inv).filter((s) => !(ident || {})[s] && dias(s).length)) {
+    const o = inv[sn];
+    const vs = [];
+    for (const v of vagas) {
+      if (v.ufv !== o.ufv || v.pasta !== o.pasta) continue;
+      const own = dias(sn).find((d) => !eDup(sn, v.dono, d));
+      if (!own || !(v.fim < own)) continue;                         // o dono leu no dia proprio do novo ou depois: nao ha vaga
+      if (!lePasta(v.ufv, v.pasta, own, v.dono)) continue;          // a pasta nao foi lida no dia: nada prova a vaga
+      vs.push({ pos: v.pos, d: own, dono: v.dono });
+    }
+    if (vs.length) cand[sn] = vs;
+  }
+  const atribui = {}, ambiguos = [];
+  const porVaga = new Map();
+  for (const [sn, vs] of Object.entries(cand)) {
+    if (vs.length > 1) { ambiguos.push({ sn, vagas: vs.map((v) => v.pos).sort() }); continue; }
+    (porVaga.get(vs[0].pos) || porVaga.set(vs[0].pos, []).get(vs[0].pos)).push({ sn, ...vs[0] });
+  }
+  for (const [pos, L] of porVaga) {
+    if (L.length > 1) { ambiguos.push({ pos, novos: L.map((x) => x.sn).sort() }); continue; }
+    atribui[L[0].sn] = { pos, d: L[0].d, metodo: METODO_VAGA, dono: L[0].dono };
+  }
+  return { atribui, ambiguos };
+}
+
+module.exports = { posicaoPelaVaga, METODO_VAGA, produtoInv, janelasTroca, dupContador, substitutosTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
   diaDisp, histVazio, junta, estacaoPorMeia, calcula, produto, pct };

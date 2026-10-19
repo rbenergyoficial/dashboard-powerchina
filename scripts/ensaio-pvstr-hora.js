@@ -132,7 +132,7 @@ const q = (v, p) => v[Math.floor(v.length * p)];
   console.log('');
   console.log('C · FECHAMENTO com o diario — duas rotas sobre a mesma fonte');
   {
-    const inv = await le('perdas_inv.json');
+    const inv = await le('perdas_inv_scada.json');
     const dmap = new Map();
     for (const l of (inv.serie || [])) {
       if (l.ufv !== UFV) continue;

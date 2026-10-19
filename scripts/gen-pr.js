@@ -4,16 +4,22 @@
  *
  * Fontes (todas ja publicadas):
  *   hist/way2_<dia>.json      medidor, 5 min, TR1 e TR2 — o dia de hoje e reescrito a cada 5 min
- *   irr_60min.json            irradiacao no plano, media das estacoes, 1 h (~1 ano)
+ *   irr_60min.json            irradiacao no plano, media das estacoes, 1 h (~1 ano), do DATALOGGER (media das medias de 10 min)
  *   ons_restricao_all.json    limitacao do operador por meia hora (~1 dia de atraso)
  *   corte_gemeo.json          quais meses tem o corte apurado pela referencia do operador
- *   irr_plano_30min.json      as AMOSTRAS de 30 min da irradiacao (so para o dia em meias horas)
+ *   irr_plano_30min.json      a irradiacao media de cada meia hora [T, T+30) (so para o dia em meias horas), do DATALOGGER
+ *
+ * 🔴 FONTE DA IRRADIACAO = DATALOGGER DAS ESTACOES (lote fonte-pr-logger, 19/10/2026, regra do humano). Os dois blobs de
+ * irradiancia declaram `fonte_estacao`; outra fonte para o gerador (lib-pr, confereFonte). Cada linha publicada leva
+ * `irr_fonte`, e a linha calculada com a irradiancia antiga (amostra do SCADA, sem a marca) e refeita em lotes de LOTE_MIGRA
+ * dias por rodada, dos recentes para tras (migracao por MARCA).
  *
  * Publica tambem pr_hora.json: o dia em meias horas [T, T+30), para o painel descer ao dia escolhido. A conta e a
- * mesma do dia (lib-pr.js, prMeias); a irradiacao da meia hora e o TRAPEZIO das amostras T e T+30, porque a estacao
- * amostra no instante e o medidor e o operador integram a meia hora. Guarda: a soma das meias horas fecha com o dia.
+ * mesma do dia (lib-pr.js, prMeias); a irradiacao da meia hora e a MEDIA do intervalo medida pelo datalogger, direta: a mesma
+ * janela do medidor e do operador. (Ate 19/10/2026 era o trapezio das amostras do SCADA em T e T+30, que so vale para amostra.)
+ * Guarda: a soma das meias horas fecha com o dia.
  *
- * O dia so fecha quando a irradiacao chega (export das estacoes, D-1): a energia e fresca, o PR nao
+ * O dia so fecha quando a irradiacao chega (datalogger das estacoes, D-1): a energia e fresca, o PR nao
  * pode ser mais fresco que a irradiacao. Acumulativo: dia ja publicado e completo nao e refeito, salvo
  * os ultimos REFAZ_DIAS (o operador e as estacoes corrigem dias recentes).
  *
@@ -31,16 +37,21 @@ const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
 const REFAZ_DIAS = Number(process.env.PR_REFAZ || 5);
 const INICIO = process.env.PR_INICIO || '';   /* vazio: desde o primeiro dia com irradiacao por hora */
 const LOTE_MEIAS = Number(process.env.PR_LOTE_MEIAS || 60);   /* dias sem meia hora preenchidos por rodada */
+/* dias publicados com a irradiancia de OUTRA fonte (sem `irr_fonte` = a amostra do SCADA) refeitos por rodada, dos recentes para tras.
+   ~4 MB de medidor por dia: 120 dias = ~480 MB numa rodada de 15 min; o historico de 365 dias fecha em 4 rodadas (~4 h de cron). */
+const LOTE_MIGRA = Number(process.env.PR_LOTE_MIGRA || 120);
 
 /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira 'HTTP 404 <nome>' (a ausencia
    que os chamadores testam); o que a lib estoura (403, 409, 5xx, rede, e o 404 de conteiner sumido) sai sem casar com /HTTP 404/,
    para nunca virar "primeira rodada" e regravar o acumulado do zero. */
 const LD = require('./lib-le-dados');
 const naoE404 = (e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); };
-function puxa(url) {
-  /* 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`); a mensagem do 404 e a mesma */
+function puxa(url, semCopia) {
+  /* 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`); a mensagem do 404 e a mesma.
+     `semCopia` (o dia velho baixado so pela migracao da fonte da irradiancia): direto, sem copia em disco — senao ~1,4 GB de dias
+     fechados iriam para o cache do Actions e seriam restaurados em toda rodada por 4 dias. */
   const LB = require('./lib-le-blob');
-  if (LB.ALVO.test(url)) return LB.bytes(url, { 'Accept-Encoding': 'gzip' }).catch(naoE404).then((b) => {
+  if (LB.ALVO.test(url) && !semCopia) return LB.bytes(url, { 'Accept-Encoding': 'gzip' }).catch(naoE404).then((b) => {
     if (b == null) throw new Error('HTTP 404 ' + url.split('/').pop());
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     try { return JSON.parse(b.toString('utf8').replace(/^\uFEFF/, '')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
@@ -86,7 +97,8 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
      `leituras_travadas`) e refeito, mesmo fora dos ultimos REFAZ_DIAS — o PR publicado dele saiu com a irradiacao errada
      (23/09/2026: 79,92 % com a manha do M5 a 0,26 W/m2). Sem o campo (solarimetria antiga), nada muda. */
   const travDias = new Set(((iu && iu.leituras_travadas) || []).map((t) => t.dia));
-  const sM = L.amostrasIrr(irr30.serie, 'gti_w_Complexo'), impM = L.impedidaMeias(ons.consolidado);
+  L.confereFonte(irr, 'irr_60min.json'); L.confereFonte(irr30, 'irr_plano_30min.json');   // lote fonte-pr-logger: so o datalogger
+  const sM = L.irrMeias(irr30.serie, 'gti_w_Complexo'), impM = L.impedidaMeias(ons.consolidado);
   if (!sM.size) throw new Error('irr_plano_30min sem a coluna gti_w_Complexo: formato mudou?');
   const gH = L.irradiacaoHoras(irr.serie);
   const op = L.operadorHoras(ons.consolidado);
@@ -99,6 +111,18 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const primeiroIrr = chaves[0].slice(0, 10), ultimoIrr = chaves[chaves.length - 1].slice(0, 10);
   const hoje = hojeLocal(), inicio = INICIO || primeiroIrr;
   const velhos = new Map(((ant && ant.dias) || []).map(d => [d.dia, d]));
+  /* 🔴 A MIGRACAO DA FONTE DA IRRADIACAO (lote fonte-pr-logger): o dia publicado em qualquer dos tres blobs com `irr_fonte` diferente
+     do datalogger e refeito nos tres, LOTE_MIGRA dias por rodada, dos mais recentes para tras. */
+  const velhaFonte = (x) => !!x && x.irr_fonte !== L.IRR_FONTE;
+  const migra = new Set();
+  { const cand = new Set();
+    for (const d of velhos.values()) if (velhaFonte(d)) cand.add(d.dia);
+    for (const d of (antM && antM.dias) || []) if (velhaFonte(d)) cand.add(d.dia);
+    for (const v of Object.values((antU && antU.entidades) || {})) for (const d of v.dias || []) if (velhaFonte(d)) cand.add(d.dia);
+    const ord = [...cand].sort().reverse();
+    ord.slice(0, LOTE_MIGRA).forEach((d) => migra.add(d));
+    console.log('migracao da irradiancia para o ' + L.IRR_FONTE + ': ' + cand.size + ' dia(s) com a fonte antiga · ' + migra.size + ' refeito(s) nesta rodada'
+      + (cand.size > migra.size ? ' · ' + (cand.size - migra.size) + ' na proxima' : '')); }
   const limiteRefaz = new Date(Date.parse(hoje + 'T00:00:00Z') - REFAZ_DIAS * 86400e3).toISOString().slice(0, 10);
 
   /* 🔴 O DIA QUE O OPERADOR REVISOU DEPOIS DE PUBLICADO (PROMOVER ref-parcela-corte, 11/10/2026; a regra `revisto` que o
@@ -113,7 +137,7 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const alvo = diasEntre(inicio, ultimoIrr).filter(d => {
     const v = velhos.get(d);
     return !v || d >= limiteRefaz || v.pr_pct == null || (v.pr_corrigido_pct == null && apurados.has(d.slice(0, 7))) || travDias.has(d)
-      || revistoConj(d, v);
+      || revistoConj(d, v) || migra.has(d);
   });
   { const rev = diasEntre(inicio, ultimoIrr).filter(d => d < limiteRefaz && velhos.get(d) && revistoConj(d, velhos.get(d)));
     if (rev.length) console.log('pr do conjunto: ' + rev.length + ' dia(s) refeito(s) pela revisao do operador: ' + rev.join(', ')); }
@@ -123,7 +147,7 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const alvoSet = new Set(alvo);
   /* o que falta entra em LOTES, dos mais recentes para tras: a primeira rodada baixaria ~180 dias do medidor, e o job do
      executivo tem 15 min para tudo. Com o cron de 15 rodadas por dia, o historico fecha no mesmo dia. */
-  const faltam = diasEntre(inicioM, ultimoIrr).filter(d => !alvoSet.has(d) && !velhosM.has(d)).reverse().slice(0, LOTE_MEIAS);
+  const faltam = diasEntre(inicioM, ultimoIrr).filter(d => !alvoSet.has(d) && (!velhosM.has(d) || migra.has(d))).reverse().slice(0, LOTE_MEIAS);
   const alvoM = diasEntre(inicioM, ultimoIrr).filter(d => alvoSet.has(d)).concat(faltam).sort();
   const baixar = [...new Set([...alvo, ...alvoM])].sort();
   console.log('irradiacao', primeiroIrr, 'a', ultimoIrr, '·', alvo.length, 'dias a calcular ·', velhos.size, 'ja publicados ·', alvoM.length, 'dias em meias horas'
@@ -149,7 +173,7 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const revisto = (d, v) => ENT.some((u) => v[u] && v[u].impedida_mwh != null && corteU.has(d + '|' + u)
     && Math.abs(v[u].impedida_mwh - corteU.get(d + '|' + u)) > 0.0006);
   const precisaU = (d) => { const v = velhosU.get(d); if (!v) return false;
-    return d >= limiteRefaz || travDias.has(d) || revisto(d, v)
+    return d >= limiteRefaz || travDias.has(d) || revisto(d, v) || migra.has(d)
       || ENT.some((u) => !v[u] || v[u].pr_pct == null || (v[u].pr_corrigido_pct == null && corteU.has(d + '|' + u))); };
   const alvoU = diasEntre(inicio, ultimoIrr).filter(precisaU)
     .concat(diasEntre(inicio, ultimoIrr).filter((d) => !velhosU.has(d)).reverse().slice(0, LOTE_UFV)).sort();
@@ -164,20 +188,24 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const novosU = new Map();
 
   const novos = new Map(), novosM = new Map(), alvoMSet = new Set(alvoM);
+  /* o dia que so entra pela migracao (fora dos ultimos REFAZ_DIAS, sem outro motivo): o medidor vem sem copia em disco */
+  const soMigra = (d) => migra.has(d) && d < limiteRefaz && velhos.get(d) && !travDias.has(d) && !revistoConj(d, velhos.get(d));
   let i = 0, falhas = 0;
   async function trabalha() {
     while (i < baixar.length) {
       const dia = baixar[i++];
       let hist = null;
-      try { hist = await puxa(BASE + 'hist/way2_' + dia + '.json'); }
+      try { hist = await puxa(BASE + 'hist/way2_' + dia + '.json', soMigra(dia)); }
       catch (e) { if (!/HTTP 404/.test(e.message)) { falhas++; throw e; } }
       if (alvoSet.has(dia)) novos.set(dia, Object.assign(L.prDia(dia, hist ? L.energiaHoras(hist) : new Map(), gH, op, apurados),
-        { op_impedida_mwh: Math.round(opDia(dia) * 1000) / 1000 }));   // a impressao da revisao do operador (ver `revistoConj`)
-      if (alvoMSet.has(dia)) novosM.set(dia, L.prMeias(dia, hist ? L.energiaMeias(hist) : new Map(), sM, impM, novos.get(dia) || velhos.get(dia)));
+        { op_impedida_mwh: Math.round(opDia(dia) * 1000) / 1000, irr_fonte: L.IRR_FONTE }));   // a impressao da revisao do operador (ver `revistoConj`)
+      if (alvoMSet.has(dia)) novosM.set(dia, Object.assign(L.prMeias(dia, hist ? L.energiaMeias(hist) : new Map(), sM, impM, novos.get(dia) || velhos.get(dia)),
+        { irr_fonte: L.IRR_FONTE }));
       if (alvoUSet.has(dia)) {
         const eU = hist ? L.energiaHorasUfv(hist) : new Map(), o = {};
         for (const u of ENT) o[u] = L.prDiaUfv(dia, eU.get(u) || new Map(), gU.get(u), placaMwp[u], cortadoDe(u, dia));
         for (const [g, membros] of Object.entries(L.GRUPOS)) o[g] = L.prDiaGrupo(dia, membros.map((u) => o[u]));
+        for (const e of Object.keys(o)) o[e].irr_fonte = L.IRR_FONTE;
         novosU.set(dia, o);
       }
     }
@@ -187,13 +215,13 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
   const dias = diasEntre(inicio, ultimoIrr).map(d => novos.get(d) || velhos.get(d)).filter(Boolean);
   const meses = L.prMeses(dias);
   const saida = {
-    gerado_em: new Date().toISOString(), esquema: 1,
+    gerado_em: new Date().toISOString(), esquema: 2, irr_fonte: L.IRR_FONTE,
     grandeza: 'Performance Ratio do conjunto no ponto de conexao (230 kV)',
     formula: 'PR = energia injetada / (potencia CC de placa x irradiacao no plano / 1 kW/m2)',
     formula_corrigido: 'PR corrigido = (energia injetada + energia impedida pelo operador) / (potencia CC de placa x irradiacao no plano / 1 kW/m2)',
     p_cc_mwp: L.P_CC_MWP,
     energia: 'injetada no 230 kV: soma de TR1 e TR2 por instante de 5 min, so a parte positiva (sem o consumo noturno)',
-    irradiacao: 'no plano dos modulos, media das estacoes do parque, por hora',
+    irradiacao: 'no plano dos modulos, media das estacoes do parque, por hora, medida pelo datalogger das estacoes (media das medias de 10 min)',
     impedida: 'Sum max(0, referencia - geracao) x 0,5 h nas meias horas com limitacao, a mesma do executivo; estimativa; so nos meses em que a referencia do operador vale',
     meses_corrigido: [...apurados].sort(),
     sem_correcao_de_temperatura: 1,
@@ -215,12 +243,12 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
     fechados++;
   }
   const saidaM = {
-    gerado_em: saida.gerado_em, esquema: 1,
+    gerado_em: saida.gerado_em, esquema: 2, irr_fonte: L.IRR_FONTE,
     grandeza: 'Performance Ratio do conjunto no 230 kV, por meia hora',
     p_cc_mwp: L.P_CC_MWP, passo_min: 30,
     janela: 'a meia hora [T, T+30), T e a posicao no vetor de 48 (00:00, 00:30, ...), hora local',
     unidades: { inj: 'MWh na meia hora', irr: 'W/m2 medio na meia hora', imp: 'MWh impedidos na meia hora', pr: '%', prc: '%' },
-    irradiacao: 'trapezio das amostras instantaneas da media das estacoes em T e T+30',
+    irradiacao: 'media do intervalo [T, T+30) da media das estacoes, medida pelo datalogger das estacoes (sem trapezio)',
     criterios: { piso_irr_w_m2: L.PISO_IRR_MEIA, teto_pr_pct: L.TETO_PR, corrigido: 'so no dia em que o PR corrigido do dia existe' },
     desde: diasM.length ? diasM[0].dia : null, ultimo_dia: diasM.length ? diasM[diasM.length - 1].dia : null,
     dias: diasM,
@@ -232,11 +260,11 @@ const diasEntre = (a, b) => { const o = []; for (let t = Date.parse(a + 'T00:00:
     entidades[e] = { dias: de, meses: L.prMesesEnt(de) };
   }
   const saidaU = {
-    gerado_em: saida.gerado_em, esquema: 1,
+    gerado_em: saida.gerado_em, esquema: 2, irr_fonte: L.IRR_FONTE,
     grandeza: 'Performance Ratio por usina e por contrato',
     formula: saida.formula, formula_corrigido: 'PR corrigido = (energia injetada + energia impedida da usina) / (potencia CC da usina x irradiacao da estacao / 1 kW/m2)',
     energia: 'dos circuitos de 34,5 kV de cada usina, por instante de 5 min, so a parte positiva: energia antes da transformacao (a soma das nove fica ~0,3 % acima da do 230 kV); o PR de uma usina nao se compara 1:1 com o do conjunto no 230 kV',
-    irradiacao: 'no plano dos modulos, da estacao da propria usina, por hora',
+    irradiacao: 'no plano dos modulos, da estacao da propria usina, por hora, medida pelo datalogger da estacao',
     impedida: 'o corte diario reconciliado da usina, o mesmo do executivo; estimativa',
     contrato: 'soma da energia das usinas / soma de (potencia CC x irradiacao) de cada uma; o dia do contrato so existe com todas as usinas',
     placa_mwp: placaMwp, grupos: L.GRUPOS,

@@ -9,7 +9,7 @@
  *     - o historico e um CONJUNTO: fundir duas vezes os mesmos dias da o mesmo estado;
  *     - a lista: nuvem de UM dia sobre string sadia nao entra; string a ~43 % por 30 dias entra como fraca, inclusive
  *       quando a hora do pico a leva de 16 a 110 %; morta no ultimo dia entra como morta, com o inicio do trecho.
- * B · o PRODUTO (`strings_alarme.json`, `pvstr_entradas.json`, `perdas_inv.json`, `pvstr_hora_<u>`, `pvstr_str_<u>_<ts>`):
+ * B · o PRODUTO do supervisorio (`strings_alarme_scada.json`, `pvstr_entradas.json`, `perdas_inv_scada.json`, `pvstr_hora_<u>`, `pvstr_str_<u>_<ts>`):
  *     - toda string da lista e real no historico, e a classe e coerente com o limiar;
  *     - nenhum inversor-dia aponta como "mais fraca" uma entrada que nao e real (a prova do fim do falso alarme);
  *     - DUAS ROTAS: a menor razao do arquivo por eletrocentro, em cada meia hora, e a `sm` da curva do inversor, e o
@@ -102,7 +102,7 @@ const tres = ['2026-09-01', '2026-09-02', '2026-09-03'];
   }
 
   console.log('B · o produto' + (process.env.LOCAL_DIR ? ' (saida local)' : ''));
-  const al = await le('strings_alarme.json');
+  const al = await le('strings_alarme_scada.json');
   const en = await le('pvstr_entradas.json');
   const I = STR.indiceReais(en.serie);
   ok(Array.isArray(al.serie) && Array.isArray(al.resumo) && al.criterio, 'strings_alarme tem serie, resumo e criterio');
@@ -116,7 +116,7 @@ const tres = ['2026-09-01', '2026-09-02', '2026-09-03'];
   ok(!classeErrada, 'classe coerente com o limiar em todas (' + classeErrada + ' incoerentes)');
   for (const r of al.resumo) ok(Math.abs(r.placa - r.strings_com_corrente) <= 0.01 * r.placa, r.ufv + ': ' + r.strings_com_corrente + ' strings com corrente contra ' + r.placa + ' de placa');
 
-  const pi = await le('perdas_inv.json');
+  const pi = await le('perdas_inv_scada.json');
   let aponta = 0, comN = 0, pontoFraco = 0;
   for (const l of pi.serie) {
     for (const [c, g] of [['str_min_n', 's'], ['mppt_min_n', 'm']]) {

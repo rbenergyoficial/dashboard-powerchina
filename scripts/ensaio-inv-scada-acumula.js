@@ -55,7 +55,7 @@ function roda(janela) {
   const le = (n) => { let b = fs.readFileSync(path.join(SAI, n));
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     return JSON.parse(b.toString('utf8')); };
-  return { log: out, pub: le('inv_scada.json'), hist: le('inv_scada_hist.json') };
+  return { log: out, pub: le('inv_scada_supervisorio.json'), hist: le('inv_scada_hist.json') };
 }
 
 const falhas = [];

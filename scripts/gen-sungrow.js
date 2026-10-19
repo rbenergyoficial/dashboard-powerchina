@@ -4,13 +4,16 @@
  *
  * O logger da Sungrow registra a cada 5 minutos o que o export do SCADA traz a cada 30, e mais: codigo de falha, estado
  * de operacao, eficiencia, horarios de partida e parada, o PID de cada eletrocentro e o proprio logger (setpoint do
- * arranjo, inversores na rede, PT100). Cobre o M1 e o M5 a M9 (o M2, o M3 e o M4 nao estao na pasta). Auditoria e
- * decisoes: livro do pipeline, secao do logger Sungrow (03/10/2026).
+ * arranjo, inversores na rede, PT100). Cobre as nove usinas: a pasta tem o M2, o M3 e o M4 desde 05/10/2026, e o historico
+ * tem os 1.155 inversores desde 12/04/2026 (medido no sg_disp_dia em 19/10/2026). Auditoria e decisoes: livro do pipeline,
+ * secao do logger Sungrow (03/10/2026).
  *
  * 🔴 A PASTA NAO E POSICAO. No M1 os grupos de inversores dos TS5 e TS6 estao trocados nas pastas, e o M9/TS1 01-05 esta
- *    na pasta do TS2. Cada inversor e identificado pelo CONTADOR DE VIDA: no fim do dia ele e IGUAL (a 0,5 kWh) ao
- *    `ENERGIA TOTAL GERADA` do mesmo inversor no export do SCADA. Medido: 594 de 594, sem ambiguidade. Inversor que nao
- *    casa (trocado antes da janela do export) fica fora dos produtos por posicao e e contado em `sem_posicao`.
+ *    na pasta do TS2. Cada inversor foi identificado pelo CONTADOR DE VIDA: no fim do dia ele e IGUAL (a 0,5 kWh) ao
+ *    `ENERGIA TOTAL GERADA` do mesmo inversor no export do SCADA. Medido: 594 de 594, sem ambiguidade. A identificacao fica
+ *    guardada em `sg_ident.json` e vale para sempre. O export do SCADA parou em 14/10/2026: o inversor que chega numa troca
+ *    depois disso assume a POSICAO VAGA do mesmo logger, quando ela e unica (lib-sungrow-disp, posicaoPelaVaga; fonte-inv-logger,
+ *    19/10/2026). Inversor que nao casa por nenhuma das duas regras fica fora dos produtos por posicao e e contado em `sem_posicao`.
  * 🔴 INCREMENTAL. O historico tem 3,9 GB de zip e 38 GB de CSV; cada rodada le so os zips novos ou mudados (nome +
  *    tamanho, no manifesto `sg_lidos.json`) e funde no historico interno (`sg_hist.json`). REFAZER=1 relê tudo.
  *    No mesmo inversor-dia vindo de dois zips (a PowerChina renomeia e regrava os lotes), fica o de mais amostras.
@@ -314,6 +317,23 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   }
   for (const sn of Object.keys(busca)) if (ident[sn] || !H.inv[sn]) delete busca[sn];
   if (lidosFundo) console.log('  busca funda: ' + lidosFundo + ' export(s) mais velhos lidos');
+  /* -------- a POSICAO VAGA NO MESMO LOGGER (fonte-inv-logger, 19/10/2026): o export do SCADA parou em 14/10/2026, e o inversor que
+     entra numa troca depois disso nao casa com contador nenhum. Quem ainda esta sem posicao assume a posicao vaga do mesmo logger,
+     quando ela e unica e ele e o unico candidato (D.posicaoPelaVaga). A atribuicao e REVISTA a cada rodada: se o dono volta a ter
+     leitura a partir do dia da atribuicao, ela cai e o caso volta a ser julgado -------- */
+  const dupVaga = (novo, dono, d) => D.dupContador(H.inv[novo].dias, H.inv[dono].dias, d);
+  for (const [sn, a] of Object.entries(ident)) {
+    if (a.metodo !== D.METODO_VAGA) continue;
+    const dono = a.dono && H.inv[a.dono];
+    if (!H.inv[sn] || !dono || Object.keys(dono.dias).some((d) => d >= a.d)) {
+      console.log('  ⚠️ posicao vaga revista: ' + sn + ' deixa ' + a.pos + ' (o dono ' + a.dono + ' voltou a ler, ou saiu do historico)');
+      delete ident[sn];
+    }
+  }
+  { const V = D.posicaoPelaVaga(H.inv, ident, dupVaga);
+    for (const [sn, a] of Object.entries(V.atribui)) { ident[sn] = a; delete busca[sn];
+      console.log('  posicao vaga no mesmo logger: ' + sn + ' -> ' + a.pos + ' a partir de ' + a.d + ' (dono anterior ' + a.dono + ')'); }
+    if (V.ambiguos.length) console.log('  ⚠️ posicao vaga AMBIGUA (fica sem posicao): ' + V.ambiguos.map((x) => x.sn ? x.sn + ' em ' + x.vagas.join('|') : x.pos + ' para ' + x.novos.join('|')).join(' · ')); }
   // uma posicao com DOIS numeros de serie e troca: cada um vale no seu periodo (o mais novo a partir do primeiro dia dele)
   const porPos = new Map();
   for (const [sn, a] of Object.entries(ident)) (porPos.get(a.pos) || porPos.set(a.pos, []).get(a.pos)).push(sn);
