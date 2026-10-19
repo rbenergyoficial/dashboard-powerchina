@@ -104,6 +104,13 @@ jobs:
         if: always()
         run: node scripts/ensaio-le-dados.js
 
+      # O estado da malha de dados para o portal admin (gen-malha-estado.js, lote malha-estado): a tabela do contrato, o
+      # estado sem registro que nao vira ok, o teste que nao vence o diario, nada do log da ponte nem nome de conteiner/blob
+      # na saida, prazo da agenda e 404 de conteiner que estoura. O mesmo ensaio roda antes do gerador no malha-estado.yml.
+      - name: Ensaio · o estado da malha de dados (gen-malha-estado)
+        if: always()
+        run: node scripts/ensaio-malha-estado.js
+
       # O substituto do fluxo "Way2 → Azure Blob Sync" (gen-way2-mes.js; PROMOVER pa-way2-mes-sombra / pa-way2-mes): as tres
       # chamadas do fluxo, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.
       - name: Ensaio · energia e demanda do mes da Way2 (substituto do fluxo)

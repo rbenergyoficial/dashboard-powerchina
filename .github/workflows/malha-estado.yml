@@ -1,0 +1,38 @@
+name: Malha de dados (estado para o portal admin)
+
+# O estado da malha de dados para a pagina Malha de Dados do Portal Corporativo (lote malha-estado, 19/10/2026):
+# estado da ponte (cofre, so leitura), frescor do que o portal le contra a agenda do relogio, e as execucoes do Actions.
+# Grava UM arquivo, no conteiner privado do portal admin. Minuto quebrado de proposito; o relogio dispara pela agenda.
+#
+# O ensaio roda ANTES do gerador e o gerador so roda se ele passar: e ele que prova que o estado sem registro nao vira
+# ok, que o arquivo de teste nao vence o diario, que o log da ponte e nome de conteiner/blob nao chegam a saida, que
+# fonte sem prazo e o 404 de conteiner estouram. Sem rede e sem segredo (o Azure e o GitHub sao simulados).
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '4,19,34,49 * * * *'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: malha-estado
+  cancel-in-progress: false
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - name: Ensaio · as regras do estado da malha (sem rede)
+        run: node scripts/ensaio-malha-estado.js
+      - name: Gerar o estado da malha
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/gen-malha-estado.js
