@@ -62,7 +62,7 @@
  *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio.
  */
 const zlib = require('zlib');
-const https = require('https');
+const LD = require('./lib-le-dados');
 const { disponibilidade, completaDisponibilidade, janelaContrato, dispContrato } = require('./lib-disponibilidade.js');
 const { casaCru } = require('./lib-inversor-cru.js');
 const STR = require('./lib-strings.js');
@@ -424,20 +424,15 @@ const soma = (a) => a.reduce((s, x) => s + x, 0);
 const media = (a) => (a.length ? soma(a) / a.length : null);
 
 // ---------- entrada ---------------------------------------------------------------------------
-function puxa(url) {
-  return new Promise((ok, ko) => {
-    const u = new URL(url);
-    https.get({ host: u.host, path: u.pathname, family: 4,
-      headers: { 'accept-encoding': 'gzip' } }, (r) => {
-      if (r.statusCode !== 200) { ko(new Error(url + ' -> HTTP ' + r.statusCode)); return; }
-      const c = []; r.on('data', (d) => c.push(d));
-      r.on('end', () => {
-        let b = Buffer.concat(c);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); }
-      });
-    }).on('error', ko);
-  });
+// 🔐 Fase 2 (18/10/2026): o transporte e o `lib-le-dados.js` (com credencial; o contêiner `dados` deixa de ser publico). So o
+//    404 do PROPRIO blob (BlobNotFound) sai como "HTTP 404" e com a marca `naoExiste`; contêiner sumido, 403, 409, 5xx e rede
+//    estouram com a mensagem da lib — que tambem pode conter "HTTP 404" e por isso o `leAnterior` le a MARCA, nao o texto.
+async function puxa(url) {
+  const x = await LD.pede(url, { 'accept-encoding': 'gzip' });
+  if (x.status !== 200) { const e = new Error(url + ' -> HTTP ' + x.status); if (x.status === 404) e.naoExiste = true; throw e; }
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 }
 
 async function listaArquivos() {
@@ -626,7 +621,7 @@ async function leAnterior(nome) {
     _anterior.set(nome, s);
     return s;
   } catch (e) {
-    if (/HTTP 404/.test(e.message)) { _anterior.set(nome, []); return []; }
+    if (e.naoExiste) { _anterior.set(nome, []); return []; }
     throw new Error('nao consegui ler o ' + nome + ' publicado (' + e.message + '). Abortando: '
       + 'regravar sem o historico apagaria o que ja foi acumulado.');
   }

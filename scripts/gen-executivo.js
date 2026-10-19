@@ -20,7 +20,7 @@
  * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
 const rot = require('./lib-rotulos.js');
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial (o https do Open-Meteo passa por ela, direto)
 const zlib = require('zlib');
 // rateio MUST reaproveitado do arquivador — ver nota em gen-way2-hist.js
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
@@ -256,21 +256,15 @@ function getJSON(url) {
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
   });
-  return new Promise((res, rej) => {
-    https.get(url, x => {
-      if (x.statusCode !== 200) { x.resume(); return rej(new Error(x.statusCode + ' ' + url)); }
-      const partes = [];
-      x.on('data', c => partes.push(c));
-      x.on('end', () => {
-        try {
-          let b = Buffer.concat(partes);
-          if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-          // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os
-          // que vem crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
-          res(JSON.parse(b.toString('utf8').replace(/^﻿/, '')));
-        } catch (e) { rej(e); }
-      });
-    }).on('error', rej);
+  // Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; o Open-Meteo passa direto). So o 404 do proprio blob
+  // vira '404 <url>' (o que os chamadores tratam como ausente); 403/409/5xx/rede estouram com a mensagem da lib.
+  return LD.pede(url).then((x) => {
+    if (x.status !== 200) throw new Error(x.status + ' ' + url);
+    let b = x.buf;
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    // replace do BOM: os blobs que NOS escrevemos saem de JSON.stringify e nao tem, mas os
+    // que vem crus da API da Way2 (hist/way2_DIA.json) comecam com ﻿ e quebram o JSON.parse.
+    return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
   });
 }
 // 🔴 CAMPO QUE VIRA TEXTO PUBLICO. Alguns campos do blob sao interpolados direto em

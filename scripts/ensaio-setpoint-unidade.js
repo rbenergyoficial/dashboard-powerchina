@@ -25,7 +25,7 @@
  * uso: node ensaio-setpoint-unidade.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 
 const URL = 'https://rbenergydata.blob.core.windows.net/dados/perdas_inv.json';
@@ -35,18 +35,14 @@ const TETO_KW = 352;             // 110% da nominal — a sobrecarga configurada
 let mau = 0;
 const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 
-const le = () => new Promise((ok, erro) => {
-  https.get(URL, { family: 4 }, (r) => {
-    /* só o 404 é ausência; qualquer outra falha estoura, em vez de virar "nada a conferir" */
-    if (r.statusCode !== 200) { r.resume(); erro(new Error('HTTP ' + r.statusCode)); return; }
-    const c = [];
-    r.on('data', (d) => c.push(d));
-    r.on('end', () => {
-      try { let b = Buffer.concat(c); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        ok(JSON.parse(b.toString('utf8'))); } catch (e) { erro(e); }
-    });
-  }).on('error', erro);
-});
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+const le = async () => {
+  const r = await LD.pede(URL);
+  /* só o 404 é ausência; qualquer outra falha estoura, em vez de virar "nada a conferir" */
+  if (r.status !== 200) throw new Error('HTTP ' + r.status);
+  let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
+};
 
 const num = (x) => typeof x === 'number' && isFinite(x);
 const q = (v, p) => v[Math.floor(v.length * p)];

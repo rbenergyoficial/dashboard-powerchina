@@ -8,18 +8,19 @@
 //     guarda esta so no sinal e passa. Depois que ela encheu uma vez, janela curta de novo REPROVA, e dia aceito so pelo
 //     sinal tambem;
 //   · os dias reais do mes sao julgados com a mesma funcao do gerador (GL.julgaDias), e a decisao de cada um e impressa.
-const https = require('https'), zlib = require('zlib');
+const zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const GL = require('./lib-guarda-liquida.js');
 const BASE = process.env.BASE_DADOS ? null : 'https://rbenergydata.blob.core.windows.net/dados/';
 const PT = { 6368: 'M1', 6369: 'M2', 6373: 'M3', 6374: 'M4', 6375: 'M5', 6376: 'M6', 6215: 'M7', 6378: 'M8', 6219: 'M9' };
 
 const pega = (nome) => {
   if (!BASE) return Promise.resolve(JSON.parse(require('fs').readFileSync(require('path').join(process.env.BASE_DADOS, nome), 'utf8').replace(/^﻿/, '')));
-  return new Promise((s, f) => https.get(BASE + nome, { family: 4 }, (r) => {
-    const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => {
-      if (r.statusCode !== 200) return f(new Error(String(r.statusCode)));
-      let x = Buffer.concat(b); if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
-      try { s(JSON.parse(x.toString('utf8').replace(/^﻿/, ''))); } catch (e) { f(e); } }); }).on('error', f));
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`) */
+  return LD.pede(BASE + nome).then((r) => {
+    if (r.status !== 200) throw new Error(String(r.status));
+    let x = r.buf; if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
+    return JSON.parse(x.toString('utf8').replace(/^﻿/, '')); });
 };
 const porDia = (j) => { const o = {};
   (j.dados || []).forEach((d) => { const u = PT[d.pontoId]; if (!u) return;

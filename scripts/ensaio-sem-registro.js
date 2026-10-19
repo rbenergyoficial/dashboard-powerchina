@@ -19,7 +19,7 @@
  * uso: node ensaio-sem-registro.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -100,13 +100,12 @@ const doTs = (d, ts) => [...d.inv.values()].filter((o) => o.ts === ts);
   }
 
   console.log('\nB · o produto publicado');
-  const le = (nome) => new Promise((res, rej) => {
-    https.get('https://rbenergydata.blob.core.windows.net/dados/' + nome, { family: 4 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); rej(new Error(nome + ': HTTP ' + r.statusCode)); return; }
-      const c = []; r.on('data', (x) => c.push(x));
-      r.on('end', () => { try { let b = Buffer.concat(c); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); res(JSON.parse(b.toString('utf8'))); } catch (e) { rej(e); } });
-    }).on('error', rej);
-  });
+  /* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+  const le = async (nome) => {
+    const r = await LD.pede('https://rbenergydata.blob.core.windows.net/dados/' + nome);
+    if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+    let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8'));
+  };
   const p = await le('perdas_30min.json');
   const idx = new Map(p.serie.map((l) => [l.t, l]));
   const primeiro = p.serie.length ? p.serie[0].t.slice(0, 10) : '9999';

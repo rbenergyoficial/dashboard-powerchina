@@ -34,7 +34,7 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial (o https saiu: era so o leitor do puxa)
 const { entradas } = require('./lib-zip.js');
 const S = require('./lib-sungrow.js');
 const D = require('./lib-sungrow-disp.js');
@@ -90,16 +90,14 @@ async function listaRaw() {
   return out;
 }
 
-function puxa(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { family: 4, headers: { 'accept-encoding': 'gzip' } }, (r) => {
-      if (r.statusCode === 404) { r.resume(); ok(null); return; }
-      if (r.statusCode !== 200) { r.resume(); ko(new Error(url + ' -> HTTP ' + r.statusCode)); return; }
-      const c = []; r.on('data', (x) => c.push(x));
-      r.on('end', () => { try { let b = Buffer.concat(c); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
-  });
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do PROPRIO blob (BlobNotFound) devolve null, a
+   "primeira rodada"; o 404 de contêiner sumido, 403, 409, 5xx, rede e timeout estouram (o leAnterior aborta). */
+async function puxa(url) {
+  const x = await LD.pede(url, { 'accept-encoding': 'gzip' });
+  if (x.status === 404) return null;
+  if (x.status !== 200) throw new Error(url + ' -> HTTP ' + x.status);
+  let b = x.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 }
 async function leAnterior(nome) {
   if (process.env.LOCAL_OUT_DIR) {

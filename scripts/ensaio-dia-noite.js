@@ -279,7 +279,7 @@ ontemCaso('ontem sem uma das 12 entidades (M9): aviso, nao fecha', execComOntem(
 ontemCaso('snapshot de ontem que perdeu energia no passado: aviso, nao fecha', execComOntem(), { [ONTEM]: snapshotDe(ONTEM, 1440, 1440, (m, p) => (m === T(12, 0) ? 0 : p)) },
   { log: /::warning::ontem \(2026-10-07\) NAO fechado: dia em curso ENCOLHEU no trecho ja publicado/ });
 ontemCaso('ontem sem snapshot (404) fica', execComOntem(), {}, { log: /nao existe/ });
-ontemCaso('HTTP 500 no snapshot de ontem estoura', execComOntem(), { [ONTEM]: { status: 500 } }, { estoura: /ERRO HTTP 500 em .*hist\/way2_2026-10-07/ });
+ontemCaso('HTTP 500 no snapshot de ontem estoura', execComOntem(), { [ONTEM]: { status: 500 } }, { estoura: /ERRO (HTTP 500 em|SDK 500) .*hist\/way2_2026-10-07/ });
 // a virada do mes: hoje 01/11, ontem 31/10 parcial com o snapshot completo — fica para a rodada completa (a manchete do mes fechado)
 (() => {
   const H = '2026-11-01', O = '2026-10-31';
@@ -322,7 +322,7 @@ const leit = (nome, leitura, deveFalhar, porque) => {
   else if (!deveFalhar && r.status !== 0) f.push('leitura · ' + nome + ': devia sair 0 (ausencia), saiu ' + r.status + ' (' + motivo(r) + ')');
 };
 leit('snapshot ainda nao existe (404)', { falta: 1 }, false);
-leit('HTTP 500 na leitura do snapshot', { status: 500 }, true, /ERRO HTTP 500 em .*hist\/way2_/);
+leit('HTTP 500 na leitura do snapshot', { status: 500 }, true, /ERRO (HTTP 500 em|SDK 500) .*hist\/way2_/);
 leit('snapshot com JSON quebrado', { cru: '{"dados": [' }, true, /ERRO .*JSON/);
 
 if (f.length) { console.error('REPROVADO (' + path.basename(GEN) + '):\n  ' + f.join('\n  ')); process.exit(1); }

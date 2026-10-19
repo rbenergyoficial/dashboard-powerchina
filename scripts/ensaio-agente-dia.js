@@ -34,7 +34,8 @@
  * Sem segredo: lê só blob público.
  */
 'use strict';
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const LOCAL = process.env.LOCAL_DIR || process.env.FONTES_DIR || '';   /* no job: o produto que o gerador deste job gravou (FONTES_DIR) */
 const U9 = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
@@ -48,12 +49,10 @@ const ok = (c, m) => { if (c) console.log('  ✓ ' + m); else { falhas++; consol
 const deJson = (b) => JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8').replace(/^﻿/, ''));
 function get(nome, local) {
   if (local) return Promise.resolve(deJson(fs.readFileSync(path.join(local, nome))));
-  return new Promise((res, rej) => {
-    const req = https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 180000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode + ' em ' + nome)); }
-      const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => { try { res(deJson(Buffer.concat(c))); } catch (e) { rej(e); } });
-    });
-    req.on('timeout', () => req.destroy(new Error('sem resposta em 180 s: ' + nome))); req.on('error', rej);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); como antes, toda resposta que nao e 200 reprova, o 404 tambem */
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + nome);
+    return deJson(x.buf);
   });
 }
 const r2 = (x) => Math.round(x * 100) / 100, r3 = (x) => Math.round(x * 1000) / 1000;

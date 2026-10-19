@@ -319,23 +319,18 @@ for (const o of OUTROS) {
 const PRODUTO = process.argv.includes('--produto');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const TOL_MES_GWH = 0.02;   // a do ensaio-pr para a mesma comparacao (impedida x corte apurado, em GWh)
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; BASE_DADOS de outro endereco passa direto) */
 function pega(nome) {
-  const https = require('https'), zlib = require('zlib');
-  return new Promise((ok, ko) => https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return ko(new Error(nome + ': HTTP ' + r.statusCode)); }
-    const ch = []; r.on('data', (d) => ch.push(d));
-    r.on('end', () => { try { let b = Buffer.concat(ch); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); } });
-  }).on('error', ko));
+  return pegaData(nome).then((x) => x.j);
 }
 /* a mesma leitura, devolvendo tambem o last-modified (a safra do arquivo, para a segunda rota do dia retido) */
 function pegaData(nome) {
-  const https = require('https'), zlib = require('zlib');
-  return new Promise((ok, ko) => https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return ko(new Error(nome + ': HTTP ' + r.statusCode)); }
-    const ch = []; r.on('data', (d) => ch.push(d));
-    r.on('end', () => { try { let b = Buffer.concat(ch); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-      ok({ j: JSON.parse(b.toString('utf8')), mod: r.headers['last-modified'] }); } catch (e) { ko(e); } });
-  }).on('error', ko));
+  const LD = require('./lib-le-dados'), zlib = require('zlib');
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((r) => {
+    if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+    let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    return { j: JSON.parse(b.toString('utf8')), mod: r.ultimaMod };
+  });
 }
 /* julga um par (executivo, benchmark); devolve { erros, julgado, comparados } — usado no par real e nos forjados */
 function julgaProduto(E, B, lib) {

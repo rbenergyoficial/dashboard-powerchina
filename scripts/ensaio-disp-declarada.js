@@ -22,7 +22,8 @@
  * exige que cada um faca pelo menos um caso sair do esperado. A fiacao tem as suas contraprovas: o gerador do HEAD de
  * antes do lote e quatro geradores quebrados de jeitos que um texto frouxo deixaria passar (revisor-ensaio, 10/10/2026).
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const PRODUTO = process.argv.includes('--produto');
 const FONTE = path.join(__dirname, 'lib-disp-declarada.js');
 const GERADOR = path.join(__dirname, 'gen-executivo.js');
@@ -41,12 +42,10 @@ if (PRODUTO) {
   const pega = (nome) => {
     if (!/^https?:/.test(BASE)) { const p = path.join(BASE, nome);
       return Promise.resolve({ j: deJson(fs.readFileSync(p)), mod: fs.statSync(p).mtime }); }
-    return new Promise((ok, erro) => {
-      https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-        if (r.statusCode !== 200) { r.resume(); return erro(new Error(nome + ': HTTP ' + r.statusCode)); }
-        const ch = []; r.on('data', (d) => ch.push(d));
-        r.on('end', () => { try { ok({ j: deJson(Buffer.concat(ch)), mod: new Date(r.headers['last-modified']) }); } catch (e) { erro(e); } });
-      }).on('error', erro).on('timeout', function () { this.destroy(new Error(nome + ': tempo esgotado')); });
+    /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; timeout de 120 s na lib); a data do blob vem da lib */
+    return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((x) => {
+      if (x.status !== 200) throw new Error(nome + ': HTTP ' + x.status);
+      return { j: deJson(x.buf), mod: new Date(x.ultimaMod) };
     });
   };
   (async () => {

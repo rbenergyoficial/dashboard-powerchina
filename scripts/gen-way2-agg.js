@@ -27,7 +27,7 @@
  *   REFRESH_DIAS (default 3, mínimo 2). RESOLUCOES (csv de nomes de blob p/ limitar; default os 3).
  */
 const { BlobServiceClient } = require('@azure/storage-blob');
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 
 const CONTAINER = 'dados';
 const BLOB_BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -72,18 +72,8 @@ function bucketKey(data, bucketMin) {
 //    resolucao, tres vezes o mesmo dia) e 304 sem corpo quando o dia nao mudou desde a execucao anterior.
 function fetchBlob(url) {
   if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => (b == null ? null : parseJson(b)));
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (res) => {
-      if (res.statusCode === 404) { res.resume(); return resolve(null); }
-      if (res.statusCode !== 200) { res.resume(); return reject(new Error('HTTP ' + res.statusCode + ' ' + url)); }
-      const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('error', reject);
-      res.on('end', () => { try { resolve(parseJson(Buffer.concat(chunks))); } catch (e) { reject(e); } });
-    });
-    req.on('error', reject);
-    req.setTimeout(FETCH_TIMEOUT, () => req.destroy(new Error('timeout ' + url)));
-  });
+  // Fase 2: o resto pelo transporte da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira null; o resto estoura.
+  return LD.pede(url).then((x) => (x.status === 404 ? null : parseJson(x.buf)));
 }
 
 // Acumula {soma,contagem} de UM arquivo-dia no acumulador (acc: serieKey -> Map(bucketISO->{s,n})).

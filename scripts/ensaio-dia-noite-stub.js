@@ -30,6 +30,20 @@ const falso = {
           downloadToBuffer: async () => fs.readFileSync(arq('blob_' + nome)),
           upload: async (buf) => { fs.writeFileSync(arq('up_' + nome), buf); },
         }),
+        /* Fase 2: com DADOS_STORAGE a lib-le-dados le o `dados` pelo SDK (getBlobClient); serve os MESMOS arquivos que o https.get
+           falso abaixo (url_<nome>, status_<nome>), para o ensaio valer igual nos dois transportes */
+        getBlobClient: (nome) => {
+          const le = () => {
+            const st = arq('status_' + nome), f = arq('url_' + nome);
+            if (fs.existsSync(st)) { const e = new Error('stub ' + nome); e.statusCode = Number(fs.readFileSync(st, 'utf8')); e.code = 'Simulado'; throw e; }
+            if (!fs.existsSync(f)) { const e = new Error('404 em ' + nome); e.statusCode = 404; e.code = 'BlobNotFound'; throw e; }
+            return fs.readFileSync(f);
+          };
+          return {
+            download: async () => { const b = le(); return { etag: '"stub"', lastModified: new Date(agora), readableStreamBody: Readable.from([b]) }; },
+            getProperties: async () => { const b = le(); return { etag: '"stub"', lastModified: new Date(agora), contentLength: b.length }; },
+          };
+        },
       }),
     }),
   },

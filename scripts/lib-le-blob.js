@@ -19,7 +19,7 @@
  * Uso:   const LB = require('./lib-le-blob');   const buf = await LB.bytes(url, { 'Accept-Encoding': 'gzip' });
  *        LB.resumo()   // uma linha no log: da memoria, da copia (304), da rede (200)
  */
-const https = require('https');
+const LD = require('./lib-le-dados');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -69,18 +69,9 @@ function gravaCopia(d, url, etag, buf) {
   } catch (e) { /* sem copia: a proxima rodada baixa */ }
 }
 
-function pede(url, headers) {
-  return new Promise((ok, erro) => {
-    const req = https.get(url, { family: 4, headers }, (r) => {
-      if (r.statusCode === 404 || r.statusCode === 304) { r.resume(); return ok({ status: r.statusCode, etag: r.headers.etag }); }
-      if (r.statusCode !== 200) { r.resume(); return erro(new Error('HTTP ' + r.statusCode + ' ' + chave(url))); }
-      const p = []; r.on('data', (c) => p.push(c)); r.on('error', erro);
-      r.on('end', () => ok({ status: 200, etag: r.headers.etag, buf: Buffer.concat(p) }));
-    });
-    req.on('error', erro);
-    req.setTimeout(120000, () => req.destroy(new Error('timeout ' + chave(url))));
-  });
-}
+/* Fase 2 (PROMOVER fase2-pipeline): o transporte e o da lib-le-dados — com DADOS_STORAGE, o SDK (o If-None-Match vai como condicao e
+   o 304 continua valendo); sem credencial, o endereco publico com aviso. So o 404 do proprio blob vira null; o resto estoura. */
+function pede(url, headers) { return LD.pede(url, headers); }
 
 // bytes(url, headers) -> Promise<Buffer|null>
 function bytes(url, headers) {

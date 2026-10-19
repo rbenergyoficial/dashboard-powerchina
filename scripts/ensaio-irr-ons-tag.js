@@ -20,7 +20,8 @@
  *   sem argumento, --lib.
  * Sem segredo: le so blob publico (ou BASE_DADOS=<pasta local>).
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const LIB = path.join(__dirname, 'lib-irr-ons-tag.js');
 
@@ -35,14 +36,12 @@ function getJSON(nome) {
     if (!fs.existsSync(f)) return Promise.reject(new Error('HTTP 404 em ' + nome));
     return Promise.resolve(deJson(fs.readFileSync(f)));
   }
-  return new Promise((res, rej) => {
-    const req = https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode + ' em ' + nome)); }
-      const c = []; r.on('data', (d) => c.push(d));
-      r.on('end', () => { try { res(deJson(Buffer.concat(c))); } catch (e) { rej(e); } });
-    });
-    req.on('timeout', () => req.destroy(new Error('sem resposta em 120 s: ' + nome)));
-    req.on('error', rej);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; timeout de 120 s na lib). So o 404 do proprio blob vira
+     'HTTP 404' ("mes sem arquivo"); o que a lib estoura (o 404 de conteiner sumido, 403, 409, 5xx) sai sem casar com /HTTP 404/ */
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' })
+    .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + nome);
+    return deJson(x.buf);
   });
 }
 

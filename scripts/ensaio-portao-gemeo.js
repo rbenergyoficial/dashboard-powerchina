@@ -13,7 +13,8 @@
  * 1. Em 11/10, com 9 dias e 83 h de restricao, o veredito virou entre rodadas do mesmo dia so com a republicacao do
  * operador (14:47Z passou, 15:40Z reprovou, 18h passaria), e o blob ficou parado nas reprovadas.
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const PRODUTO = process.argv.includes('--produto');
 const f = [];
 const fim = (nome) => { if (f.length) { console.error('\nREPROVADO:'); f.forEach((x) => console.error('   🔴 ' + x)); process.exit(1); }
@@ -25,10 +26,11 @@ if (PRODUTO) {
   const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
   const deJson = (buf) => JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf).toString('utf8'));
   const pega = (nome) => (!/^https?:/.test(BASE) ? Promise.resolve(deJson(fs.readFileSync(path.join(BASE, nome))))
-    : new Promise((ok, erro) => https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return erro(new Error(nome + ': HTTP ' + r.statusCode)); }
-      const ch = []; r.on('data', (d) => ch.push(d)); r.on('end', () => { try { ok(deJson(Buffer.concat(ch))); } catch (e) { erro(e); } });
-    }).on('error', erro)));
+    /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`) */
+    : LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((x) => {
+      if (x.status !== 200) throw new Error(nome + ': HTTP ' + x.status);
+      return deJson(x.buf);
+    }));
   (async () => {
     const G = await pega('corte_gemeo.json');
     const V = G.validacao || {}, P = V.pares || [];

@@ -34,11 +34,12 @@ const REPO = require('path').resolve(__dirname, '..');
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/must_5min.json';
 const CACHE = require('os').tmpdir() + '/fixture_must5.json';
 
-const baixa = () => new Promise(ok => https.get(BASE, { headers: { 'accept-encoding': 'gzip' } }, r => {
-  const s = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-  const c = []; s.on('data', d => c.push(d));
-  s.on('end', () => ok(JSON.parse(Buffer.concat(c).toString('utf8'))));
-}));
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o 404 e o erro da lib estouram, o fixture nao sai vazio
+const baixa = () => require('./lib-le-dados').pede(BASE, { 'accept-encoding': 'gzip' }).then(r => {
+  if (r.status !== 200) throw new Error('must_5min.json HTTP ' + r.status);
+  let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
+});
 
 (async () => {
   let cheio;

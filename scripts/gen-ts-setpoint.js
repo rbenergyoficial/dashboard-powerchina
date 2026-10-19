@@ -29,8 +29,6 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
-const https = require('https');
-const http = require('http');
 
 const OUT = process.env.OUT || 'dados';
 const BLOB = process.env.BLOB_BASE || 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -42,16 +40,14 @@ const GERANDO = 1;                                           // kW: o mesmo piso
 let _svc = null;
 const svc = () => { if (!_svc) { const { BlobServiceClient } = require('@azure/storage-blob');
   if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido'); _svc = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE); } return _svc; };
-function puxa(url) {
-  return new Promise((ok, ko) => {
-    (url.startsWith('http:') ? http : https).get(url, { family: 4, headers: { 'accept-encoding': 'gzip' } }, (r) => {
-      if (r.statusCode === 404) { r.resume(); ok(null); return; }
-      if (r.statusCode !== 200) { r.resume(); ko(new Error(url + ' -> HTTP ' + r.statusCode)); return; }
-      const c = []; r.on('data', (x) => c.push(x));
-      r.on('end', () => { try { let b = Buffer.concat(c); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        ok(JSON.parse(b.toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
-  });
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; o BLOB_BASE http do ensaio passa direto pelo mesmo codigo).
+// So o 404 do proprio blob vira null; o resto (403, 409, 5xx, rede, conteiner sumido) estoura.
+const LD = require('./lib-le-dados');
+async function puxa(url) {
+  const x = await LD.pede(url, { 'accept-encoding': 'gzip' });
+  if (x.status === 404) return null;
+  let b = x.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 }
 const leLocal = (dir, nome) => { const f = path.join(dir, nome); if (!fs.existsSync(f)) return null;
   let b = fs.readFileSync(f); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8')); };

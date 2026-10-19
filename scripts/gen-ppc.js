@@ -40,20 +40,16 @@ const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
 const PREFIXO = /mauriti_historico/i;                     // por PREFIXO, nunca por nome exato
 const JANELA_DIAS = Number(process.env.PPC_JANELA || 730);
 
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do PROPRIO blob sai como "HTTP 404" e com a marca
+// `naoExiste`; o que a lib estoura (403, 409, 5xx, rede, e o 404 de conteiner sumido, cuja mensagem tambem contem "HTTP 404")
+// propaga, e por isso o `leAnterior` le a MARCA, nao o texto.
+const LD = require('./lib-le-dados');
 async function puxa(url) {
-  const https = require('https');
-  return new Promise((ok, erro) => {
-    https.get(url, (r) => {
-      if (r.statusCode !== 200) { erro(new Error('HTTP ' + r.statusCode)); r.resume(); return; }
-      const p = [];
-      r.on('data', (c) => p.push(c));
-      r.on('end', () => {
-        let b = Buffer.concat(p);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { erro(new Error('JSON invalido: ' + e.message)); }
-      });
-    }).on('error', erro);
-  });
+  const x = await LD.pede(url);
+  if (x.status !== 200) { const e = new Error('HTTP ' + x.status); if (x.status === 404) e.naoExiste = true; throw e; }
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  try { return JSON.parse(b.toString('utf8')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
 }
 
 // 🔴 SO O 404 DEVOLVE VAZIO. Falha de rede tratada como ausencia faz o gerador achar que e a
@@ -64,7 +60,7 @@ async function leAnterior(nome) {
     const j = await puxa('https://rbenergydata.blob.core.windows.net/dados/' + nome);
     return Array.isArray(j.eventos) ? j.eventos : [];
   } catch (e) {
-    if (/HTTP 404/.test(e.message)) return [];
+    if (e.naoExiste) return [];
     throw new Error('nao consegui ler o ' + nome + ' publicado (' + e.message + '). Abortando: '
       + 'regravar sem o historico apagaria o que ja foi acumulado.');
   }

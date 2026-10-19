@@ -29,7 +29,7 @@
  * uso: node ensaio-rampa-amanhecer.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -59,14 +59,12 @@ function anulados(regra, ca, cc, cong, e) {
   return [...regra(d, congeladas).keys()].sort((a, b) => a - b).join(',');
 }
 
-function baixa(url) {
-  return new Promise((res, rej) => https.get(url, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return rej(new Error(url + ' HTTP ' + r.statusCode)); }
-    const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => {
-      let buf = Buffer.concat(b); if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
-      res(JSON.parse(buf.toString('utf8')));
-    });
-  }).on('error', rej));
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+async function baixa(url) {
+  const r = await LD.pede(url);
+  if (r.status !== 200) throw new Error(url + ' HTTP ' + r.status);
+  let buf = r.buf; if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
+  return JSON.parse(buf.toString('utf8'));
 }
 async function le(nome) {
   if (process.env.LOCAL_DIR) {

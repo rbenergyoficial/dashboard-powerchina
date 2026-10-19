@@ -126,12 +126,16 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
 })();
 
 /* ── PRODUTO ───────────────────────────────────────────────────────────────────────────────────── */
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira 'HTTP 404' (o "ainda nao
+   publicado"); o que a lib estoura (o 404 de conteiner sumido, 403, 409, 5xx, rede) sai sem casar com /HTTP 404/ */
 function puxa(url) {
-  const https = require('https');
-  return new Promise((ok, erro) => https.get(url, { headers: { 'Accept-Encoding': 'gzip' } }, res => {
-    if (res.statusCode !== 200) { erro(new Error('HTTP ' + res.statusCode + ' ' + url)); res.resume(); return; }
-    const p = []; res.on('data', c => p.push(c)); res.on('end', () => { let b = Buffer.concat(p); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); ok(JSON.parse(b.toString('utf8'))); });
-  }).on('error', erro));
+  const LD = require('./lib-le-dados');
+  return LD.pede(url, { 'Accept-Encoding': 'gzip' })
+    .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); })
+    .then((res) => {
+      if (res.status !== 200) throw new Error('HTTP ' + res.status + ' ' + url);
+      let b = res.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8'));
+    });
 }
 
 (async () => {

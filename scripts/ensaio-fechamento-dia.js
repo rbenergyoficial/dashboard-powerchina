@@ -17,17 +17,16 @@
  *
  * Sem segredo nenhum: le so blob publico. Roda em qualquer maquina.
  */
-const https = require('https'), zlib = require('zlib');
+const zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial (BASE_DADOS de outro endereco passa direto)
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 
+/* o gzip pelos bytes: a lib devolve o que esta gravado, sem o cabecalho content-encoding */
 function getJSON(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
+  return LD.pede(url, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + url);
+    const b = x.buf[0] === 0x1f && x.buf[1] === 0x8b ? zlib.gunzipSync(x.buf) : x.buf;
+    return JSON.parse(b.toString('utf8'));
   });
 }
 

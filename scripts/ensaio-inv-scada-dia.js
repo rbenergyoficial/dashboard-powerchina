@@ -23,18 +23,20 @@
  * Roda DEPOIS de gerar. `LOCAL_DIR` le o historico de uma rodada local; o `perdas_inv` vem sempre do ar.
  */
 'use strict';
-const https = require('https'), zlib = require('zlib'), fs = require('fs'), path = require('path');
+const zlib = require('zlib'), fs = require('fs'), path = require('path');
+const LD = require('./lib-le-dados');
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const MARGEM = 0.02, MIN_DECIDIDOS = 10, MIN_PARES = 500, FRACAO_MIN = 0.9;
 
-const baixa = (nome) => new Promise((ok, ko) => {
-  https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 180000 }, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return ko(new Error(nome + ': HTTP ' + r.statusCode)); }
-    const s = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-    const c = []; s.on('data', (d) => c.push(d));
-    s.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-  }).on('error', ko);
-});
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+/* a lib devolve os bytes como gravados: o gzip se reconhece pela assinatura (antes, pelo content-encoding da resposta) */
+const baixa = async (nome) => {
+  const r = await LD.pede(BASE + nome, { 'accept-encoding': 'gzip' });
+  if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
+};
 const leHist = () => {
   if (!process.env.LOCAL_DIR) return baixa('inv_scada_hist.json');
   let b = fs.readFileSync(path.join(process.env.LOCAL_DIR, 'inv_scada_hist.json'));

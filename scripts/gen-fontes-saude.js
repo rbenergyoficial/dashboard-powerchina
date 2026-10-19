@@ -33,7 +33,7 @@
 // ⚠️ Se uma fonte nao puder ser lida, o selo dela sai VERMELHO com "sem leitura" — nunca some,
 //    nunca herda a cor de outra fonte. Ausencia declarada e informacao; selo vazio e ruido.
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const rot = require('./lib-rotulos.js');
 const SELO = require('./lib-selo.js');
@@ -43,14 +43,13 @@ const OUT_BLOB = 'fontes_saude.json';
 const AGORA = Date.now();
 const VERDE = '#2FBF71', AMBAR = '#FF8A3D', VERMELHO = '#E5484D';   // as mesmas do selo da Way2
 
-function le(nome) {
-  return new Promise((res, rej) => {
-    https.get(BASE + nome, { family: 4, headers: { 'accept-encoding': 'gzip' } }, (r) => {
-      if (r.statusCode !== 200) return rej(new Error(nome + ' HTTP ' + r.statusCode));
-      const c = []; r.on('data', (d) => c.push(d));
-      r.on('end', () => { let b = Buffer.concat(c); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); res(JSON.parse(b.toString('utf8'))); });
-    }).on('error', rej);
-  });
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). Como antes, o 404 tambem e erro, e cada cartao que nao le
+// mostra "sem leitura" em vermelho.
+async function le(nome) {
+  const x = await LD.pede(BASE + nome, { 'accept-encoding': 'gzip' });
+  if (x.status !== 200) throw new Error(nome + ' HTTP ' + x.status);
+  let b = x.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 }
 const horas = (ms) => (AGORA - ms) / 3600000;
 const dias = (ms) => horas(ms) / 24;

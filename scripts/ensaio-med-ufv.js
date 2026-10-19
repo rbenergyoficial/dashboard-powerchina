@@ -27,18 +27,17 @@
  *                usina com um registro a mais contra a recontagem.
  * Sem segredo: lê só blob público (ou BASE_DADOS=<pasta local>).
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const { rollupDia, SLOTS_COMPLETO: L } = require('./gen-way2-hist.js');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const deJson = (b) => JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8').replace(/^﻿/, ''));
 function getJSON(nome) {
   if (!/^https?:/.test(BASE)) return Promise.resolve(deJson(fs.readFileSync(path.join(BASE, nome))));
-  return new Promise((ok, ko) => {
-    const req = https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 180000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + nome)); }
-      const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => { try { ok(deJson(Buffer.concat(c))); } catch (e) { ko(e); } });
-    });
-    req.on('timeout', () => req.destroy(new Error('sem resposta em 180 s: ' + nome))); req.on('error', ko);
+  // Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); como antes, o 404 tambem estoura, e o erro da lib propaga
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((r) => {
+    if (r.status !== 200) throw new Error('HTTP ' + r.status + ' em ' + nome);
+    return deJson(r.buf);
   });
 }
 const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205], M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214], M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };

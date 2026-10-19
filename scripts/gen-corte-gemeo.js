@@ -23,7 +23,7 @@
  * inspecionar uma rodada reprovada sem gravar.
  */
 const rot = require('./lib-rotulos.js');
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 // o portao (so meses fechados contam) mora numa lib que o ensaio julga (PROMOVER gemeo-mes-fechado)
 const PG = require('./lib-portao-gemeo.js');
 
@@ -71,15 +71,13 @@ const MES_LBL = m => ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 's
 // eixo_x continuo: o numero do mes desce de 12 para 1 e o trend do Grafana recusa a serie inteira.
 const EIXO_X = m => (+m.slice(0, 4) - 2025) * 12 + (+m.slice(5, 7));
 
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; BASE_DADOS de outro endereco passa direto). O gzip e
+// detectado pelos bytes (a lib devolve o que esta gravado, sem o cabecalho content-encoding).
 function getJSON(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' } }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '')
-        ? r.pipe(require('zlib').createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
+  return LD.pede(url, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + url);
+    const b = x.buf[0] === 0x1f && x.buf[1] === 0x8b ? require('zlib').gunzipSync(x.buf) : x.buf;
+    return JSON.parse(b.toString('utf8'));
   });
 }
 

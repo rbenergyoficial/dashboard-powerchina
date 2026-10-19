@@ -32,27 +32,25 @@ const REFAZ_DIAS = Number(process.env.PR_REFAZ || 5);
 const INICIO = process.env.PR_INICIO || '';   /* vazio: desde o primeiro dia com irradiacao por hora */
 const LOTE_MEIAS = Number(process.env.PR_LOTE_MEIAS || 60);   /* dias sem meia hora preenchidos por rodada */
 
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira 'HTTP 404 <nome>' (a ausencia
+   que os chamadores testam); o que a lib estoura (403, 409, 5xx, rede, e o 404 de conteiner sumido) sai sem casar com /HTTP 404/,
+   para nunca virar "primeira rodada" e regravar o acumulado do zero. */
+const LD = require('./lib-le-dados');
+const naoE404 = (e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); };
 function puxa(url) {
-  const https = require('https');
   /* 💰 custo-a (17/10/2026): o historico do medidor vem pela leitura condicional (`lib-le-blob.js`); a mensagem do 404 e a mesma */
   const LB = require('./lib-le-blob');
-  if (LB.ALVO.test(url)) return LB.bytes(url, { 'Accept-Encoding': 'gzip' }).then((b) => {
+  if (LB.ALVO.test(url)) return LB.bytes(url, { 'Accept-Encoding': 'gzip' }).catch(naoE404).then((b) => {
     if (b == null) throw new Error('HTTP 404 ' + url.split('/').pop());
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     try { return JSON.parse(b.toString('utf8').replace(/^\uFEFF/, '')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
   });
-  return new Promise((ok, erro) => {
-    https.get(url, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => {
-      if (res.statusCode !== 200) { erro(new Error('HTTP ' + res.statusCode + ' ' + url.split('/').pop())); res.resume(); return; }
-      const p = [];
-      res.on('data', (c) => p.push(c));
-      res.on('end', () => {
-        let b = Buffer.concat(p);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        /* arquivos antigos do medidor vem com BOM */
-        try { ok(JSON.parse(b.toString('utf8').replace(/^\uFEFF/, ''))); } catch (e) { erro(new Error('JSON invalido: ' + e.message)); }
-      });
-    }).on('error', erro);
+  return LD.pede(url, { 'Accept-Encoding': 'gzip' }).catch(naoE404).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' ' + url.split('/').pop());
+    let b = x.buf;
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    /* arquivos antigos do medidor vem com BOM */
+    try { return JSON.parse(b.toString('utf8').replace(/^\uFEFF/, '')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
   });
 }
 

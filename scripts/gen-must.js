@@ -272,21 +272,20 @@ function doDia(resp15, resp5, dia) {
 // O risco cresceu quando o blob passou a ser gravado comprimido: virou mais um ponto onde a
 // leitura pode falhar. Agora so o 404 devolve "vazio"; o resto ESTOURA, o job fica vermelho e o
 // blob antigo continua no ar — que e o comportamento certo.
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). Ela devolve os bytes como gravados: o gzip sai pelos
+// bytes magicos, nao pelo content-encoding. So o 404 do proprio blob vira null; o resto (403, 409, 5xx, rede) estoura.
+const LD = require('./lib-le-dados');
 async function leBlob(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' } }, res => {
-      if (res.statusCode === 404) { res.resume(); return ok(null); }
-      if (res.statusCode !== 200) { res.resume(); return ko(new Error('HTTP ' + res.statusCode + ' ao ler ' + url)); }
-      const cru = /gzip/i.test(res.headers['content-encoding'] || '')
-        ? res.pipe(require('zlib').createGunzip()) : res;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('error', e => ko(new Error('descompressao falhou em ' + url + ': ' + e.message)));
-      cru.on('end', () => {
-        try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); }
-        catch (e) { ko(new Error('JSON invalido em ' + url + ': ' + e.message)); }
-      });
-    }).on('error', e => ko(new Error('rede falhou em ' + url + ': ' + e.message)));
-  });
+  let x;
+  try { x = await LD.pede(url, { 'accept-encoding': 'gzip' }); }
+  catch (e) { throw new Error('leitura falhou em ' + url + ': ' + e.message); }
+  if (x.status === 404) return null;
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) {
+    try { b = require('zlib').gunzipSync(b); } catch (e) { throw new Error('descompressao falhou em ' + url + ': ' + e.message); }
+  }
+  try { return JSON.parse(b.toString('utf8')); }
+  catch (e) { throw new Error('JSON invalido em ' + url + ': ' + e.message); }
 }
 
 async function grava(obj) {

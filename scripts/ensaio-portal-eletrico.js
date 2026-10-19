@@ -34,7 +34,7 @@
  * do executivo nao para. O --lib roda no fim do job e julga a regra em casos forjados.
  */
 'use strict';
-const https = require('https'), zlib = require('zlib'), fs = require('fs');
+const zlib = require('zlib'), fs = require('fs');
 const R3 = 1.7320508075688772;
 
 // ── a REFERENCIA, refeita do bruto sem a lib ──────────────────────────────────────────────────────────────────────────
@@ -220,11 +220,9 @@ function le(nome, local) {
   const dec = (b) => JSON.parse(((b[0] === 0x1f && b[1] === 0x8b) ? zlib.gunzipSync(b) : b).toString('utf8').replace(/^﻿/, ''));
   if (local) return Promise.resolve(dec(fs.readFileSync(local)));
   const BASE_DADOS = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
-  return new Promise((ok, ko) => https.get(BASE_DADOS + nome + '?t=' + Date.now(), { headers: { 'accept-encoding': 'gzip' } }, res => {
-    if (res.statusCode === 404) { res.resume(); return ok(null); }
-    if (res.statusCode !== 200) { res.resume(); return ko(new Error(nome + ' HTTP ' + res.statusCode)); }
-    const ch = []; res.on('data', c => ch.push(c)); res.on('end', () => { try { ok(dec(Buffer.concat(ch))); } catch (e) { ko(e); } });
-  }).on('error', ko));
+  // Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira null; o resto estoura.
+  return require('./lib-le-dados').pede(BASE_DADOS + nome + '?t=' + Date.now(), { 'accept-encoding': 'gzip' })
+    .then((r) => (r.status === 404 ? null : dec(r.buf)));
 }
 async function modoProduto() {
   const [pe, elet] = await Promise.all([le('portal_eletrico.json', process.env.LOCAL_PE), le('way2_eletrico.json', process.env.LOCAL_ELET)]);

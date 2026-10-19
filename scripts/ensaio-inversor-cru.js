@@ -15,7 +15,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const { casaCru, CODIGO } = require('./lib-inversor-cru.js');
 
@@ -60,10 +60,11 @@ function julgaDia(r) {
 }
 function le(nome) {
   if (process.env.LOCAL_DIR) return Promise.resolve(parse(fs.readFileSync(path.join(process.env.LOCAL_DIR, nome))));
-  return new Promise((res, rej) => https.get('https://rbenergydata.blob.core.windows.net/dados/' + nome, { headers: { 'Accept-Encoding': 'gzip' } }, (s) => {
-    if (s.statusCode !== 200) return rej(new Error(nome + ': HTTP ' + s.statusCode));
-    const b = []; s.on('data', (c) => b.push(c)); s.on('end', () => { try { res(parse(Buffer.concat(b))); } catch (e) { rej(e); } });
-  }).on('error', rej));
+  /* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+  return LD.pede('https://rbenergydata.blob.core.windows.net/dados/' + nome, { 'Accept-Encoding': 'gzip' }).then((s) => {
+    if (s.status !== 200) throw new Error(nome + ': HTTP ' + s.status);
+    return parse(s.buf);
+  });
 }
 function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf).toString('utf8')); }
 

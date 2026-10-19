@@ -19,6 +19,7 @@
  */
 'use strict';
 const zlib = require('zlib');
+const LD = require('./lib-le-dados');
 const L = require('./lib-disponibilidade.js');
 const falhas = [];
 /* 🔴 A FAIXA DA JANELA SAI DA LIB, e nao de um numero do ensaio. A primeira versao exigia 8 a 14 h e
@@ -85,13 +86,11 @@ const perto = (a, b, tol) => Math.abs(a - b) <= tol;
 })();
 
 /* ── PRODUTO ───────────────────────────────────────────────────────────────────────────────────── */
-function puxa(url) {
-  const https = require('https');
-  return new Promise((ok, erro) => https.get(url, { headers: { 'Accept-Encoding': 'gzip' } }, (res) => {
-    if (res.statusCode !== 200) { erro(new Error('HTTP ' + res.statusCode + ' ' + url.split('/').pop())); res.resume(); return; }
-    const p = []; res.on('data', (c) => p.push(c));
-    res.on('end', () => { let b = Buffer.concat(p); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); ok(JSON.parse(b.toString('utf8'))); });
-  }).on('error', erro));
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+async function puxa(url) {
+  const x = await LD.pede(url, { 'Accept-Encoding': 'gzip' });
+  if (x.status !== 200) throw new Error('HTTP ' + x.status + ' ' + url.split('/').pop());
+  let b = x.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b); return JSON.parse(b.toString('utf8'));
 }
 const le = async (nome) => {
   if (process.env.PERDAS_DIR) {

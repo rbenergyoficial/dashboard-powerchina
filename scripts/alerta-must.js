@@ -33,7 +33,7 @@
  *
  * Env: MUST_ARQ (arquivo local, para o ensaio) · BLOB_BASE · MAIL_* e AZ_MAIL_* (lib-alerta) · AGORA_MS (ensaio)
  */
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const fs = require('fs');
 
@@ -101,19 +101,15 @@ function acaoDe(e) {
   };
 }
 
-function baixa(nome) {
-  return new Promise((ok, ko) => {
-    https.get(BASE + nome, { headers: { 'Accept-Encoding': 'gzip' } }, (r) => {
-      const b = [];
-      r.on('data', (c) => b.push(c));
-      r.on('end', () => {
-        if (r.statusCode !== 200) return ko(new Error(nome + ': HTTP ' + r.statusCode));
-        let x = Buffer.concat(b);
-        if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
-        try { ok(JSON.parse(x.toString('utf8'))); } catch (e) { ko(e); }
-      });
-    }).on('error', ko).setTimeout(60000, function () { this.destroy(new Error(nome + ': tempo esgotado')); });
-  });
+// Fase 2: o transporte e o da lib-le-dados. Como antes, nada aqui e "nao existe": o 404 tambem estoura (o alerta nao roda sem o
+// must_15min.json), e o erro da lib (403, 409, 5xx, rede, timeout) sai com o nome do blob.
+async function baixa(nome) {
+  let r;
+  try { r = await LD.pede(BASE + nome, { 'Accept-Encoding': 'gzip' }); } catch (e) { throw new Error(nome + ': ' + e.message); }
+  if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+  let x = r.buf;
+  if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
+  return JSON.parse(x.toString('utf8'));
 }
 
 async function main({ alerta = require('./lib-alerta').alerta, agora = Number(process.env.AGORA_MS) || Date.now() } = {}) {

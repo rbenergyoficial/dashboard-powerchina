@@ -24,7 +24,7 @@
  *   LIBPV=./lib/<copia>.js ... --lib                         a regra sobre outra versao da lib (ANTES: a do HEAD reprova)
  */
 'use strict';
-const https = require('https'), zlib = require('zlib'), fs = require('fs');
+const zlib = require('zlib'), fs = require('fs');
 const L = require(process.env.LIBPV || './lib/portal-vivo.js');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const R3 = Math.sqrt(3);
@@ -207,13 +207,11 @@ function aMao(pv) {
 
 // ── leitura: gzip decidido pelos BYTES (1f 8b), nao pelo cabecalho ──────────────────────────────────────────────────
 const decodifica = b => JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8').replace(/^﻿/, ''));
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); como antes, o 404 tambem estoura, e o erro da lib propaga
 function getJSON(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { timeout: 120000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-      const c = []; r.on('data', d => c.push(d));
-      r.on('end', () => { try { ok(decodifica(Buffer.concat(c))); } catch (e) { ko(new Error('nao li ' + url + ': ' + e.message)); } });
-    }).on('error', ko);
+  return require('./lib-le-dados').pede(url).then(r => {
+    if (r.status !== 200) throw new Error('HTTP ' + r.status + ' em ' + url);
+    try { return decodifica(r.buf); } catch (e) { throw new Error('nao li ' + url + ': ' + e.message); }
   });
 }
 const local = (v) => decodifica(fs.readFileSync(v));

@@ -66,13 +66,14 @@ for (const [nome, cfg, corEsperada, sufEsperado] of CASOS) {
 
 // ---- a comparacao que impede a regra duplicada de divergir em silencio -------------------------
 if (process.argv.includes('--real')) {
-  const https = require('https'), zlib = require('zlib');
-  https.get('https://rbenergydata.blob.core.windows.net/dados/way2_saude.json',
-    { headers: { 'accept-encoding': 'gzip' } }, r => {
-      const st = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; st.on('data', b => c.push(b));
-      st.on('end', () => {
-        const j = JSON.parse(Buffer.concat(c).toString('utf8'));
+  // Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); 404 e erro da lib estouram (sai 1, nunca "concorda")
+  const zlib = require('zlib');
+  require('./lib-le-dados').pede('https://rbenergydata.blob.core.windows.net/dados/way2_saude.json',
+    { 'accept-encoding': 'gzip' }).then(r => {
+      if (r.status !== 200) throw new Error('way2_saude.json HTTP ' + r.status);
+      let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+      {
+        const j = JSON.parse(b.toString('utf8'));
         const meu = selo(j.medidores, j.resumo.total);
         const dele = (j.badges || []).find(b => /medidor/i.test(b.l)) || {};
         const igual = meu.v === dele.v && meu.u === (dele.u || '') && meu.c === dele.c;
@@ -83,8 +84,8 @@ if (process.argv.includes('--real')) {
         console.log('    ' + (igual ? '✓ a regra duplicada ainda concorda com o gerador'
                                     : '🔴 DIVERGIU — a regra mudou no gerador e nao aqui'));
         process.exit(igual && !falhou ? 0 : 1);
-      });
-    });
+      }
+    }).catch(e => { console.error('  🔴 nao consegui ler o blob real: ' + e.message); process.exit(1); });
 } else {
   console.log('');
   console.log(falhou ? '  ENSAIO REPROVADO · ' + falhou + ' caso(s)' : '  ENSAIO APROVADO');

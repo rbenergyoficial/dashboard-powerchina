@@ -21,7 +21,7 @@
  * uso: node ensaio-selo-frescor.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const SELO = require('./lib-selo.js');
 
@@ -31,20 +31,14 @@ const ARQS = ['fontes_saude.json', 'way2_saude.json'];
 let mau = 0;
 const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 
-const le = (nome) => new Promise((ok, erro) => {
-  https.get(BASE + nome, { family: 4 }, (r) => {
-    /* só o 404 é ausência; qualquer outra falha estoura, em vez de virar "nada a conferir" */
-    if (r.statusCode !== 200) { r.resume(); erro(new Error(nome + ' HTTP ' + r.statusCode)); return; }
-    const c = [];
-    r.on('data', (d) => c.push(d));
-    r.on('end', () => {
-      try {
-        let b = Buffer.concat(c);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        ok(JSON.parse(b.toString('utf8')));
-      } catch (e) { erro(e); }
-    });
-  }).on('error', erro);
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); como antes, o 404 tambem estoura com o nome do blob, e o
+   erro da lib propaga como esta. */
+const le = (nome) => LD.pede(BASE + nome).then((r) => {
+  /* só o 404 é ausência; qualquer outra falha estoura, em vez de virar "nada a conferir" */
+  if (r.status !== 200) throw new Error(nome + ' HTTP ' + r.status);
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 });
 
 /* a mesma regra que o PAINEL vai aplicar, escrita aqui de forma independente: se as duas

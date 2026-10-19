@@ -18,7 +18,8 @@
  * Roda DEPOIS de gerar. Sem segredo: le blob publico; `BASE_DADOS` apontando para um DIRETORIO le o executivo do
  * disco (o arquivo mensal do operador continua vindo do blob), para exercita-lo antes de publicar.
  */
-const https = require('https'), zlib = require('zlib'), fs = require('fs'), path = require('path');
+const zlib = require('zlib'), fs = require('fs'), path = require('path');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML = ['M1', 'M7', 'M9'], NOVE = PPA.concat(ML);
@@ -31,14 +32,13 @@ const REF_DESDE = (function () {
   return m[1];
 })();
 
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); como antes, o 404 tambem estoura, e o erro da lib propaga.
+// A lib devolve os bytes como gravados: o gzip sai pelos bytes magicos, nao pelo content-encoding.
 function baixa(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' }, timeout: 180000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
+  return LD.pede(url, { 'accept-encoding': 'gzip' }).then(r => {
+    if (r.status !== 200) throw new Error('HTTP ' + r.status + ' em ' + url);
+    let b = r.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    return JSON.parse(b.toString('utf8'));
   });
 }
 const leExec = () => /^https?:/i.test(BASE) ? baixa(BASE + 'executivo.json')

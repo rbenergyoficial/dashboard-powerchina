@@ -157,26 +157,20 @@ function diaBRT(off = 0) {
 // ---- leitura de blob: so o 404 e "vazio"; o resto ESTOURA --------------------------------------
 // Mesma guarda do gen-must-intra, e pela mesma razao: devolver null para qualquer falha faz o
 // gerador se achar na primeira execucao e regravar o blob so com os dias desta rodada.
-function leBlob(nome) {
-  return new Promise((ok, ko) => {
-    https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' } }, (res) => {
-      if (res.statusCode === 404) { res.resume(); return ok(null); }
-      if (res.statusCode !== 200) {
-        res.resume();
-        return ko(new Error('HTTP ' + res.statusCode + ' ao ler ' + nome));
-      }
-      const cru = /gzip/i.test(res.headers['content-encoding'] || '')
-        ? res.pipe(require('zlib').createGunzip())
-        : res;
-      const c = [];
-      cru.on('data', (d) => c.push(d));
-      cru.on('error', (e) => ko(new Error('descompressao falhou em ' + nome + ': ' + e.message)));
-      cru.on('end', () => {
-        try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); }
-        catch (e) { ko(new Error('JSON invalido em ' + nome + ': ' + e.message)); }
-      });
-    }).on('error', (e) => ko(new Error('rede falhou em ' + nome + ': ' + e.message)));
-  });
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). Ela devolve os bytes como gravados: o gzip sai pelos bytes
+// magicos, nao pelo content-encoding. So o 404 do proprio blob vira null; o resto (403, 409, 5xx, rede, conteiner sumido) estoura.
+const LD = require('./lib-le-dados');
+async function leBlob(nome) {
+  let x;
+  try { x = await LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }); }
+  catch (e) { throw new Error('leitura falhou em ' + nome + ': ' + e.message); }
+  if (x.status === 404) return null;
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) {
+    try { b = require('zlib').gunzipSync(b); } catch (e) { throw new Error('descompressao falhou em ' + nome + ': ' + e.message); }
+  }
+  try { return JSON.parse(b.toString('utf8')); }
+  catch (e) { throw new Error('JSON invalido em ' + nome + ': ' + e.message); }
 }
 
 // O BLOB VAI COMPRIMIDO. O Azure serve exatamente os bytes gravados — nao comprime sozinho — e foi

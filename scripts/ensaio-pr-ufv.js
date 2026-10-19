@@ -9,17 +9,16 @@
  *              1,000 e 1,010 (medido 1,0032 a 1,0047 em 23 dias: perda de transformacao, sempre positiva e pequena).
  *              PLANTIOS: usina do contrato alterada, mes alterado e corte trocado reprovam.
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const deJson = (b) => JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8').replace(/^﻿/, ''));
 function getJSON(nome) {
   if (!/^https?:/.test(BASE)) return Promise.resolve(deJson(fs.readFileSync(path.join(BASE, nome))));
-  return new Promise((ok, ko) => {
-    const req = https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + nome)); }
-      const c = []; r.on('data', (d) => c.push(d)); r.on('end', () => { try { ok(deJson(Buffer.concat(c))); } catch (e) { ko(e); } });
-    });
-    req.on('timeout', () => req.destroy(new Error('sem resposta em 120 s: ' + nome))); req.on('error', ko);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; timeout de 120 s na lib) */
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + nome);
+    return deJson(x.buf);
   });
 }
 const perto = (a, b, t) => a != null && b != null && Math.abs(a - b) <= t;

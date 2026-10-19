@@ -32,6 +32,7 @@
  *     ele deixa de ser usado e o dado passa a vir do CSV.
  */
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial; o https fica so para o IIRR_URL (export do SCADA)
 const { travadas } = require('./lib-irr-travada.js');   // PROMOVER irr-travada
 const { rotulaQualidade, confereCobertura } = require('./lib-irr-rotulo.js');   // PROMOVER irr-rotulo
 const { chaveOns, indiceDatalogger, confereM7, semReferencia } = require('./lib-irr-ons-tag.js');   // PROMOVER irr-ons-m7
@@ -805,24 +806,22 @@ const leSeed = cam => JSON.parse(zlib.gunzipSync(fs.readFileSync(cam)).toString(
   // O ONS tambem nao tem agosto/2025 (o arquivo nao existe), o que deixa o primeiro mes da janela sem
   // comparativo. Nao ha o que reconstruir ali, e forcar seria inventar.
   const ONS_BASE = 'https://rbenergydata.blob.core.windows.net/dados/ons_irradiancia_';
-  const getJSON = url => new Promise((res, rej) => {
-    https.get(url, r => {
-      if (r.statusCode !== 200) { r.resume(); return rej(new Error('HTTP ' + r.statusCode)); }
-      const c = []; r.on('data', b => c.push(b));
-      r.on('end', () => {
-        try {
-          // 🔴 GZIP POR BYTES MAGICOS. Os blobs do ONS passaram a ser gravados comprimidos e este
-          //    leitor os lia como texto: o JSON.parse estourava, o catch de fora contava "mes sem
-          //    arquivo", e o gerador PUBLICAVA assim mesmo. Medido em 26/08/2026: "ONS: 0 de 13
-          //    meses lidos, 0 leituras" — a linha do ONS sumiu do comparativo e ninguem foi
-          //    avisado. Mesma familia do gzip que ja cegou a medicao do gauntlet.
-          let b = Buffer.concat(c);
-          if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-          res(JSON.parse(b.toString('utf8')));
-        } catch (e) { rej(e); }
-      });
-    }).on('error', rej);
-  });
+  // Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira 'HTTP 404' (o mes ainda
+  // nao gerado, o datalogger que nao existe); o que a lib estoura (403, 409, 5xx, rede, conteiner sumido) sai sem casar com
+  // /HTTP 404/ e conta como LEITOR quebrado.
+  const getJSON = url => LD.pede(url)
+    .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); })
+    .then((x) => {
+      if (x.status !== 200) throw new Error('HTTP ' + x.status);
+      // 🔴 GZIP POR BYTES MAGICOS. Os blobs do ONS passaram a ser gravados comprimidos e este
+      //    leitor os lia como texto: o JSON.parse estourava, o catch de fora contava "mes sem
+      //    arquivo", e o gerador PUBLICAVA assim mesmo. Medido em 26/08/2026: "ONS: 0 de 13
+      //    meses lidos, 0 leituras" — a linha do ONS sumiu do comparativo e ninguem foi
+      //    avisado. Mesma familia do gzip que ja cegou a medicao do gauntlet.
+      let b = x.buf;
+      if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+      return JSON.parse(b.toString('utf8'));
+    });
   const ons = {};                 // 'dia|ufv|slot' -> W/m2 verificado
   // 🔴 OS MESES DO ONS NAO SAEM DOS DIAS DO SCADA. O despejo do SCADA e manual e pode envelhecer
   //    (medido em 27/08/2026: ele parou em 06/08 e o ONS ja estava em 25/08). Derivando a lista da

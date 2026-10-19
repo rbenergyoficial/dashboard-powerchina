@@ -14,7 +14,8 @@
  *   4 · PLANTIO: dois defeitos reprovam — a meta tirada do GWh (o defeito que o lote conserta) e a manchete sem a ancora
  *       em MWh (o remendo passaria por vacuidade, sem julgar nada).
  */
-const fs = require('fs'), path = require('path'), https = require('https'), zlib = require('zlib');
+const fs = require('fs'), path = require('path'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const { remendaManchete } = require('./lib-manchete.js');
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 
@@ -24,13 +25,11 @@ function getJSON(nome) {
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
     return Promise.resolve(JSON.parse(b.toString('utf8')));
   }
-  return new Promise((ok, ko) => {
-    https.get(BASE + nome, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + nome)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o gzip pelos bytes, a lib devolve o que esta gravado */
+  return LD.pede(BASE + nome, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + nome);
+    const b = x.buf[0] === 0x1f && x.buf[1] === 0x8b ? zlib.gunzipSync(x.buf) : x.buf;
+    return JSON.parse(b.toString('utf8'));
   });
 }
 

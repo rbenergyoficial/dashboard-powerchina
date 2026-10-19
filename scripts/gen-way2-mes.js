@@ -26,8 +26,9 @@
  *
  * Env: WAY2_TOKEN · DADOS_STORAGE (modo padrão) · SOMBRA=1 · BLOB_BASE (leitura pública)
  */
-const https = require('https');
+const https = require('https');   // so a API da Way2
 const zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 
 const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medicao/pontos' };
 const ENERGIA = '6368,6369,6373,6374,6375,6376,6215,6378,6219';
@@ -118,17 +119,14 @@ async function apiComRetry(q, token) {
   }
 }
 
-function lePublico(nome) {
-  return new Promise((ok, ko) => {
-    https.get(BASE + nome + '?t=' + Date.now(), { headers: { 'Accept-Encoding': 'gzip' } }, (r) => {
-      const b = []; r.on('data', (c) => b.push(c));
-      r.on('end', () => {
-        if (r.statusCode !== 200) return ko(new Error(nome + ': HTTP ' + r.statusCode));
-        let x = Buffer.concat(b); if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
-        ok({ texto: x.toString('utf8'), modificado: r.headers['last-modified'] });
-      });
-    }).on('error', ko);
-  });
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; o nome guardado vem do mesmo pedido). Como antes, nada aqui e
+// "nao existe": o 404 tambem estoura, e o erro da lib propaga com o nome do blob.
+async function lePublico(nome) {
+  let r;
+  try { r = await LD.pede(BASE + nome + '?t=' + Date.now(), { 'Accept-Encoding': 'gzip' }); } catch (e) { throw new Error(nome + ': ' + e.message); }
+  if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+  let x = r.buf; if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
+  return { texto: x.toString('utf8'), modificado: r.ultimaMod };
 }
 
 async function main({ api = apiComRetry, le = lePublico, grava, agora = Date.now(), sombra = process.env.SOMBRA === '1' } = {}) {

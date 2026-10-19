@@ -20,7 +20,7 @@
  * uso: node ensaio-ppc-duracao.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const P = require('./lib-ppc.js');
 
@@ -42,22 +42,14 @@ function caso(nome, eventos, esperaMin, esperaAberta) {
     + ' e veio ' + (r ? r.minutos + ' min / aberta=' + r.aberta : 'nada'));
 }
 
-const baixa = () => new Promise((resolve, reject) => {
-  https.get(URL, (r) => {
-    /* 🔴 So o 404 significa ausente. Qualquer outra falha de leitura estoura, em vez de virar
-       "primeira execucao" — a licao que o leBlob do MUST e o leitor do ONS ja pagaram. */
-    if (r.statusCode === 404) { r.resume(); reject(new Error('o registro ainda nao foi publicado')); return; }
-    if (r.statusCode !== 200) { r.resume(); reject(new Error('HTTP ' + r.statusCode)); return; }
-    const p = [];
-    r.on('data', (c) => p.push(c));
-    r.on('end', () => {
-      try {
-        let b = Buffer.concat(p);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        resolve(JSON.parse(b.toString('utf8')));
-      } catch (e) { reject(e); }
-    });
-  }).on('error', reject);
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o erro dela propaga como esta. */
+const baixa = () => LD.pede(URL).then((r) => {
+  /* 🔴 So o 404 significa ausente. Qualquer outra falha de leitura estoura, em vez de virar
+     "primeira execucao" — a licao que o leBlob do MUST e o leitor do ONS ja pagaram. */
+  if (r.status === 404) throw new Error('o registro ainda nao foi publicado');
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
 });
 
 (async () => {

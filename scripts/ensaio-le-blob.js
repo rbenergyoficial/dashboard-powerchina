@@ -102,8 +102,9 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   ok(!fs.existsSync(velho), 'arquivo de 5 dias podado');
 
   console.log('8. plantios');
-  const src = fs.readFileSync(LIB, 'utf8');
-  const p1 = path.join(dir, '_plantio_le_blob_1.js'), p2 = path.join(dir, '_plantio_le_blob_2.js');   /* fora do repositorio: a lib so usa modulos nativos */
+  /* fora do repositorio: o transporte (lib-le-dados, Fase 2) vai pelo caminho completo */
+  const src = fs.readFileSync(LIB, 'utf8').replace("require('./lib-le-dados')", 'require(' + JSON.stringify(path.join(__dirname, 'lib-le-dados.js')) + ')');
+  const p1 = path.join(dir, '_plantio_le_blob_1.js'), p2 = path.join(dir, '_plantio_le_blob_2.js');
   fs.writeFileSync(p1, src.replace("if (c) h['If-None-Match'] = c.etag;", ''));
   fs.writeFileSync(p2, src.replace('EST.rede++; EST.bytesRede += x.buf.length;', 'if (c) return c.buf; EST.rede++; EST.bytesRede += x.buf.length;'));
   try {

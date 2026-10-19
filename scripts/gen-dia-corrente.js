@@ -16,7 +16,7 @@
  *
  * Env: DADOS_STORAGE · BASE (url publica) · LOCAL_OUT p/ ensaio sem gravar.
  */
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const { BlobServiceClient } = require('@azure/storage-blob');
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
@@ -64,17 +64,18 @@ function decodifica(x) {
 function baixa(url) {
   const m = /\/hist\/way2_(\d{4}-\d{2}-\d{2})\.json$/.exec(url), dl = process.env.ELET_LOCAL_DIR;
   if (m && dl) { const f = require('path').join(dl, 'way2_' + m[1] + '.json'); if (require('fs').existsSync(f)) { console.log('  ' + m[1] + ': copia local da rodada'); return Promise.resolve(decodifica(require('fs').readFileSync(f))); } }
-  if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => { if (b == null) throw new Error('HTTP 404 em ' + url); return decodifica(b); },
-    (e) => { throw new Error(String(e.message).replace(/^HTTP (\d+) .*$/, 'HTTP $1 em ' + url)); });   /* a mesma mensagem de antes */
-  return new Promise((ok, err) => https.get(url, { family: 4 }, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return err(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-    const b = []; r.on('data', (c) => b.push(c)); r.on('end', () => {
-      let x = Buffer.concat(b);
-      if (x[0] === 0x1f && x[1] === 0x8b) { try { x = zlib.gunzipSync(x); } catch (e) { return err(e); } }
-      try { ok(JSON.parse(x.toString('utf8').replace(/^﻿/, ''))); } catch (e) { err(e); }
-    });
-  }).on('error', err));
+  if (LB.ALVO.test(url)) return LB.bytes(url).then((b) => { if (b == null) throw new Error('HTTP 404 em ' + url); return decodifica(b); }, erroLeitura(url));
+  // Fase 2: o resto pelo transporte da lib-le-dados (credencial para `dados`), com as mesmas mensagens
+  return LD.pede(url).then((x) => { if (x.status === 404) throw new Error('HTTP 404 em ' + url); return decodifica(x.buf); }, erroLeitura(url));
 }
+// Fase 2: so o 404 do PROPRIO blob vira 'HTTP 404 em <url>' (a ausencia que os chamadores testam com /^HTTP 404 /). O 404 que a
+// lib estoura (conteiner sumido, pedido anonimo a conteiner privado) sai sem casar, para nunca virar "o snapshot nao existe"; os
+// outros codigos ficam com a mensagem de antes ('HTTP 500 em <url>').
+const erroLeitura = (url) => (e) => {
+  const m = String(e && e.message);
+  if (/^HTTP 404/.test(m)) throw new Error('lib-le-dados: ' + m.replace(/^HTTP 404/, '404'));
+  throw new Error(m.replace(/^HTTP (\d+) .*$/, 'HTTP $1 em ' + url));
+};
 
 // Fecha as 12 linhas de ONTEM pelo snapshot completo, se elas ainda estao `parcial`. Nao derruba o job: o que impede o fechamento
 // sai no log (com `::warning::` quando e a guarda), e a rodada completa fecha depois. Leitura que falha sem ser 404 estoura.

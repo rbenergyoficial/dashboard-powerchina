@@ -136,21 +136,15 @@ const diasFora = (rel) => { const a = (rel.alarmes || []).find((x) => x.gatilho 
 
 /* baixa um blob publicado. 🔴 So o 404 vira erro claro; qualquer outra falha de leitura estoura,
    porque ensaiar contra um arquivo pela metade diria "tudo bem" sobre nada. */
-function baixa(nome, msg404) {
-  const https = require('https');
-  return new Promise((ok, erro) => {
-    https.get(BASE + nome, (r) => {
-      if (r.statusCode === 404) { erro(new Error(msg404 || (nome + ' nao esta publicado'))); r.resume(); return; }
-      if (r.statusCode !== 200) { erro(new Error('HTTP ' + r.statusCode + ' ao ler ' + nome)); r.resume(); return; }
-      const p = [];
-      r.on('data', (c) => p.push(c));
-      r.on('end', () => {
-        let b = Buffer.concat(p);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { erro(new Error(nome + ': JSON invalido: ' + e.message)); }
-      });
-    }).on('error', erro);
-  });
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do PROPRIO blob vira a mensagem de "nao publicado";
+   o 404 de conteiner sumido e o resto que a lib estoura saem com o texto dela. */
+async function baixa(nome, msg404) {
+  let r;
+  try { r = await require('./lib-le-dados').pede(BASE + nome); } catch (e) { throw new Error('leitura de ' + nome + ' falhou: ' + e.message); }
+  if (r.status === 404) throw new Error(msg404 || (nome + ' nao esta publicado'));
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  try { return JSON.parse(b.toString('utf8')); } catch (e) { throw new Error(nome + ': JSON invalido: ' + e.message); }
 }
 /* 🔴 Esta mensagem existe porque a primeira rodada deste passo caiu assim e o log dizia so
    "HTTP 404". A falha e legitima — sem registro nao ha o que auditar, e calar seria pior —, mas ela

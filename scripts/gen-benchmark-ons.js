@@ -42,6 +42,7 @@ let LISTA = new Map(), nLista = 0;
 const APLICADOS = new Set();   // os ts trocados, publicados em `ref_conjunto_pela_soma_aplicada` (o ensaio cruza com o executivo)
 const ACHADOS = new Map();     // ts da lista -> a NOSSA linha do CSV (gref, disp, ger): trocada ou nao, o cru pode ja vir certo
 const https = require('https'), readline = require('readline'), zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial; o https fica so para os CSV do ONS
 const ONS = 'https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/';
 const FONTES = [
   { id: 'solar', dir: 'restricao_coff_fotovoltaica_tm', arq: 'RESTRICAO_COFF_FOTOVOLTAICA' },
@@ -135,15 +136,17 @@ const DIA_INI = new Date(Date.now() - DIA_JANELA * 86400000).toISOString().slice
 
 // Le um blob JSON ja publicado (historico e corte calculado). Os CSV do ONS vem por `linhas()`,
 // em streaming, porque tem dezenas de MB; estes tem dezenas de KB e cabem na memoria.
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; BASE_DADOS de outro endereco passa direto). So o 404 do
+// proprio blob vira 'HTTP 404' (a ausencia que o chamador testa); o que a lib estoura sai sem casar com /HTTP 404/. O gzip e
+// detectado pelos bytes (a lib devolve o que esta gravado, sem o cabecalho content-encoding).
 function getJSON(url) {
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' }, timeout: 60000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
-  });
+  return LD.pede(url, { 'accept-encoding': 'gzip' })
+    .catch((e) => { throw new Error('lib-le-dados: ' + String(e && e.message).replace(/^HTTP 404/, '404')); })
+    .then((x) => {
+      if (x.status !== 200) throw new Error('HTTP ' + x.status);
+      const b = x.buf[0] === 0x1f && x.buf[1] === 0x8b ? zlib.gunzipSync(x.buf) : x.buf;
+      return JSON.parse(b.toString('utf8'));
+    });
 }
 
 function linhas(url) {

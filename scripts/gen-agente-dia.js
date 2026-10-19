@@ -45,16 +45,14 @@ const TETO_KB = 60;
 const r2 = (x) => (x == null || !isFinite(x) ? null : Math.round(x * 100) / 100);
 const r3 = (x) => (x == null || !isFinite(x) ? null : Math.round(x * 1000) / 1000);
 
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). Como antes, toda resposta que nao e 200 estoura, o 404 do
+   proprio blob tambem: aqui nenhuma fonte ausente vira vazio. O tempo de espera passa a ser o da lib (120 s sem resposta). */
+const LD = require('./lib-le-dados');
 function puxa(url) {
-  const https = require('https');
-  return new Promise((ok, erro) => {
-    const req = https.get(url, { headers: { 'Accept-Encoding': 'gzip' }, timeout: 180000 }, (res) => {
-      if (res.statusCode !== 200) { erro(new Error('HTTP ' + res.statusCode + ' ' + url.split('/').pop())); res.resume(); return; }
-      const p = []; res.on('data', (c) => p.push(c));
-      res.on('end', () => { let b = Buffer.concat(p); if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        try { ok(JSON.parse(b.toString('utf8').replace(/^﻿/, ''))); } catch (e) { erro(new Error('JSON invalido: ' + e.message)); } });
-    });
-    req.on('timeout', () => req.destroy(new Error('sem resposta em 180 s: ' + url.split('/').pop()))); req.on('error', erro);
+  return LD.pede(url, { 'Accept-Encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' ' + url.split('/').pop());
+    let b = x.buf; if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    try { return JSON.parse(b.toString('utf8').replace(/^﻿/, '')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
   });
 }
 

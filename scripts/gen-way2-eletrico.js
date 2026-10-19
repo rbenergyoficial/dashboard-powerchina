@@ -22,7 +22,8 @@
 //                     E o crivo que autoriza a troca: sem ele, "parece igual" nao e igual.
 
 'use strict';
-const https = require('https');
+const https = require('https');   // so a API da Way2
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 
 const API = { host: 'pim.way2.com.br', port: 183, path: '/api/v3/dados-de-medicao/pontos' };
 const CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -84,25 +85,19 @@ async function buscaComEspera(q, token) {
   throw ultimo;
 }
 
-function leBlob(nome) {
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do proprio blob vira null; o resto (403, 409, 5xx,
+// rede, conteiner sumido) estoura. A lib devolve os bytes como gravados, sem o content-encoding: o segundo gunzip (gzip sobre gzip)
+// passa a sair so pelos bytes magicos.
+async function leBlob(nome) {
   const zlib = require('zlib');
-  return new Promise((ok, ko) => {
-    https.get(BASE_LEITURA + nome, { headers: { 'accept-encoding': 'gzip' } }, res => {
-      if (res.statusCode === 404) return ok(null);
-      if (res.statusCode !== 200) return ko(new Error(nome + ' HTTP ' + res.statusCode));
-      const ch = []; res.on('data', c => ch.push(c));
-      res.on('end', () => {
-        try {
-          let b = Buffer.concat(ch);
-          // 🔴 gzip se reconhece pelos BYTES MAGICOS, nao pelo cabecalho: o Azure serve os bytes
-          // gravados, e um blob comprimido lido como texto vira JSON invalido.
-          if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-          if (/gzip/i.test(res.headers['content-encoding'] || '') && b[0] === 0x1f) b = zlib.gunzipSync(b);
-          ok(JSON.parse(b.toString('utf8').replace(/^﻿/, '')));
-        } catch (e) { ko(e); }
-      });
-    }).on('error', ko);
-  });
+  const x = await LD.pede(BASE_LEITURA + nome, { 'accept-encoding': 'gzip' });
+  if (x.status === 404) return null;
+  let b = x.buf;
+  // 🔴 gzip se reconhece pelos BYTES MAGICOS, nao pelo cabecalho: o Azure serve os bytes
+  // gravados, e um blob comprimido lido como texto vira JSON invalido.
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
 }
 
 // A guarda que impede publicar coleta pela metade. Serie faltando nao e "medidor parado": e coleta

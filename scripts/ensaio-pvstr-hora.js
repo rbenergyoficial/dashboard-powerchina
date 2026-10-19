@@ -27,7 +27,7 @@
  * uso: node ensaio-pvstr-hora.js [ufv]        (padrao: M3)
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -51,22 +51,17 @@ const le = (nome) => new Promise((res, rej) => {
     j.__bytes = naRede;
     res(j); return;
   }
-  https.get(BASE + nome, { family: 4 }, (r) => {
+  /* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+  LD.pede(BASE + nome).then((r) => {
     /* so o 404 e ausencia; qualquer outra falha estoura em vez de virar "nada a conferir" */
-    if (r.statusCode !== 200) { r.resume(); rej(new Error(nome + ': HTTP ' + r.statusCode)); return; }
-    const c = [];
-    let bytes = 0;
-    r.on('data', (d) => { c.push(d); bytes += d.length; });
-    r.on('end', () => {
-      try {
-        let b = Buffer.concat(c);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        const j = JSON.parse(b.toString('utf8'));
-        j.__bytes = bytes;
-        res(j);
-      } catch (e) { rej(e); }
-    });
-  }).on('error', rej);
+    if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+    const bytes = r.buf.length;   /* os bytes como gravados (gzip) = o peso que a pagina baixa */
+    let b = r.buf;
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    const j = JSON.parse(b.toString('utf8'));
+    j.__bytes = bytes;
+    return j;
+  }).then(res, rej);
 });
 
 const num = (x) => typeof x === 'number' && isFinite(x);

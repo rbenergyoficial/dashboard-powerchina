@@ -17,7 +17,7 @@
  * e uma tentativa por hora.
  * escreve `velho=true|false` em $GITHUB_OUTPUT e imprime a idade medida.
  */
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const fs = require('fs');
 
 const BASE = process.env.BASE || 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -31,13 +31,14 @@ const saida = (velho, msg) => {
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'velho=' + velho + '\n');
 };
 
-https.request(BASE + blob, { method: 'HEAD', family: 4 }, (r) => {
-  r.resume();
+// Fase 2: o HEAD e o da lib-le-dados (credencial para `dados`). Ela devolve 200 ou 404 e estoura o resto (403, 409, 5xx, rede);
+// o estouro continua contando como VELHO, como qualquer resposta estranha antes.
+LD.cabecalho(BASE + blob).then((r) => {
   // 🔴 404 conta como VELHO: blob que nao existe e o caso em que mais se quer gerar.
   //    Qualquer outra resposta estranha tambem, porque o custo de gerar a toa e 3 min
   //    e o custo de nao gerar e a pagina ficar parada por um dia.
-  if (r.statusCode !== 200) return saida(true, blob + ': HTTP ' + r.statusCode + ' — trata como velho');
-  const lm = r.headers['last-modified'];
+  if (r.status !== 200) return saida(true, blob + ': HTTP ' + r.status + ' — trata como velho');
+  const lm = r.ultimaMod;
   if (!lm) return saida(true, blob + ': sem last-modified — trata como velho');
   const h = (Date.now() - new Date(lm).getTime()) / 3600000;
   const min = new Date().getUTCMinutes();
@@ -46,4 +47,4 @@ https.request(BASE + blob, { method: 'HEAD', family: 4 }, (r) => {
   if (h < horas) return saida(false, idade + ' — fresco, pula');
   if (!naJanela) return saida(false, idade + ' — velho, mas fora da janela (minuto ' + min + ')');
   saida(true, idade + ' — VELHO, vai gerar');
-}).on('error', (e) => saida(true, blob + ': ' + e.message + ' — trata como velho')).end();
+}, (e) => saida(true, blob + ': ' + e.message + ' — trata como velho'));

@@ -23,7 +23,8 @@
  * Sem segredo nenhum: le blob publico. `BASE_DADOS` apontando para um DIRETORIO le do disco, que e o
  * que permite exercita-lo contra uma rodada local ANTES de publicar.
  */
-const https = require('https'), zlib = require('zlib'), fs = require('fs'), path = require('path');
+const zlib = require('zlib'), fs = require('fs'), path = require('path');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.net/dados/';
 const PPA = ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'];
 const ML = ['M1', 'M7', 'M9'];
@@ -40,13 +41,11 @@ const TAG_M7_OK = (function () {
 function getJSON(nome) {
   if (!/^https?:/i.test(BASE)) return Promise.resolve(JSON.parse(fs.readFileSync(path.join(BASE, nome), 'utf8')));
   const url = BASE + nome;
-  return new Promise((ok, ko) => {
-    https.get(url, { headers: { 'accept-encoding': 'gzip' }, timeout: 120000 }, r => {
-      if (r.statusCode !== 200) { r.resume(); return ko(new Error('HTTP ' + r.statusCode + ' em ' + url)); }
-      const cru = /gzip/i.test(r.headers['content-encoding'] || '') ? r.pipe(zlib.createGunzip()) : r;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(e); } });
-    }).on('error', ko);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o gzip pelos bytes, a lib devolve o que esta gravado */
+  return LD.pede(url, { 'accept-encoding': 'gzip' }).then((x) => {
+    if (x.status !== 200) throw new Error('HTTP ' + x.status + ' em ' + url);
+    const b = x.buf[0] === 0x1f && x.buf[1] === 0x8b ? zlib.gunzipSync(x.buf) : x.buf;
+    return JSON.parse(b.toString('utf8'));
   });
 }
 

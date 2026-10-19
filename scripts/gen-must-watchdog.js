@@ -99,20 +99,19 @@ const lista = (a) => !a.length ? '—' : a.length === 1 ? a[0] : a.slice(0, -1).
 
 // 🔴 So o 404 devolve vazio. Qualquer outra falha ESTOURA — a licao de 23/08: um leitor que
 // confunde "falhou" com "nao existe" faz o gerador tratar queda de rede como primeira execucao.
-function leBlob(url) {
-  // o modulo sai do PROTOCOLO: em producao e sempre https; o ensaio serve o recorte gravado
-  // por http em 127.0.0.1, e assim testa o mesmo codigo que roda de verdade
-  const mod = url.startsWith('http:') ? require('http') : https;
-  return new Promise((ok, ko) => {
-    mod.get(url, { headers: { 'accept-encoding': 'gzip' } }, res => {
-      if (res.statusCode === 404) { res.resume(); return ok(null); }
-      if (res.statusCode !== 200) { res.resume(); return ko(new Error('HTTP ' + res.statusCode + ' ao ler ' + url)); }
-      const cru = /gzip/i.test(res.headers['content-encoding'] || '') ? res.pipe(require('zlib').createGunzip()) : res;
-      const c = []; cru.on('data', d => c.push(d));
-      cru.on('error', e => ko(new Error('descompressao falhou: ' + e.message)));
-      cru.on('end', () => { try { ok(JSON.parse(Buffer.concat(c).toString('utf8'))); } catch (e) { ko(new Error('JSON invalido: ' + e.message)); } });
-    }).on('error', e => ko(new Error('rede falhou: ' + e.message)));
-  });
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; endereco de fora, como o http de 127.0.0.1 do ensaio, passa
+// direto pelo mesmo codigo). Bytes como gravados: o gzip sai pelos bytes magicos. So o 404 do proprio blob vira null.
+const LD = require('./lib-le-dados');
+async function leBlob(url) {
+  let x;
+  try { x = await LD.pede(url, { 'accept-encoding': 'gzip' }); }
+  catch (e) { throw new Error('leitura falhou: ' + e.message); }
+  if (x.status === 404) return null;
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) {
+    try { b = require('zlib').gunzipSync(b); } catch (e) { throw new Error('descompressao falhou: ' + e.message); }
+  }
+  try { return JSON.parse(b.toString('utf8')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
 }
 function apiGet(query, token, timeout = 45000) {
   return new Promise((resolve, reject) => {

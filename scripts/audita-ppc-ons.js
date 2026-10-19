@@ -43,17 +43,14 @@ const TOL = Number(process.env.PPC_TOL || 2);         // MW — a folga entre as
 const TOL_DIA = Number(process.env.PPC_TOL_DIA || 2); // MW — a MEDIANA do dia acima disso e vermelho
 const SECO = /^(1|true|sim)$/i.test(process.env.SECO || '');
 
-const puxa = (url) => new Promise((ok, erro) => {
-  require('https').get(url, (r) => {
-    if (r.statusCode !== 200) { erro(new Error('HTTP ' + r.statusCode)); r.resume(); return; }
-    const p = [];
-    r.on('data', (c) => p.push(c));
-    r.on('end', () => {
-      let b = Buffer.concat(p);
-      if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-      try { ok(JSON.parse(b.toString('utf8'))); } catch (e) { erro(new Error('JSON invalido: ' + e.message)); }
-    });
-  }).on('error', erro);
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). Como antes, o 404 tambem estoura (sem o registro ou sem o
+// ONS nao ha auditoria); o erro da lib propaga como esta.
+const LD = require('./lib-le-dados');
+const puxa = (url) => LD.pede(url).then((x) => {
+  if (x.status !== 200) throw new Error('HTTP ' + x.status);
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  try { return JSON.parse(b.toString('utf8')); } catch (e) { throw new Error('JSON invalido: ' + e.message); }
 });
 
 async function grava(nome, obj) {

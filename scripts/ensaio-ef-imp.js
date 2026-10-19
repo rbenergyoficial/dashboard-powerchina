@@ -23,7 +23,7 @@
  * uso: node ensaio-ef-imp.js [ufv]   ·   LOCAL_DIR=<pasta> julga os .json de um ensaio local
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -41,25 +41,19 @@ let mau = 0;
 const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
-const le = (nome) => new Promise((res, rej) => {
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+const le = async (nome) => {
   if (process.env.LOCAL_DIR) {
     let b = fs.readFileSync(path.join(process.env.LOCAL_DIR, nome));
     if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-    res(JSON.parse(b.toString('utf8'))); return;
+    return JSON.parse(b.toString('utf8'));
   }
-  https.get(BASE + nome, { family: 4 }, (r) => {
-    if (r.statusCode !== 200) { r.resume(); rej(new Error(nome + ': HTTP ' + r.statusCode)); return; }
-    const c = [];
-    r.on('data', (d) => c.push(d));
-    r.on('end', () => {
-      try {
-        let b = Buffer.concat(c);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        res(JSON.parse(b.toString('utf8')));
-      } catch (e) { rej(e); }
-    });
-  }).on('error', rej);
-});
+  const r = await LD.pede(BASE + nome);
+  if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
+};
 
 /* a regra B, isolada para poder ser exercitada contra um defeito plantado */
 const violaFisica = (s) => s.filter((l) => l.ef > 1 && 'ef_imp' in l && !(l.ef_imp > 0));

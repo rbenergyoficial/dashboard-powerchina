@@ -15,12 +15,14 @@
  * uso: node scripts/ensaio-disponibilidade.js
  */
 const zlib = require('zlib');
+const LD = require('./lib-le-dados');
 const { disponibilidade, mensal } = require('./lib-disponibilidade.js');
 
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
-const get = (u) => fetch(u).then(async (r) => {
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+const get = (u) => LD.pede(u).then(async (r) => {
   if (r.status !== 200) throw new Error(r.status + ' ' + u);
-  let b = Buffer.from(await r.arrayBuffer());
+  let b = r.buf;
   if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
   return JSON.parse(b.toString('utf8'));
 });

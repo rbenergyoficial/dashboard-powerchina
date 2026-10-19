@@ -19,7 +19,7 @@
  * uso: node scripts/ensaio-hierarquia.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 
 const BASE = process.env.BLOB_BASE || 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -30,17 +30,12 @@ function baixa(nome) {
     const p = require('path').join(process.env.BLOB_DIR, nome);
     return Promise.resolve(JSON.parse(require('fs').readFileSync(p, 'utf8')));
   }
-  return new Promise((ok, mau) => {
-    https.get(BASE + nome, (r) => {
-      if (r.statusCode !== 200) { mau(new Error(nome + ': HTTP ' + r.statusCode)); r.resume(); return; }
-      const b = [];
-      r.on('data', (c) => b.push(c));
-      r.on('end', () => {
-        let buf = Buffer.concat(b);
-        if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
-        try { ok(JSON.parse(buf.toString('utf8'))); } catch (e) { mau(new Error(nome + ': ' + e.message)); }
-      });
-    }).on('error', mau);
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`; BLOB_BASE de outro endereco passa direto) */
+  return LD.pede(BASE + nome).then((x) => {
+    if (x.status !== 200) throw new Error(nome + ': HTTP ' + x.status);
+    let buf = x.buf;
+    if (buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
+    try { return JSON.parse(buf.toString('utf8')); } catch (e) { throw new Error(nome + ': ' + e.message); }
   });
 }
 

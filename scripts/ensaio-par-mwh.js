@@ -23,7 +23,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
 const { conferePares } = require('./lib-par-mwh.js');
 
@@ -31,10 +31,11 @@ const BASE = process.env.BASE_DADOS || 'https://rbenergydata.blob.core.windows.n
 function parse(buf) { return JSON.parse((buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf).toString('utf8')); }
 function le(nome) {
   if (!/^https?:/.test(BASE)) return Promise.resolve(parse(fs.readFileSync(path.join(BASE, nome))));
-  return new Promise((res, rej) => https.get(BASE + nome, { headers: { 'Accept-Encoding': 'gzip' } }, (s) => {
-    if (s.statusCode !== 200) return rej(new Error(nome + ': HTTP ' + s.statusCode));
-    const b = []; s.on('data', (c) => b.push(c)); s.on('end', () => { try { res(parse(Buffer.concat(b))); } catch (e) { rej(e); } });
-  }).on('error', rej));
+  /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`) */
+  return LD.pede(BASE + nome, { 'Accept-Encoding': 'gzip' }).then((s) => {
+    if (s.status !== 200) throw new Error(nome + ': HTTP ' + s.status);
+    return parse(s.buf);
+  });
 }
 const copia = (o) => JSON.parse(JSON.stringify(o));
 

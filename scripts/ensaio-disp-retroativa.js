@@ -18,7 +18,7 @@
  * uso: node scripts/ensaio-disp-retroativa.js
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const { disponibilidade, completaDisponibilidade } = require('./lib-disponibilidade.js');
 
@@ -26,15 +26,14 @@ const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const US = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 
-const puxa = (u) => new Promise((ok, no) => {
-  https.get(u, (r) => {
-    if (r.statusCode !== 200) { r.resume(); return no(new Error('HTTP ' + r.statusCode)); }
-    const b = []; r.on('data', (d) => b.push(d));
-    r.on('end', () => { let x = Buffer.concat(b);
-      if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
-      try { ok(JSON.parse(x.toString('utf8'))); } catch (e) { no(e); } });
-  }).on('error', no);
-});
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+const puxa = async (u) => {
+  const r = await LD.pede(u);
+  if (r.status !== 200) throw new Error('HTTP ' + r.status);
+  let x = r.buf;
+  if (x[0] === 0x1f && x[1] === 0x8b) x = zlib.gunzipSync(x);
+  return JSON.parse(x.toString('utf8'));
+};
 
 const campos = (o) => Object.keys(o).filter((k) => /_disp_pct$|_inv_parados$|_inv_parciais$|_inv_contador_24h$|^janela_h$|^CX_disp_pct$/.test(k));
 

@@ -33,7 +33,7 @@
  * uso: node ensaio-isol-zero.js [ufv]   ·   LOCAL_BLOB=<arquivo> para julgar um blob de arquivo
  */
 'use strict';
-const https = require('https');
+const LD = require('./lib-le-dados');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -46,24 +46,18 @@ let mau = 0;
 const falha = (m) => { mau += 1; console.log('  🔴 ' + m); };
 const ok = (c, m) => { if (!c) falha(m); else console.log('  ok  ' + m); };
 
-const le = (nome) => new Promise((res, rej) => {
+/* 🔐 Fase 2 (18/10/2026): o transporte é o lib-le-dados.js (com credencial). Contrato mantido: não-200 estoura, 404 inclusive */
+const le = async (nome) => {
   if (process.env.LOCAL_BLOB && nome === 'perdas_inv.json') {
-    res(JSON.parse(fs.readFileSync(process.env.LOCAL_BLOB, 'utf8'))); return;
+    return JSON.parse(fs.readFileSync(process.env.LOCAL_BLOB, 'utf8'));
   }
-  https.get(BASE + nome, { family: 4 }, (r) => {
-    /* só o 404 é ausência; qualquer outra falha estoura em vez de virar "nada a conferir" */
-    if (r.statusCode !== 200) { r.resume(); rej(new Error(nome + ': HTTP ' + r.statusCode)); return; }
-    const c = [];
-    r.on('data', (d) => c.push(d));
-    r.on('end', () => {
-      try {
-        let b = Buffer.concat(c);
-        if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
-        res(JSON.parse(b.toString('utf8')));
-      } catch (e) { rej(e); }
-    });
-  }).on('error', rej);
-});
+  const r = await LD.pede(BASE + nome);
+  /* só o 404 é ausência; qualquer outra falha estoura em vez de virar "nada a conferir" */
+  if (r.status !== 200) throw new Error(nome + ': HTTP ' + r.status);
+  let b = r.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  return JSON.parse(b.toString('utf8'));
+};
 
 /* 🔴 A REGRA VEM DO PRÓPRIO GERADOR, como ela sobe. Reescrevê-la aqui provaria só que a minha
       cópia concorda consigo mesma — é a lição do ensaio da guarda do relógio. */

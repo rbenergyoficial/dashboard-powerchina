@@ -176,7 +176,8 @@ planta('instante em UTC', "Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3
 planta('sem fonte passa calado', 'if (!arquivos) throw new Error(', 'if (false) throw new Error(', 'okFalha');
 planta('sem guarda de contrato', 'if (quebra) throw new Error(', 'if (false) throw new Error(', 'okContrato');
 planta('publicado ilegivel vira primeira vez', "throw new Error('nao consegui ler o ' + nome + ' publicado (", "return null; void new Error('nao consegui ler o ' + nome + ' publicado (", 'okHttp');
-planta('qualquer codigo vira ausencia', "ko(new Error(url + ' -> HTTP ' + r.statusCode))", 'ok(null)', 'okHttp');
+/* Fase 2: a leitura passou para a lib-le-dados; o defeito e o mesmo, qualquer erro da leitura tratado como blob ausente */
+planta('qualquer codigo vira ausencia', "const x = await LD.pede(url, { 'accept-encoding': 'gzip' });", "const x = await LD.pede(url, { 'accept-encoding': 'gzip' }).catch(() => ({ status: 404 }));", 'okHttp');
 
 console.log(falhas ? '\n' + falhas + ' FALHA(S)' : '\nensaio-ts-setpoint: tudo ok');
 process.exit(falhas ? 1 : 0);
