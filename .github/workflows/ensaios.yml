@@ -92,6 +92,18 @@ jobs:
         if: always()
         run: node scripts/ensaio-alerta-must.js
 
+      # O mes corrente do ONS (repara-ons-mes.js, gravarMesCorrente; PROMOVER pa-ons) no formato do fluxo do Power Automate que
+      # ele substitui: texto cru, so o dsc aparado, mes em UTC, topo do blob igual, e nunca piorar o que esta gravado.
+      - name: Ensaio · o mes corrente do ONS no formato do fluxo
+        if: always()
+        run: node scripts/ensaio-ons-mes-corrente.js
+
+      # A leitura do conteiner `dados` com credencial (lib-le-dados.js; Fase 2): SDK, SAS e publico; so o 404 BlobNotFound e
+      # "nao existe", o anonimo no conteiner privado e a conta fechada ESTOURAM.
+      - name: Ensaio · leitura do conteiner dados (lib-le-dados)
+        if: always()
+        run: node scripts/ensaio-le-dados.js
+
       # O substituto do fluxo "Way2 → Azure Blob Sync" (gen-way2-mes.js; PROMOVER pa-way2-mes-sombra / pa-way2-mes): as tres
       # chamadas do fluxo, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.
       - name: Ensaio · energia e demanda do mes da Way2 (substituto do fluxo)

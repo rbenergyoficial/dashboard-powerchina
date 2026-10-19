@@ -10,6 +10,8 @@
  * Teste local: env LOCAL_OUT_DIR=<pasta> grava os arquivos localmente em vez do blob.
  */
 const rot = require('./lib-rotulos.js');
+const zlib = require('zlib');
+const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const START_Y = 2025, START_M = 9; // Set/2025 = entrada em operação
@@ -26,12 +28,18 @@ function months() {
   return out;
 }
 
+// Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). 🔴 So o mes que NAO EXISTE (404 BlobNotFound) vira null. Antes,
+// qualquer resposta que nao fosse 200 (403, 409, 5xx) e JSON ilegivel tambem viravam null: o mes sumia do consolidado e o arquivo era
+// regravado sem ele; depois da virada sem credencial, todos os meses dariam null e a consolidacao seria pulada calada. Agora a leitura
+// que falha ESTOURA e a rodada fica vermelha. A lib devolve os bytes gravados; o gzip sai pelos bytes magicos.
 async function fetchJson(url) {
-  const r = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
-  if (!r.ok) return null;
-  let t = await r.text();
+  const x = await LD.pede(url + '?t=' + Date.now());
+  if (x.status === 404) return null;
+  let b = x.buf;
+  if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+  let t = b.toString('utf8');
   if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
-  try { return JSON.parse(t); } catch (e) { return null; }
+  try { return JSON.parse(t); } catch (e) { throw new Error('JSON ilegivel em ' + url.split('?')[0] + ': ' + e.message); }
 }
 
 function num(v) { const n = +v; return isNaN(n) ? 0 : n; }
@@ -279,6 +287,14 @@ async function gerarKpis(rows) {
   } catch (e) {
     console.warn('  reparo falhou (' + e.message + ') — segue com os blobs como estão');
   }
+  console.log('');
+
+  // O MÊS CORRENTE (PROMOVER pa-ons): era gravado pelo fluxo "ONS Restricao Fotovoltaica" do Power Automate, que sai com o Premium
+  // em 09/11/2026. Mesmo CSV e mesmo formato do fluxo (ver repara-ons-mes.js), antes de consolidar, para o all sair do mesmo
+  // dado. 🔴 Erro aqui NAO para a consolidacao (os meses fechados seguem), mas deixa o job VERMELHO: agora este e o unico
+  // escritor do mes corrente, e mes parado em silencio e o defeito que o vermelho existe para mostrar.
+  console.log('Mês corrente:');
+  await require('./repara-ons-mes.js').etapaMesCorrente(upload, BASE);
   console.log('');
 
   // Restrição: 1 linha por ts (nível complexo)

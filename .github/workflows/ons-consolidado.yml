@@ -15,6 +15,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      # O gravador do mes corrente (repara-ons-mes.js, PROMOVER pa-ons) e o unico escritor do ons_restricao_<mes>.json desde que o
+      # fluxo do Power Automate saiu. O ensaio dele vem ANTES: regra quebrada nao chega a gravar o mes (o passo vermelho para o job).
+      - name: Ensaio do mes corrente do ONS (formato do fluxo, ausencia x defeito, virada)
+        run: node scripts/ensaio-ons-mes-corrente.js
       - name: Consolidar ONS restricao + irradiancia
         id: consolidado
         env:
