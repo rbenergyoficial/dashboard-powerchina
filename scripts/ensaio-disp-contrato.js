@@ -101,7 +101,7 @@ const le = async (nome) => {
 };
 
 (async () => {
-  const [diario, inv, irr] = await Promise.all([le('perdas_diario_scada.json'), le('perdas_inv_scada.json'), puxa('https://rbenergydata.blob.core.windows.net/dados/irr_30min.json')]);
+  const [diario, inv, irr] = await Promise.all([le('perdas_diario_scada.json'), le('perdas_inv_scada.json'), puxa('https://rbenergydata.blob.core.windows.net/dados/irr_plano_30min.json')]);   // fontes-logger: a copia do supervisorio confere com a irradiancia do SCADA (scada_w)
   const S = diario.serie || [];
   const comCampo = S.filter((o) => o.CX_disp_contrato_pct != null);
   if (!comCampo.length) {
@@ -109,8 +109,8 @@ const le = async (nome) => {
       + '(o campo nasce na primeira rodada que ler a curva)');
     return fim();
   }
-  const us = (irr.ufvs || []).filter((u) => u !== 'Complexo');
-  const J = L.janelaContrato(irr.serie, us);
+  const us = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+  const J = L.janelaContrato(L.serieScada(irr, us), us);
   const linhas = (inv.serie || []).map((o) => ({ dia: o.dia, ufv: o.ufv, ts: o.ts, inv: o.inv, gerando: o.gerando, lidos: o.lidos }));
   const R = L.dispContrato(linhas, J);
   /* a regra ANTIGA (janela inteira), para o dia publicado ANTES do campo `sem_leitura` existir: o blob

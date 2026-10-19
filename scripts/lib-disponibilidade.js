@@ -155,6 +155,13 @@ const MIN_SLOTS_JANELA = 12;  // menos de 6 h de janela num dia: o dia nao serve
  * @param {Array<Object>} serie linhas do irr_30min: { t: 'AAAA-MM-DDTHH:MM:SS-03:00', <ufv>: W/m2 }
  * @param {Array<string>} ufvs colunas de usina a considerar
  * @returns {Map<string, Set<string>>} 'dia|ufv' -> Set('HH:MM') */
+/* fontes-logger (19/10/2026): desde que a irradiancia das telas passou ao datalogger, o irr_30min e o gti_w do irr_plano sao a media
+   do datalogger. A copia do SUPERVISORIO (perdas_diario_scada, so para o Comparativo) foi feita com a irradiancia do SCADA, que
+   continua no campo `scada_w_<u>` do irr_plano_30min: esta funcao devolve a serie no formato {t, <u>: W/m2} para a janela dela. */
+function serieScada(plano, ufvs) {
+  if (!plano || plano.fonte_estacao !== 'datalogger') throw new Error('serieScada: irr_plano sem a marca fonte_estacao=datalogger (sem o campo scada_w)');
+  return (plano.serie || []).map((x) => { const o = { t: x.t }; for (const u of ufvs) o[u] = x['scada_w_' + u] == null ? null : x['scada_w_' + u]; return o; });
+}
 function janelaContrato(serie, ufvs) {
   const out = new Map();
   for (const x of serie || []) {
@@ -224,5 +231,5 @@ function dispContrato(porInv, janela) {
   return out;
 }
 
-module.exports = { disponibilidade, mensal, completaDisponibilidade, janelaContrato, dispContrato,
+module.exports = { serieScada, disponibilidade, mensal, completaDisponibilidade, janelaContrato, dispContrato,
   LIMITE_DIURNO_MIN, JANELA_MIN, JANELA_MAX, PARADO, PARCIAL, LIMIAR_IRR, MIN_SLOTS_JANELA };

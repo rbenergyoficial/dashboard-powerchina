@@ -728,8 +728,11 @@ async function grava(nomeLogico, obj) {
   // — e isso vai ao log, em vez de virar um numero calculado com outra janela.
   let JAN_CONTRATO = new Map();
   try {
-    const irr30 = await puxa('https://rbenergydata.blob.core.windows.net/dados/irr_30min.json');
-    JAN_CONTRATO = janelaContrato(irr30.serie, (irr30.ufvs || []).filter((u) => u !== 'Complexo'));
+    /* fontes-logger (19/10/2026): este gerador grava a copia do SUPERVISORIO (Comparativo): a janela sai da irradiancia do SCADA
+       (`scada_w_<u>` do irr_plano_30min), nao da media do datalogger que as telas usam */
+    const plano = await puxa('https://rbenergydata.blob.core.windows.net/dados/irr_plano_30min.json');
+    const US9 = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+    JAN_CONTRATO = janelaContrato(require('./lib-disponibilidade.js').serieScada(plano, US9), US9);
     const hs = [...JAN_CONTRATO.values()].map((s) => s.size / 2).sort((a, b) => a - b);
     console.log('  janela do contrato (irradiância > 100 W/m²): ' + JAN_CONTRATO.size + ' dias-usina · '
       + (hs.length ? hs[0].toFixed(1) + ' a ' + hs[hs.length - 1].toFixed(1) + ' h, mediana ' + hs[hs.length >> 1].toFixed(1) + ' h' : '—'));
