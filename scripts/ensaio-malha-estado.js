@@ -6,12 +6,15 @@
  *
  * Tres camadas:
  *   1. as regras soltas (prazo da agenda, frescor, escolha do arquivo do dia, execucoes, guarda), importadas do gerador;
- *   2. o GERADOR DE VERDADE num processo a parte, em sete mundos fabricados: o principal (estados v0 e v1, dia sem arquivo,
+ *   2. o GERADOR DE VERDADE num processo a parte, em doze mundos fabricados: o principal (estados v0 e v1, dia sem arquivo,
  *      teste e diario no mesmo dia, falha, ressalva, tentativas > 1; frescor ok/atrasado/ausente; execucoes vermelhas), a
- *      gravacao no blob, a pasta local, nenhuma fonte, o cofre que sumiu, a agenda sem um workflow e o publico que sumiu;
+ *      gravacao no blob, a pasta local, nenhuma fonte, o cofre que sumiu, a agenda sem um workflow, o publico que sumiu, e
+ *      os cinco do `proc` (malha-v2: vermelho com arquivo atrasado, com arquivo ausente, com arquivo no prazo, sem arquivo
+ *      no frescor, tudo verde);
  *   3. os PLANTIOS: copias do gerador quebradas de proposito, que TEM de reprovar (estado sem registro virando ok, teste
- *      vencendo o diario, log/conteiner/blob na saida, frescor sem prazo, 404 de conteiner tratado como ausencia). Os de
- *      texto e de prazo rodam duas vezes: com a guarda do gerador (ela barra) e sem ela (a checagem deste ensaio barra).
+ *      vencendo o diario, log/conteiner/blob na saida, frescor sem prazo, 404 de conteiner tratado como ausencia; no `proc`,
+ *      vermelho com arquivo atrasado virando at e vermelho com arquivo no prazo virando fa). Os de texto e de prazo rodam
+ *      duas vezes: com a guarda do gerador (ela barra) e sem ela (a checagem deste ensaio barra).
  *
  * Esperados contados FORA do gerador: letras, numeros e datas escritos a mao a partir dos fixtures abaixo.
  */
@@ -244,7 +247,7 @@ const ETAPA_ESPERADA = {
   pa: { st: 'des', motivo: null, ultima: null, ref_dia: null, prox: null, n: { restam: 4 } },
   way2: { st: 'ok', motivo: null, ultima: '2026-10-19T15:26:00Z', ref_dia: null, prox: '2026-10-19T15:35:00Z', n: { idade_min: 4 } },
   ons: { st: 'at', motivo: 'atrasado', ultima: '2026-10-18T09:30:00Z', ref_dia: null, prox: '2026-10-19T18:17:00Z', n: { idade_min: 1800 } },
-  proc: { st: 'at', motivo: 'workflow_vermelho', ultima: '2026-10-19T15:20:00Z', ref_dia: null, prox: '2026-10-19T15:33:00Z', n: { ok: 2 * W - 1, total: 2 * W, vermelhos: 1 } },
+  proc: { st: 'at', motivo: 'workflow_vermelho', ultima: '2026-10-19T15:20:00Z', ref_dia: null, prox: '2026-10-19T15:33:00Z', n: { ok: 2 * W - 1, total: 2 * W, vermelhos: 1, parados: 0 } },
   pub: { st: 'fa', motivo: 'muito_atrasado', ultima: '2026-10-19T15:05:00Z', ref_dia: null, prox: '2026-10-19T15:33:00Z', n: { no_prazo: G.FONTES.length - 4, total: G.FONTES.length - 2 } },
   portal: { st: 'sem', motivo: null, ultima: null, ref_dia: null, prox: null, n: {} },
 };
@@ -423,15 +426,44 @@ async function regras() {
   R = G.etapasPonte(G.normaliza(v0(D, 'ok', 1, false), 0, 0, 'x'), D, true);
   ok(R.ponte.st === 'ok' && ['inv', 'est', 'scada', 'vm', 'vpn', 'cofre', 'onedrive'].every((k) => R[k].st === 'sem' && R[k].motivo === 'sem_fontes_v0'), 'versao 0: a ponte pelo resultado, o resto sem (sem_fontes_v0)');
 
+  /* proc (malha-v2): `fa` so quando um workflow PAROU DE GRAVAR. Os workflows e as fontes sao os do mapa do gerador:
+   * ppc.yml grava registro_mesa; perdas.yml grava perdas_inversor e perdas_dia; must-intra.yml nao grava nada do frescor. */
+  ok(G.FONTES.filter((f) => f.wf.includes('ppc.yml')).map((f) => f.id).join() === 'registro_mesa'
+    && G.FONTES.filter((f) => f.wf.includes('perdas.yml')).map((f) => f.id).join() === 'perdas_inversor,perdas_dia'
+    && !G.FONTES.some((f) => f.wf.includes('must-intra.yml')), 'premissa do caso: o mapa fonte -> workflow do gerador');
   const runs = (...cs) => cs.map((c) => ({ c, t: AGORA_MS }));
+  const FR = (over) => G.FONTES.map((f) => ({ id: f.id, st: (over || {})[f.id] || 'ok' }));
   const pr = G.etapaProc;
-  ok(pr(null).st === 'sem', 'sem token: proc sem');
-  ok(pr([{ wf: 'a', runs: runs('success', 'success') }, { wf: 'b', runs: runs('success', 'cancelled') }]).st === 'ok', 'todas verdes (cancelada nao e vermelha): ok');
-  let x = pr([{ wf: 'a', runs: runs('failure', 'success') }, { wf: 'b', runs: runs('success', 'success') }]);
-  ok(x.st === 'at' && x.motivo === 'workflow_vermelho' && igual(x.n, { ok: 3, total: 4, vermelhos: 1 }), '1 das 2 vermelha: at, n = {ok 3, total 4, vermelhos 1}');
-  x = pr([{ wf: 'a', runs: runs('failure', 'timed_out') }, { wf: 'b', runs: runs('failure', 'success') }]);
-  ok(x.st === 'fa', 'um workflow vermelho nas 2 ultimas: fa');
-  ok(pr([{ wf: 'a', runs: [] }]).st === 'sem', 'nenhuma execucao concluida: sem');
+  const casa = (x, st, motivo, n) => x.st === st && x.motivo === motivo && igual(x.n, n);
+  const verde = { wf: 'must-intra.yml', runs: runs('success', 'success') };
+  ok(pr(null, FR()).st === 'sem', 'sem token: proc sem');
+  ok(pr([{ wf: 'a.yml', runs: [] }], FR()).st === 'sem', 'nenhuma execucao concluida: sem');
+  let x = pr([{ wf: 'ppc.yml', runs: runs('success', 'cancelled') }, verde], FR());
+  ok(casa(x, 'ok', null, { ok: 3, total: 4, vermelhos: 0, parados: 0 }), 'todas verdes (cancelada nao e vermelha): ok, vermelhos 0 e parados 0 presentes');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'success') }, verde], FR());
+  ok(casa(x, 'at', 'workflow_vermelho_grava', { ok: 3, total: 4, vermelhos: 1, parados: 0 }), '1 das 2 vermelha com o arquivo dele no prazo: at (workflow_vermelho_grava)');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'timed_out') }, verde], FR());
+  ok(casa(x, 'at', 'workflow_vermelho_grava', { ok: 2, total: 4, vermelhos: 1, parados: 0 }), 'vermelho nas 2 ultimas com o arquivo dele no prazo: at (workflow_vermelho_grava), nao fa');
+  for (const s of ['at', 'fa', 'sem']) {
+    x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'startup_failure') }, verde], FR({ registro_mesa: s }));
+    ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 4, vermelhos: 1, parados: 1 }), 'vermelho nas 2 ultimas com o arquivo dele ' + s + ' no frescor: fa, parados 1');
+  }
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'success') }, verde], FR({ registro_mesa: 'fa' }));
+  ok(casa(x, 'at', 'workflow_vermelho', { ok: 3, total: 4, vermelhos: 1, parados: 0 }), 'vermelho em 1 das 2 com o arquivo dele atrasado: at (workflow_vermelho), nao parou');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure') }, verde], FR({ registro_mesa: 'at' }));
+  ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 3, vermelhos: 1, parados: 1 }), 'vermelho na unica execucao que ha com o arquivo atrasado: fa');
+  x = pr([{ wf: 'must-intra.yml', runs: runs('failure', 'failure') }], FR({ registro_mesa: 'fa', ons_restricao: 'sem' }));
+  ok(casa(x, 'at', 'workflow_vermelho', { ok: 0, total: 2, vermelhos: 1, parados: 0 }), 'vermelho nas 2 ultimas num workflow que nao grava nada do frescor: at (workflow_vermelho)');
+  x = pr([{ wf: 'perdas.yml', runs: runs('failure', 'failure') }, verde], FR({ perdas_dia: 'at' }));
+  ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 4, vermelhos: 1, parados: 1 }), 'workflow com dois arquivos, um no prazo e um atrasado: fa (basta um)');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, verde], FR({ ons_restricao: 'fa', perdas_dia: 'sem' }));
+  ok(casa(x, 'at', 'workflow_vermelho_grava', { ok: 2, total: 4, vermelhos: 1, parados: 0 }), 'arquivo atrasado de OUTRO workflow nao para o vermelho: at (workflow_vermelho_grava)');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, { wf: 'must-intra.yml', runs: runs('failure', 'success') }], FR());
+  ok(casa(x, 'at', 'workflow_vermelho', { ok: 1, total: 4, vermelhos: 2, parados: 0 }), 'um vermelho que grava e um que nao grava nada do frescor: at (workflow_vermelho), vermelhos 2');
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, { wf: 'perdas.yml', runs: runs('failure', 'failure') }, verde], FR({ registro_mesa: 'at', perdas_inversor: 'fa' }));
+  ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 6, vermelhos: 2, parados: 2 }), 'dois workflows que pararam de gravar: fa, parados 2');
+  est = null; try { pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }], FR().filter((f) => f.id !== 'registro_mesa')); } catch (e) { est = e; }
+  ok(!!est && /frescor sem a fonte registro_mesa/.test(est.message), 'frescor sem a fonte de um workflow vermelho estoura (nao inventa "no prazo")');
 }
 
 /* ───────────── 2 e 3. o gerador de verdade e os plantios ───────────── */
@@ -482,6 +514,39 @@ async function processos() {
     ok(!e.length, 'estoura sem gravar: ' + nome + (e.length ? ': ' + e.join(' | ') : ' (' + String(r.stderr).trim().split('\n').pop().slice(0, 90) + ')'));
   }
 
+  /* proc (malha-v2) no gerador de verdade: o frescor e o do mundo principal (ons_restricao at, executivo ausente, portal_vivo
+   * fa; o resto no prazo). So o GitHub muda; o resto da saida tem de ficar igual ao principal. */
+  const verm2 = (c1, c2) => [run(c1, '2026-10-19T15:10:00Z'), run(c2, '2026-10-19T14:10:00Z')];
+  const nProc = (verde, parados) => ({ ok: 2 * W - 2 + verde, total: 2 * W, vermelhos: 1, parados });
+  const MUNDOS_PROC = {
+    'vermelho nas 2 com o arquivo atrasado (ons)': [{ 'ons-consolidado.yml': verm2('failure', 'timed_out') }, { st: 'fa', motivo: 'workflow_vermelho', n: nProc(0, 1) }],
+    'vermelho nas 2 com o arquivo ausente (executivo)': [{ 'executivo.yml': verm2('failure', 'failure') }, { st: 'fa', motivo: 'workflow_vermelho', n: nProc(0, 1) }],
+    'vermelho nas 2 com o arquivo no prazo (ppc)': [{ 'ppc.yml': verm2('failure', 'failure') }, { st: 'at', motivo: 'workflow_vermelho_grava', n: nProc(0, 0) }],
+    'vermelho nas 2 sem arquivo no frescor (must-intra)': [{ 'must-intra.yml': verm2('failure', 'failure') }, { st: 'at', motivo: 'workflow_vermelho', n: nProc(0, 0) }],
+    'todas verdes': [{}, { st: 'ok', motivo: null, n: { ok: 2 * W, total: 2 * W, vermelhos: 0, parados: 0 } }],
+  };
+  const chkProc = (esp) => (r) => {
+    if (r.code !== 0 || !r.out) return ['o gerador nao terminou (codigo ' + r.code + '): ' + String(r.stderr).trim().split('\n').slice(-1)];
+    const e = [...textoLimpo(r), ...semViolacao(r)];
+    const y = Object.assign({}, r.out.etapas.proc); delete y.h;
+    const x = Object.assign({ ultima: '2026-10-19T15:20:00Z', ref_dia: null, prox: '2026-10-19T15:33:00Z' }, esp);
+    const xo = { st: x.st, ultima: x.ultima, ref_dia: x.ref_dia, prox: x.prox, n: x.n, motivo: x.motivo };
+    if (!igual(y, xo)) e.push('proc: ' + JSON.stringify(y) + ' (esperado ' + JSON.stringify(xo) + ')');
+    const L = { ok: 'o', at: 'a', fa: 'f' }[esp.st];
+    if (r.out.etapas.proc.h !== N13 + L) e.push('proc: h ' + r.out.etapas.proc.h);
+    const ev = r.out.linha_dia.filter((l) => l.etapa === 'proc');
+    if (ev.length !== 1 || ev[0].st !== esp.st) e.push('linha_dia do proc: ' + JSON.stringify(ev));
+    if (ref) for (const id of G.ETAPAS) if (id !== 'proc' && !igual(r.out.etapas[id], ref.etapas[id])) e.push('etapa ' + id + ' mudou junto com o proc');
+    return e;
+  };
+  for (const [nome, [ghm, esp]] of Object.entries(MUNDOS_PROC)) {
+    const r = await roda({ sdk: mundoCofre(), gh: ghm });
+    const e = chkProc(esp)(r);
+    ok(!e.length, 'proc: ' + nome + ' -> ' + esp.st + (esp.motivo ? ' (' + esp.motivo + ')' : '') + (e.length ? ': ' + e.join(' | ') : ''));
+  }
+  const MP = (k) => ({ sdk: mundoCofre(), gh: MUNDOS_PROC[k][0] });
+  const CP = (k) => chkProc(MUNDOS_PROC[k][1]);
+
   console.log('3. plantios (cada um TEM de reprovar)');
   const ANCORA_SEM = "  if (!S) return semTodas(ehHoje ? 'sem_estado_hoje' : null);";
   const OK_SEM_REGISTRO = "  if (!S) { const R = semTodas(null); for (const id of PONTE_ETAPAS) R[id] = { st: 'ok', motivo: null, ultima: null, ref_dia: null, n: {} }; return R; }";
@@ -504,6 +569,20 @@ async function processos() {
       CENARIOS_ESTOURA.semPrazo[0], CENARIOS_ESTOURA.semPrazo[1]],
     ['404 de conteiner tratado como ausencia', [['    const itens = await fonte.lista(dia);', '    const itens = await fonte.lista(dia).catch((e) => { if (e && e.statusCode === 404) return []; throw e; });']],
       CENARIOS_ESTOURA.cofre404[0], CENARIOS_ESTOURA.cofre404[1]],
+    /* proc (malha-v2): vermelho com arquivo atrasado virando at; vermelho com arquivo no prazo virando fa */
+    ['proc: parado vira at', [["  const st = parados ? 'fa' : verm ? 'at' : 'ok';", "  const st = verm ? 'at' : 'ok';"]],
+      MP('vermelho nas 2 com o arquivo atrasado (ons)'), CP('vermelho nas 2 com o arquivo atrasado (ons)')],
+    ['proc: atrasado nao conta como fora do prazo', [["    const fora = sts.some((s) => s !== 'ok');", "    const fora = sts.some((s) => s === 'fa' || s === 'sem');"]],
+      MP('vermelho nas 2 com o arquivo atrasado (ons)'), CP('vermelho nas 2 com o arquivo atrasado (ons)')],
+    ['proc: ausente nao conta como fora do prazo', [["    const fora = sts.some((s) => s !== 'ok');", "    const fora = sts.some((s) => s === 'at' || s === 'fa');"]],
+      MP('vermelho nas 2 com o arquivo ausente (executivo)'), CP('vermelho nas 2 com o arquivo ausente (executivo)')],
+    ['proc: regra antiga (vermelho nas 2 = fa, com o arquivo no prazo)', [['    if (fora && v === e.runs.length) parados++;', '    if (v === e.runs.length) parados++;']],
+      MP('vermelho nas 2 com o arquivo no prazo (ppc)'), CP('vermelho nas 2 com o arquivo no prazo (ppc)')],
+    ['proc: arquivo de outro workflow conta', [["    const fora = sts.some((s) => s !== 'ok');", "    const fora = [...stDe.values()].some((s) => s !== 'ok');"]],
+      MP('vermelho nas 2 com o arquivo no prazo (ppc)'), CP('vermelho nas 2 com o arquivo no prazo (ppc)')],
+    ['proc: workflow sem arquivo no frescor vira fa', [['    if (!sts.length) continue;', '    if (!sts.length) { if (v === e.runs.length) parados++; continue; }']],
+      MP('vermelho nas 2 sem arquivo no frescor (must-intra)'), CP('vermelho nas 2 sem arquivo no frescor (must-intra)')],
+    ['proc: vermelho em 1 das 2 com arquivo ausente vira fa', [['    if (fora && v === e.runs.length) parados++;', '    if (fora) parados++;']], PRINCIPAL, chkPrincipal],
   ];
   /* Barrado pela guarda do gerador so conta se a mensagem dela NOMEIA o defeito plantado (senao a guarda pode ter barrado
    * outra coisa e o plantio nao provou nada). Sem a guarda, quem tem de barrar e a checagem deste ensaio. */

@@ -13,7 +13,9 @@
  *   · frescor: a data de gravacao (cabecalho, lib-le-dados) dos arquivos que o portal le, contra o PRAZO = 2 periodos do
  *     agendamento do workflow que grava cada um, lido da agenda do relogio (`relogio/agenda.json`); workflow que roda uma vez
  *     por dia = 26 h. E a fonte nomeada do limiar: a propria agenda. ok <= prazo, at <= 2 x prazo, fa acima, sem = nao existe;
- *   · execucoes do GitHub Actions: as 2 ultimas execucoes CONCLUIDAS de cada workflow da agenda (API REST, GITHUB_TOKEN);
+ *   · execucoes do GitHub Actions: as 2 ultimas execucoes CONCLUIDAS de cada workflow da agenda (API REST, GITHUB_TOKEN),
+ *     cruzadas com o frescor do que cada workflow grava: `proc` so e `fa` quando um workflow de producao PAROU DE GRAVAR
+ *     (vermelho nas 2 ultimas e arquivo dele fora do prazo); vermelho que segue gravando e ressalva (lote malha-v2, etapaProc);
  *   · o que e declarado por lote (Power Automate, backup local, PC, aviso): constantes abaixo, nada lido de API.
  *
  * 🔴 NADA INVENTADO: etapa sem registro sai `st: "sem"` e "n" no historico, NUNCA ok. Etapa ok/at/fa tem de ter `ultima`.
@@ -114,13 +116,13 @@ const PONTE_ETAPAS = ['inv', 'est', 'scada', 'vm', 'vpn', 'ponte', 'cofre', 'one
 const ST = ['ok', 'at', 'fa', 'des', 'plan', 'sem'];
 const LETRA = { ok: 'o', at: 'a', fa: 'f', des: 'd', plan: 'p', sem: 'n' };
 const CODIGOS = ['sem_estado_hoje', 'sem_fontes_v0', 'ponte_falhou', 'ponte_tentativas', 'fonte_falha', 'fonte_ressalva', 'atrasado',
-  'muito_atrasado', 'workflow_vermelho', 'deploy_falhou', 'ponte_inicio', 'ponte_fim', 'cofre_gravou', 'onedrive_gravou',
+  'muito_atrasado', 'workflow_vermelho', 'workflow_vermelho_grava', 'deploy_falhou', 'ponte_inicio', 'ponte_fim', 'cofre_gravou', 'onedrive_gravou',
   'coleta_inversores', 'processamento', 'publicacao'];
 /* os numeros da linha "resultado" de cada etapa (contrato); nada fora disto entra em `n` */
 const N_PERMITIDO = {
   inv: ['arquivos', 'mb'], est: ['arquivos', 'mb'], scada: ['arquivos', 'mb'], vm: ['arquivos'], vpn: [],
   ponte: ['arquivos', 'mb', 'tentativas'], aviso: [], local: [], cofre: ['gravados', 'mb'], pc: [], onedrive: ['gravados'],
-  pa: ['restam'], way2: ['idade_min'], ons: ['idade_min'], proc: ['ok', 'total', 'vermelhos'], pub: ['no_prazo', 'total'], portal: [],
+  pa: ['restam'], way2: ['idade_min'], ons: ['idade_min'], proc: ['ok', 'total', 'vermelhos', 'parados'], pub: ['no_prazo', 'total'], portal: [],
 };
 /* as fontes do bloco `fontes` do estado da ponte que este gerador usa (as outras, o espelho, nao viram etapa) */
 const FONTES_PONTE = ['inversores', 'estacoes', 'scada_db', 'cofre', 'onedrive'];
@@ -397,18 +399,38 @@ async function leExecucoes(agenda) {
     return { wf, runs };
   }));
 }
-function etapaProc(execs) {
+/* proc (lote malha-v2, regra aprovada pelo humano em 19/10/2026): vermelho sozinho NAO derruba a etapa. Um passo de auditoria
+ * que reprova por dado real pinta o workflow de vermelho enquanto o gerador dele gravou normalmente (no ar em 19/10: `fa` com
+ * 2 vermelhos em 46). Cada workflow vermelho e cruzado com o frescor dos arquivos que ELE grava (o mapa `FONTES.wf`):
+ *   · parado = vermelho em TODAS as ultimas execucoes (as 2, ou a unica que ha) E algum arquivo dele fora do prazo (at/fa)
+ *     ou ausente (sem) no frescor -> `fa`: o workflow de producao parou de gravar;
+ *   · qualquer outro vermelho -> `at`. Motivo `workflow_vermelho_grava` quando TODO workflow vermelho grava arquivo do frescor
+ *     e todos os arquivos deles estao no prazo; senao `workflow_vermelho` (vermelho em 1 das 2 com arquivo atrasado, ou
+ *     workflow que nao grava nenhum arquivo do frescor, ex.: ensaios). Com `fa`, o motivo e `workflow_vermelho`;
+ *   · n: `ok` e `total` contam EXECUCOES; `vermelhos` e `parados` contam WORKFLOWS (sempre presentes quando ha execucao). */
+function etapaProc(execs, frescor) {
   if (!execs) return { st: 'sem', motivo: null, ultima: null, n: {} };
-  let ok = 0, total = 0, verm = 0, pior = 'ok', ult = null;
+  const stDe = new Map((frescor || []).map((x) => [x.id, x.st]));
+  let ok = 0, total = 0, ult = null, verm = 0, parados = 0, gravam = 0;
   for (const e of execs) {
     const v = e.runs.filter((r) => GH_VERMELHO.includes(r.c)).length;
-    total += e.runs.length; verm += v; ok += e.runs.filter((r) => GH_OK.includes(r.c)).length;
+    total += e.runs.length; ok += e.runs.filter((r) => GH_OK.includes(r.c)).length;
     for (const r of e.runs) if (isFinite(r.t) && (ult == null || r.t > ult)) ult = r.t;
-    if (v && v === e.runs.length) pior = 'fa';                       // falhou nas 2 ultimas (ou na unica que ha)
-    else if (v && pior !== 'fa') pior = 'at';                        // 1 das 2
+    if (!v) continue;
+    verm++;
+    const sts = FONTES.filter((f) => f.wf.includes(e.wf)).map((f) => {
+      if (!stDe.has(f.id)) throw new Error('proc: frescor sem a fonte ' + f.id + ' (gravada por ' + e.wf + ')');   // nao inventa "no prazo"
+      return stDe.get(f.id);
+    });
+    if (!sts.length) continue;                                       // nao grava nada do frescor: so ressalva
+    const fora = sts.some((s) => s !== 'ok');
+    if (fora && v === e.runs.length) parados++;                      // vermelho nas 2 ultimas (ou na unica) e arquivo fora do prazo
+    else if (!fora) gravam++;                                        // vermelho, mas tudo o que ele grava esta no prazo
   }
   if (!total) return { st: 'sem', motivo: null, ultima: null, n: {} };
-  return { st: pior, motivo: pior === 'ok' ? null : 'workflow_vermelho', ultima: ult == null ? null : isoZ(ult), n: { ok, total, vermelhos: verm } };
+  const st = parados ? 'fa' : verm ? 'at' : 'ok';
+  const motivo = st === 'ok' ? null : st === 'at' && gravam === verm ? 'workflow_vermelho_grava' : 'workflow_vermelho';
+  return { st, motivo, ultima: ult == null ? null : isoZ(ult), n: { ok, total, vermelhos: verm, parados } };
 }
 
 /* ───────────── montagem ───────────── */
@@ -458,7 +480,7 @@ function monta({ agoraMs, agenda, por, frescor, execs }) {
     ref_dia: null, prox: isoZ(Math.min(...wfP.map((w) => proximo(agenda[w], agoraMs)))),
     n: { no_prazo: P.filter((x) => x.st === 'ok').length, total: P.length }, motivo: motivoFrescor(stP), h: soHoje(stP) };
   /* proc e portal */
-  const pr = etapaProc(execs);
+  const pr = etapaProc(execs, frescor);
   E.proc = { st: pr.st, ultima: pr.ultima, ref_dia: null, prox: isoZ(Math.min(...todos.map((w) => proximo(agenda[w], agoraMs)))), n: pr.n,
     motivo: pr.motivo, h: soHoje(pr.st) };
   E.portal = { st: 'sem', ultima: null, ref_dia: null, prox: null, n: {}, motivo: null, h: soHoje('sem') };
