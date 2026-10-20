@@ -28,6 +28,8 @@
  */
 'use strict';
 const LD = require('./lib-le-dados');
+// strings-logger (19/10/2026): a curva de 30 min do SUPERVISORIO tem o nome `_scada` (o pvstr_hora/pvstr_str das telas e do logger)
+const { leCopia } = require('./lib-pvstr-logger.js');
 const zlib = require('zlib');
 
 const BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -68,7 +70,7 @@ const num = (x) => typeof x === 'number' && isFinite(x);
 const q = (v, p) => v[Math.floor(v.length * p)];
 
 (async () => {
-  const h = await le('pvstr_hora_' + UFV + '.json');
+  const h = await leCopia(le, 'pvstr_hora_' + UFV + '.json');
   const s = Array.isArray(h.serie) ? h.serie : [];
   if (!s.length) { console.log('🔴 blob sem serie'); process.exit(1); }
   const dias = [...new Set(s.map((l) => l.d))].sort();

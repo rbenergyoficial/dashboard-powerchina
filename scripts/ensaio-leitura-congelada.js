@@ -22,6 +22,8 @@
  */
 'use strict';
 const LD = require('./lib-le-dados');
+// strings-logger (19/10/2026): a curva de 30 min do SUPERVISORIO tem o nome `_scada` (o pvstr_hora/pvstr_str das telas e do logger)
+const { leCopia } = require('./lib-pvstr-logger.js');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -109,7 +111,7 @@ function patamares(serie) {
   console.log('B · o produto: pvstr_hora das nove usinas' + (process.env.LOCAL_DIR ? ' (saida local)' : ''));
   let n = 0, primeiro = null;
   for (let u = 1; u <= 9; u += 1) {
-    let j; try { j = await le('pvstr_hora_M' + u + '.json'); } catch (e) { falha('M' + u + ': ' + e.message); continue; }
+    let j; try { j = await leCopia(le, 'pvstr_hora_M' + u + '.json'); } catch (e) { falha('M' + u + ': ' + e.message); continue; }
     const s = j.serie || []; n += s.length; if (!primeiro && s.length) primeiro = s;
     const p = patamares(s);
     ok(!p.length, 'M' + u + ': ' + s.length + ' inversor-dias, nenhum patamar congelado' + (p.length ? ' · ' + p.slice(0, 3).join(' · ') : ''));

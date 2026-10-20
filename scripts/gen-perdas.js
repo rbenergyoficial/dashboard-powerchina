@@ -4,9 +4,12 @@
  * 🔴 DESDE 19/10/2026 (fonte-inv-logger) O DADO DE INVERSOR DAS TELAS VEM DO LOGGER SUNGROW: perdas_diario.json, perdas_inv.json e
  *    strings_alarme.json sao do gen-inv-logger.js. Este gerador grava a copia do supervisorio com o sufixo `_scada`
  *    (perdas_diario_scada, perdas_inv_scada, strings_alarme_scada; ver PUBLICA), que o Comparativo de Medicoes usa. Os produtos de
- *    30 e 60 min (perdas_30min, perdas_60min) e a curva por inversor (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>) continuam com o
- *    nome de sempre e do supervisorio: o logger ainda nao tem o equivalente com historico (lote seguinte), e o setpoint de despacho
- *    do pvstr_hora so existe no export (gen-ts-setpoint).
+ *    30 e 60 min (perdas_30min, perdas_60min) continuam com o nome de sempre e do supervisorio: o logger ainda nao tem o
+ *    equivalente com historico (lote seguinte).
+ * 🔴 DESDE strings-logger (19/10/2026) A CURVA DE 30 MIN POR INVERSOR DAS TELAS TAMBEM VEM DO LOGGER: pvstr_hora_<usina> e
+ *    pvstr_str_<usina>_<ts> sao do gen-pvstr-logger.js (media das leituras de 5 min). Este gerador grava a curva do supervisorio em
+ *    pvstr_hora_<usina>_scada e pvstr_str_<usina>_<ts>_scada (lib-pvstr-logger.nomeScada, pelo `fisico`), que o gen-ts-setpoint le:
+ *    o setpoint de despacho por inversor so existe no export.
  *
  * A PERGUNTA QUE ELE RESPONDE: onde a energia se perde entre o arranjo fotovoltaico e o ponto de
  * medicao, e quanto em cada degrau. Hoje a suite mostra o que ENTROU no medidor; ela nao mostra o
@@ -624,9 +627,12 @@ function migraIsolZero(j, nome) {
 //    disponibilidade dela, pelo perdas_diario). Dentro do gerador o nome continua o LOGICO (as migracoes por nome nao mudam); so a
 //    leitura do anterior e a gravacao usam o fisico. Primeira rodada sem a copia: le o nome antigo, SO se ele nao tiver a marca do
 //    logger (`origem_inversor`); com a marca e sem a copia, aborta (o historico do supervisorio teria se perdido).
+//    strings-logger (19/10/2026): a curva de 30 min (pvstr_hora_<u>, pvstr_str_<u>_<ts>) tambem passa ao logger (gen-pvstr-logger); a
+//    do supervisorio vai ao nome da lib-pvstr-logger.nomeScada (`_scada` antes do .json), pela mesma regra da primeira rodada.
 const PUBLICA = { 'perdas_diario.json': 'perdas_diario_scada.json', 'perdas_inv.json': 'perdas_inv_scada.json',
   'strings_alarme.json': 'strings_alarme_scada.json' };
-const fisico = (nome) => PUBLICA[nome] || nome;
+const { nomeScada } = require('./lib-pvstr-logger.js');
+const fisico = (nome) => PUBLICA[nome] || nomeScada(nome) || nome;
 
 const _anterior = new Map();
 async function leAnterior(nome) {
@@ -636,7 +642,7 @@ async function leAnterior(nome) {
     let j;
     try { j = await puxa(base + fisico(nome)); }
     catch (e) {
-      if (!e.naoExiste || !PUBLICA[nome]) throw e;
+      if (!e.naoExiste || fisico(nome) === nome) throw e;
       j = await puxa(base + nome);
       if (j && j.origem_inversor) {
         throw new Error(nome + ' ja e do ' + j.origem_inversor + ' e ' + fisico(nome) + ' nao existe: a copia do supervisorio se perdeu');

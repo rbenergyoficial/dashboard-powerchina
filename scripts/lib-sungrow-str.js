@@ -19,8 +19,12 @@
  *   r   = a MEDIANA do dia da razao de cada entrada contra a mediana das irmas (as entradas com mais de IRMA_A no instante), so nos
  *         instantes SEM potencia limitada e com essa mediana acima do PISO_A, em %; nr = quantos instantes. Com limitacao o
  *         rastreador sai do ponto de maxima potencia e a razao espalha (a mesma exclusao da tensao dos MPPT, lib-sungrow);
- *   g5  = a corrente de cada entrada a cada 5 min (0,1 A, inteiro), da primeira a ultima amostra gerando (> 1 kW);
- *   cv  = a curva de 5 min na mesma grade: p e pdc (0,1 kW, inteiro), t (0,1 °C) e lim (1 = potencia limitada).
+ *   g5  = a corrente de cada entrada a cada 5 min (0,1 A, inteiro), da MEIA HORA da primeira a meia hora da ultima amostra gerando
+ *         (> 1 kW): desde strings-logger (19/10/2026) a grade comeca no :00/:30 anterior a primeira e termina no :25/:55 da ultima, para a
+ *         meia hora da ponta (o amanhecer, a parada do fim do dia) ter as seis leituras (lib-pvstr-logger, tudo ou nada);
+ *   cv  = a curva de 5 min na mesma grade: p e pdc (0,1 kW, inteiro), t (0,1 °C), lim (1 = potencia limitada) e iso (kΩ, a "Impedancia
+ *         paralela em relacao a terra"; zero e sem leitura, nulo), e nom (kW, a maior "Potencia ativa nominal" do dia, em 0,1 kW no
+ *         registro) — iso e nom desde strings-logger (19/10/2026), para a meia hora integralizada do lib-pvstr-logger.
  */
 const STR = require('./lib-strings.js');
 const STRL = STR;
@@ -44,11 +48,12 @@ const r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
 function colunas(cab, onde) {
   const s = []; for (let n = 1; n <= N_ENT; n += 1) s.push(exige(cab, 'Corrente na string ' + n, 0, onde));
   return { s, p: exige(cab, 'Potência ativa total', 0, onde), pdc: exige(cab, 'Potência CC total', 0, onde),
-    t: exige(cab, 'Temperatura de ar interna', 0, onde), lim: exige(cab, 'Modo de potência limitada', 0, onde) };
+    t: exige(cab, 'Temperatura de ar interna', 0, onde), lim: exige(cab, 'Modo de potência limitada', 0, onde),
+    iso: exige(cab, 'Impedância paralela em relação à terra', 0, onde), nom: exige(cab, 'Potência ativa nominal', 0, onde) };
 }
 
 /* linhas = as do CSV (lib-sungrow.le), de um ou mais dias. Devolve um item por dia com amostra gerando:
-   { d, pk: { h, s: [24 A|null] }, md_pk, r: [24 %|null], nr: [24], g5: { h0, s: [24][...] }, cv: { h0, p, pdc, t, lim } } */
+   { d, pk: { h, s: [24 A|null] }, md_pk, r: [24 %|null], nr: [24], g5: { h0, s: [24][...] }, cv: { h0, p, pdc, t, lim, iso, nom } } */
 function diaStrings(cab, linhas, onde) {
   const c = colunas(cab, onde);
   const porDia = new Map();
@@ -71,9 +76,14 @@ function diaStrings(cab, linhas, onde) {
     const { md: mdPk } = STR.razoes(Object.fromEntries(sPk.map((x, k) => [k + 1, x])));
     // a razao de cada entrada contra as irmas, instante a instante, so com a mediana das irmas acima do piso
     const R = Array.from({ length: N_ENT }, () => []);
-    const m0 = min5(L[ger[0]][0]), m1 = min5(L[ger[ger.length - 1]][0]), nG = Math.floor((m1 - m0) / 5) + 1;
+    /* a grade: da meia hora da primeira a meia hora da ultima amostra gerando (strings-logger). Sem isso a meia hora em que o inversor
+       PAROU de vez (M9/TS1/INV16 em 15/10/2026, ilhamento as 14:50 gerando ~300 kW) ficava sem as leituras depois da parada e sumia
+       da curva de 30 min; as leituras de fora da geracao (ate 1 kW, ou faltando) sao as do proprio registro */
+    const g0 = min5(L[ger[0]][0]), g1 = min5(L[ger[ger.length - 1]][0]);
+    const m0 = Math.floor(g0 / 30) * 30, m1 = Math.min(1435, Math.floor(g1 / 30) * 30 + 25), nG = Math.floor((m1 - m0) / 5) + 1;
     const g5 = Array.from({ length: N_ENT }, () => new Array(nG).fill(null));
-    const cv = { h0: hhmm(m0), p: new Array(nG).fill(null), pdc: new Array(nG).fill(null), t: new Array(nG).fill(null), lim: new Array(nG).fill(null) };
+    const cv = { h0: hhmm(m0), p: new Array(nG).fill(null), pdc: new Array(nG).fill(null), t: new Array(nG).fill(null), lim: new Array(nG).fill(null),
+      iso: new Array(nG).fill(null), nom: null };
     for (const v of L) {
       const m = min5(v[0]); if (m < m0 || m > m1) continue;
       const j = (m - m0) / 5;
@@ -85,7 +95,10 @@ function diaStrings(cab, linhas, onde) {
       const p = num(v[c.p]), pd = num(v[c.pdc]), t = num(v[c.t]), l = num(v[c.lim]);
       cv.p[j] = p == null ? null : Math.round(p / 100); cv.pdc[j] = pd == null ? null : Math.round(pd / 100);
       cv.t[j] = t; cv.lim[j] = l == null ? null : (l !== 0 ? 1 : 0);
+      const iso = num(v[c.iso]); cv.iso[j] = iso != null && iso > 0 ? iso : null;   // zero e "sem leitura" (a regra do sg_saude)
     }
+    // a nominal do dia: a maior lida (0,1 kW no registro), em kW; e constante do equipamento
+    { const ns = L.map((v) => num(v[c.nom])).filter((x) => x != null && x > 0); cv.nom = ns.length ? r1(Math.max(...ns) / 10) : null; }
     out.push({ d, pk: { h: L[ip][0].slice(11, 16), s: sPk }, md_pk: r2(mdPk),
       r: R.map((x) => (x.length ? r1(100 * STR.mediana(x)) : null)), nr: R.map((x) => x.length),
       g5: { h0: hhmm(m0), s: g5 }, cv });
@@ -201,7 +214,7 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
       const R = reaisDe(u, tsx, l.inv) || new Set();
       const s = {}; l.g5.s.forEach((a, i) => { if (R.has(i + 1) || a.some((x) => x != null && x > 0)) s[i + 1] = a; });
       tS.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.g5.h0, reais: [...R].sort((a, b) => a - b), s });
-      tC.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.cv.h0, p: l.cv.p, pdc: l.cv.pdc, t: l.cv.t, lim: l.cv.lim });
+      tC.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.cv.h0, p: l.cv.p, pdc: l.cv.pdc, t: l.cv.t, lim: l.cv.lim, iso: l.cv.iso, nom: l.cv.nom });
     }
     const dias = [...new Set([...tS.keys(), ...tC.keys()].map((c) => c.slice(0, 10)))].sort().slice(-DIAS_5MIN);
     const fica = (m) => [...m.keys()].filter((c) => dias.includes(c.slice(0, 10))).sort().map((c) => m.get(c));
@@ -210,7 +223,8 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
         + ' entradas que sao string (lib-strings); sn numero de serie', serie: fica(tS) });
     pesos['sg_curva_' + k + '.json'] = await escreve('sg_curva_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_5MIN,
       unidade: 'a cada 5 min a partir de h0: p potencia CA e pdc potencia CC, 0,1 kW (inteiro); t temperatura interna, 0,1 °C; lim 1 = potencia'
-        + ' limitada; sn numero de serie', serie: fica(tC) });
+        + ' limitada; iso isolamento do arranjo, kOhm (nulo sem leitura); nom potencia nominal do dia, kW (iso e nom desde 20/10/2026: as linhas'
+        + ' anteriores nao os tem); sn numero de serie', serie: fica(tC) });
     nG += 1;
   }
   console.log('  strings do logger: ' + nD + ' diario(s) e ' + nG + ' de 5 min gravado(s) · entradas reais por usina contra a placa: '

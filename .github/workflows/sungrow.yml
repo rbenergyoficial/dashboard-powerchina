@@ -43,6 +43,11 @@ jobs:
       # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios
       - name: Ensaio · strings e curva de 5 min do logger (sem rede)
         run: node scripts/ensaio-sungrow-str.js
+      # strings-logger (19/10/2026): a curva de 30 min por inversor e a razao de cada string (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>)
+      # pelo logger, a MEDIA das seis leituras de 5 min (lib-pvstr-logger). Mundo forjado com a conta refeita no ensaio, o gerador de
+      # ponta a ponta (semente da copia do supervisorio, abortos sem gravar), o nome da copia no gen-perdas, com plantios. Sem rede
+      - name: Ensaio · strings de 30 min pelo logger (lib, sem rede)
+        run: node scripts/ensaio-pvstr-logger.js --lib
       # fonte-inv-logger (19/10/2026): perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger (lib-inv-logger), e a posicao
       # vaga no mesmo logger (o export do SCADA parou em 14/10). Mundo forjado com a conta a mao, o gen-sungrow de ponta a ponta sem
       # SCADA e plantios (SCADA de volta como fonte, sem leitura contada como parado, parado do supervisorio contado). Sem rede
@@ -79,8 +84,23 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-inv-logger.js --produto
-      # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora, gen-perdas) guarda 7 dias,
-      # entao um dia sem rodar nao perde nada
+      # strings-logger (19/10/2026): pvstr_hora_<usina> e pvstr_str_<usina>_<ts> das telas pelo logger, refeitos do sg_curva/sg_str que o
+      # gen-sungrow acabou de gravar. Na PRIMEIRA rodada semeia a copia do supervisorio (pvstr_hora_<usina>_scada, pvstr_str_<u>_<ts>_scada)
+      # que o gen-perdas passa a gravar e o gen-ts-setpoint le logo abaixo; nome antigo ja do logger sem a copia aborta sem gravar
+      - name: Gerar pvstr_hora e pvstr_str pelo logger
+        id: pvstr_logger
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/gen-pvstr-logger.js
+      # o produto: marca, contrato, a conta refeita no ensaio contra o registro de 5 min e a segunda rota (a energia do sg_saude), com
+      # plantios em memoria. Custo declarado: roda DEPOIS de gravar (job vermelho e melhor que dado ruim calado)
+      - name: Ensaio · strings de 30 min pelo logger (produto)
+        if: ${{ !cancelled() && steps.pvstr_logger.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/ensaio-pvstr-logger.js --produto
+      # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora_<usina>_scada, a copia do supervisorio
+      # que o gen-perdas grava desde strings-logger) guarda 7 dias, entao um dia sem rodar nao perde nada
       - name: Gerar sp_ts_<usina>_<ts>.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

@@ -1,6 +1,7 @@
 'use strict';
 /*
- * ensaio-ts-setpoint.js — julga o gen-ts-setpoint.js sem rede externa, com uma fonte forjada (pvstr_hora_M1.json) e plantios.
+ * ensaio-ts-setpoint.js — julga o gen-ts-setpoint.js sem rede externa, com uma fonte forjada (pvstr_hora_M1_scada.json, a copia do
+ * supervisorio desde strings-logger, 19/10/2026) e plantios.
  *
  * Cenario (M1/TS1, tres inversores; o M2 sem fonte):
  *   29/09  INV01 e INV02 das 06:00 as 17:00; o INV03 so das 09:00 (a janela dele comeca depois); as 12:00 o carimbo SEM
@@ -13,6 +14,8 @@
  *   contrato: fonte sem o setpoint, de esquema 1 (setpoint em W) ou com outra unidade estoura
  *   HTTP: um servidor local no lugar do blob. 404 do publicado = primeira vez; 500 do publicado e 503 da fonte (de OUTRA usina,
  *          depois de uma legivel) ESTOURAM sem gravar nada: as fontes sao todas lidas antes da primeira gravacao
+ *   VIRADA (strings-logger): sem a copia `_scada`, o nome antigo sem a marca do logger vale; com a marca, estoura; a copia com a
+ *          marca estoura; com as duas, vale a copia (o nome antigo do logger, sem setpoint, nunca entra na soma)
  */
 const fs = require('fs');
 const os = require('os');
@@ -48,6 +51,7 @@ const fonte2 = [
   linha('2026-09-28', 'INV01', H, H.map(() => 290), H.map(() => 352)),
 ];
 const grava = (dir, n, o) => fs.writeFileSync(path.join(dir, n), zlib.gzipSync(JSON.stringify(o)));
+const FONTE = 'pvstr_hora_M1_scada.json', ANTIGO = 'pvstr_hora_M1.json';   // a copia do supervisorio e o nome das telas (logger)
 const le = (n) => { const f = path.join(OUT, n); return fs.existsSync(f) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(f)).toString('utf8')) : null; };
 const roda = (gen, env) => { try { execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_IN_DIR: IN, LOCAL_OUT_DIR: OUT }, env || {}),
   encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); return true; } catch (e) { return false; } };
@@ -76,7 +80,7 @@ function cenario(gen) {
   try {
     limpa(IN, OUT);
     // 1 · primeira rodada
-    grava(IN, 'pvstr_hora_M1.json', fonte(fonte1));
+    grava(IN, FONTE, fonte(fonte1));
     R.roda1 = roda(gen);
     const A = (le('sp_ts_M1_TS1.json') || { serie: [] }).serie, a = (t) => A.find((x) => x.t === t) || {};
     R.okSoma = a('2026-09-29 10:00').p === 750 && a('2026-09-29 10:00').sp === 984 && a('2026-09-29 10:00').n_lido === 3
@@ -96,7 +100,7 @@ function cenario(gen) {
     const velha = (t) => ({ t, ms: Date.parse(t.replace(' ', 'T') + ':00-03:00'), p: 1, sp: 1, n_lido: 1, n_sp: 1, n_ger: 1, n_tot: 3 });
     pub.serie.unshift(velha('2025-10-01 10:00'), velha('2025-10-02 10:00'));
     grava(OUT, 'sp_ts_M1_TS1.json', pub);
-    grava(IN, 'pvstr_hora_M1.json', fonte(fonte2));
+    grava(IN, FONTE, fonte(fonte2));
     R.roda2 = roda(gen);
     const B = (le('sp_ts_M1_TS1.json') || { serie: [] }).serie, b = (t) => B.find((x) => x.t === t) || {};
     // 29/09 (so no publicado), 30/09 refeito, 01/10 novo, 28/09 anterior, e a linha de ultimo - 364 dias: 4 x 12 + 1
@@ -107,26 +111,36 @@ function cenario(gen) {
     // o INV03 saiu da fonte, mas nao do eletrocentro; o INV04 entrou: 4 nos carimbos desta rodada, 3 no dia que ela nao refez
     R.okTot2 = b('2026-09-30 10:00').n_tot === 4 && b('2026-10-01 10:00').n_tot === 4 && b('2026-09-29 10:00').n_tot === 3;
     // 3 · sem fonte nenhuma: falha
-    fs.unlinkSync(path.join(IN, 'pvstr_hora_M1.json'));
+    fs.unlinkSync(path.join(IN, FONTE));
     R.okFalha = roda(gen) === false;
     // 4 · o contrato da fonte
-    const quebra = (f) => { limpa(IN, OUT); grava(IN, 'pvstr_hora_M1.json', f); return roda(gen) === false && !fs.readdirSync(OUT).length; };
+    const quebra = (f) => { limpa(IN, OUT); grava(IN, FONTE, f); return roda(gen) === false && !fs.readdirSync(OUT).length; };
     R.okContrato = quebra(fonte(fonte1.map((l) => { const x = Object.assign({}, l); delete x.sp; return x; })))
       && quebra(fonte(fonte1, { esquema: 1 })) && quebra(fonte(fonte1, { unidade: 'pca em kW; sp em W' }));
     // 5 · a leitura pelo endereco http: 404 e primeira vez; 500 do publicado e 503 da fonte estouram sem gravar
     const env = { BLOB_BASE: BASE };
     limpa(IN, OUT);
-    grava(WEB, 'pvstr_hora_M1.json', fonte(fonte1));
+    grava(WEB, FONTE, fonte(fonte1));
     fs.writeFileSync(path.join(WEB, 'rotas.json'), '{}');
     const h1 = roda(gen, env) && (le('sp_ts_M1_TS1.json') || { serie: [] }).serie.length === 24;
     limpa(OUT);
     fs.writeFileSync(path.join(WEB, 'rotas.json'), JSON.stringify({ 'sp_ts_M1_TS1.json': 500 }));
     const h2 = roda(gen, env) === false && !fs.readdirSync(OUT).length;
-    fs.writeFileSync(path.join(WEB, 'rotas.json'), JSON.stringify({ 'pvstr_hora_M2.json': 503 }));
+    fs.writeFileSync(path.join(WEB, 'rotas.json'), JSON.stringify({ 'pvstr_hora_M2_scada.json': 503 }));
     limpa(OUT);
     const h3 = roda(gen, env) === false && !fs.readdirSync(OUT).length;
     fs.writeFileSync(path.join(WEB, 'rotas.json'), '{}');
     R.okHttp = h1 && h2 && h3;
+    // 6 · a virada do nome (strings-logger)
+    const v = (arqs) => { limpa(IN, OUT); for (const [n, o] of arqs) grava(IN, n, o); const r = roda(gen); return { r, A: (le('sp_ts_M1_TS1.json') || { serie: [] }).serie }; };
+    const logger = fonte(fonte2.map((l) => { const x = Object.assign({}, l); delete x.sp; return x; }), { origem_inversor: 'logger', esquema: 4 });
+    // v2: o nome antigo com a marca do logger e DENTRO do contrato (com sp): so a guarda da marca o recusa; v2b: o do logger de verdade (sem sp)
+    const v1 = v([[ANTIGO, fonte(fonte1)]]), v2 = v([[ANTIGO, Object.assign(fonte(fonte2), { origem_inversor: 'logger' })]]), v2b = v([[ANTIGO, logger]]);
+    const v3 = v([[FONTE, Object.assign(fonte(fonte1), { origem_inversor: 'logger' })]]);
+    const v4 = v([[FONTE, fonte(fonte1)], [ANTIGO, Object.assign(fonte(fonte2), { origem_inversor: 'logger' })]]);
+    const p10 = (A) => (A.find((x) => x.t === '2026-09-29 10:00') || {}).p;
+    R.okVirada = v1.r && p10(v1.A) === 750 && v2.r === false && !v2.A.length && v2b.r === false && !v2b.A.length && v3.r === false && !v3.A.length && v4.r && p10(v4.A) === 750 && !v4.A.some((x) => x.t.startsWith('2026-10-01'));
+    R.txtVirada = 'antigo sem marca ' + v1.r + ' · antigo do logger sem copia ' + v2.r + ' · copia com a marca ' + v3.r + ' · copia e antigo do logger: a copia ' + (v4.r && p10(v4.A));
     R.txtHttp = '404 primeira vez ' + h1 + ' · 500 do publicado ' + h2 + ' · 503 da fonte ' + h3;
   } catch (e) { R.erro = String(e.message).split('\n')[0]; }
   return R;
@@ -150,6 +164,7 @@ ok(R.okOrdem, 'serie em ordem de instante, mesmo com a fonte trazendo um dia ant
 ok(R.okFalha, 'sem nenhuma fonte o gerador falha');
 ok(R.okContrato, 'fonte fora do contrato (sem o setpoint, esquema 1 com setpoint em W, outra unidade) estoura sem gravar');
 ok(R.okHttp, 'leitura do blob: ' + R.txtHttp);
+ok(R.okVirada, 'a copia do supervisorio pelo nome novo: ' + R.txtVirada);
 
 console.log('\nplantios (cada um roda o cenario inteiro; o gerador plantado tem de RODAR, e reprovar so na regra)');
 const src = fs.readFileSync(GEN, 'utf8');
@@ -173,6 +188,9 @@ planta('janela sem corte', 'ks.filter((t) => t.slice(0, 10) >= corte)', 'ks.filt
 planta('janela de 366 dias', '(DIAS - 1) * 864e5', 'DIAS * 864e5', 'okJanela');
 planta('sem ordenar', 'const ks = [...tudo.keys()].sort();', 'const ks = [...tudo.keys()];', 'okOrdem');
 planta('instante em UTC', "Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3", "Date.parse(t.replace(' ', 'T') + ':00Z')", 'okSoma');
+planta('le o nome das telas (o logger) antes da copia', '  const j = await leFonte(novo);\n', '  const j = (await leFonte(antigo)) || (await leFonte(novo));\n', 'okVirada');
+planta('nome antigo do logger aceito', "if (a && a.origem_inversor) throw new Error(antigo + ' ja e do '", "if (false) throw new Error(antigo + ' ja e do '", 'okVirada');
+planta('copia contaminada aceita', "if (j) { if (j.origem_inversor) throw new Error(novo + ' traz a marca do '", "if (j) { if (false) throw new Error(novo + ' traz a marca do '", 'okVirada');
 planta('sem fonte passa calado', 'if (!arquivos) throw new Error(', 'if (false) throw new Error(', 'okFalha');
 planta('sem guarda de contrato', 'if (quebra) throw new Error(', 'if (false) throw new Error(', 'okContrato');
 planta('publicado ilegivel vira primeira vez', "throw new Error('nao consegui ler o ' + nome + ' publicado (", "return null; void new Error('nao consegui ler o ' + nome + ' publicado (", 'okHttp');

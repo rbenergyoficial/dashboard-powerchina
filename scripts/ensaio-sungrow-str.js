@@ -6,7 +6,8 @@
  *     cobre mais da metade dos instantes julgados e triplica a string 3: so a exclusao deixa 100 %), SEM os de mediana abaixo de 3 A
  *     e SEM a celula de limitacao vazia; a sentinela (65535) num instante livre (sai so da razao dela) e no pico (nula no pico); a
  *     entrada vazia a 0 %; a grade de 5 min da primeira a ultima amostra gerando; a curva em 0,1 kW e 0,1 °C e a limitacao 0/1; as
- *     linhas EMBARALHADAS e um carimbo FORA da grade com valores absurdos dao o mesmo dia; coluna faltando estoura com o nome.
+ *     linhas EMBARALHADAS e um carimbo FORA da grade com valores absurdos dao o mesmo dia; coluna faltando estoura com o nome; o
+ *     isolamento de 5 min em kΩ com o zero e a sentinela nulos, e a nominal do dia em kW (strings-logger, 19/10/2026).
  * 2 · acumula (o que o gerador faz a cada CSV): no mesmo dia vindo de dois zips fica o de mais amostras (nas duas ordens), os
  *     campos do registro do dia, e o 5 min so com os ultimos 7 dias do numero de serie.
  * 3 · produtos com leitura e gravacao em memoria: o diario acumulado com o ms do dia em BRT; a MORTA no ultimo dia e a FRACA; a
@@ -30,11 +31,12 @@ const falhasTotal = [];
 const HH = []; for (let m = 0; m < 1440; m += 5) HH.push(String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'));
 const perfil = (k) => { const h = k / 12; return h < 6 || h > 18 ? 0 : Math.round(300000 * Math.sin(Math.PI * (h - 6) / 12) ** 2); };   // W
 const CAB = ['Horário', 'Potência ativa nominal', 'Modo de potência limitada', 'Temperatura de ar interna', 'Potência CC total', 'Potência ativa total',
-  'Potência ativa total', ...Array.from({ length: 40 }, (_, k) => 'Corrente na string ' + (k + 1))];
+  'Potência ativa total', ...Array.from({ length: 40 }, (_, k) => 'Corrente na string ' + (k + 1)), 'Impedância paralela em relação à terra'];
 /* um dia: corrente de cada string = 12 A x (p / pmax) x `esc`, em 0,01 A; `f` {n: fator}; strings 23 e 24 vazias (0); 25 a 40 sentinela.
    `lim` [de, ate) com potencia limitada, em que a string 3 TRIPLICA (o rastreador fora do ponto); `limVazio` [k...] com a celula de
    limitacao VAZIA e a string 3 triplicada; `sent` [[k, n]...] a string n com 65535 no indice k; `teto` W de teto da CA; `ate` ultimo
-   indice lido (zip parcial); `fora` uma linha FORA da grade (12:02:00) com CA e correntes absurdas; `embaralha` a ordem das linhas */
+   indice lido (zip parcial); `fora` uma linha FORA da grade (12:02:00) com CA e correntes absurdas; `embaralha` a ordem das linhas;
+   isolamento 180 kΩ de dia e 20000 (topo da faixa) de noite, `isoZero` [k...] com zero e `isoSent` [k...] com 65535 */
 function csv(d, o) {
   o = o || {};
   const L = [];
@@ -51,9 +53,10 @@ function csv(d, o) {
       if ((o.sent || []).some((q) => q[0] === k && q[1] === n)) { s.push(65535); continue; }
       s.push(Math.round(a));
     }
-    L.push([d + ' ' + h + ':00', 3200, vazio ? '' : lim ? 1 : 0, 450 + Math.round(fr * 100), Math.round(p * 1.015), p, 0, ...s].join(', '));
+    const iso = (o.isoZero || []).includes(k) ? 0 : (o.isoSent || []).includes(k) ? 65535 : perfil(k) > 0 ? 180 : 20000;
+    L.push([d + ' ' + h + ':00', 3200, vazio ? '' : lim ? 1 : 0, 450 + Math.round(fr * 100), Math.round(p * 1.015), p, 0, ...s, iso].join(', '));
   });
-  if (o.fora) L.push([d + ' 12:02:00', 3200, 0, 999, 999999, 999999, 0, ...Array.from({ length: 40 }, () => 9999)].join(', '));
+  if (o.fora) L.push([d + ' 12:02:00', 3200, 0, 999, 999999, 999999, 0, ...Array.from({ length: 40 }, () => 9999), 9].join(', '));
   if (o.embaralha) L.sort((a, b) => ((a.charCodeAt(15) * 7 + a.charCodeAt(12)) % 11) - ((b.charCodeAt(15) * 7 + b.charCodeAt(12)) % 11) || (a < b ? 1 : -1));
   return CAB.join(',') + '\n' + L.join('\n') + '\n';
 }
@@ -71,7 +74,7 @@ async function ensaio(libPath, mudo) {
   const dia1 = (d, o, nome) => { const t = leCsv(csv(d, o)); return SS.diaStrings(t.cab, t.linhas, nome || 'x.csv')[0]; };
   /* ---------- 1 · diaStrings ---------- */
   if (!mudo) console.log('1 · diaStrings');
-  const OA = { f: { 5: 0.45 }, lim: [110, 180], sent: [[185, 7]], limVazio: [190] };
+  const OA = { f: { 5: 0.45 }, lim: [110, 180], sent: [[185, 7]], limVazio: [190], isoZero: [150], isoSent: [151] };
   const { cab, linhas } = leCsv(csv('2026-09-29', OA));
   const D = SS.diaStrings(cab, linhas, 'a.csv'), x = D[0] || { pk: { s: [] }, r: [], nr: [], g5: { s: [[]] }, cv: { p: [], lim: [] } };
   ok(D.length === 1 && x.d === '2026-09-29', 'um dia com geracao');
@@ -82,11 +85,15 @@ async function ensaio(libPath, mudo) {
   ok(julgLim.length > julg.length, 'o forjado: a limitacao cobre mais da metade dos instantes acima do piso (' + julgLim.length + ' x ' + julg.length + ')');
   ok(x.r[0] === 100 && x.r[4] === 45 && x.r[2] === 100 && x.r[22] === 0, 'razao do dia: 100 %, a fraca 45 %, a string 3 (triplicada so na limitacao) 100 %, a vazia 0 %: ' + [x.r[0], x.r[4], x.r[2], x.r[22]].join(' '));
   ok(x.nr[0] === julg.length && x.nr[6] === julg.length - 1, 'instantes julgados: sem a limitacao, sem a celula vazia e sem os de mediana abaixo de 3 A (' + x.nr[0] + ', esperado ' + julg.length + '); a string 7 perde so o instante da sentinela (' + x.nr[6] + ')');
-  const ger = HH.map((h, k) => k).filter((k) => perfil(k) > 1000), k0 = ger[0], k1 = ger[ger.length - 1];
-  ok(x.g5.h0 === HH[k0] && x.cv.h0 === HH[k0] && x.cv.p.length === k1 - k0 + 1 && x.g5.s[0].length === k1 - k0 + 1, 'grade de 5 min da primeira a ultima amostra gerando: ' + x.g5.h0 + ', ' + x.cv.p.length + ' instantes');
+  // a grade vai da MEIA HORA da primeira a meia hora da ultima amostra gerando (strings-logger): k0 no :00/:30 anterior, k1 no :25/:55
+  const ger = HH.map((h, k) => k).filter((k) => perfil(k) > 1000), k0 = Math.floor(ger[0] / 6) * 6, k1 = Math.floor(ger[ger.length - 1] / 6) * 6 + 5;
+  ok(ger[0] % 6 !== 0 && x.g5.h0 === HH[k0] && x.cv.h0 === HH[k0] && x.cv.p.length === k1 - k0 + 1 && x.g5.s[0].length === k1 - k0 + 1 && x.cv.p[0] != null && x.cv.p[0] <= 10,
+    'grade de 5 min da meia hora da primeira a meia hora da ultima amostra gerando (a primeira gerando as ' + HH[ger[0]] + '): ' + x.g5.h0 + ', ' + x.cv.p.length + ' instantes');
   ok(x.g5.s[0][144 - k0] === 120 && x.g5.s[6][185 - k0] === null && x.g5.s[22][144 - k0] === 0, 'corrente de 5 min em 0,1 A, a sentinela nula, a vazia zero');
   ok(x.cv.p[144 - k0] === 3000 && x.cv.pdc[144 - k0] === 3045 && x.cv.t[144 - k0] === 550 && x.cv.lim[140 - k0] === 1 && x.cv.lim[100 - k0] === 0 && x.cv.lim[190 - k0] === null,
     'curva: CA e CC em 0,1 kW, temperatura em 0,1 °C, limitacao 0/1 e a celula vazia nula');
+  ok(x.cv.iso && x.cv.iso.length === x.cv.p.length && x.cv.iso[144 - k0] === 180 && x.cv.iso[150 - k0] === null && x.cv.iso[151 - k0] === null && x.cv.nom === 320,
+    'curva: isolamento em kΩ na mesma grade, o zero e a sentinela nulos, a nominal do dia em kW (3200 x 0,1): ' + [x.cv.iso && x.cv.iso[144 - k0], x.cv.iso && x.cv.iso[150 - k0], x.cv.nom].join(' '));
   { const y = dia1('2026-09-29', { sent: [[144, 7]] }); ok(y.pk.h === '12:00' && y.pk.s[6] === null && y.pk.s[5] === 12, 'sentinela no pico: nula no pico'); }
   { const y = dia1('2026-09-29', Object.assign({ embaralha: true, fora: true }, OA));
     ok(JSON.stringify(y) === JSON.stringify(x), 'linhas embaralhadas e um carimbo fora da grade (12:02, absurdo) dao o mesmo dia'); }
@@ -143,6 +150,7 @@ async function ensaio(libPath, mudo) {
   ok(new Set(S5.map((l) => l.d)).size === 7 && S5.length === 14 && C5.length === 14, '5 min: so os ultimos 7 dias, um por inversor: ' + S5.length + ' / ' + C5.length);
   ok(s5u.s[9] && s5u.s[9].every((v) => v === 0) && !s5u.s[23] && !s5u.s[24] && Object.keys(s5u.s).length === 22, 'no 5 min a morta fica (zeros) e as vazias saem: ' + Object.keys(s5u.s).length + ' entradas');
   ok(S5.filter((l) => l.inv === 'INV02').every((l) => l.sn === 'B2'), 'no 5 min do INV02 so o inversor novo');
+  ok(C5.length > 0 && C5.every((l) => Array.isArray(l.iso) && l.iso.length === l.p.length && l.nom === 320), 'a curva publicada leva o isolamento de 5 min e a nominal do dia (strings-logger)');
   const ds = B.disp.get('M8/TS1/INV01|' + ULT);
   ok(ds && ds.min_pct === 0 && ds.mortas === 1 && ds.n === 22 && ds.min_n === 9, 'dispersao do ultimo dia do INV01 para a saude: a mais fraca a 0 % (S9), 1 sem corrente: ' + JSON.stringify(ds || null));
   let pesos = {};
@@ -237,6 +245,10 @@ async function ensaio(libPath, mudo) {
     await planta('dispersao sem o piso de classe', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A)', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, 0)', /^dia escuro/);
     await planta('entradas sem o historico anterior', "STRL.fundeEntradas((entAnt && entAnt.entradas) || [], obs, PISO_A)", 'STRL.fundeEntradas([], obs, PISO_A)', /^a entrada real que so o historico/);
     await planta('placa sem dividir pela string', 'Math.round(PLACA[u].modulos / MOD_POR_STRING)', 'PLACA[u].modulos', /^M8 com 44 strings reais/);
+    await planta('grade so da geracao (sem a meia hora da ponta)', 'const m0 = Math.floor(g0 / 30) * 30, m1 = Math.min(1435, Math.floor(g1 / 30) * 30 + 25),', 'const m0 = g0, m1 = g1,', /^grade de 5 min/);
+    await planta('isolamento zero como leitura', 'cv.iso[j] = iso != null && iso > 0 ? iso : null;', 'cv.iso[j] = iso;', /^curva: isolamento/);
+    await planta('nominal em 0,1 kW', 'cv.nom = ns.length ? r1(Math.max(...ns) / 10) : null;', 'cv.nom = ns.length ? Math.max(...ns) : null;', /^curva: isolamento/);
+    await planta('curva publicada sem o isolamento', 'lim: l.cv.lim, iso: l.cv.iso, nom: l.cv.nom });', 'lim: l.cv.lim });', /^a curva publicada leva o isolamento/);
     await planta('diario sem a janela', 'sDia[k] = ks.filter((c) => c.slice(0, 10) >= corte).map((c) => tudo.get(c));', 'sDia[k] = ks.map((c) => tudo.get(c));', /^janela do diario/);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
   console.log(falhasTotal.length ? '\nREPROVADO: ' + falhasTotal.length + '\n  ' + falhasTotal.join('\n  ') : '\nAPROVADO');

@@ -34,6 +34,8 @@
  */
 'use strict';
 const LD = require('./lib-le-dados');
+// strings-logger (19/10/2026): a curva de 30 min do SUPERVISORIO tem o nome `_scada` (o pvstr_hora/pvstr_str das telas e do logger)
+const { leCopia } = require('./lib-pvstr-logger.js');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -104,7 +106,7 @@ function migracaoDoGerador() {
   console.log('');
   console.log('C · a curva de 30 min concorda: zero em instante nenhum');
   {
-    const h = await le('pvstr_hora_' + UFV + '.json');
+    const h = await leCopia(le, 'pvstr_hora_' + UFV + '.json');
     let n = 0; let z = 0;
     for (const l of (h.serie || [])) {
       for (const x of (l.iso || [])) { if (typeof x === 'number') { n += 1; if (x === 0) z += 1; } }

@@ -18,6 +18,8 @@
  * Roda DEPOIS de gerar. `LOCAL_DIR` julga a saida de uma rodada local antes de publicar.
  */
 const LD = require('./lib-le-dados');
+// strings-logger (19/10/2026): a curva de 30 min do SUPERVISORIO tem o nome `_scada` (o pvstr_hora/pvstr_str das telas e do logger)
+const { leCopia } = require('./lib-pvstr-logger.js');
 const zlib = require('zlib');
 const fs = require('fs');
 const path = require('path');
@@ -132,8 +134,8 @@ const tres = ['2026-09-01', '2026-09-02', '2026-09-03'];
   // DUAS ROTAS: o arquivo por eletrocentro contra a curva do inversor
   let comp = 0, div = 0, divN = 0, ex = '';
   for (const [u, ts] of [['M2', 'TS2'], ['M8', 'TS1'], ['M6', 'TS3']]) {
-    const f = await le('pvstr_str_' + u + '_' + ts + '.json');
-    const h = await le('pvstr_hora_' + u + '.json');
+    const f = await leCopia(le, 'pvstr_str_' + u + '_' + ts + '.json');
+    const h = await leCopia(le, 'pvstr_hora_' + u + '.json');
     const H = new Map(h.serie.map((l) => [l.d + '|' + l.ts + '|' + l.inv, l]));
     for (const r of f.serie) {
       const c = H.get(r.d + '|' + r.ts + '|' + r.inv); if (!c) continue;

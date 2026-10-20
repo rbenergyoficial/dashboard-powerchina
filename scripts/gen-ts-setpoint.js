@@ -6,7 +6,9 @@
  * do gen-perdas). O logger Sungrow tambem tem um "setpoint do arranjo", mas e um valor de CONFIGURACAO: o mesmo numero em
  * todos os 180 dias de cada um dos 24 loggers (medido em 04/10/2026), entao nao serve para comparar com a potencia.
  *
- * Fonte: `pvstr_hora_<usina>.json` (gen-perdas), a curva de 30 min de cada inversor nos ultimos 7 dias. Este gerador SOMA,
+ * Fonte: `pvstr_hora_<usina>_scada.json` (gen-perdas), a curva de 30 min de cada inversor do SUPERVISORIO nos ultimos 7 dias
+ * (desde strings-logger, 19/10/2026, o `pvstr_hora_<usina>.json` das telas e do logger, sem setpoint; a copia do supervisorio
+ * ganhou o nome da lib-pvstr-logger.nomeScada; sem ela, o nome antigo vale SO sem a marca do logger). Este gerador SOMA,
  * por eletrocentro e por carimbo, a potencia CA e o setpoint dos inversores, e ACUMULA no arquivo publicado do eletrocentro
  * (`sp_ts_<usina>_<ts>.json`, DIAS dias): a fonte guarda 7, entao rodar uma vez por dia basta com folga de seis.
  *
@@ -23,7 +25,7 @@
  * 🔴 QUANTIDADE DO ELETROCENTRO (n_tot) e a uniao dos inversores ja vistos nele (guardada no arquivo, `inversores`) com os
  *    da fonte: inversor parado por mais de 7 dias sai da fonte, mas nao sai do eletrocentro.
  *
- * Env: DADOS_STORAGE · OUT=dados · ensaio: LOCAL_IN_DIR (os pvstr_hora_*.json) e LOCAL_OUT_DIR; BLOB_BASE troca a origem
+ * Env: DADOS_STORAGE · OUT=dados · ensaio: LOCAL_IN_DIR (os pvstr_hora_*_scada.json) e LOCAL_OUT_DIR; BLOB_BASE troca a origem
  *      da LEITURA (fonte e publicado) por outro endereco http(s), para o ensaio julgar o 404 e os outros codigos
  */
 const fs = require('fs');
@@ -67,6 +69,19 @@ async function escreve(nome, obj) {
   await svc().getContainerClient(OUT).getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;
+}
+/* a curva do SUPERVISORIO (strings-logger): a copia `_scada`; sem ela (a primeira rodada da virada), o nome antigo SO sem a marca do
+   logger. Copia com a marca, ou nome antigo com a marca e sem a copia, estoura: somar o logger (sem setpoint) como supervisorio
+   publicaria um ano de setpoint nulo */
+const { nomeScada } = require('./lib-pvstr-logger.js');
+async function leCurvaScada(u) {
+  const antigo = 'pvstr_hora_' + u + '.json', novo = nomeScada(antigo);
+  const j = await leFonte(novo);
+  if (j) { if (j.origem_inversor) throw new Error(novo + ' traz a marca do ' + j.origem_inversor + ': a copia do supervisorio esta contaminada'); return [novo, j]; }
+  const a = await leFonte(antigo);
+  if (a && a.origem_inversor) throw new Error(antigo + ' ja e do ' + a.origem_inversor + ' e ' + novo + ' nao existe: a copia do supervisorio se perdeu');
+  if (a) console.log('  ' + novo + ' ainda nao existe: a curva do supervisorio vem do ' + antigo + ' (sem a marca do logger)');
+  return [antigo, a];
 }
 const r1 = (x) => Math.round(x * 10) / 10;
 const msDe = (t) => Date.parse(t.replace(' ', 'T') + ':00Z') + 3 * 3600e3;    // epoch do instante em BRT
@@ -118,15 +133,15 @@ function somaPorTs(serie) {
      usina aborta a rodada inteira sem deixar parte das usinas atualizada e parte nao */
   const fontes = [];
   for (const u of USINAS) {
-    const fonte = await leFonte('pvstr_hora_' + u + '.json');
+    const [nomeF, fonte] = await leCurvaScada(u);
     if (!fonte || !(fonte.serie || []).length) { console.log('  ' + u + ': sem curva de 30 min na fonte'); continue; }
     const quebra = (fonte.esquema || 1) < 2 ? 'esquema ' + (fonte.esquema || 1) + ' (setpoint em W)'
       : !/pca em kW/.test(fonte.unidade || '') || !/sp em kW/.test(fonte.unidade || '') ? 'unidade sem "pca em kW" e "sp em kW"'
         : fonte.serie.some((l) => !Array.isArray(l.h) || !Array.isArray(l.pca) || !Array.isArray(l.sp)) ? 'linha sem h, pca ou sp' : null;
-    if (quebra) throw new Error('pvstr_hora_' + u + '.json fora do contrato: ' + quebra);
+    if (quebra) throw new Error(nomeF + ' fora do contrato: ' + quebra);
     fontes.push([u, fonte]);
   }
   for (const [u, fonte] of fontes) await grava(u, fonte);
-  if (!arquivos) throw new Error('nenhuma usina com curva de 30 min: a fonte (pvstr_hora_*) nao foi lida');
+  if (!arquivos) throw new Error('nenhuma usina com curva de 30 min: a fonte (pvstr_hora_*_scada) nao foi lida');
   console.log('sp_ts: ' + arquivos + ' arquivo(s), ' + linhas + ' linhas');
 })().catch((e) => { console.error(e.message || e); process.exit(1); });
