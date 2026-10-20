@@ -357,6 +357,14 @@ async function copiaScada(io, novo, antigo, conteudo) {
   return { j: a, semeada: true };
 }
 
+/* o ultimo dia que a disponibilidade do logger JULGOU (alguma usina com meia hora de sol medida). A coleta da madrugada cria a
+   linha do dia corrente e a do dia anterior antes de a estacao chegar, com meias_sol 0 em todas as usinas: essas linhas nao contam
+   (20/10/2026: a trava comparava com a ultima linha e derrubou o sungrow.yml). */
+function ultimoDiaJulgado(sgDisp) {
+  const js = ((sgDisp && sgDisp.serie) || []).filter((o) => USINAS.some((u) => o[u + '_meias_sol'] > 0));
+  return js.length ? js[js.length - 1].dia : null;
+}
+
 const METODO_DIARIO = 'Dado de inversor do registrador de dados do fabricante (logger), coletado a cada 5 min. Disponibilidade da '
   + 'posicao: estado de cada inversor a cada 5 min, so as meias horas com irradiancia no plano de ' + LIMIAR_SOL + ' W/m2 ou mais na '
   + 'estacao da usina; parado abaixo de ' + (PARADO * 100) + ' %, parcial ate ' + (PARCIAL * 100) + ' %; posicao sem leitura com sol '
@@ -364,4 +372,4 @@ const METODO_DIARIO = 'Dado de inversor do registrador de dados do fabricante (l
   + 'Medidor e consumo: medidor de faturamento.';
 
 module.exports = { SEMENTES, copiaScada, ORIGEM, ESQUEMA, MIN_PARES, MIN_DIAS, TOP_SERIE, CAMPOS_SCADA_U, CAMPOS_SCADA_DIA, RENOMEIA_SCADA_U, METODO_DIARIO,
-  classifica, medidor, contador, diario, cobertura, porInversor, comparaComPares, linhasPares, ranking, alarmes, porDiaExecutivo, msDia };
+  classifica, medidor, contador, diario, cobertura, ultimoDiaJulgado, porInversor, comparaComPares, linhasPares, ranking, alarmes, porDiaExecutivo, msDia };

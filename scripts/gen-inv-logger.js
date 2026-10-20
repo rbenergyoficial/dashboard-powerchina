@@ -84,7 +84,7 @@ function guardas(serie, inv, rank, sgDisp) {
     if (o[u + '_inv_parados'] + o[u + '_inv_parciais'] > n) mau.push(o.dia + ' ' + u + ': parados + parciais acima dos ' + n + ' lidos');
     if (n + o[u + '_inv_sem_leitura'] !== p) mau.push(o.dia + ' ' + u + ': lidos + sem leitura diferente da placa');
   }
-  const ultDisp = sgDisp.serie[sgDisp.serie.length - 1].dia;
+  const ultDisp = L.ultimoDiaJulgado(sgDisp);   // a ultima linha com sol medido (a coleta cria o dia corrente sem sol)
   const ultDia = serie.filter((o) => USINAS.some((u) => o[u + '_n_inv'] != null)).map((o) => o.dia).pop();
   if (ultDia !== ultDisp) mau.push('ultimo dia do diario ' + ultDia + ' diferente do ultimo da disponibilidade do logger ' + ultDisp);
   const sujo = inv.find((l) => CAMPOS_SO_SCADA_INV.some((c) => c in l));

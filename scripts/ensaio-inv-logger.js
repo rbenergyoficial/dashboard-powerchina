@@ -322,12 +322,23 @@ function planta(fonte, destino, nome, trocas, julga) {
   finally { if (fs.existsSync(destino)) fs.unlinkSync(destino); delete require.cache[destino]; }
 }
 
+/* 20/10/2026: a coleta da madrugada cria as linhas de D-1 e D sem sol (meias_sol 0) antes de a estacao chegar */
+function ultimoJulgadoOk(L) {
+  const z = (dia, m) => { const o = { dia }; for (const u of ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9']) o[u + '_meias_sol'] = m; return o; };
+  const a = L.ultimoDiaJulgado({ serie: [z('2026-10-17', 23), z('2026-10-18', 23), z('2026-10-19', 0), z('2026-10-20', 0)] });
+  const b = L.ultimoDiaJulgado({ serie: [z('2026-10-19', 0)] });
+  const s = z('2026-10-19', 0); s.M5_meias_sol = 4;
+  const c = L.ultimoDiaJulgado({ serie: [z('2026-10-18', 23), s, z('2026-10-20', 0)] });
+  return a === '2026-10-18' && b === null && c === '2026-10-19';
+}
+
 async function lib() {
   console.log('1-6 · lib-inv-logger (mundo forjado, sem rede)');
   const L = require('./lib-inv-logger.js');
   const R = casosLib(L);
   const CH = ['okClassifica', 'okSemSol', 'okDiario', 'okCobertura', 'okScada', 'okEnergia', 'okInv', 'okExecutivo', 'okPares', 'okRanking', 'okAlarme'];
   for (const k of CH) ok(R[k], k);
+  ok(ultimoJulgadoOk(L), 'okUltimoJulgado: o ultimo dia da disponibilidade e o ultimo com sol medido (linhas da coleta sem sol nao contam)');
   const P = paresIguais(L); ok(P.ok, 'okParesGenInvScada: a funcao do gen-inv-scada e a da lib dao o mesmo · ' + P.txt);
   console.log('7 · posicao vaga no mesmo logger (lib-sungrow-disp)');
   const V = casosVaga(require('./lib-sungrow-disp.js'));
@@ -350,6 +361,8 @@ async function lib() {
     [["o[u + '_inv_parados'] = c.parados;", "o[u + '_inv_parados'] = S && S[u + '_inv_parados'] != null ? S[u + '_inv_parados'] : c.parados;"]], libCasos('okDiario'));
   planta(LIB, LIBP, 'inversor do logger ausente contado como parado', [['      if (d == null) continue;\n      porU[u].lidas += 1;',
     '      porU[u].lidas += 1;\n      if (d == null) { porU[u].parados += 1; continue; }']], libCasos('okClassifica'));
+  planta(LIB, LIBP, 'ultimo dia da disponibilidade pela ultima linha (com as linhas sem sol da coleta)',
+    [["const js = ((sgDisp && sgDisp.serie) || []).filter((o) => USINAS.some((u) => o[u + '_meias_sol'] > 0));", "const js = ((sgDisp && sgDisp.serie) || []);"]], (f) => ultimoJulgadoOk(require(f)));
   planta(LIB, LIBP, 'usina-dia sem sol publicada como zero', [["if (D && D[u + '_meias_sol'] > 0 && C) {", 'if (C) {']], libCasos('okSemSol'));
   planta(LIB, LIBP, 'grandeza fisica do dia parcial', [['const inteiro = r.p === 0;', 'const inteiro = true;']], libCasos('okInv'));
   planta(LIB, LIBP, 'Complexo com usina incompleta', [['if (K.n_cc === placa) { scc', 'if (true) { scc']], libCasos('okEnergia'));
