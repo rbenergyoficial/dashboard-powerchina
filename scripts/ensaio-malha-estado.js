@@ -19,13 +19,24 @@
  * Esperados contados FORA do gerador: letras, numeros e datas escritos a mao a partir dos fixtures abaixo.
  *
  * malha-frescor-conteudo (19/10/2026): cada arquivo do frescor tem GRAVACAO e CONTEUDO. Regras soltas: o instante sem fuso e de
- * Brasilia, o fim do dia, o prazo do conteudo contado a mao na agenda REAL (trafo 2018, logger 2177, PR 2293, operador 2477, dia do
- * medidor 1590, 5 min 30, registro 30 d), conteudo ilegivel = null. Mundos: verde; CONGELADO (trafo, sager e perdas regravados ha
+ * Brasilia, o fim do dia, o prazo do conteudo contado a mao na agenda de ensaio AG_FIX (RE-002; trafo 2018, logger 2177, PR 2293,
+ * operador 2477, dia do medidor 1590, 5 min 30, registro 30 d), conteudo ilegivel = null. Mundos: verde; CONGELADO (trafo, sager e perdas regravados ha
  * 5 min com o dado parado no dia 14: pela gravacao sairiam ok, o que a premissa prova; pelo conteudo saem fa, e o proc com o trafo
  * vermelho sai fa); conteudo ilegivel (sem registro, nunca a gravacao); a saida anterior do MESMO dia (so o regravado e baixado, e
  * o `ate` que so a saida anterior tem aparece) e de OUTRO dia (tudo baixado); 403 na saida anterior estoura. Plantios: a regra
  * antiga (so a gravacao), ilegivel vira gravacao, a pior medida nao vence, saida anterior com outra gravacao ou de outro dia
  * reaproveitada, 403 como ausencia, o arquivo de 5 min da medicao baixado.
+ *
+ * malha-vigia-mais (20/10/2026, decisao do humano): oito fontes novas (perdas de 30 e 60 min, historico das entradas de string e
+ * inversores hora a hora, do supervisorio; transformadores de 5, 15, 30 e 60 min, do medidor), 39 no total, 37 da publicacao. A lista
+ * e conferida contra a declarada AQUI (id, workflow, conteudo). Regras soltas: o fim do dado e o prazo de cada uma contados a mao no
+ * AG_FIX (medidor do trafo 1578, supervisorio 2232 e 2147). Mundos: SUPERVISORIO PARADO com o medidor em dia (os quatro do
+ * supervisorio fa pelo conteudo, regravados ha 5 min; os do trafo ok com o supervisorio dele parado e a serie seguindo) e MEDIDOR
+ * PARADO com linhas do supervisorio no fim da serie (trafo fa). Plantios: fonte nova fora da lista, os do supervisorio pela gravacao,
+ * o trafo pelo supervisorio, o trafo pelo fim da serie, a hora de 60 min com 30. Revisao (RE-001..006 do malha-vigia-mais): os quatro
+ * trafos pelo C5 numa execucao fora da agenda (1288; o dia fechado daria 2728), sem medidor_ate = null mesmo com o supervisorio e a serie
+ * em dia (e um mundo disso, `sem`), o maior ultimo_ok no meio da serie, a ponte numa agenda derivada (3240; sem ela 1800), a lista
+ * conferida no proprio mutante pelo require, e o chkC exigindo o mesmo conjunto de ids.
  */
 const fs = require('fs');
 const path = require('path');
@@ -178,7 +189,29 @@ const FIX = {
   supervisorio: [{ ultimo_dia: D1 }, true, okC(750, 2070, FIM_D1)],
   trafo_dia: [{ serie: [{ dia: '2026-10-17' }, { dia: D1 }] }, true, okC(750, 2018, FIM_D1)],
   medidor_dia: [{ dias: [{ dia: D1 }] }, false, okC(750, 1590, FIM_D1)],
+  /* malha-vigia-mais. Supervisorio, dia D pela ponte (como perdas_dia e inversores_scada): a meia hora 23:30 + 30 e a hora 23:00 + 60
+   * fecham o dia 18; o historico das entradas vale pelo MAIOR ultimo_ok; os inversores hora a hora pelo escopo.ate */
+  perdas_30: [{ serie: [{ ms: Date.parse('2026-10-19T02:00:00Z'), t: '2026-10-18 23:00' }, { ms: Date.parse('2026-10-19T02:30:00Z'), t: '2026-10-18 23:30' }] }, true, okC(750, 2232, FIM_D1)],
+  perdas_60: [{ serie: [{ ms: Date.parse('2026-10-19T01:00:00Z'), t: '2026-10-18 22:00' }, { ms: Date.parse('2026-10-19T02:00:00Z'), t: '2026-10-18 23:00' }] }, true, okC(750, 2232, FIM_D1)],
+  strings_entradas: [{ serie: [{ ufv: 'M1', ok: ['2026-07-23'], ultimo_ok: '2026-09-30' }, { ufv: 'M2', ok: ['2026-07-24'], ultimo_ok: D1 }, { ufv: 'M3', ok: ['2026-07-24'], ultimo_ok: '2026-08-02' }, { ufv: 'M4', ok: [], ultimo_ok: null }] }, true, okC(750, 2232, FIM_D1)],
+  inversores_scada_hora: [{ escopo: { de: '2026-09-15', ate: D1 }, serie_hora: [{ dia: D1 }] }, true, okC(750, 2147, FIM_D1)],
+  /* medidor, 5 min, pela execucao diaria do trafo (10:38 UTC): o ultimo intervalo lido comeca 07:15 de Brasilia, fim 10:20 UTC (310 min
+   * antes de AGORA); o seguinte termina 10:25 + 16 = 10:41, depois da execucao do dia: R1 20/10 10:38 (24h18 = 1458) + 120 = 1578.
+   * O supervisorio do trafo (temperaturas) parou no dia 14 e NAO conta */
+  trafo_5: [{ medidor_ate: '2026-10-19 07:15', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T10:15:00Z'), t: '2026-10-19 07:15' }] }, true, okC(310, 1578, '2026-10-19T10:20:00Z')],
+  /* RE-001: o trafo_15 e o trafo_60 com o medidor lido fora da agenda (execucao manual, como em 20/10 15:24): fim 12:10 de Brasilia =
+   * 15:10 UTC, 20 min antes; o seguinte (15:15 + 16 = 15:31) cai na execucao de 20/10 10:38: 19h28 + 2 h = 1288 (o dia fechado daria 2728) */
+  trafo_15: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: null, serie: [{ ms: Date.parse('2026-10-19T15:05:00Z'), t: '2026-10-19 12:05' }] }, true, okC(20, 1288, '2026-10-19T15:10:00Z')],
+  trafo_30: [{ medidor_ate: '2026-10-19 07:15', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T10:00:00Z'), t: '2026-10-19 07:00' }] }, false, okC(310, 1578, '2026-10-19T10:20:00Z')],
+  trafo_60: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: '2026-10-14 23:00', serie: [{ ms: Date.parse('2026-10-19T15:00:00Z'), t: '2026-10-19 12:00' }] }, true, okC(20, 1288, '2026-10-19T15:10:00Z')],
 };
+/* malha-vigia-mais: a lista declarada AQUI, fora do gerador (id -> workflow que grava). Fonte que some do gerador, ou muda de workflow,
+ * reprova; o total tambem e escrito a mao */
+const VIGIA_MAIS = { perdas_30: 'perdas.yml', perdas_60: 'perdas.yml', strings_entradas: 'perdas.yml', inversores_scada_hora: 'inv-scada.yml',
+  trafo_5: 'trafo.yml', trafo_15: 'trafo.yml', trafo_30: 'trafo.yml', trafo_60: 'trafo.yml' };
+const N_FONTES = 39, N_PUB = 37;
+/* RE-005: a conferencia da lista, aplicada ao gerador de verdade e a um mutante (a fonte que falta, ou que mudou, pelo id) */
+const faltaVigia = (Gx) => Object.entries(VIGIA_MAIS).filter(([id, w]) => { const f = Gx.FONTES.find((x) => x.id === id); return !f || f.etapa !== 'pub' || !f.conteudo || f.wf.join() !== w; }).map(([id]) => id);
 const faltaFixC = G.FONTES.filter((f) => !FIX[f.id]).map((f) => f.id);
 if (faltaFixC.length) { console.error('FALHA: o ensaio nao tem fixture de conteudo para ' + faltaFixC.join(', ')); process.exit(1); }
 const BLOB = Object.fromEntries(G.FONTES.map((f) => [f.id, f.blob]));
@@ -457,7 +490,7 @@ function mutante(nome, trocas) {
   let src = orig;
   for (const [de, para] of trocas.concat([["require('./lib-le-dados')", 'require(' + JSON.stringify(LIB) + ')']])) {
     const n = src.split(de).length - 1;
-    if (n !== 1) throw new Error('plantio ' + nome + ': ancora achada ' + n + ' vezes: ' + de.slice(0, 70));
+    if (n !== 1) throw new Error('plantio ' + nome + ': ancora achada ' + n + ' vezes (a linha do gerador mudou: atualizar a ancora do plantio, isto NAO e deteccao): ' + de.slice(0, 70));
     src = src.replace(de, () => para);
   }
   assert.notStrictEqual(src, orig, 'plantio ' + nome + ' nao mudou nada');
@@ -530,7 +563,7 @@ async function regras() {
   /* proc (malha-v2): `fa` so quando um workflow PAROU DE GRAVAR. Os workflows e as fontes sao os do mapa do gerador:
    * ppc.yml grava registro_mesa; perdas.yml grava perdas_inversor e perdas_dia; must-intra.yml nao grava nada do frescor. */
   ok(G.FONTES.filter((f) => f.wf.includes('ppc.yml')).map((f) => f.id).join() === 'registro_mesa'
-    && G.FONTES.filter((f) => f.wf.includes('perdas.yml')).map((f) => f.id).join() === 'perdas_inversor,perdas_dia'
+    && G.FONTES.filter((f) => f.wf.includes('perdas.yml')).map((f) => f.id).join() === 'perdas_inversor,perdas_dia,perdas_30,perdas_60,strings_entradas'
     && !G.FONTES.some((f) => f.wf.includes('must-intra.yml')), 'premissa do caso: o mapa fonte -> workflow do gerador');
   const runs = (...cs) => cs.map((c) => ({ c, t: AGORA_MS }));
   const FR = (over) => G.FONTES.map((f) => ({ id: f.id, st: (over || {})[f.id] || 'ok' }));
@@ -575,7 +608,7 @@ async function regras() {
     && I('2026-10-18T23:30:00-03:00') === Date.parse('2026-10-19T02:30:00Z') && I('2026-10-19T21:00:41.000Z') === Date.parse('2026-10-19T21:00:41Z')
     && I('2026-10-19') === null && I(1792377000000) === null && I('19/10/2026 12:00') === null, 'instante: sem fuso = Brasilia; com fuso, o dele; o resto nao e instante');
   ok(FD('2026-10-14') === Date.parse('2026-10-15T03:00:00Z') && FD('2026-10') === null && FD(null) === null, 'fim do dia de Brasilia: 00:00 do dia seguinte');
-  const PC = (id, E) => { const f = G.FONTES.find((x) => x.id === id); return G.prazoConteudo(f.conteudo, f.wf, AG_FIX, Date.parse(E)); };
+  const PC = (id, E) => { const f = G.FONTES.find((x) => x.id === id); if (!f || !f.conteudo) return null; return G.prazoConteudo(f.conteudo, f.wf, AG_FIX, Date.parse(E)); };
   ok(PC('trafo_dia', '2026-10-15T03:00:00Z') === 2018, 'trafo (dia 14): o dia 15 sai da VM na ponte de 16/10 05:55 e o trafo o publica as 10:38 UTC: 31h38 + 2 h = 2018 min');
   ok(PC('logger_disp', '2026-10-19T03:00:00Z') === 2177, 'logger: sungrow 13:17 UTC do dia seguinte: 34h17 + 2 h = 2177 min (o selo da casa: 36 h)');
   ok(PC('pr', '2026-10-19T03:00:00Z') === 2293, 'PR: ponte -> estacao 15:33 -> executivo 16:13: 37h13 + a folga de 1 execucao (1 h) = 2293 min');
@@ -584,13 +617,43 @@ async function regras() {
   ok(PC('ao_vivo', '2026-10-19T22:50:00Z') === 30, 'medicao de 5 min: 5 + 16 de latencia, a execucao seguinte, + 1 execucao = 30 min');
   ok(PC('inversores_registro', '2026-10-15T12:00:00Z') === 43200, 'registro de trocas: prazo fixo de 30 dias (revisao mensal)');
   ok(G.estadoFrescor(7010, PC('trafo_dia', '2026-10-15T03:00:00Z')) === 'fa', 'o caso de hoje: trafo com o dia 14, lido 7010 min depois (prazo 2018): fa');
-  const FC = (id, corpo, gz) => { const f = G.FONTES.find((x) => x.id === id); let b = Buffer.from(typeof corpo === 'string' ? corpo : JSON.stringify(corpo)); if (gz) b = zlib.gzipSync(b); return G.fimDoConteudo(f.conteudo, b); };
+  const FC = (id, corpo, gz) => { const f = G.FONTES.find((x) => x.id === id); if (!f || !f.conteudo) return undefined; let b = Buffer.from(typeof corpo === 'string' ? corpo : JSON.stringify(corpo)); if (gz) b = zlib.gzipSync(b); return G.fimDoConteudo(f.conteudo, b); };
   ok(FC('trafo_dia', { serie: [{ dia: '2026-10-14' }, { dia: '2026-10-13' }, { x: 1 }, null] }, true) === Date.parse('2026-10-15T03:00:00Z'), 'conteudo em gzip: o MAIOR dia da serie, linhas sem dia ignoradas');
   ok(FC('selo_medidores', '﻿' + JSON.stringify({ ancora: '2026-10-19T19:50:00' })) === Date.parse('2026-10-19T22:50:00Z'), 'conteudo com BOM');
   ok(FC('trafo_dia', { serie: [] }) === null && FC('trafo_dia', { serie: [{ x: 1 }, null] }) === null, 'serie vazia, ou so com linhas sem dia: null (sai sem registro)');   // RE-005
   ok(FC('trafo_dia', 'nao e json') === null && FC('trafo_dia', { serie: 'x' }) === null && FC('trafo_dia', { dias: [{ dia: '2026-10-18' }] }) === null && FC('trafo_dia', '') === null,
     'conteudo ilegivel, sem a lista ou com o campo noutro lugar: null (nunca a gravacao no lugar)');
   ok(G.FONTES.filter((f) => !f.conteudo).map((f) => f.id).join() === 'medidor_5min,selos_fontes,corte_gemeo,registro_mesa', 'so quatro fontes pela gravacao, declaradas');
+
+  /* malha-vigia-mais: a lista e os prazos das oito fontes novas, contados a mao no AG_FIX */
+  const faltaV = faltaVigia(G);
+  ok(!faltaV.length && G.FONTES.length === N_FONTES && G.FONTES.filter((f) => f.etapa === 'pub').length === N_PUB,
+    'as oito fontes novas na lista, pelo conteudo e com o workflow declarado; ' + N_FONTES + ' fontes, ' + N_PUB + ' da publicacao'
+    + (faltaV.length ? ': falta ou difere ' + faltaV.join(', ') : ' (gerador: ' + G.FONTES.length + ')'));
+  const TRAFOS_ID = ['trafo_5', 'trafo_15', 'trafo_30', 'trafo_60'];
+  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-19T10:20:00Z') === 1578),
+    'trafo pelo medidor: o intervalo seguinte (10:25 + 16 = 10:41) passa da execucao das 10:38: a do dia seguinte, 24h18 + 2 h = 1578 min');
+  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-20T15:10:00Z') === 1288), 'os quatro trafos, execucao fora da agenda as 15:24 (o caso de hoje): ate 21/10 10:38, 19h28 + 2 h = 1288 min (o dia fechado daria 2728)');
+  ok(PC('perdas_30', '2026-10-19T03:00:00Z') === 2232 && PC('perdas_60', '2026-10-19T03:00:00Z') === 2232 && PC('strings_entradas', '2026-10-19T03:00:00Z') === 2232,
+    'perdas de 30 e 60 min e entradas de string: ponte -> perdas 14:12 UTC do dia seguinte: 35h12 + 2 h = 2232 min');
+  ok(PC('inversores_scada_hora', '2026-10-19T03:00:00Z') === 2147, 'inversores hora a hora: ponte -> inv-scada 12:47 UTC: 33h47 + 2 h = 2147 min');
+  /* RE-004: com perdas e inv-scada as 07:00 UTC a ponte (08:55) muda o resultado: R1 22/10 07:00 (3120) + 120 = 3240; sem ela, 1800 */
+  const AG_CEDO = Object.assign({}, AG_FIX, { 'perdas.yml': ['0 0 7 * * *'], 'inv-scada.yml': ['0 0 7 * * *'] });
+  const PCA = (id, E) => { const f = G.FONTES.find((x) => x.id === id); return f && f.conteudo ? G.prazoConteudo(f.conteudo, f.wf, AG_CEDO, Date.parse(E)) : null; };
+  ok(['perdas_30', 'perdas_60', 'strings_entradas', 'inversores_scada_hora'].every((id) => PCA(id, '2026-10-19T03:00:00Z') === 3240),
+    'os quatro do supervisorio esperam a ponte das 05:55 de Brasilia: com o workflow as 07:00 UTC, 3240 min (sem a ponte seriam 1800)');
+  const F14 = Date.parse('2026-10-15T03:00:00Z');
+  ok(FC('trafo_5', { medidor_ate: '2026-10-20 12:05', supervisorio_ate: '2026-10-14 23:30', serie: [{ t: '2026-10-20 12:05' }] }, true) === Date.parse('2026-10-20T15:10:00Z')
+    && FC('trafo_30', { medidor_ate: '2026-10-15 07:15', supervisorio_ate: '2026-10-19 23:30', serie: [{ t: '2026-10-19 23:30' }] }) === Date.parse('2026-10-15T10:20:00Z'),
+    'trafo: o fim do dado e o medidor_ate + 5 min; o supervisorio e o fim da serie nao contam');
+  ok(TRAFOS_ID.every((id) => FC(id, { medidor_ate: null, supervisorio_ate: '2026-10-19 07:00', serie: [{ t: '2026-10-19 07:00' }] }) === null
+    && FC(id, { supervisorio_ate: '2026-10-19 07:00', serie: [{ t: '2026-10-19 07:00' }] }) === null),
+    'trafo sem medidor_ate: null (sai sem registro, nunca a serie no lugar)');
+  ok(FC('perdas_30', { serie: [{ t: '2026-10-14 23:00' }, { t: '2026-10-14 23:30' }] }, true) === F14 && FC('perdas_60', { serie: [{ t: '2026-10-14 23:00' }, { t: '2026-10-14 22:00' }] }) === F14,
+    'perdas: a meia hora das 23:30 + 30 e a hora das 23:00 + 60 fecham o dia 14');
+  ok(FC('strings_entradas', { serie: [{ ultimo_ok: '2026-09-01' }, { ultimo_ok: null }, { ultimo_ok: '2026-10-14' }, { ok: ['2026-10-19'] }, { ultimo_ok: '2026-10-02' }] }, true) === F14
+    && FC('inversores_scada_hora', { escopo: { de: '2026-09-15', ate: '2026-10-14' } }) === F14,
+    'entradas de string pelo MAIOR ultimo_ok (o ok[] dos primeiros dias nao conta); inversores hora a hora pelo escopo.ate');
   est = null; try { G.prazoConteudo({ passo: 1440, chegada: [{ wf: ['sumiu.yml'] }] }, ['trafo.yml'], AG_FIX, Date.now()); } catch (e) { est = e; }
   ok(!!est && /sem prazo: sumiu.yml/.test(est.message), 'regra de chegada com workflow fora da agenda estoura');
 }
@@ -731,18 +794,49 @@ async function processos() {
   /* logger com o fim da saida anterior (02:00 UTC): 810 min; E + 1 dia + 355 = 07:55 -> sungrow 13:17: 35h17 + 2 h = 2237 */
   const ESP_ANT = Object.assign({}, ESP_VERDE, { logger_disp: Object.assign(okC(810, 2237, '2026-10-19T02:00:00Z'), { gravado: MOD5Z }) });
   const MUNDOS_C = {
-    verde: [{ sdk: mundoDados(DADOS_VERDE) }, ESP_VERDE, { st: 'ok', n: { no_prazo: 29, total: 29 } }, NOMES_C],
+    verde: [{ sdk: mundoDados(DADOS_VERDE) }, ESP_VERDE, { st: 'ok', n: { no_prazo: 37, total: 37 } }, NOMES_C],
     'congelado em 14/10, regravado hoje': [{ sdk: mundoDados(dadosDe(CONG)), gh: { 'trafo.yml': verm2('failure', 'failure') } }, ESP_CONG,
-      { st: 'fa', n: { no_prazo: 26, total: 29 }, proc: { st: 'fa', motivo: 'workflow_vermelho' } }, NOMES_C],
-    'conteudo ilegivel': [{ sdk: mundoDados(dadosDe(ILEG)) }, ESP_ILEG, { st: 'fa', n: { no_prazo: 27, total: 29 } }, NOMES_C],
+      { st: 'fa', n: { no_prazo: 34, total: 37 }, proc: { st: 'fa', motivo: 'workflow_vermelho' } }, NOMES_C],
+    'conteudo ilegivel': [{ sdk: mundoDados(dadosDe(ILEG)) }, ESP_ILEG, { st: 'fa', n: { no_prazo: 35, total: 37 } }, NOMES_C],
     'saida anterior do mesmo dia': [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-19T15:15:00Z') } }) }, ESP_ANT,
-      { st: 'ok', n: { no_prazo: 29, total: 29 } }, ['trafo_diario.json']],
+      { st: 'ok', n: { no_prazo: 37, total: 37 } }, ['trafo_diario.json']],
     'saida anterior de outro dia': [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-18T23:00:00Z') } }) }, ESP_VERDE,
-      { st: 'ok', n: { no_prazo: 29, total: 29 } }, NOMES_C],
+      { st: 'ok', n: { no_prazo: 37, total: 37 } }, NOMES_C],
   };
-  const chkC = (esp, pub, baixa) => (r) => {
+  /* malha-vigia-mais. SUPERVISORIO PARADO: os quatro do supervisorio regravados ha 5 min com o dado no dia 14 (fa pelo conteudo; o
+   * perdas.yml vermelho nas 2 so com eles fora do prazo: o proc vai a fa por eles), e o trafo com o medidor em dia e o supervisorio dele
+   * parado no dia 14 (ok). MEDIDOR PARADO: o medidor_ate no dia 15 e linhas so do supervisorio no fim da serie, ate o dia 19 (fa: 15/10
+   * 10:20 a 19/10 15:30 = 6070 min, prazo 1578) */
+  const SUP14 = { perdas_30: { corpo: { serie: [{ t: '2026-10-14 23:00' }, { t: '2026-10-14 23:30' }] } }, perdas_60: { corpo: { serie: [{ t: '2026-10-14 23:00' }] } },
+    strings_entradas: { corpo: { serie: [{ ultimo_ok: '2026-08-02' }, { ultimo_ok: '2026-10-14' }, { ultimo_ok: null }, { ultimo_ok: '2026-09-30' }] } }, inversores_scada_hora: { corpo: { escopo: { de: '2026-09-15', ate: '2026-10-14' } } } };
+  const ESP_SUP14 = Object.assign({}, ESP_VERDE, { perdas_30: fa14(2232), perdas_60: fa14(2232), strings_entradas: fa14(2232), inversores_scada_hora: fa14(2147) });
+  const MED15 = { medidor_ate: '2026-10-15 07:15', supervisorio_ate: '2026-10-19 07:00', serie: [{ t: '2026-10-15 07:15' }, { t: '2026-10-19 07:00' }] };
+  const TRAFOS = ['trafo_5', 'trafo_15', 'trafo_30', 'trafo_60'];
+  const ESP_MED15 = Object.assign({}, ESP_VERDE);
+  for (const id of TRAFOS) ESP_MED15[id] = { st: 'fa', idade_min: 6070, prazo_min: 1578, medida: 'conteudo', ate: '2026-10-15T10:20:00Z', gravado: MOD5Z };
+  /* premissa: pela gravacao (a regra de antes do lote, com as fontes fora da lista nem medidas) os oito sairiam ok */
+  const velhoV = [...Object.keys(SUP14), ...TRAFOS].map((id) => { const f = G.FONTES.find((x) => x.id === id); return f ? G.estadoFrescor((AGORA_MS - MOD5) / 60000, G.prazoDe(AG_FIX, f.wf)) : 'fora da lista'; });
+  ok(velhoV.every((s) => s === 'ok'), 'premissa dos mundos do vigia: os oito regravados ha 5 min sairiam ok pela gravacao (' + velhoV.join(', ') + ')');
+  /* RE-002: o medidor sem leitura (medidor_ate nulo) com o supervisorio e a serie em dia: sem registro, com o prazo da gravacao (26 h) */
+  const MEDNULO = { medidor_ate: null, supervisorio_ate: '2026-10-19 12:00', serie: [{ t: '2026-10-19 12:00' }] };
+  const ESP_MEDNULO = Object.assign({}, ESP_VERDE);
+  for (const id of TRAFOS) ESP_MEDNULO[id] = { st: 'sem', idade_min: null, prazo_min: 1560, medida: 'conteudo', ate: null, gravado: MOD5Z };
+  Object.assign(MUNDOS_C, {
+    'vigia: medidor sem leitura, supervisorio e serie em dia': [{ sdk: mundoDados(dadosDe(Object.fromEntries(TRAFOS.map((id) => [id, { corpo: MEDNULO }])))) }, ESP_MEDNULO,
+      { st: 'fa', n: { no_prazo: 33, total: 37 } }, NOMES_C],
+    'vigia: supervisorio parado no dia 14, medidor em dia': [{ sdk: mundoDados(dadosDe(SUP14)), gh: { 'perdas.yml': verm2('failure', 'failure') } }, ESP_SUP14,
+      { st: 'fa', n: { no_prazo: 33, total: 37 }, proc: { st: 'fa', motivo: 'workflow_vermelho' } }, NOMES_C],
+    'vigia: medidor parado no dia 15, supervisorio seguindo': [{ sdk: mundoDados(dadosDe(Object.fromEntries(TRAFOS.map((id) => [id, { corpo: MED15 }])))) }, ESP_MED15,
+      { st: 'fa', n: { no_prazo: 33, total: 37 } }, NOMES_C],
+  });
+  const chkC = (esp, pub, baixa, parcial) => (r) => {
     if (r.code !== 0 || !r.out) return ['o gerador nao terminou (codigo ' + r.code + '): ' + String(r.stderr).trim().split('\n').slice(-1)];
     const e = [...textoLimpo(r), ...semViolacao(r)];
+    if (!parcial) {   /* RE-006: as fontes da saida sao as do esperado, nem uma a menos, nem uma a mais */
+      const sai = new Set(r.out.frescor.map((x) => x.id)), quer = Object.keys(esp);
+      const falta = quer.filter((k) => !sai.has(k)), sobra = [...sai].filter((k) => !(k in esp));
+      if (falta.length || sobra.length) e.push('fontes da saida: faltam ' + (falta.join(', ') || 'nenhuma') + '; sobram ' + (sobra.join(', ') || 'nenhuma'));
+    }
     for (const f of r.out.frescor) {
       const x = esp[f.id] || {};
       for (const k of Object.keys(x)) if (f[k] !== x[k]) e.push('frescor ' + f.id + '.' + k + ' = ' + f[k] + ' (esperado ' + x[k] + ')');
@@ -761,8 +855,16 @@ async function processos() {
     ok(!e.length, 'conteudo: ' + nome + ' -> pub ' + pub.st + ', ' + baixa.length + ' baixado(s)' + (e.length ? ': ' + e.join(' | ') : ''));
   }
   const MC = (k) => MUNDOS_C[k][0];
+  /* malha-vigia-mais: as ancoras dos plantios (as linhas do gerador, uma vez cada) e os dois mundos do vigia */
+  const L_P30 = "  { id: 'perdas_30', etapa: 'pub', blob: 'perdas_30min.json', wf: ['perdas.yml'], conteudo: CDIA(lerMeiaHora('serie', 't'), PONTE) },";
+  const L_P60 = "  { id: 'perdas_60', etapa: 'pub', blob: 'perdas_60min.json', wf: ['perdas.yml'], conteudo: CDIA(lerHora('serie', 't'), PONTE) },";
+  const L_SE = "  { id: 'strings_entradas', etapa: 'pub', blob: 'pvstr_entradas.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'ultimo_ok'), PONTE) },";
+  const L_ISH = "  { id: 'inversores_scada_hora', etapa: 'pub', blob: 'inv_scada_hora.json', wf: ['inv-scada.yml'], conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },";
+  const L_MED = 'const lerMedidor = (j) => mais(instante(j.medidor_ate), 5);';
+  const L_HORA = 'const lerHora = (lista, campo) => (j) => mais(ultimo(j[lista], (x) => instante(x[campo])), 60);';
+  const K_SUP = 'vigia: supervisorio parado no dia 14, medidor em dia', K_MED = 'vigia: medidor parado no dia 15, supervisorio seguindo';
   /* o plantio da regra antiga e julgado SO pelos tres congelados (o erro citado e o deles, nao o de outra fonte) */
-  const SO_CONGELADOS = chkC({ trafo_dia: ESP_CONG.trafo_dia, sager_disp: ESP_CONG.sager_disp, perdas_dia: ESP_CONG.perdas_dia }, MUNDOS_C['congelado em 14/10, regravado hoje'][2], NOMES_C);
+  const SO_CONGELADOS = chkC({ trafo_dia: ESP_CONG.trafo_dia, sager_disp: ESP_CONG.sager_disp, perdas_dia: ESP_CONG.perdas_dia }, MUNDOS_C['congelado em 14/10, regravado hoje'][2], NOMES_C, true);
   const CC = (k) => chkC(MUNDOS_C[k][1], MUNDOS_C[k][2], MUNDOS_C[k][3]);
   const ANT403 = [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: {}, proibido: true } }) }, chkEstoura('saida anterior com 403'), /AuthorizationPermissionMismatch/];
   /* RE-001: o cabecalho do arquivo responde 200 e a leitura do conteudo 403 ou 500: estoura, sem gravar (so o 404 e ausencia) */
@@ -801,6 +903,11 @@ async function processos() {
   }
 
   console.log('3. plantios (cada um TEM de reprovar)');
+  {   /* RE-005: a conferencia da lista aplicada ao proprio gerador mutante (sem o perdas_30), carregado pelo require */
+    const Mx = require(mutante('vigia_lista_require', [[L_P30 + '\n', '']]));
+    const fv = faltaVigia(Mx);
+    ok(fv.join() === 'perdas_30' && Mx.FONTES.length === N_FONTES - 1, 'plantio reprovado: vigia: fonte nova fora da lista, pela conferencia da lista — falta ou difere ' + (fv.join(', ') || 'NADA (nao detectado)'));
+  }
   const ANCORA_SEM = "  if (!S) return semTodas(ehHoje ? 'sem_estado_hoje' : null);";
   const OK_SEM_REGISTRO = "  if (!S) { const R = semTodas(null); for (const id of PONTE_ETAPAS) R[id] = { st: 'ok', motivo: null, ultima: null, ref_dia: null, n: {} }; return R; }";
   const PLANTIOS = [
@@ -859,6 +966,13 @@ async function processos() {
     ['conteudo: o dia da saida anterior pelo UTC (00:30 de Brasilia)', [['diaBRT(Date.parse(j.gerado)) !== diaBRT(agoraMs)', 'String(j.gerado).slice(0, 10) !== new Date(agoraMs).toISOString().slice(0, 10)']],
       ANT_0030, chkDiaBRT],
     ['conteudo: baixa tambem o que vai pela gravacao', [['    if (f.conteudo) {\n      const a = anterior', '    if (f.conteudo || f.blob) {\n      const a = anterior']], PRINCIPAL, chkPrincipal],
+    /* malha-vigia-mais */
+    ['vigia: fonte nova fora da lista', [[L_P30 + '\n', '']], PRINCIPAL, chkPrincipal],
+    ['vigia: os do supervisorio pela gravacao', [L_P30, L_P60, L_SE, L_ISH].map((l) => [l, l.replace(/conteudo: .*\},$/, 'conteudo: null },')]),
+      MC(K_SUP), CC(K_SUP)],
+    ['vigia: o trafo pelo supervisorio', [[L_MED, L_MED.replace('j.medidor_ate', 'j.supervisorio_ate')]], MC(K_SUP), CC(K_SUP)],
+    ['vigia: o trafo pelo fim da serie', [[L_MED, L_MED.replace('instante(j.medidor_ate)', 'ultimo(j.serie, (x) => instante(x.t))')]], MC(K_MED), CC(K_MED)],
+    ['vigia: a hora de 60 min com 30', [[L_HORA, L_HORA.replace('[campo])), 60);', '[campo])), 30);')]], MC(K_SUP), CC(K_SUP)],
   ];
   /* Barrado pela guarda do gerador so conta se a mensagem dela NOMEIA o defeito plantado (senao a guarda pode ter barrado
    * outra coisa e o plantio nao provou nada). Sem a guarda, quem tem de barrar e a checagem deste ensaio. */

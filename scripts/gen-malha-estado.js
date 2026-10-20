@@ -122,8 +122,16 @@ const VIA_ESTACAO = [{ min: PONTE_MIN }, { wf: ['estacao-logger.yml'] }];
 const lerDia = (lista, campo) => (j) => ultimo(j[lista], (x) => fimDoDia(x[campo]));
 const lerMeiaHora = (lista, campo) => (j) => mais(ultimo(j[lista], (x) => instante(x[campo])), 30);   // rotulo = inicio da meia hora
 const lerDiaHora = (j) => instante(String(j.dia) + 'T' + String(j.hora));
+/* malha-vigia-mais (20/10/2026): a hora rotulada pelo inicio soma 60 min; os transformadores pelo lado do MEDIDOR (o campo
+ * `medidor_ate` e o inicio do ultimo intervalo de 5 min lido do medidor, o mesmo nos quatro passos). O `supervisorio_ate` (temperaturas,
+ * comutador e 34,5 kV, copia do supervisorio) NAO conta: a juncao cria linhas so do supervisorio, entao o fim da serie mentiria
+ * "em dia" com o medidor parado. */
+const lerHora = (lista, campo) => (j) => mais(ultimo(j[lista], (x) => instante(x[campo])), 60);
+const lerMedidor = (j) => mais(instante(j.medidor_ate), 5);
 
-/* Os arquivos do conteiner de dados que o portal le, com o workflow que GRAVA cada um (lido nos geradores em 19/10/2026).
+/* Os arquivos do conteiner de dados que o portal le, com o workflow que GRAVA cada um (lido nos geradores em 19/10/2026), e desde o
+ * malha-vigia-mais (20/10/2026) tambem os produtos dos paineis que estavam fora e congelados: perdas de 30 e 60 min, historico das
+ * entradas de string, inversores do supervisorio hora a hora e os transformadores de 5, 15, 30 e 60 min (39 fontes).
  * `id` e a chave publica da fonte (a pagina traduz); nunca o nome do arquivo. `conteudo`: onde esta o fim do dado (acima);
  * `conteudo: null` = sem campo de data legivel, fica pela gravacao (o porque ao lado).
  * Ficaram FORA, porque a data de gravacao nao mede a execucao: os que so regravam quando o conteudo muda (dia em curso por
@@ -162,8 +170,15 @@ const FONTES = [
   { id: 'estacao_dia', etapa: 'pub', blob: 'estacao_dia.json', wf: ['estacao-logger.yml'], conteudo: CDIA(lerDia('serie', 'd'), PONTE) },
   { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // supervisorio; o perdas_inv.json e do logger (sungrow.yml) desde 19/10/2026
   { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // idem, fonte-inv-logger
+  /* malha-vigia-mais (20/10/2026, decisao do humano): os produtos dos paineis que ficavam fora da lista. Os do supervisorio seguem do
+   * supervisorio (dia D pela ponte de D+1) e saem do prazo quando o export para; amostra de meia hora com rotulo no inicio soma 30 min,
+   * a hora soma 60; o historico das entradas, o ULTIMO dia em que alguma entrada foi julgada string real */
+  { id: 'perdas_30', etapa: 'pub', blob: 'perdas_30min.json', wf: ['perdas.yml'], conteudo: CDIA(lerMeiaHora('serie', 't'), PONTE) },
+  { id: 'perdas_60', etapa: 'pub', blob: 'perdas_60min.json', wf: ['perdas.yml'], conteudo: CDIA(lerHora('serie', 't'), PONTE) },
+  { id: 'strings_entradas', etapa: 'pub', blob: 'pvstr_entradas.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'ultimo_ok'), PONTE) },
   { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada_supervisorio.json', wf: ['inv-scada.yml'],   // o inv_scada.json e do logger (sungrow.yml)
     conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },
+  { id: 'inversores_scada_hora', etapa: 'pub', blob: 'inv_scada_hora.json', wf: ['inv-scada.yml'], conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },
   /* registro de trocas: troca que nao acontece nao e dado velho; o que envelhece e a planilha da equipe, revista todo mes
    * (regra do selo dos inversores, gen-fontes-saude.js, lote invmt1: 30 d, ressalva ate 60 d) */
   { id: 'inversores_registro', etapa: 'pub', blob: 'inversores.json', wf: ['inversores.yml'],
@@ -178,6 +193,12 @@ const FONTES = [
   { id: 'logger_disp', etapa: 'pub', blob: 'sg_disp_dia.json', wf: ['sungrow.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
   { id: 'supervisorio', etapa: 'pub', blob: 'portal_scada.json', wf: ['scada.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), PONTE) },
   { id: 'trafo_dia', etapa: 'pub', blob: 'trafo_diario.json', wf: ['trafo.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
+  /* malha-vigia-mais: o lado de 230 kV pelo medidor de faturamento (fonte-trafo-way2), lido do historico do medidor com a latencia
+   * da medicao; o trafo.yml roda uma vez por dia, entao o periodo seguinte chega na execucao do dia seguinte */
+  { id: 'trafo_5', etapa: 'pub', blob: 'trafo_5min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_15', etapa: 'pub', blob: 'trafo_15min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_30', etapa: 'pub', blob: 'trafo_30min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_60', etapa: 'pub', blob: 'trafo_60min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
   { id: 'medidor_dia', etapa: 'pub', blob: 'way2_daily.json', wf: ['way2-hist.yml'], conteudo: CDIA(lerDia('dias', 'dia')) },
 ];
 
