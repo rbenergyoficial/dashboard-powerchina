@@ -224,6 +224,82 @@ if (naoFecha.length) {
   console.error('ENSAIO REPROVOU na linha de base.'); process.exit(1);
 }
 
+/* ── G · a serie por meia hora (`meias_horas`, lote painel-mesa-ons, 20/10/2026) ─────────────
+   A tela do portal desenha o mapa dia x meia hora e a lista do que corrigir a partir dela; o placar por dia continua sendo o que
+   reprova. As duas tem de contar a MESMA coisa: uma serie que perde, duplica ou troca de classe uma meia hora poria na tela um
+   achado que a auditoria nao tem (ou esconderia o que ela tem). Confere, sem a auditoria:
+     · cada meia hora uma vez so, dentro do trecho auditado;
+     · por dia e por classe, a contagem da serie = o placar (casa, diverge de borda e de miolo, parcial, sem registro, sem lastro,
+       livre);
+     · cada meia hora restrita do operador esta na serie, com o limite dele e a classe que a integralizacao da `lib-ppc` da
+       (contada aqui: sem registro, parcial, plena, ou casa/diverge pela tolerancia publicada), e a potencia do registro dela;
+     · meia hora sem limite do operador so entra como livre ou sem lastro;
+     · as meias horas "sem registro" sao as do alarme.
+   E o conferidor e ensaiado: quatro defeitos plantados num relatorio copiado (meia hora apagada, duplicada, de classe trocada e
+   com o limite errado) TEM de ser acusados, ou o ensaio reprova por o conferidor nao pegar o defeito. */
+const r3 = (x) => (x == null ? null : Math.round(x * 1000) / 1000);
+function confereMeias(rel, slots) {
+  const M = rel.meias_horas, prob = [];
+  if (!Array.isArray(M)) return ['o relatorio nao tem meias_horas'];
+  const visto = new Map();
+  for (const m of M) {
+    if (visto.has(m.ts)) prob.push('meia hora repetida ' + m.ts);
+    visto.set(m.ts, m);
+    if (m.ts.slice(0, 10) < DE || m.ts.slice(0, 10) > rel.auditado_ate) prob.push('meia hora fora do trecho auditado ' + m.ts);
+  }
+  for (const d of (rel.dias || [])) {
+    const c = { casa: 0, diverge: 0, borda: 0, miolo: 0, parcial: 0, sem_registro: 0, sem_lastro: 0, livre: 0 };
+    for (const m of M) {
+      if (m.ts.slice(0, 10) !== d.dia) continue;
+      c[m.c] = (c[m.c] || 0) + 1;
+      if (m.c === 'diverge') c[m.pos === 'MIOLO' ? 'miolo' : 'borda'] += 1;
+    }
+    const placar = { casa: d.casa, diverge: d.diverge, borda: d.div_borda, miolo: d.div_miolo, parcial: d.parcial,
+      sem_registro: d.so_ons, sem_lastro: d.so_registro, livre: d.livres };
+    const fora = Object.keys(placar).filter((k) => c[k] !== placar[k]);
+    if (fora.length) prob.push(d.dia + ': a serie nao fecha com o placar em ' + fora.map((k) => k + ' ' + c[k] + '/' + placar[k]).join(', '));
+  }
+  for (const k of onsLim.keys()) {
+    if (k.slice(0, 10) > rel.auditado_ate || !restrOns(k)) continue;
+    const m = visto.get(k), s = slots.get(k), lim = onsLim.get(k);
+    const esp = !s ? 'sem_registro' : s.cobertura < 1 ? 'parcial' : s.pot >= P.PLENA - P.FOLGA ? 'sem_registro'
+      : (Math.abs(s.pot - lim) <= rel.tolerancia_mw ? 'casa' : 'diverge');
+    if (!m) { prob.push(k + ': meia hora restrita do operador fora da serie'); continue; }
+    if (m.c !== esp) prob.push(k + ': classe ' + m.c + ', a contagem de fora da ' + esp);
+    if (m.ons_mw !== r3(lim)) prob.push(k + ': limite ' + m.ons_mw + ' na serie, ' + r3(lim) + ' no arquivo do operador');
+    if (m.reg_mw !== (s ? r3(s.pot) : null)) prob.push(k + ': registro ' + m.reg_mw + ' na serie, ' + (s ? r3(s.pot) : null) + ' na integralizacao');
+  }
+  for (const m of M) if (m.ons_mw == null && ['livre', 'sem_lastro'].indexOf(m.c) < 0) prob.push(m.ts + ': classe ' + m.c + ' sem limite do operador');
+  const al = (rel.alarmes || []).find((a) => a.gatilho === 'restricao_sem_registro');
+  if (!al || al.n <= 20) {
+    const a = new Set(al ? al.detalhe.map((x) => x.ts) : []), b = new Set(M.filter((m) => m.c === 'sem_registro').map((m) => m.ts));
+    if (a.size !== b.size || [...a].some((t) => !b.has(t))) prob.push('as meias horas sem registro da serie nao sao as do alarme');
+  }
+  return prob;
+}
+const probG = confereMeias(A.rel, slotsBase);
+if (probG.length) {
+  console.error('  FALHA G · a serie por meia hora nao fecha: ' + probG.slice(0, 4).join(' | ') + (probG.length > 4 ? ' (+' + (probG.length - 4) + ')' : ''));
+  console.error('ENSAIO REPROVOU na linha de base.'); process.exit(1);
+}
+{
+  const relCopia = () => JSON.parse(JSON.stringify(A.rel));
+  const iC = A.rel.meias_horas.findIndex((m) => m.c === 'casa'), iR = A.rel.meias_horas.findIndex((m) => m.ons_mw != null);
+  const plantios = [
+    ['meia hora apagada', (r) => { r.meias_horas.splice(iR, 1); }],
+    ['meia hora duplicada', (r) => { r.meias_horas.push(Object.assign({}, r.meias_horas[iR])); }],
+    ['classe trocada (casa -> diverge)', (r) => { r.meias_horas[iC].c = 'diverge'; }],
+    ['limite do operador errado (+5 MW)', (r) => { r.meias_horas[iR].ons_mw = r3(r.meias_horas[iR].ons_mw + 5); }],
+  ];
+  const calado = plantios.filter(([, f]) => { const r = relCopia(); f(r); return !confereMeias(r, slotsBase).length; }).map(([n]) => n);
+  if (iC < 0 || iR < 0 || calado.length) {
+    console.error('  FALHA G · o conferidor da serie nao pega o defeito plantado: ' + (calado.join(', ') || 'sem meia hora para plantar'));
+    console.error('ENSAIO REPROVOU.'); process.exit(1);
+  }
+  console.log('  OK   G · serie por meia hora: ' + A.rel.meias_horas.length + ' meias horas fecham com o placar e com a contagem de fora;'
+    + ' os ' + plantios.length + ' defeitos plantados no relatorio foram acusados');
+}
+
 /* ── o dia-cobaia ────────────────────────────────────────────────────────────────────────── */
 const foraA = diasFora(A.rel);
 const evDia = new Map();
@@ -289,14 +365,21 @@ const ultimaLinha = (j, dia) => Math.max(...j.eventos.filter((e) => e.dia === di
 /* ── os casos plantados ──────────────────────────────────────────────────────────────────── */
 const casos = [];
 
+let slotsB = null;
 casos.push({ nome: 'B · um dia some do registro', espera: 'restricao_sem_registro',
-  monta: (j) => { j.eventos = j.eventos.filter((e) => e.dia !== alvo); return j; },
+  monta: (j) => { j.eventos = j.eventos.filter((e) => e.dia !== alvo); slotsB = P.integraliza(j.eventos.filter((e) => e.dia >= DE)); return j; },
   julga: (rel) => {
     const d = diaDe(rel, alvo);
     const ganho = nDe(rel, 'restricao_sem_registro') - nDe(A.rel, 'restricao_sem_registro');
     if (!d) return 'o dia-cobaia saiu do trecho auditado';
     if (d.so_ons !== onsAlvo) return 'o dia-cobaia tem ' + d.so_ons + ' meia(s) hora(s) sem registro; o operador restringiu ' + onsAlvo;
     if (ganho !== onsAlvo) return 'o gatilho cresceu ' + ganho + ' sobre a base; esperava ' + onsAlvo;
+    /* G no defeito: a serie por meia hora acompanha o placar, e o dia-cobaia inteiro vira "sem registro" sem potencia do registro */
+    const sB = (rel.meias_horas || []).filter((m) => m.ts.slice(0, 10) === alvo && m.ons_mw != null);
+    if (sB.length !== onsAlvo || sB.some((m) => m.c !== 'sem_registro' || m.reg_mw !== null)) return 'a serie por meia hora do dia-cobaia nao virou "sem registro" ('
+      + sB.map((m) => m.c).join(',') + ')';
+    const pG = confereMeias(rel, slotsB);
+    if (pG.length) return 'a serie por meia hora nao fecha com o registro alterado: ' + pG[0];
     return null;
   } });
 

@@ -140,6 +140,20 @@ function dataDosDefeitos(eventos, defeitos) {
       parcial: 0, so_ons: 0, so_reg: 0, livres: 0, difs: [], difs_miolo: [] });
     return porDia.get(d);
   };
+  /* 🆕 painel-mesa-ons (20/10/2026): a MEIA HORA de cada classe, com as duas rotas lado a lado. O placar por dia diz QUANTAS;
+     a tela do portal precisa dizer QUAIS (o mapa dia x meia hora, a curva do dia, a lista do que corrigir na planilha). Campo
+     NOVO, ao lado do resto: nenhum campo que ja existia muda. Cada meia hora que o placar conta entra aqui UMA vez, na MESMA
+     classe que o placar lhe deu (o ensaio confere, dia a dia e classe a classe); a que o placar nao conta (sem registro e sem
+     limite do operador, ou registro pela metade com o operador livre) fica fora, como fica fora do placar.
+       c       casa | diverge | parcial | sem_registro | sem_lastro | livre
+       ons_mw  o limite do operador na meia hora (null quando ele nao limitou)
+       reg_mw  a potencia do registro integralizada na meia hora (null quando o registro nao a cobre); no `parcial` e a media
+               do trecho coberto, que o placar nao compara
+       pos     PRIMEIRO | MIOLO | ULTIMO | UNICO na corrida do operador (null fora dela)
+       razao   a razao do operador (ENE, CNF, REL) quando ele limitou */
+  const meias = [];
+  const meia = (k, c, o, onsRestr, p) => meias.push({ ts: k, c, ons_mw: onsRestr ? r3(o.lim) : null,
+    reg_mw: p ? r3(p.pot) : null, pos: pos.get(k) || null, razao: onsRestr ? (o.razao || null) : null });
 
   for (const k of chaves) {
     const d = diaDe(k);
@@ -150,18 +164,19 @@ function dataDosDefeitos(eventos, defeitos) {
     const x = pega(d);
 
     if (!p) {
-      if (onsRestr) { x.so_ons += 1; semRegistro.push({ ts: k, ons_mw: r3(o.lim), razao: o.razao }); }
+      if (onsRestr) { x.so_ons += 1; semRegistro.push({ ts: k, ons_mw: r3(o.lim), razao: o.razao }); meia(k, 'sem_registro', o, true, null); }
       continue;
     }
     /* slot pela metade nao se compara: seria divergencia de JANELA, nao de medicao */
-    if (p.cobertura < 1) { if (onsRestr) x.parcial += 1; continue; }
+    if (p.cobertura < 1) { if (onsRestr) { x.parcial += 1; meia(k, 'parcial', o, true, p); } continue; }
 
     const regRestr = p.pot < P.PLENA - P.FOLGA;
-    if (!onsRestr && !regRestr) { x.livres += 1; continue; }
+    if (!onsRestr && !regRestr) { x.livres += 1; meia(k, 'livre', o, false, p); continue; }
     if (onsRestr && regRestr) {
       const dif = p.pot - o.lim;
       x.difs.push(Math.abs(dif));
       if (pos.get(k) === 'MIOLO') x.difs_miolo.push(Math.abs(dif));
+      meia(k, Math.abs(dif) <= TOL ? 'casa' : 'diverge', o, true, p);
       if (Math.abs(dif) <= TOL) x.casa += 1;
       else {
         x.diverge += 1;
@@ -175,8 +190,10 @@ function dataDosDefeitos(eventos, defeitos) {
     } else if (onsRestr) {
       x.so_ons += 1;
       semRegistro.push({ ts: k, ons_mw: r3(o.lim), razao: o.razao, registro_mw: r3(p.pot), nota: 'registro marca plena' });
+      meia(k, 'sem_registro', o, true, p);
     } else {
       x.so_reg += 1;
+      meia(k, 'sem_lastro', o, false, p);
     }
   }
 
@@ -295,6 +312,7 @@ function dataDosDefeitos(eventos, defeitos) {
       minutos_fora_mediana_min: mediana(dias.map((d) => d.minutos_fora).filter((v) => v != null)),
     },
     dias, alarmes, avisos, defeitos,
+    meias_horas: meias,   // 🆕 painel-mesa-ons: ver o comentario do confronto
   };
 
   console.log('AUDITORIA ' + DE + ' a ' + ate + ' · ' + dias.length + ' dias');
