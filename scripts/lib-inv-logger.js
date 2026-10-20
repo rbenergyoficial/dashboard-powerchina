@@ -175,6 +175,10 @@ function diario(F) {
     }
     serie.push(o);
   }
+  /* 20/10/2026: o fim da serie e o ultimo dia CLASSIFICADO. A coleta da madrugada cria D-1 e D no sg_disp_dia antes de a estacao
+     chegar (sem sol medido); essas linhas so tinham os campos do medidor e viravam a "ultima linha" de quem le serie[-1] (o cartao
+     de cobertura do sumario1 [956] e o do portal sairam do ar). Elas voltam quando o dia for classificado. So a CAUDA sai. */
+  while (serie.length && !USINAS.some((u) => serie[serie.length - 1][u + '_n_inv'] != null)) serie.pop();
   return serie;
 }
 
