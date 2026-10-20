@@ -129,3 +129,12 @@ jobs:
       - name: Ensaio · a fusao das copias da planilha da mesa tira a linha corrigida
         if: always()
         run: node scripts/ensaio-ppc-funde.js
+
+      # A ponte dos inversores (coleta-inversores.js, lote pa-inversores), substituto do fluxo "Inversores PWC -> Blob -> Grafana".
+      # Ela roda na maquina do operador; aqui se julga a regra com contêiner forjado: nome cru do fluxo, comparacao por SHA-256
+      # contra o contêiner, SECO por padrao, envio condicional, ZIP inteiro e o codigo de saida do script, com 21 plantios.
+      - name: Ensaio · a ponte dos inversores sobe so o que mudou, com o nome do fluxo (coleta-inversores)
+        if: always()
+        run: |
+          npm i --no-save xlsx@0.18.5
+          node scripts/ensaio-coleta-inversores.js

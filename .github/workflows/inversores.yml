@@ -3,6 +3,7 @@ on:
   schedule:
     - cron: '22 12 * * *' # 09:00 BRT · min 22 foge do :00
     - cron: '22 18 * * *' # 15:00 BRT
+    - cron: '22 0 * * *'  # 21:00 BRT · pa-inversores (20/10/2026): a planilha salva a tarde entra no mesmo dia
   workflow_dispatch: {}
 concurrency:
   group: gen-inversores
