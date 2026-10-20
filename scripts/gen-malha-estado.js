@@ -64,9 +64,9 @@ const PONTE_LIGA_BRT = { h: 5, m: 55 };      // o agendador da ponte liga a maqu
 /* 🔴 POWER AUTOMATE: estado DECLARADO, atualizado a cada lote do plano de desligar o Power Automate (nada e lido da API dele).
  *    Ao desligar um fluxo, tirar o nome daqui no MESMO lote e mudar `atualizado`. */
 const PA = {
-  fluxos: ['Sungrow OneDrive RB para Blob', 'Inversores PWC → Blob → Grafana', 'SCADA SharePoint para Blob'],
+  fluxos: ['Sungrow OneDrive RB para Blob', 'SCADA SharePoint para Blob'],
   fim_licenca: '2026-11-09',
-  atualizado: '2026-10-20',   // pa-way2-mes: o "Way2 → Azure Blob Sync" saiu (o way2-mes.yml grava)
+  atualizado: '2026-10-20',   // pa-way2-mes e pa-inversores: sairam o "Way2 → Azure Blob Sync" e o "Inversores PWC → Blob → Grafana"
 };
 /* As outras etapas declaradas (contrato, decisoes de 19/10/2026). `desde` = primeiro dia do historico com a letra declarada;
  * antes dele nao ha registro ("n"). aviso: o pipeline nao le o agendador do aviso (sem); local: backup local em implantacao
