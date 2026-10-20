@@ -430,10 +430,14 @@ function julgaProduto(X) {
   R.marca_copia = [!!SC && !SC.origem_inversor, 'perdas_diario_scada sem a marca do logger (copia do supervisorio nao contaminada)'];
   const porDia = new Map(((PD && PD.serie) || []).map((o) => [o.dia, o]));
   // apurado = a usina-dia com meia hora de sol medida no sg_disp_dia: o campo existe SE E SO SE ha sol (nunca zero sem sol, nunca sumido com sol)
-  let presenca = 0; const difPres = [];
-  for (const r of ((SD && SD.serie) || [])) { const o = porDia.get(r.dia); if (!o) { difPres.push(r.dia + ' sem linha'); continue; }
+  // 20/10/2026 (okCauda): a cauda do sg_disp_dia sem sol (D-1 e D antes de a estacao chegar) nao vira linha do diario
+  const ultPD = ((PD && PD.serie) || []).length ? PD.serie[PD.serie.length - 1].dia : '';
+  let presenca = 0, cauda = 0; const difPres = [];
+  for (const r of ((SD && SD.serie) || [])) { const o = porDia.get(r.dia);
+    if (!o && r.dia > ultPD && !U9.some((u) => r[u + '_meias_sol'] > 0)) { cauda++; continue; }
+    if (!o) { difPres.push(r.dia + ' sem linha'); continue; }
     for (const u of U9) { const tem = o[u + '_n_inv'] != null, sol = r[u + '_meias_sol'] > 0; presenca++; if (tem !== sol) difPres.push(r.dia + ' ' + u + (tem ? ' publicado sem sol' : ' com sol e sem campo')); } }
-  R.presenca = [presenca === 9 * ((SD && SD.serie) || []).length && presenca > 0 && !difPres.length, 'n_inv presente se e so se ha sol no dia: ' + presenca + ' usina-dias, ' + difPres.length + ' fora ' + difPres.slice(0, 3).join(' · ')];
+  R.presenca = [presenca === 9 * (((SD && SD.serie) || []).length - cauda) && presenca > 0 && cauda <= 2 && !difPres.length, 'n_inv presente se e so se ha sol no dia: ' + presenca + ' usina-dias, ' + cauda + ' dia(s) de cauda sem sol fora do diario, ' + difPres.length + ' fora ' + difPres.slice(0, 3).join(' · ')];
   // a recontagem PROPRIA (sem a lib): por posicao com leitura, < 50 parado, < 90 parcial; e o ms = 00:00 BRT
   let julg = 0; const dif = [];
   ((SDI && SDI.dias) || []).forEach((dia, i) => {
@@ -501,6 +505,7 @@ async function produto() {
     ['parados do supervisorio no lugar do logger', 'recontagem', (Y) => { for (const o of Y.PD.serie) for (const u of U9) if (o[u + '_inv_parados_scada'] != null && o[u + '_n_inv'] != null) o[u + '_inv_parados'] = o[u + '_inv_parados_scada']; }],
     ['usina-dia sem sol publicada como zero', 'presenca', (Y) => { const r = Y.SD.serie.find((x) => U9.some((u) => !(x[u + '_meias_sol'] > 0)));
       if (!r) { Y.SD.serie[0].M1_meias_sol = 0; return; } const u = U9.find((v) => !(r[v + '_meias_sol'] > 0)); const o = Y.PD.serie.find((x) => x.dia === r.dia); if (o) { o[u + '_n_inv'] = 0; o[u + '_inv_parados'] = 0; } }],
+    ['dia com sol cortado do fim do diario (a cauda que sai e so a sem sol)', 'presenca', (Y) => { Y.PD.serie.pop(); }],
     ['SCADA de volta como fonte da disponibilidade depois do export', 'copia', (Y) => { ultimo(Y.PD).M5_disp_pct = 99.9; }],
     ['copia do supervisorio contaminada pelo logger', 'marca_copia', (Y) => { Y.SC.origem_inversor = 'logger'; }],
     ['campo do supervisorio no perdas_inv', 'inv', (Y) => { Y.PI.serie[0].horas = 720; }],
