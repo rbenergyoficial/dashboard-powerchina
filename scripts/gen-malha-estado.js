@@ -13,6 +13,16 @@
  *   · frescor: a data de gravacao (cabecalho, lib-le-dados) dos arquivos que o portal le, contra o PRAZO = 2 periodos do
  *     agendamento do workflow que grava cada um, lido da agenda do relogio (`relogio/agenda.json`); workflow que roda uma vez
  *     por dia = 26 h. E a fonte nomeada do limiar: a propria agenda. ok <= prazo, at <= 2 x prazo, fa acima, sem = nao existe;
+ *   · frescor pelo CONTEUDO (lote malha-frescor-conteudo, 19/10/2026): arquivo regravado todo dia com o dado congelado (o export
+ *     do supervisorio parou em 14/10 e os derivados dele seguiam verdes) so se pega pelo ULTIMO INSTANTE DO DADO. Cada fonte com
+ *     campo de data legivel declara em `conteudo` onde ele esta (`ler`), o passo do dado (`passo`: 5 min, o dia) e a regra de
+ *     chegada (`chegada`: a latencia da medicao, a ponte das 05:55, o operador nacional no dia seguinte). O prazo do conteudo e
+ *     ate a execucao da agenda que deveria trazer o PERIODO SEGUINTE do dado, mais a folga de uma execucao, ate 2 h (a mesma do
+ *     prazo de gravacao: 2 periodos para o que roda de hora em hora ou mais, 26 h para o diario). Vale a pior das duas medidas
+ *     (conteudo e gravacao, pela fracao do prazo usada); a saida diz qual (`medida`) e o fim do dado (`ate`). Fonte sem campo de
+ *     data legivel fica pela gravacao, declarada (`conteudo: null` e o porque). Conteudo que nao se le sai `sem`, nunca ok.
+ *     Trafego de saida: o conteudo so e baixado quando a gravacao mudou desde a execucao anterior do MESMO dia de Brasilia (o
+ *     `gravado` e o `ate` da saida anterior, lida do conteiner do portal admin); a primeira execucao do dia le tudo;
  *   · execucoes do GitHub Actions: as 2 ultimas execucoes CONCLUIDAS de cada workflow da agenda (API REST, GITHUB_TOKEN),
  *     cruzadas com o frescor do que cada workflow grava: `proc` so e `fa` quando um workflow de producao PAROU DE GRAVAR
  *     (vermelho nas 2 ultimas e arquivo dele fora do prazo); vermelho que segue gravando e ressalva (lote malha-v2, etapaProc);
@@ -71,44 +81,104 @@ const DECLARADAS = {
  * Apps). O unico workflow azure-static-web-apps-*.yml deste repositorio publica o site APOSENTADO em 18/10/2026, entao ler a
  * execucao dele como "deploy do portal" seria mentir. Ate o deploy do portal ganhar registro legivel, `portal` sai "sem". */
 
+/* ───────────── conteudo: onde esta o ultimo instante do DADO de cada arquivo (lote malha-frescor-conteudo) ───────────── */
+const MIN = 60000;
+const DIA_MIN = 1440;
+/* As regras de chegada, cada uma com a sua fonte nomeada:
+ *   · WAY2_LAT_MIN: a latencia estrutural da medicao de faturamento, ~15-16 min (gen-way2-recent.js, `OK_MIN`);
+ *   · PONTE_MIN: o dia D da usina (logger dos inversores, datalogger das estacoes, export do supervisorio) so sai da VM pela
+ *     ponte, que o agendador liga as 05:55 de Brasilia de D+1 (`PONTE_LIGA_BRT`; contrato da malha, etapa `ponte`);
+ *   · o operador nacional publica o dia D em D+1, e o consolidado o le na execucao da agenda (`ons-consolidado.yml`);
+ *   · o dia fechado do medidor sai do historico da madrugada (`way2-hist.yml`).
+ * FOLGA_MAX_MIN: a folga de uma execucao, limitada a 2 h, como os 26 h do diario no contrato. */
+const WAY2_LAT_MIN = 16;
+const PONTE_MIN = PONTE_LIGA_BRT.h * 60 + PONTE_LIGA_BRT.m;
+const FOLGA_MAX_MIN = 120;
+/* 'AAAA-MM-DD[T ]HH:MM[:SS][.mmm][fuso]': sem fuso = Brasilia (como os geradores gravam); com fuso, o dele */
+function instante(s) {
+  if (typeof s !== 'string') return null;
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/.exec(s.trim());
+  if (!m) return null;
+  const t = Date.parse(m[1] + 'T' + m[2] + ':' + (m[3] || '00') + (m[4] || '-03:00'));
+  return isFinite(t) ? t : null;
+}
+/* o fim do dia D de Brasilia (00:00 de D+1) */
+const fimDoDia = (d) => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? Date.parse(d + 'T00:00:00-03:00') + 86400000 : null);
+const mais = (t, min) => (t == null ? null : t + min * MIN);
+function ultimo(lista, f) {
+  if (!Array.isArray(lista)) return null;
+  let mx = null;
+  for (const x of lista) { const t = x && typeof x === 'object' ? f(x) : null; if (t != null && isFinite(t) && (mx == null || t > mx)) mx = t; }
+  return mx;
+}
+const hhmm = (h) => (typeof h === 'number' && isFinite(h) && h >= 0 && h < 24
+  ? String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.round((h % 1) * 60)).padStart(2, '0') : null);
+/* os tres tipos de dado; `ler` devolve o FIM do dado em ms (null = nao achou) */
+const C5 = (ler) => ({ ler, passo: 5, chegada: [{ min: WAY2_LAT_MIN }] });                  // medicao de 5 em 5 min
+const CDIA = (ler, chegada) => ({ ler, passo: DIA_MIN, chegada: chegada || [] });           // o dia fechado
+const PONTE = [{ min: PONTE_MIN }];
+const VIA_ONS = [{ wf: ['ons-consolidado.yml'] }];
+const VIA_ESTACAO = [{ min: PONTE_MIN }, { wf: ['estacao-logger.yml'] }];
+const lerDia = (lista, campo) => (j) => ultimo(j[lista], (x) => fimDoDia(x[campo]));
+const lerMeiaHora = (lista, campo) => (j) => mais(ultimo(j[lista], (x) => instante(x[campo])), 30);   // rotulo = inicio da meia hora
+const lerDiaHora = (j) => instante(String(j.dia) + 'T' + String(j.hora));
+
 /* Os arquivos do conteiner de dados que o portal le, com o workflow que GRAVA cada um (lido nos geradores em 19/10/2026).
- * `id` e a chave publica da fonte (a pagina traduz); nunca o nome do arquivo.
+ * `id` e a chave publica da fonte (a pagina traduz); nunca o nome do arquivo. `conteudo`: onde esta o fim do dado (acima);
+ * `conteudo: null` = sem campo de data legivel, fica pela gravacao (o porque ao lado).
  * Ficaram FORA, porque a data de gravacao nao mede a execucao: os que so regravam quando o conteudo muda (dia em curso por
  * hora, comparativo de fontes, MUST de 5/15 min e o diario), o historico do portal (grava uma vez por dia, so quando fecha
  * ontem; o cron e repescagem), o oleo (por campanha, sem agenda), os recortes por usina e por mes (o agregado os representa)
  * e as imagens dos paineis. */
 const FONTES = [
-  { id: 'medidor_5min', etapa: 'way2', blob: 'way2_recent.json', wf: ['way2-recent.yml'] },
-  { id: 'ons_restricao', etapa: 'ons', blob: 'ons_restricao_all.json', wf: ['ons-consolidado.yml'] },
-  { id: 'visao_executiva', etapa: 'pub', blob: 'executivo.json', wf: ['executivo.yml'] },
-  { id: 'ao_vivo', etapa: 'pub', blob: 'portal_vivo.json', wf: ['way2-recent.yml'] },
-  { id: 'ao_vivo_eletrico', etapa: 'pub', blob: 'portal_eletrico.json', wf: ['way2-recent.yml'] },
-  { id: 'selo_medidores', etapa: 'pub', blob: 'way2_saude.json', wf: ['way2-recent.yml'] },
-  { id: 'assistente_om', etapa: 'pub', blob: 'agente_om.json', wf: ['way2-recent.yml'] },
-  { id: 'assistente_dia', etapa: 'pub', blob: 'agente_dia.json', wf: ['estacao-logger.yml', 'sungrow.yml', 'way2-hist.yml'] },
-  { id: 'selos_fontes', etapa: 'pub', blob: 'fontes_saude.json', wf: ['way2-agg.yml'] },
-  { id: 'benchmark_ne', etapa: 'pub', blob: 'benchmark_ne.json', wf: ['executivo.yml'] },
-  { id: 'referencia_hora', etapa: 'pub', blob: 'ref_hora.json', wf: ['executivo.yml'] },
-  { id: 'perfil_recente', etapa: 'pub', blob: 'perfil_recente.json', wf: ['executivo.yml'] },
-  { id: 'pr', etapa: 'pub', blob: 'pr.json', wf: ['executivo.yml'] },
-  { id: 'pr_usina', etapa: 'pub', blob: 'pr_ufv.json', wf: ['executivo.yml'] },
-  { id: 'pr_hora', etapa: 'pub', blob: 'pr_hora.json', wf: ['executivo.yml'] },
-  { id: 'corte_gemeo', etapa: 'pub', blob: 'corte_gemeo.json', wf: ['ons-consolidado.yml'] },
-  { id: 'ons_indicadores', etapa: 'pub', blob: 'ons_kpis.json', wf: ['ons-consolidado.yml'] },
-  { id: 'estacao_30min', etapa: 'pub', blob: 'estacao_logger_30min.json', wf: ['estacao-logger.yml'] },
-  { id: 'estacao_dia', etapa: 'pub', blob: 'estacao_dia.json', wf: ['estacao-logger.yml'] },
-  { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv_scada.json', wf: ['perdas.yml'] },   // supervisorio; o perdas_inv.json e do logger (sungrow.yml) desde 19/10/2026
-  { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario_scada.json', wf: ['perdas.yml'] },   // idem, fonte-inv-logger
-  { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada_supervisorio.json', wf: ['inv-scada.yml'] },   // o inv_scada.json e do logger (sungrow.yml)
-  { id: 'inversores_registro', etapa: 'pub', blob: 'inversores.json', wf: ['inversores.yml'] },
-  { id: 'ativos', etapa: 'pub', blob: 'portal_ativos.json', wf: ['inversores.yml'] },
-  { id: 'registro_mesa', etapa: 'pub', blob: 'ppc_restricao.json', wf: ['ppc.yml'] },
-  { id: 'sager_disp', etapa: 'pub', blob: 'sager_disp_30min.json', wf: ['sager-disp.yml'] },
-  { id: 'logger_saude', etapa: 'pub', blob: 'sg_saude.json', wf: ['sungrow.yml'] },
-  { id: 'logger_disp', etapa: 'pub', blob: 'sg_disp_dia.json', wf: ['sungrow.yml'] },
-  { id: 'supervisorio', etapa: 'pub', blob: 'portal_scada.json', wf: ['scada.yml'] },
-  { id: 'trafo_dia', etapa: 'pub', blob: 'trafo_diario.json', wf: ['trafo.yml'] },
-  { id: 'medidor_dia', etapa: 'pub', blob: 'way2_daily.json', wf: ['way2-hist.yml'] },
+  /* 7,8 MB regravados a cada 5 min: baixar o conteudo a cada 15 min custaria ~0,75 GB/dia de trafego de saida. O dado da mesma
+   * medicao e conferido pelo conteudo do Ao vivo e da Saude dos medidores, gravados na mesma execucao. */
+  { id: 'medidor_5min', etapa: 'way2', blob: 'way2_recent.json', wf: ['way2-recent.yml'], conteudo: null },
+  { id: 'ons_restricao', etapa: 'ons', blob: 'ons_restricao_all.json', wf: ['ons-consolidado.yml'], conteudo: CDIA(lerMeiaHora('consolidado', 'ts')) },
+  /* o dia fechado da Visao Executiva vem do arquivo do operador nacional (o restricao consolidado) */
+  { id: 'visao_executiva', etapa: 'pub', blob: 'executivo.json', wf: ['executivo.yml'], conteudo: CDIA(lerDia('serie_diaria', 'dia'), VIA_ONS) },
+  { id: 'ao_vivo', etapa: 'pub', blob: 'portal_vivo.json', wf: ['way2-recent.yml'], conteudo: C5(lerDiaHora) },
+  { id: 'ao_vivo_eletrico', etapa: 'pub', blob: 'portal_eletrico.json', wf: ['way2-recent.yml'], conteudo: C5(lerDiaHora) },
+  { id: 'selo_medidores', etapa: 'pub', blob: 'way2_saude.json', wf: ['way2-recent.yml'], conteudo: C5((j) => instante(j.ancora)) },
+  { id: 'assistente_om', etapa: 'pub', blob: 'agente_om.json', wf: ['way2-recent.yml'],
+    conteudo: C5((j) => instante(j.tempo_real && j.tempo_real.medidores && j.tempo_real.medidores.ancora)) },
+  { id: 'assistente_dia', etapa: 'pub', blob: 'agente_dia.json', wf: ['estacao-logger.yml', 'sungrow.yml', 'way2-hist.yml'],
+    conteudo: CDIA((j) => fimDoDia(j.ultimo_dia_fechado), [{ wf: ['way2-hist.yml'] }]) },
+  /* os selos sao um indice das OUTRAS fontes (cada uma ja medida aqui): nao ha dado proprio com data */
+  { id: 'selos_fontes', etapa: 'pub', blob: 'fontes_saude.json', wf: ['way2-agg.yml'], conteudo: null },
+  { id: 'benchmark_ne', etapa: 'pub', blob: 'benchmark_ne.json', wf: ['executivo.yml'], conteudo: CDIA(lerDia('serie_dia', 'dia'), VIA_ONS) },
+  { id: 'referencia_hora', etapa: 'pub', blob: 'ref_hora.json', wf: ['executivo.yml'], conteudo: CDIA(lerDia('dias', 'dia'), VIA_ONS) },
+  /* meia hora da medicao; o rotulo `h` e tomado como o instante do dado (sem somar a meia hora: a leitura mais estrita) */
+  { id: 'perfil_recente', etapa: 'pub', blob: 'perfil_recente.json', wf: ['executivo.yml'],
+    conteudo: { ler: (j) => ultimo(j.perfil, (x) => (x.ent_mw == null ? null : instante(String(x.dia) + 'T' + hhmm(x.h)))), passo: 30, chegada: [{ min: WAY2_LAT_MIN }] } },
+  /* o PR do dia sai da irradiancia do datalogger, que chega pela ponte e e publicada pela estacao (fonte-pr-logger) */
+  { id: 'pr', etapa: 'pub', blob: 'pr.json', wf: ['executivo.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), VIA_ESTACAO) },
+  { id: 'pr_usina', etapa: 'pub', blob: 'pr_ufv.json', wf: ['executivo.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), VIA_ESTACAO) },
+  { id: 'pr_hora', etapa: 'pub', blob: 'pr_hora.json', wf: ['executivo.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), VIA_ESTACAO) },
+  /* serie MENSAL (o mes em curso e o ultimo): sem dia no conteudo */
+  { id: 'corte_gemeo', etapa: 'pub', blob: 'corte_gemeo.json', wf: ['ons-consolidado.yml'], conteudo: null },
+  { id: 'ons_indicadores', etapa: 'pub', blob: 'ons_kpis.json', wf: ['ons-consolidado.yml'], conteudo: CDIA((j) => mais(instante(j.ultimo_dado), 30)) },
+  { id: 'estacao_30min', etapa: 'pub', blob: 'estacao_logger_30min.json', wf: ['estacao-logger.yml'], conteudo: CDIA(lerMeiaHora('serie', 't'), PONTE) },
+  { id: 'estacao_dia', etapa: 'pub', blob: 'estacao_dia.json', wf: ['estacao-logger.yml'], conteudo: CDIA(lerDia('serie', 'd'), PONTE) },
+  { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // supervisorio; o perdas_inv.json e do logger (sungrow.yml) desde 19/10/2026
+  { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // idem, fonte-inv-logger
+  { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada_supervisorio.json', wf: ['inv-scada.yml'],   // o inv_scada.json e do logger (sungrow.yml)
+    conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },
+  /* registro de trocas: troca que nao acontece nao e dado velho; o que envelhece e a planilha da equipe, revista todo mes
+   * (regra do selo dos inversores, gen-fontes-saude.js, lote invmt1: 30 d, ressalva ate 60 d) */
+  { id: 'inversores_registro', etapa: 'pub', blob: 'inversores.json', wf: ['inversores.yml'],
+    conteudo: { ler: (j) => instante(j.fontes && j.fontes.substituicoes_planilha_em), prazo_fixo_min: 30 * DIA_MIN } },
+  { id: 'ativos', etapa: 'pub', blob: 'portal_ativos.json', wf: ['inversores.yml'],
+    conteudo: { ler: (j) => instante(j.fontes && j.fontes.substituicoes_planilha_em), prazo_fixo_min: 30 * DIA_MIN } },
+  /* registro de eventos da mesa: hora sem evento nao e dado velho; fica pela gravacao */
+  { id: 'registro_mesa', etapa: 'pub', blob: 'ppc_restricao.json', wf: ['ppc.yml'], conteudo: null },
+  /* o arquivo do operador chega sem agenda declarada: o dia seguinte conta da propria agenda do workflow */
+  { id: 'sager_disp', etapa: 'pub', blob: 'sager_disp_30min.json', wf: ['sager-disp.yml'], conteudo: CDIA(lerMeiaHora('serie', 't')) },
+  { id: 'logger_saude', etapa: 'pub', blob: 'sg_saude.json', wf: ['sungrow.yml'], conteudo: CDIA(lerDia('usina_dia', 'd'), PONTE) },
+  { id: 'logger_disp', etapa: 'pub', blob: 'sg_disp_dia.json', wf: ['sungrow.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
+  { id: 'supervisorio', etapa: 'pub', blob: 'portal_scada.json', wf: ['scada.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), PONTE) },
+  { id: 'trafo_dia', etapa: 'pub', blob: 'trafo_diario.json', wf: ['trafo.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
+  { id: 'medidor_dia', etapa: 'pub', blob: 'way2_daily.json', wf: ['way2-hist.yml'], conteudo: CDIA(lerDia('dias', 'dia')) },
 ];
 
 const ETAPAS = ['inv', 'est', 'scada', 'vm', 'vpn', 'ponte', 'aviso', 'local', 'cofre', 'pc', 'onedrive', 'pa', 'way2', 'ons', 'proc', 'pub', 'portal'];
@@ -211,18 +281,90 @@ function estadoFrescor(idadeMin, prazo) {
   if (idadeMin == null) return 'sem';
   return idadeMin <= prazo ? 'ok' : idadeMin <= 2 * prazo ? 'at' : 'fa';
 }
-async function leFrescor(agenda, agoraMs) {
+/* O prazo do CONTEUDO: o dado termina em E; o periodo seguinte termina em E + passo e fica disponivel depois da regra de chegada
+ * (latencia, ponte, outro workflow da agenda); a execucao R1 do proprio workflow e a primeira a partir dai. Prazo = (R1 - E)
+ * mais a folga de uma execucao (R2 - R1), limitada a 2 h. Prazo fixo (registro revisto todo mes) passa por cima. */
+function prazoConteudo(C, wfs, agenda, E) {
+  if (C.prazo_fixo_min) return C.prazo_fixo_min;
+  const meus = cronsDe(agenda, wfs);
+  let t = E + C.passo * MIN;
+  for (const p of C.chegada) t = p.min != null ? t + p.min * MIN : proximo(cronsDe(agenda, p.wf), t - 1);   // a partir de t, inclusive
+  const R1 = proximo(meus, t - 1), R2 = proximo(meus, R1);
+  return Math.round((R1 - E) / MIN + Math.min((R2 - R1) / MIN, FOLGA_MAX_MIN));
+}
+function fimDoConteudo(C, buf) {
+  if (!buf || !buf.length) return null;
+  let j;
+  try {
+    const b = buf[0] === 0x1f && buf[1] === 0x8b ? zlib.gunzipSync(buf) : buf;
+    j = JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
+  } catch (e) { return null; }
+  if (!j || typeof j !== 'object') return null;
+  let t = null;
+  try { t = C.ler(j); } catch (e) { t = null; }
+  return typeof t === 'number' && isFinite(t) ? t : null;
+}
+/* A saida anterior, para nao baixar de novo o que nao foi regravado (trafego de saida). So vale a do MESMO dia de Brasilia: a
+ * primeira execucao do dia le tudo (assim uma regra de conteudo nova vale em ate um dia). So o 404 do proprio arquivo e ausencia. */
+async function leAnterior(agoraMs) {
+  if (!process.env.DADOS_STORAGE) return null;
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  let buf;
+  try {
+    const r = await BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DESTINO).getBlobClient(OUT_BLOB).download();
+    const p = [];
+    for await (const c of r.readableStreamBody) p.push(c);
+    buf = Buffer.concat(p);
+  } catch (e) {
+    const cod = (e && (e.code || (e.details && e.details.errorCode))) || '';
+    if (e && e.statusCode === 404 && cod === 'BlobNotFound') return null;
+    throw e;
+  }
+  let j;
+  try { j = parseEstado(buf, 'saida anterior'); } catch (e) { console.log('::warning::gen-malha-estado: a saida anterior nao se le; o conteudo sera lido inteiro'); return null; }
+  if (!j || j.versao !== 1 || !RE_ISO.test(String(j.gerado)) || diaBRT(Date.parse(j.gerado)) !== diaBRT(agoraMs) || !Array.isArray(j.frescor)) return null;
+  const M = new Map();
+  for (const x of j.frescor) if (x && typeof x.id === 'string' && RE_ISO.test(String(x.gravado)) && RE_ISO.test(String(x.ate))) M.set(x.id, { gravado: x.gravado, ate: x.ate });
+  return M;
+}
+async function leFrescor(agenda, agoraMs, anterior) {
   const prazos = FONTES.map((f) => prazoDe(agenda, f.wf));           // estoura antes de ler: fonte sem prazo nao e publicada
+  for (const f of FONTES) if (f.conteudo) prazoConteudo(f.conteudo, f.wf, agenda, agoraMs);   // regra de chegada sem agenda estoura
   const cab = await Promise.all(FONTES.map((f) => LD.cabecalho(LD.BASE + f.blob)));
-  return FONTES.map((f, i) => {
-    const h = cab[i];
-    if (h.status === 404) return { id: f.id, etapa: f.etapa, idade_min: null, prazo_min: prazos[i], st: 'sem', _t: null };
+  const conta = { lidos: 0, anteriores: 0, ilegiveis: [] };
+  const R = await Promise.all(FONTES.map(async (f, i) => {
+    const sem = { id: f.id, etapa: f.etapa, idade_min: null, prazo_min: prazos[i], st: 'sem', medida: f.conteudo ? 'conteudo' : 'gravacao', ate: null, gravado: null, _t: null };
+    let h = cab[i];
+    if (h.status === 404) return sem;
     if (h.status !== 200) throw new Error('frescor ' + f.id + ': resposta ' + h.status);
-    const t = Date.parse(h.ultimaMod);
-    if (!isFinite(t)) throw new Error('frescor ' + f.id + ': sem data de gravacao');
-    const idade = Math.max(0, (agoraMs - t) / 60000);
-    return { id: f.id, etapa: f.etapa, idade_min: Math.round(idade), prazo_min: prazos[i], st: estadoFrescor(idade, prazos[i]), _t: t };
-  });
+    let tG = Date.parse(h.ultimaMod);
+    if (!isFinite(tG)) throw new Error('frescor ' + f.id + ': sem data de gravacao');
+    let E = null;
+    if (f.conteudo) {
+      const a = anterior && anterior.get(f.id);
+      if (a && a.gravado === isoZ(tG)) { E = Date.parse(a.ate); conta.anteriores++; }
+      else {
+        const x = await LD.pede(LD.BASE + f.blob);
+        if (x.status === 404) return sem;                              // sumiu entre o cabecalho e a leitura
+        const t2 = Date.parse(x.ultimaMod);
+        if (isFinite(t2)) tG = t2;                                     // a gravacao do que foi LIDO
+        E = fimDoConteudo(f.conteudo, x.buf);
+        conta.lidos++;
+      }
+    }
+    const gIdade = Math.max(0, (agoraMs - tG) / MIN);
+    const base = { id: f.id, etapa: f.etapa, gravado: isoZ(tG), _t: tG };
+    if (!f.conteudo) return Object.assign(base, { idade_min: Math.round(gIdade), prazo_min: prazos[i], st: estadoFrescor(gIdade, prazos[i]), medida: 'gravacao', ate: null });
+    /* conteudo que nao se le: sem registro, NUNCA a gravacao no lugar */
+    if (E == null) { conta.ilegiveis.push(f.id); return Object.assign(base, { idade_min: null, prazo_min: prazos[i], st: 'sem', medida: 'conteudo', ate: null }); }
+    const cIdade = Math.max(0, (agoraMs - E) / MIN), cPrazo = prazoConteudo(f.conteudo, f.wf, agenda, E);
+    const peloConteudo = cIdade / cPrazo >= gIdade / prazos[i];        // vale a medida que usou mais do proprio prazo
+    const idade = peloConteudo ? cIdade : gIdade, prazo = peloConteudo ? cPrazo : prazos[i];
+    return Object.assign(base, { idade_min: Math.round(idade), prazo_min: prazo, st: estadoFrescor(idade, prazo), medida: peloConteudo ? 'conteudo' : 'gravacao', ate: isoZ(E) });
+  }));
+  if (conta.ilegiveis.length) console.log('::warning::gen-malha-estado: conteudo sem data legivel (sai sem registro): ' + conta.ilegiveis.join(', '));
+  R.conta = conta;
+  return R;
 }
 
 /* ───────────── estado da ponte ───────────── */
@@ -536,7 +678,7 @@ function monta({ agoraMs, agenda, por, frescor, execs }) {
     recebido_hoje,
     proxima,
     linha_dia: linha,
-    frescor: frescor.map((x) => ({ id: x.id, etapa: x.etapa, idade_min: x.idade_min, prazo_min: x.prazo_min, st: x.st })),
+    frescor: frescor.map((x) => ({ id: x.id, etapa: x.etapa, idade_min: x.idade_min, prazo_min: x.prazo_min, st: x.st, medida: x.medida, ate: x.ate, gravado: x.gravado })),
     pa: { restam: PA.fluxos.length, fluxos: PA.fluxos.slice(), fim_licenca: PA.fim_licenca, atualizado: PA.atualizado },
     acesso: null,
   };
@@ -546,6 +688,7 @@ function monta({ agoraMs, agenda, por, frescor, execs }) {
 const RE_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const RE_DIA = /^\d{4}-\d{2}-\d{2}$/;
 const RE_H = /^[oafdpn]{14}$/;
+const MEDIDAS = ['conteudo', 'gravacao'];
 /* o que nunca pode aparecer, para o diagnostico (a lista de valores permitidos abaixo ja barra tudo que nao e codigo) */
 const PROIBIDO = [
   [/\b\d{1,3}(?:\.\d{1,3}){3}\b/, 'endereco IP'],
@@ -558,7 +701,7 @@ function confere(o) {
   const erros = [];
   const e = (m) => erros.push(m);
   const ids = FONTES.map((f) => f.id);
-  const textos = new Set([...ST, ...CODIGOS, ...ETAPAS, ...ids, 'ok', 'falhou', 'sem', ...PA.fluxos]);
+  const textos = new Set([...ST, ...CODIGOS, ...ETAPAS, ...ids, ...MEDIDAS, 'ok', 'falhou', 'sem', ...PA.fluxos]);
   const chaves = (x, lista, onde) => {
     if (!x || typeof x !== 'object' || Array.isArray(x)) return e(onde + ': nao e objeto');
     for (const k of Object.keys(x)) if (!lista.includes(k)) e(onde + ': chave fora do contrato "' + k + '"');
@@ -602,12 +745,19 @@ function confere(o) {
   });
   if (!Array.isArray(o.frescor)) e('frescor nao e lista');
   else o.frescor.forEach((x, i) => {
-    chaves(x, ['id', 'etapa', 'idade_min', 'prazo_min', 'st'], 'frescor[' + i + ']');
+    chaves(x, ['id', 'etapa', 'idade_min', 'prazo_min', 'st', 'medida', 'ate', 'gravado'], 'frescor[' + i + ']');
     if (!ids.includes(x.id)) e('frescor[' + i + ']: id fora da lista');
     if (!['way2', 'ons', 'pub'].includes(x.etapa)) e('frescor[' + i + ']: etapa invalida');
     if (typeof x.prazo_min !== 'number' || !isFinite(x.prazo_min) || x.prazo_min <= 0) e('frescor[' + i + ']: sem prazo_min');
     if (!['ok', 'at', 'fa', 'sem'].includes(x.st)) e('frescor[' + i + ']: st invalido');
     if ((x.st === 'sem') !== (x.idade_min === null)) e('frescor[' + i + ']: idade e st nao concordam');
+    /* malha-frescor-conteudo: a medida e declarada; medido pelo conteudo exige o fim do dado; medido exige a gravacao */
+    if (!MEDIDAS.includes(x.medida)) e('frescor[' + i + ']: medida fora da lista');
+    isoOuNulo(x.ate, 'frescor[' + i + '].ate'); isoOuNulo(x.gravado, 'frescor[' + i + '].gravado');
+    if (x.st !== 'sem' && x.medida === 'conteudo' && !x.ate) e('frescor[' + i + ']: medido pelo conteudo sem o fim do dado');
+    if (x.st !== 'sem' && !x.gravado) e('frescor[' + i + ']: medido sem a gravacao');
+    const F = FONTES.find((f) => f.id === x.id);
+    if (F && !F.conteudo && x.ate !== null) e('frescor[' + i + ']: fonte sem conteudo declarado com fim do dado');
   });
   chaves(o.pa, ['restam', 'fluxos', 'fim_licenca', 'atualizado'], 'pa');
   /* todo texto da saida e um codigo, um id, uma data ou um nome de fluxo declarado; e nada da lista proibida */
@@ -638,7 +788,8 @@ async function main() {
   else if (process.env.DADOS_STORAGE) { fonte = fonteCofre(); modoPonte = 'cofre'; }
   else console.log('::warning::gen-malha-estado: sem DADOS_STORAGE e sem LOCAL_PONTE_DIR — as etapas da ponte saem "sem"');
 
-  const [por, frescor, execs] = await Promise.all([estadosPorDia(fonte, diaBRT(agoraMs)), leFrescor(agenda, agoraMs), leExecucoes(agenda)]);
+  const anterior = await leAnterior(agoraMs);
+  const [por, frescor, execs] = await Promise.all([estadosPorDia(fonte, diaBRT(agoraMs)), leFrescor(agenda, agoraMs, anterior), leExecucoes(agenda)]);
   if (!execs) console.log('::warning::gen-malha-estado: sem GITHUB_TOKEN — proc e portal saem "sem"');
   const out = monta({ agoraMs, agenda, por, frescor, execs });
 
@@ -647,10 +798,11 @@ async function main() {
     console.error('malha_estado: NAO gravado — ' + erros.length + ' achado(s) da guarda:\n  ' + erros.slice(0, 20).join('\n  '));
     process.exit(1);
   }
-  console.log('ponte: ' + modoPonte + ' · frescor: ' + LD.modo() + ' · execucoes: ' + (execs ? execs.length + ' workflows' : 'sem token'));
+  console.log('ponte: ' + modoPonte + ' · frescor: ' + LD.modo() + ' · conteudo: ' + frescor.conta.lidos + ' lidos, ' + frescor.conta.anteriores
+    + ' da saida anterior · execucoes: ' + (execs ? execs.length + ' workflows' : 'sem token'));
   for (const id of ETAPAS) { const x = out.etapas[id]; console.log('  ' + id.padEnd(9) + x.st.padEnd(5) + x.h + (x.motivo ? '  ' + x.motivo : '')); }
   const ruins = out.frescor.filter((x) => x.st !== 'ok');
-  console.log('frescor: ' + (out.frescor.length - ruins.length) + '/' + out.frescor.length + ' no prazo' + (ruins.length ? ' · ' + ruins.map((x) => x.id + ' ' + x.st + (x.idade_min != null ? ' ' + x.idade_min + '/' + x.prazo_min + ' min' : '')).join(', ') : ''));
+  console.log('frescor: ' + (out.frescor.length - ruins.length) + '/' + out.frescor.length + ' no prazo' + (ruins.length ? ' · ' + ruins.map((x) => x.id + ' ' + x.st + (x.idade_min != null ? ' ' + x.idade_min + '/' + x.prazo_min + ' min' : '') + ' (' + x.medida + (x.ate ? ' ate ' + x.ate : '') + ')').join(', ') : ''));
 
   const json = JSON.stringify(out);
   if (process.env.LOCAL_OUT) {
@@ -668,4 +820,4 @@ async function main() {
 
 if (require.main === module) main().catch((e) => { console.error('ERRO: ' + (e && e.message ? e.message : e)); process.exit(1); });
 else module.exports = { FONTES, ETAPAS, PONTE_ETAPAS, CODIGOS, PA, prazoMin, prazoDe, proximo, proximaPonte, estadoFrescor, escolheDiario,
-  etapasPonte, etapaProc, monta, confere, normaliza, diaBRT };
+  etapasPonte, etapaProc, monta, confere, normaliza, diaBRT, prazoConteudo, fimDoConteudo, instante, fimDoDia, WAY2_LAT_MIN, PONTE_MIN, FOLGA_MAX_MIN };

@@ -7,6 +7,8 @@ name: Malha de dados (estado para o portal admin)
 # O ensaio roda ANTES do gerador e o gerador so roda se ele passar: e ele que prova que o estado sem registro nao vira
 # ok, que o arquivo de teste nao vence o diario, que o log da ponte e nome de conteiner/blob nao chegam a saida, que
 # fonte sem prazo e o 404 de conteiner estouram. Sem rede e sem segredo (o Azure e o GitHub sao simulados).
+# Desde o malha-frescor-conteudo prova tambem que o dado congelado regravado todo dia sai fora do prazo (o frescor e o do
+# CONTEUDO de cada arquivo) e que so o que foi regravado desde a execucao anterior do dia e baixado de novo.
 on:
   workflow_dispatch: {}
   schedule:

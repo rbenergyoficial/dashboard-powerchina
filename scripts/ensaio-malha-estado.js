@@ -17,6 +17,15 @@
  *      duas vezes: com a guarda do gerador (ela barra) e sem ela (a checagem deste ensaio barra).
  *
  * Esperados contados FORA do gerador: letras, numeros e datas escritos a mao a partir dos fixtures abaixo.
+ *
+ * malha-frescor-conteudo (19/10/2026): cada arquivo do frescor tem GRAVACAO e CONTEUDO. Regras soltas: o instante sem fuso e de
+ * Brasilia, o fim do dia, o prazo do conteudo contado a mao na agenda REAL (trafo 2018, logger 2177, PR 2293, operador 2477, dia do
+ * medidor 1590, 5 min 30, registro 30 d), conteudo ilegivel = null. Mundos: verde; CONGELADO (trafo, sager e perdas regravados ha
+ * 5 min com o dado parado no dia 14: pela gravacao sairiam ok, o que a premissa prova; pelo conteudo saem fa, e o proc com o trafo
+ * vermelho sai fa); conteudo ilegivel (sem registro, nunca a gravacao); a saida anterior do MESMO dia (so o regravado e baixado, e
+ * o `ate` que so a saida anterior tem aparece) e de OUTRO dia (tudo baixado); 403 na saida anterior estoura. Plantios: a regra
+ * antiga (so a gravacao), ilegivel vira gravacao, a pior medida nao vence, saida anterior com outra gravacao ou de outro dia
+ * reaproveitada, 403 como ausencia, o arquivo de 5 min da medicao baixado.
  */
 const fs = require('fs');
 const path = require('path');
@@ -109,15 +118,93 @@ const bufEstado = (e) => { const b = Buffer.from(JSON.stringify(e[1]), 'utf8'); 
 const blobsCofre = {};
 for (const e of ESTADOS) blobsCofre['Ponte/estado/' + e[0]] = { b64: bufEstado(e).toString('base64'), mod: Date.parse(e[2]) };
 
-/* frescor: idades contra AGORA */
-const PUB = {};
-for (const f of G.FONTES) PUB[f.blob] = Date.parse('2026-10-19T15:25:00Z');            // 5 min: ok em qualquer prazo da agenda de ensaio
-PUB['way2_recent.json'] = Date.parse('2026-10-19T15:26:00Z');                          // 4 min, prazo 10 -> ok
-PUB['ons_restricao_all.json'] = Date.parse('2026-10-18T09:30:00Z');                    // 1800 min, prazo 1560 -> atrasado
-delete PUB['executivo.json'];                                                          // nao existe -> sem
-PUB['portal_vivo.json'] = Date.parse('2026-10-19T15:05:00Z');                          // 25 min, prazo 10 -> muito atrasado
-const blobsDados = {};
-for (const [n, m] of Object.entries(PUB)) blobsDados[n] = { mod: m };
+/* frescor: idades contra AGORA. Desde o malha-frescor-conteudo cada arquivo tem GRAVACAO (mod) e CONTEUDO (corpo, com o campo de
+ * data que o gerador le). Os esperados abaixo foram contados a mao na agenda de ensaio AG_FIX:
+ *   prazo do conteudo = (R1 - E) + min(R2 - R1, 120), E = fim do dado, R1 = 1a execucao do workflow a partir de quando o periodo
+ *   SEGUINTE fica disponivel (E + passo + regra de chegada), R2 = a execucao depois dela. Vale a medida com a maior fracao do prazo. */
+const MOD5 = Date.parse('2026-10-19T15:25:00Z');                                       // 5 min: gravacao ok em qualquer prazo
+const D1 = '2026-10-18';                                                               // o dia fechado: fim = 2026-10-19T03:00Z, 750 min antes de AGORA
+const FIM_D1 = '2026-10-19T03:00:00Z';
+const W5 = '2026-10-19T12:15:00';                                                      // a ultima medicao de 5 min: 15:15 UTC, 15 min antes
+const W5Z = '2026-10-19T15:15:00Z';
+const okC = (idade, prazo, ate) => ({ st: 'ok', idade_min: idade, prazo_min: prazo, medida: 'conteudo', ate });
+const okG = (idade, prazo) => ({ st: 'ok', idade_min: idade, prazo_min: prazo, medida: 'gravacao', ate: null });
+/* id -> [corpo, gzip, esperado]. Prazos (AG_FIX):
+ *   5 min: E 15:15 -> 15:20 + 16 -> R1 15:40, R2 15:45: 25 + 5 = 30
+ *   ponte diario: E 19/10 03:00 -> 20/10 03:00 + 355 = 08:55 -> R1 = trafo 10:38 (1898 + 120 = 2018), sungrow 13:17 (2057 + 120),
+ *     perdas 14:12 (2112 + 120), inv-scada 12:47 (2027 + 120), scada 11:30 (1950; R2 17:00 -> + 120), estacao 15:33 (2193; + 120)
+ *   PR: ponte -> estacao 15:33 -> executivo 16:13 (2233; R2 17:13 -> + 60 = 2293)
+ *   operador nacional: 20/10 03:00 -> ons 18:17 (2357 + 120 = 2477); via executivo: 19:13 (2413 + 60 = 2473)
+ *   dia do medidor: way2-hist 03:30 (1470 + 120 = 1590); o assistente do dia: way2-hist 03:30 -> o proprio 03:30, R2 08:23 -> + 120
+ *   perfil: E 14:30 -> 15:00 + 16 = 15:16 -> executivo 16:13 (103; + 60 = 163)
+ *   operador (sager): 20/10 03:00 -> 07:47 (1727; R2 13:47 -> + 120 = 1847) · registro de trocas: fixo 30 d = 43200 */
+const FIX = {
+  medidor_5min: [{ inicio: '2026-10-18', fim: '2026-10-19', dados: [] }, false, { st: 'ok', idade_min: 4, prazo_min: 10, medida: 'gravacao', ate: null }],
+  /* o conteudo (dia 17, 2190/2477 = 0,88) perde para a gravacao (1800/1560 = 1,15): vale a gravacao */
+  ons_restricao: [{ consolidado: [{ ts: '2026-10-17 23:00:00' }, { ts: '2026-10-17 23:30:00' }] }, false, { st: 'at', idade_min: 1800, prazo_min: 1560, medida: 'gravacao', ate: '2026-10-18T03:00:00Z' }],
+  visao_executiva: [{ serie_diaria: [{ dia: '2026-10-17' }, { dia: D1 }] }, true, { st: 'sem', idade_min: null, prazo_min: 660, medida: 'conteudo', ate: null }],   // arquivo ausente
+  /* conteudo 15/30 = 0,5; gravacao 25/10 = 2,5: vale a gravacao */
+  ao_vivo: [{ dia: '2026-10-19', hora: '12:15' }, true, { st: 'fa', idade_min: 25, prazo_min: 10, medida: 'gravacao', ate: W5Z }],
+  /* empate 0,5 x 0,5: vale o conteudo */
+  ao_vivo_eletrico: [{ dia: '2026-10-19', hora: '12:15' }, true, okC(15, 30, W5Z)],
+  selo_medidores: [{ ancora: W5 }, false, okC(15, 30, W5Z)],
+  assistente_om: [{ tempo_real: { medidores: { ancora: W5 } } }, false, okC(15, 30, W5Z)],
+  assistente_dia: [{ ultimo_dia_fechado: D1 }, false, okC(750, 1590, FIM_D1)],
+  selos_fontes: [{ badges_way2: [] }, false, okG(5, 120)],
+  benchmark_ne: [{ serie_dia: [{ dia: D1 }, { dia: '2026-10-01' }] }, false, okC(750, 2473, FIM_D1)],
+  referencia_hora: [{ dias: [{ dia: D1 }] }, true, okC(750, 2473, FIM_D1)],
+  /* a meia hora sem medicao (ent_mw nulo) nao conta: o fim e 12:00 de Brasilia, 15:00 UTC */
+  /* RE-004: a ultima linha COM valor e a meia hora h = 11.5 (11:30 de Brasilia = 14:30 UTC, 60 min antes); a de 12 sem valor nao conta.
+   * Prazo: 14:30 + 30 + 16 = 15:16 -> executivo 16:13 (103) + 60 = 163 */
+  perfil_recente: [{ perfil: [{ dia: '2026-10-19', h: 11, ent_mw: 1 }, { dia: '2026-10-19', h: 11.5, ent_mw: 2 }, { dia: '2026-10-19', h: 12, ent_mw: null }] }, true,
+    okC(60, 163, '2026-10-19T14:30:00Z')],
+  pr: [{ ultimo_dia: D1 }, true, okC(750, 2293, FIM_D1)],
+  pr_usina: [{ ultimo_dia: D1 }, true, okC(750, 2293, FIM_D1)],
+  pr_hora: [{ ultimo_dia: D1 }, true, okC(750, 2293, FIM_D1)],
+  corte_gemeo: [{ serie: [{ mes: '2026-10' }] }, false, okG(5, 1560)],
+  ons_indicadores: [{ ultimo_dado: '2026-10-18 23:30:00' }, false, okC(750, 2477, FIM_D1)],
+  estacao_30min: [{ serie: [{ t: '2026-10-18T23:00:00-03:00' }, { t: '2026-10-18T23:30:00-03:00' }] }, true, okC(750, 2313, FIM_D1)],
+  estacao_dia: [{ serie: [{ d: D1 }] }, true, okC(750, 2313, FIM_D1)],
+  perdas_inversor: [{ serie: [{ dia: D1 }] }, true, okC(750, 2232, FIM_D1)],
+  perdas_dia: [{ serie: [{ dia: D1 }] }, true, okC(750, 2232, FIM_D1)],
+  inversores_scada: [{ escopo: { ate: D1 } }, true, okC(750, 2147, FIM_D1)],
+  /* planilha salva em 15/10 12:00 UTC: 5970 min de 43200 */
+  inversores_registro: [{ fontes: { substituicoes_planilha_em: '2026-10-15T12:00:00.000Z' } }, false, okC(5970, 43200, '2026-10-15T12:00:00Z')],
+  ativos: [{ fontes: { substituicoes_planilha_em: '2026-10-15T12:00:00.000Z' } }, true, okC(5970, 43200, '2026-10-15T12:00:00Z')],
+  registro_mesa: [{ dias: [{ dia: '2026-10-19' }] }, true, okG(5, 120)],
+  sager_disp: [{ serie: [{ t: '2026-10-18T23:30' }] }, true, okC(750, 1847, FIM_D1)],
+  logger_saude: [{ usina_dia: [{ d: D1 }] }, true, okC(750, 2177, FIM_D1)],
+  logger_disp: [{ serie: [{ dia: D1 }] }, true, okC(750, 2177, FIM_D1)],
+  supervisorio: [{ ultimo_dia: D1 }, true, okC(750, 2070, FIM_D1)],
+  trafo_dia: [{ serie: [{ dia: '2026-10-17' }, { dia: D1 }] }, true, okC(750, 2018, FIM_D1)],
+  medidor_dia: [{ dias: [{ dia: D1 }] }, false, okC(750, 1590, FIM_D1)],
+};
+const faltaFixC = G.FONTES.filter((f) => !FIX[f.id]).map((f) => f.id);
+if (faltaFixC.length) { console.error('FALHA: o ensaio nao tem fixture de conteudo para ' + faltaFixC.join(', ')); process.exit(1); }
+const BLOB = Object.fromEntries(G.FONTES.map((f) => [f.id, f.blob]));
+const corpoB64 = (corpo, gz) => { const b = Buffer.from(typeof corpo === 'string' ? corpo : JSON.stringify(corpo), 'utf8'); return (gz ? zlib.gzipSync(b) : b).toString('base64'); };
+/* os arquivos de um mundo: { blob: { mod, b64 } }; `over` por id: { mod, corpo, gz, ausente } */
+function dadosDe(over, base) {
+  const out = {};
+  for (const f of G.FONTES) {
+    const o = Object.assign({}, (base || {})[f.id], (over || {})[f.id]);
+    if (o.ausente) continue;
+    const [corpo, gz] = FIX[f.id];
+    out[f.blob] = { mod: o.mod != null ? o.mod : MOD5, b64: corpoB64(o.corpo !== undefined ? o.corpo : corpo, o.gz !== undefined ? o.gz : gz) };
+  }
+  return out;
+}
+/* o mundo principal: way2 a 4 min, o ONS gravado ha 30 h, o executivo ausente, o Ao vivo gravado ha 25 min */
+const OVER_PRINCIPAL = {
+  medidor_5min: { mod: Date.parse('2026-10-19T15:26:00Z') }, ons_restricao: { mod: Date.parse('2026-10-18T09:30:00Z') },
+  visao_executiva: { ausente: true }, ao_vivo: { mod: Date.parse('2026-10-19T15:05:00Z') },
+};
+const blobsDados = dadosDe(OVER_PRINCIPAL);
+const PUB = Object.fromEntries(Object.entries(blobsDados).map(([n, x]) => [n, x.mod]));
+const CORPOS = Object.fromEntries(Object.entries(blobsDados).map(([n, x]) => [n, x.b64]));
+const FRESCOR_ESPERADO = Object.fromEntries(G.FONTES.map((f) => [f.id, Object.assign({}, FIX[f.id][2],
+  { gravado: blobsDados[f.blob] ? new Date(blobsDados[f.blob].mod).toISOString().replace(/\.\d{3}Z$/, 'Z') : null })]));
+const N_CONTEUDO = G.FONTES.filter((f) => f.conteudo && blobsDados[f.blob]).length;   // o que o gerador tem de BAIXAR no principal
 
 /* execucoes: 2 verdes por workflow; o executivo com 1 vermelha das 2 */
 /* malha-sem-mesa: cada execucao tem id e os passos do job; vermelha sem passos declarados falha no passo 'Gerar' */
@@ -149,6 +236,7 @@ function conteiner(nome) {
         anota({ op: 'baixa', conteiner: nome, blob: n });
         if (!C) throw erro(404, 'ContainerNotFound'); if (C.proibido) proibido('baixa');
         const b = C.blobs[n]; if (!b) throw erro(404, 'BlobNotFound');
+        if (C.falhaBaixa) throw erro(C.falhaBaixa, C.falhaBaixa === 403 ? 'AuthorizationPermissionMismatch' : 'InternalError');   /* RE-001: o cabecalho responde, a leitura nao */
         return { readableStreamBody: Readable.from([Buffer.from(b.b64 || '', 'base64')]), etag: '"e"', lastModified: new Date(b.mod) };
       },
       async getProperties() {
@@ -172,7 +260,7 @@ const orig = Module._load;
 Module._load = function (req) { if (req === '@azure/storage-blob') return falso; return orig.apply(this, arguments); };
 `);
 
-let MUNDO_HTTP = { gh: {}, pub: {}, pubSumiu: false };
+let MUNDO_HTTP = { gh: {}, pub: {}, corpos: {}, pubSumiu: false };
 let PORTA = 0;
 const servidor = http.createServer((q, r) => {
   const u = new URL(q.url, 'http://local');
@@ -197,8 +285,9 @@ const servidor = http.createServer((q, r) => {
     if (MUNDO_HTTP.pubSumiu) { r.writeHead(404, { 'x-ms-error-code': 'ContainerNotFound' }); return r.end(); }
     const tm = MUNDO_HTTP.pub[decodeURIComponent(m[1])];
     if (tm == null) { r.writeHead(404, { 'x-ms-error-code': 'BlobNotFound' }); return r.end(); }
-    r.writeHead(200, { 'last-modified': new Date(tm).toUTCString(), 'content-length': '2' });
-    return r.end(q.method === 'HEAD' ? undefined : '{}');
+    const c = MUNDO_HTTP.corpos[decodeURIComponent(m[1])], corpo = c != null ? Buffer.from(c, 'base64') : Buffer.from('{}');
+    r.writeHead(200, { 'last-modified': new Date(tm).toUTCString(), 'content-length': String(corpo.length) });
+    return r.end(q.method === 'HEAD' ? undefined : corpo);
   }
   r.writeHead(404); r.end();
 });
@@ -213,13 +302,13 @@ function roda(cen) {
   fs.writeFileSync(mundo, JSON.stringify(cen.sdk || { conteineres: {} }));
   const env = Object.assign({}, process.env);
   for (const k of LIMPA) delete env[k];
-  Object.assign(env, { MALHA_AGORA: AGORA, AGENDA_JSON: cen.agenda || agendaFix, MALHA_FAKE: mundo, MALHA_FAKE_REG: reg });
+  Object.assign(env, { MALHA_AGORA: cen.agora || AGORA, AGENDA_JSON: cen.agenda || agendaFix, MALHA_FAKE: mundo, MALHA_FAKE_REG: reg });
   if (cen.sdk) env.DADOS_STORAGE = 'conexao-de-ensaio';
   else env.DADOS_BASE_PUB = 'http://127.0.0.1:' + PORTA + '/dados/';
   if (!cen.blob) env.LOCAL_OUT = outF;
   if (cen.ponteDir) env.LOCAL_PONTE_DIR = cen.ponteDir;
   if (cen.gh) Object.assign(env, { GITHUB_TOKEN: 'tk-ensaio', GITHUB_REPOSITORY: 'o/r', GITHUB_API_URL: 'http://127.0.0.1:' + PORTA });
-  MUNDO_HTTP = Object.assign({ gh: cen.gh || {}, pub: PUB, pubSumiu: false }, cen.http || {});
+  MUNDO_HTTP = Object.assign({ gh: cen.gh || {}, pub: PUB, corpos: CORPOS, pubSumiu: false }, cen.http || {});
   return new Promise((res) => {
     execFile(process.execPath, ['-r', PRELOAD, cen.script || GEN], { env, timeout: 60000, maxBuffer: 1 << 24 }, (err, so, se) => {
       const code = err ? (typeof err.code === 'number' ? err.code : 1) : 0;
@@ -270,12 +359,6 @@ const LINHA_ESPERADA = [
   { ts: '2026-10-19T15:20:00Z', etapa: 'proc', st: 'at', ev: 'processamento' },
   { ts: '2026-10-19T15:25:00Z', etapa: 'pub', st: 'fa', ev: 'publicacao' },
 ];
-const FRESCOR_ESPERADO = {
-  medidor_5min: { st: 'ok', idade_min: 4, prazo_min: 10 },
-  ons_restricao: { st: 'at', idade_min: 1800, prazo_min: 1560 },
-  visao_executiva: { st: 'sem', idade_min: null, prazo_min: 660 },
-  ao_vivo: { st: 'fa', idade_min: 25, prazo_min: 10 },
-};
 
 /* ───────────── as checagens (devolvem a lista do que esta errado) ───────────── */
 function textoLimpo(r) {
@@ -306,7 +389,7 @@ function chkPrincipal(r) {
   if (!igual(o.linha_dia, LINHA_ESPERADA)) e.push('linha_dia: ' + JSON.stringify(o.linha_dia));
   if (o.frescor.length !== G.FONTES.length) e.push('frescor com ' + o.frescor.length + ' fontes');
   for (const f of o.frescor) {
-    const x = FRESCOR_ESPERADO[f.id] || { st: 'ok', idade_min: 5 };
+    const x = FRESCOR_ESPERADO[f.id];
     for (const k of Object.keys(x)) if (f[k] !== x[k]) e.push('frescor ' + f.id + '.' + k + ' = ' + f[k] + ' (esperado ' + x[k] + ')');
   }
   if (!igual(o.pa, { restam: 3, fluxos: ['Sungrow OneDrive RB para Blob', 'Inversores PWC → Blob → Grafana', 'SCADA SharePoint para Blob'], fim_licenca: '2026-11-09', atualizado: '2026-10-20' })) e.push('pa: ' + JSON.stringify(o.pa));
@@ -317,6 +400,12 @@ function chkPrincipal(r) {
   if (!igual(listas, dias15)) e.push('listou no cofre: ' + listas.join(', '));
   if (r.regs.some((x) => x.op === 'grava')) e.push('gravou no blob com LOCAL_OUT');
   if (r.regs.some((x) => x.op === 'baixa' && /2026-10-01/.test(x.blob))) e.push('leu arquivo fora da janela');
+  /* malha-frescor-conteudo: sem saida anterior, baixa o conteudo de cada fonte com conteudo declarado que existe, uma vez; as
+   * fontes so pela gravacao (o 7,8 MB da medicao entre elas) nunca sao baixadas */
+  const baixados = r.regs.filter((x) => x.op === 'baixa' && x.conteiner === 'dados').map((x) => x.blob).sort();
+  const esperados = G.FONTES.filter((f) => f.conteudo && blobsDados[f.blob]).map((f) => f.blob).sort();
+  if (!igual(baixados, esperados)) e.push('baixou do conteiner de dados: ' + baixados.length + ' (esperado ' + esperados.length + ')');
+  if (baixados.includes('way2_recent.json')) e.push('baixou o arquivo de 5 min da medicao (so pela gravacao)');
   return e;
 }
 function chkGrava(r, ref) {
@@ -377,6 +466,8 @@ function mutante(nome, trocas) {
   return f;
 }
 const SEM_GUARDA = ['  const erros = confere(out);', '  const erros = [];'];
+/* malha-frescor-conteudo: o prazo do conteudo tambem le a agenda e estouraria sozinho; o plantio "frescor sem prazo" cala os dois */
+const PRAZO_C_NULO = ['function prazoConteudo(C, wfs, agenda, E) {\n', 'function prazoConteudo(C, wfs, agenda, E) { try { return prazoConteudo0(C, wfs, agenda, E); } catch (e) { return null; } }\nfunction prazoConteudo0(C, wfs, agenda, E) {\n'];
 
 /* ───────────── 1. as regras soltas ───────────── */
 async function regras() {
@@ -474,6 +565,34 @@ async function regras() {
   ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 6, vermelhos: 2, parados: 2 }), 'dois workflows que pararam de gravar: fa, parados 2');
   est = null; try { pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }], FR().filter((f) => f.id !== 'registro_mesa')); } catch (e) { est = e; }
   ok(!!est && /frescor sem a fonte registro_mesa/.test(est.message), 'frescor sem a fonte de um workflow vermelho estoura (nao inventa "no prazo")');
+
+  /* malha-frescor-conteudo: o prazo do CONTEUDO, contado a mao na agenda DE ENSAIO AG_FIX (trafo 10:38, sungrow 13:17, executivo
+   * 04:13 e 09:13..22:13, estacao 08:23 e 15:33, ons 18:17, way2-hist 03:30, way2-recent de 5 em 5 min). RE-002: este ensaio e o
+   * portao do gerador; com a agenda real, mudar um minuto do relogio derrubaria a malha. A agenda real so entra pela premissa de
+   * que toda fonte tem prazo nela (sem minuto escrito). */
+  const I = G.instante, FD = G.fimDoDia;
+  ok(I('2026-10-19T12:15:00') === Date.parse('2026-10-19T15:15:00Z') && I('2026-10-18 23:30:00') === Date.parse('2026-10-19T02:30:00Z')
+    && I('2026-10-18T23:30:00-03:00') === Date.parse('2026-10-19T02:30:00Z') && I('2026-10-19T21:00:41.000Z') === Date.parse('2026-10-19T21:00:41Z')
+    && I('2026-10-19') === null && I(1792377000000) === null && I('19/10/2026 12:00') === null, 'instante: sem fuso = Brasilia; com fuso, o dele; o resto nao e instante');
+  ok(FD('2026-10-14') === Date.parse('2026-10-15T03:00:00Z') && FD('2026-10') === null && FD(null) === null, 'fim do dia de Brasilia: 00:00 do dia seguinte');
+  const PC = (id, E) => { const f = G.FONTES.find((x) => x.id === id); return G.prazoConteudo(f.conteudo, f.wf, AG_FIX, Date.parse(E)); };
+  ok(PC('trafo_dia', '2026-10-15T03:00:00Z') === 2018, 'trafo (dia 14): o dia 15 sai da VM na ponte de 16/10 05:55 e o trafo o publica as 10:38 UTC: 31h38 + 2 h = 2018 min');
+  ok(PC('logger_disp', '2026-10-19T03:00:00Z') === 2177, 'logger: sungrow 13:17 UTC do dia seguinte: 34h17 + 2 h = 2177 min (o selo da casa: 36 h)');
+  ok(PC('pr', '2026-10-19T03:00:00Z') === 2293, 'PR: ponte -> estacao 15:33 -> executivo 16:13: 37h13 + a folga de 1 execucao (1 h) = 2293 min');
+  ok(PC('ons_restricao', '2026-10-19T03:00:00Z') === 2477, 'operador nacional: o dia seguinte no consolidado das 18:17 UTC: 39h17 + 2 h = 2477 min');
+  ok(PC('medidor_dia', '2026-10-19T03:00:00Z') === 1590, 'dia do medidor: way2-hist 03:30 UTC: 24h30 + 2 h = 1590 min');
+  ok(PC('ao_vivo', '2026-10-19T22:50:00Z') === 30, 'medicao de 5 min: 5 + 16 de latencia, a execucao seguinte, + 1 execucao = 30 min');
+  ok(PC('inversores_registro', '2026-10-15T12:00:00Z') === 43200, 'registro de trocas: prazo fixo de 30 dias (revisao mensal)');
+  ok(G.estadoFrescor(7010, PC('trafo_dia', '2026-10-15T03:00:00Z')) === 'fa', 'o caso de hoje: trafo com o dia 14, lido 7010 min depois (prazo 2018): fa');
+  const FC = (id, corpo, gz) => { const f = G.FONTES.find((x) => x.id === id); let b = Buffer.from(typeof corpo === 'string' ? corpo : JSON.stringify(corpo)); if (gz) b = zlib.gzipSync(b); return G.fimDoConteudo(f.conteudo, b); };
+  ok(FC('trafo_dia', { serie: [{ dia: '2026-10-14' }, { dia: '2026-10-13' }, { x: 1 }, null] }, true) === Date.parse('2026-10-15T03:00:00Z'), 'conteudo em gzip: o MAIOR dia da serie, linhas sem dia ignoradas');
+  ok(FC('selo_medidores', '﻿' + JSON.stringify({ ancora: '2026-10-19T19:50:00' })) === Date.parse('2026-10-19T22:50:00Z'), 'conteudo com BOM');
+  ok(FC('trafo_dia', { serie: [] }) === null && FC('trafo_dia', { serie: [{ x: 1 }, null] }) === null, 'serie vazia, ou so com linhas sem dia: null (sai sem registro)');   // RE-005
+  ok(FC('trafo_dia', 'nao e json') === null && FC('trafo_dia', { serie: 'x' }) === null && FC('trafo_dia', { dias: [{ dia: '2026-10-18' }] }) === null && FC('trafo_dia', '') === null,
+    'conteudo ilegivel, sem a lista ou com o campo noutro lugar: null (nunca a gravacao no lugar)');
+  ok(G.FONTES.filter((f) => !f.conteudo).map((f) => f.id).join() === 'medidor_5min,selos_fontes,corte_gemeo,registro_mesa', 'so quatro fontes pela gravacao, declaradas');
+  est = null; try { G.prazoConteudo({ passo: 1440, chegada: [{ wf: ['sumiu.yml'] }] }, ['trafo.yml'], AG_FIX, Date.now()); } catch (e) { est = e; }
+  ok(!!est && /sem prazo: sumiu.yml/.test(est.message), 'regra de chegada com workflow fora da agenda estoura');
 }
 
 /* ───────────── 2 e 3. o gerador de verdade e os plantios ───────────── */
@@ -495,6 +614,14 @@ async function processos() {
     ok(planta((c) => { c.etapas.est.st = 'ok'; c.etapas.est.ultima = null; c.etapas.est.h = c.etapas.est.h.slice(0, 13) + 'o'; }), 'guarda reprova ok sem registro');
     ok(planta((c) => { c.linha_dia.push({ ts: AGORA, etapa: 'ponte', st: 'ok', ev: '10.1.2.3' }); }), 'guarda reprova IP num evento');
     ok(planta((c) => { c.etapas.inv.h = 'nnnnn'; }), 'guarda reprova h fora do formato');
+    /* malha-frescor-conteudo */
+    const iC = ref.frescor.findIndex((x) => x.id === 'trafo_dia'), iG = ref.frescor.findIndex((x) => x.id === 'selos_fontes');
+    ok(planta((c) => { c.frescor[iC].medida = 'cabecalho'; }), 'guarda reprova medida fora da lista');
+    ok(planta((c) => { c.frescor[iC].ate = null; }), 'guarda reprova medido pelo conteudo sem o fim do dado');
+    ok(planta((c) => { c.frescor[iC].ate = '14/10/2026'; }), 'guarda reprova fim do dado fora do formato');
+    ok(planta((c) => { c.frescor[iC].gravado = null; }), 'guarda reprova medido sem a gravacao');
+    ok(planta((c) => { c.frescor[iG].ate = '2026-10-19T03:00:00Z'; }), 'guarda reprova fim do dado em fonte declarada sem conteudo');
+    ok(planta((c) => { c.frescor[iC].arquivo = 'trafo_diario.json'; }), 'guarda reprova chave nova no frescor');
   }
   const r2 = await roda(Object.assign({}, PRINCIPAL, { blob: true, sdk: mundoCofre() }));
   const e2 = ref ? chkGrava(r2, ref) : ['sem referencia'];
@@ -566,6 +693,113 @@ async function processos() {
   const MP = (k) => ({ sdk: mundoCofre(), gh: MUNDOS_PROC[k][0] });
   const CP = (k) => chkProc(MUNDOS_PROC[k][1]);
 
+  /* malha-frescor-conteudo: os mundos do CONTEUDO, sobre o mundo VERDE (tudo gravado ha 5 min, o conteudo de cada fixture). */
+  const MOD5Z = '2026-10-19T15:25:00Z';
+  const ESP_VERDE = {};
+  for (const f of G.FONTES) ESP_VERDE[f.id] = Object.assign({}, FIX[f.id][2], { gravado: MOD5Z });
+  Object.assign(ESP_VERDE, {
+    medidor_5min: Object.assign(okG(5, 10), { gravado: MOD5Z }),
+    ons_restricao: Object.assign(okC(2190, 2477, '2026-10-18T03:00:00Z'), { gravado: MOD5Z }),   // o dia 17: 2190/2477, no prazo
+    visao_executiva: Object.assign(okC(750, 2473, FIM_D1), { gravado: MOD5Z }),
+    ao_vivo: Object.assign(okC(15, 30, W5Z), { gravado: MOD5Z }),
+  });
+  const mundoDados = (dados, extra) => ({ conteineres: Object.assign({ 'backup-dados-scada': { blobs: blobsCofre }, dados: { blobs: dados }, 'portal-admin': { blobs: {} } }, extra || {}) });
+  const DADOS_VERDE = dadosDe({});
+  const NOMES_C = G.FONTES.filter((f) => f.conteudo).map((f) => f.blob).sort();
+  /* o dado congelado de hoje: regravado ha 5 min, o conteudo parou no dia 14 (fim 15/10 03:00 UTC, 6510 min antes) */
+  const CONG = { trafo_dia: { corpo: { serie: [{ dia: '2026-10-13' }, { dia: '2026-10-14' }] } }, sager_disp: { corpo: { serie: [{ t: '2026-10-14T23:30' }] } },
+    perdas_dia: { corpo: { serie: [{ dia: '2026-10-14' }] } } };
+  const fa14 = (prazo) => ({ st: 'fa', idade_min: 6510, prazo_min: prazo, medida: 'conteudo', ate: '2026-10-15T03:00:00Z', gravado: MOD5Z });
+  const ESP_CONG = Object.assign({}, ESP_VERDE, { trafo_dia: fa14(2018), sager_disp: fa14(1847), perdas_dia: fa14(2232) });
+  /* o plantio nao e vazio: pela gravacao (a regra antiga), os tres congelados estariam no prazo */
+  const velho = ['trafo_dia', 'sager_disp', 'perdas_dia'].map((id) => { const f = G.FONTES.find((x) => x.id === id); return G.estadoFrescor((AGORA_MS - dadosDe(CONG)[f.blob].mod) / 60000, G.prazoDe(AG_FIX, f.wf)); });
+  ok(velho.every((s) => s === 'ok') && ['trafo_dia', 'sager_disp', 'perdas_dia'].every((id) => dadosDe(CONG)[BLOB[id]].mod === MOD5),
+    'premissa do congelado: os tres foram regravados ha 5 min e, pela gravacao, sairiam ok (' + velho.join(', ') + ')');
+  /* o conteudo que nao se le: lista sem data e corpo que nao e JSON. Sai sem registro, com a gravacao e o prazo da agenda */
+  const ILEG = { estacao_dia: { corpo: { serie: 'x' } }, pr: { corpo: 'nao e json', gz: false } };
+  const ESP_ILEG = Object.assign({}, ESP_VERDE, {
+    estacao_dia: { st: 'sem', idade_min: null, prazo_min: 1440, medida: 'conteudo', ate: null, gravado: MOD5Z },
+    pr: { st: 'sem', idade_min: null, prazo_min: 660, medida: 'conteudo', ate: null, gravado: MOD5Z } });
+  /* a saida anterior do MESMO dia: o trafo foi regravado desde entao (outra gravacao, conteudo velho na saida anterior); o logger
+   * nao (a mesma gravacao, e um `ate` que so a saida anterior tem: prova que ela foi usada) */
+  const anterior = (gerado) => {
+    const fr = G.FONTES.filter((f) => f.conteudo).map((f) => ({ id: f.id, gravado: MOD5Z, ate: ESP_VERDE[f.id].ate }));
+    fr.find((x) => x.id === 'trafo_dia').gravado = '2026-10-19T14:00:00Z'; fr.find((x) => x.id === 'trafo_dia').ate = '2026-10-15T03:00:00Z';
+    fr.find((x) => x.id === 'logger_disp').ate = '2026-10-19T02:00:00Z';
+    return { 'malha_estado.json': { mod: Date.parse(gerado), b64: zlib.gzipSync(Buffer.from(JSON.stringify({ versao: 1, gerado, frescor: fr }))).toString('base64') } };
+  };
+  /* logger com o fim da saida anterior (02:00 UTC): 810 min; E + 1 dia + 355 = 07:55 -> sungrow 13:17: 35h17 + 2 h = 2237 */
+  const ESP_ANT = Object.assign({}, ESP_VERDE, { logger_disp: Object.assign(okC(810, 2237, '2026-10-19T02:00:00Z'), { gravado: MOD5Z }) });
+  const MUNDOS_C = {
+    verde: [{ sdk: mundoDados(DADOS_VERDE) }, ESP_VERDE, { st: 'ok', n: { no_prazo: 29, total: 29 } }, NOMES_C],
+    'congelado em 14/10, regravado hoje': [{ sdk: mundoDados(dadosDe(CONG)), gh: { 'trafo.yml': verm2('failure', 'failure') } }, ESP_CONG,
+      { st: 'fa', n: { no_prazo: 26, total: 29 }, proc: { st: 'fa', motivo: 'workflow_vermelho' } }, NOMES_C],
+    'conteudo ilegivel': [{ sdk: mundoDados(dadosDe(ILEG)) }, ESP_ILEG, { st: 'fa', n: { no_prazo: 27, total: 29 } }, NOMES_C],
+    'saida anterior do mesmo dia': [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-19T15:15:00Z') } }) }, ESP_ANT,
+      { st: 'ok', n: { no_prazo: 29, total: 29 } }, ['trafo_diario.json']],
+    'saida anterior de outro dia': [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-18T23:00:00Z') } }) }, ESP_VERDE,
+      { st: 'ok', n: { no_prazo: 29, total: 29 } }, NOMES_C],
+  };
+  const chkC = (esp, pub, baixa) => (r) => {
+    if (r.code !== 0 || !r.out) return ['o gerador nao terminou (codigo ' + r.code + '): ' + String(r.stderr).trim().split('\n').slice(-1)];
+    const e = [...textoLimpo(r), ...semViolacao(r)];
+    for (const f of r.out.frescor) {
+      const x = esp[f.id] || {};
+      for (const k of Object.keys(x)) if (f[k] !== x[k]) e.push('frescor ' + f.id + '.' + k + ' = ' + f[k] + ' (esperado ' + x[k] + ')');
+    }
+    const p = r.out.etapas.pub;
+    if (p.st !== pub.st || !igual(p.n, pub.n)) e.push('pub ' + p.st + ' ' + JSON.stringify(p.n) + ' (esperado ' + pub.st + ' ' + JSON.stringify(pub.n) + ')');
+    if (pub.proc && (r.out.etapas.proc.st !== pub.proc.st || r.out.etapas.proc.motivo !== pub.proc.motivo)) e.push('proc ' + r.out.etapas.proc.st + ' ' + r.out.etapas.proc.motivo);
+    const baixados = r.regs.filter((x) => x.op === 'baixa' && x.conteiner === 'dados').map((x) => x.blob).sort();
+    if (!igual(baixados, baixa.slice().sort())) e.push('baixou ' + baixados.length + ' do conteiner de dados (esperado ' + baixa.length + '): ' + baixados.slice(0, 4).join(', '));
+    if (r.regs.some((x) => x.op === 'grava')) e.push('gravou no blob com LOCAL_OUT');
+    return e;
+  };
+  for (const [nome, [cen, esp, pub, baixa]] of Object.entries(MUNDOS_C)) {
+    const r = await roda(cen);
+    const e = chkC(esp, pub, baixa)(r);
+    ok(!e.length, 'conteudo: ' + nome + ' -> pub ' + pub.st + ', ' + baixa.length + ' baixado(s)' + (e.length ? ': ' + e.join(' | ') : ''));
+  }
+  const MC = (k) => MUNDOS_C[k][0];
+  /* o plantio da regra antiga e julgado SO pelos tres congelados (o erro citado e o deles, nao o de outra fonte) */
+  const SO_CONGELADOS = chkC({ trafo_dia: ESP_CONG.trafo_dia, sager_disp: ESP_CONG.sager_disp, perdas_dia: ESP_CONG.perdas_dia }, MUNDOS_C['congelado em 14/10, regravado hoje'][2], NOMES_C);
+  const CC = (k) => chkC(MUNDOS_C[k][1], MUNDOS_C[k][2], MUNDOS_C[k][3]);
+  const ANT403 = [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: {}, proibido: true } }) }, chkEstoura('saida anterior com 403'), /AuthorizationPermissionMismatch/];
+  /* RE-001: o cabecalho do arquivo responde 200 e a leitura do conteudo 403 ou 500: estoura, sem gravar (so o 404 e ausencia) */
+  const BAIXA403 = [{ sdk: mundoDados(DADOS_VERDE, { dados: { blobs: DADOS_VERDE, falhaBaixa: 403 } }) }, chkEstoura('leitura do conteudo com 403'), /AuthorizationPermissionMismatch/];
+  const BAIXA500 = [{ sdk: mundoDados(DADOS_VERDE, { dados: { blobs: DADOS_VERDE, falhaBaixa: 500 } }) }, chkEstoura('leitura do conteudo com 500'), /InternalError/];
+  for (const [nome, X] of [['403 na leitura do conteudo (cabecalho 200)', BAIXA403], ['500 na leitura do conteudo (cabecalho 200)', BAIXA500]]) {
+    const r = await roda(X[0]);
+    const e = X[1](r);
+    if (!e.length && !X[2].test(r.stderr)) e.push('estourou por outro motivo: ' + String(r.stderr).trim().split('\n').pop());
+    if (!r.regs.some((x) => x.op === 'baixa' && x.conteiner === 'dados')) e.push('nem chegou a ler o conteudo (o mundo nao prova nada)');
+    ok(!e.length, 'estoura sem gravar: ' + nome + (e.length ? ': ' + e.join(' | ') : ''));
+  }
+  /* RE-003: o dia da saida anterior e o de BRASILIA. (a) gerada as 02:00 UTC de 19/10 = 23:00 de 18/10 em Brasilia: outro dia, baixa
+   * tudo. (b) o relogio as 00:30 de Brasilia de 20/10 (03:30 UTC) e a saida anterior as 23:45 de 19/10 (02:45 UTC de 20/10, o MESMO
+   * dia em UTC): outro dia, baixa tudo, e o logger sai com o fim do proprio arquivo (19/10 03:00 UTC), nao o da saida anterior */
+  const chkDiaBRT = (r) => {
+    if (r.code !== 0 || !r.out) return ['o gerador nao terminou (codigo ' + r.code + '): ' + String(r.stderr).trim().split('\n').slice(-1)];
+    const e = [];
+    const baixados = r.regs.filter((x) => x.op === 'baixa' && x.conteiner === 'dados').map((x) => x.blob).sort();
+    if (!igual(baixados, NOMES_C)) e.push('baixou ' + baixados.length + ' (esperado ' + NOMES_C.length + ', tudo)');
+    const lg = r.out.frescor.find((x) => x.id === 'logger_disp');
+    if (!lg || lg.ate !== FIM_D1) e.push('logger_disp com ate ' + (lg && lg.ate) + ' (esperado ' + FIM_D1 + ', o do arquivo)');
+    return e;
+  };
+  const ANT_0200Z = { sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-19T02:00:00Z') } }) };
+  const ANT_0030 = { agora: '2026-10-20T03:30:00Z', sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-20T02:45:00Z') } }) };
+  for (const [nome, cen] of [['saida anterior das 02:00 UTC (23:00 de Brasilia do dia anterior)', ANT_0200Z], ['relogio as 00:30 de Brasilia, saida anterior do mesmo dia UTC', ANT_0030]]) {
+    const e = chkDiaBRT(await roda(cen));
+    ok(!e.length, 'o dia e o de Brasilia: ' + nome + ' -> baixa tudo' + (e.length ? ': ' + e.join(' | ') : ''));
+  }
+  {
+    const r = await roda(ANT403[0]);
+    const e = ANT403[1](r);
+    if (!e.length && !ANT403[2].test(r.stderr)) e.push('estourou por outro motivo: ' + String(r.stderr).trim().split('\n').pop());
+    ok(!e.length, 'estoura sem gravar: 403 ao ler a saida anterior (so o 404 do proprio arquivo e ausencia)' + (e.length ? ': ' + e.join(' | ') : ''));
+  }
+
   console.log('3. plantios (cada um TEM de reprovar)');
   const ANCORA_SEM = "  if (!S) return semTodas(ehHoje ? 'sem_estado_hoje' : null);";
   const OK_SEM_REGISTRO = "  if (!S) { const R = semTodas(null); for (const id of PONTE_ETAPAS) R[id] = { st: 'ok', motivo: null, ultima: null, ref_dia: null, n: {} }; return R; }";
@@ -582,9 +816,9 @@ async function processos() {
     ['nome de conteiner na saida, sem a guarda', [['    R.cofre = { st: stC, motivo: moC,', '    R.cofre = { st: stC, motivo: moC || COFRE,'], SEM_GUARDA], PRINCIPAL, chkPrincipal],
     ['nome de blob na saida', [['    frescor: frescor.map((x) => ({ id: x.id,', '    frescor: frescor.map((x) => ({ blob: FONTES.find((f) => f.id === x.id).blob, id: x.id,']], PRINCIPAL, chkPrincipal],
     ['nome de blob na saida, sem a guarda', [['    frescor: frescor.map((x) => ({ id: x.id,', '    frescor: frescor.map((x) => ({ blob: FONTES.find((f) => f.id === x.id).blob, id: x.id,'], SEM_GUARDA], PRINCIPAL, chkPrincipal],
-    ['frescor sem prazo', [['function prazoDe(agenda, wfs) { return prazoMin(cronsDe(agenda, wfs)); }', 'function prazoDe(agenda, wfs) { try { return prazoMin(cronsDe(agenda, wfs)); } catch (e) { return null; } }']],
+    ['frescor sem prazo', [['function prazoDe(agenda, wfs) { return prazoMin(cronsDe(agenda, wfs)); }', 'function prazoDe(agenda, wfs) { try { return prazoMin(cronsDe(agenda, wfs)); } catch (e) { return null; } }'], PRAZO_C_NULO],
       CENARIOS_ESTOURA.semPrazo[0], CENARIOS_ESTOURA.semPrazo[1]],
-    ['frescor sem prazo, sem a guarda', [['function prazoDe(agenda, wfs) { return prazoMin(cronsDe(agenda, wfs)); }', 'function prazoDe(agenda, wfs) { try { return prazoMin(cronsDe(agenda, wfs)); } catch (e) { return null; } }'], SEM_GUARDA],
+    ['frescor sem prazo, sem a guarda', [['function prazoDe(agenda, wfs) { return prazoMin(cronsDe(agenda, wfs)); }', 'function prazoDe(agenda, wfs) { try { return prazoMin(cronsDe(agenda, wfs)); } catch (e) { return null; } }'], PRAZO_C_NULO, SEM_GUARDA],
       CENARIOS_ESTOURA.semPrazo[0], CENARIOS_ESTOURA.semPrazo[1]],
     ['404 de conteiner tratado como ausencia', [['    const itens = await fonte.lista(dia);', '    const itens = await fonte.lista(dia).catch((e) => { if (e && e.statusCode === 404) return []; throw e; });']],
       CENARIOS_ESTOURA.cofre404[0], CENARIOS_ESTOURA.cofre404[1]],
@@ -602,6 +836,29 @@ async function processos() {
     ['proc: workflow sem arquivo no frescor vira fa', [['    if (!sts.length) continue;', '    if (!sts.length) { if (v === e.runs.length) parados++; continue; }']],
       MP('vermelho nas 2 sem arquivo no frescor (must-intra)'), CP('vermelho nas 2 sem arquivo no frescor (must-intra)')],
     ['proc: vermelho em 1 das 2 com arquivo ausente vira fa', [['    if (fora && v === e.runs.length) parados++;', '    if (fora) parados++;']], PRINCIPAL, chkPrincipal],
+    /* malha-frescor-conteudo: o frescor volta a ser so a gravacao; conteudo ilegivel cai na gravacao; a pior medida nao vence; a saida
+     * anterior reaproveitada com outra gravacao ou de outro dia; 403 na saida anterior como ausencia; o arquivo grande baixado */
+    ['conteudo: so a gravacao (a regra antiga)', [['    if (!f.conteudo) return Object.assign(base, {', '    if (true) return Object.assign(base, {']],
+      MC('congelado em 14/10, regravado hoje'), SO_CONGELADOS],
+    ['conteudo: ilegivel vira a gravacao', [['    if (E == null) { conta.ilegiveis.push(f.id);', '    if (E == null) E = tG;\n    if (E == null) { conta.ilegiveis.push(f.id);']],
+      MC('conteudo ilegivel'), CC('conteudo ilegivel')],
+    ['conteudo: a pior medida nao vence', [['    const peloConteudo = cIdade / cPrazo >= gIdade / prazos[i];', '    const peloConteudo = true;']], PRINCIPAL, chkPrincipal],
+    ['conteudo: saida anterior com outra gravacao reaproveitada', [['      if (a && a.gravado === isoZ(tG)) {', '      if (a) {']],
+      MC('saida anterior do mesmo dia'), CC('saida anterior do mesmo dia')],
+    ['conteudo: saida anterior de outro dia reaproveitada', [[' || diaBRT(Date.parse(j.gerado)) !== diaBRT(agoraMs)', '']],
+      MC('saida anterior de outro dia'), CC('saida anterior de outro dia')],
+    ['conteudo: 403 na saida anterior vira ausencia', [["    if (e && e.statusCode === 404 && cod === 'BlobNotFound') return null;\n    throw e;\n  }\n  let j;", '    return null;\n  }\n  let j;']],
+      ANT403[0], ANT403[1]],
+    /* revisao do ensaio (RE-001, RE-003) */
+    ['conteudo: 403 na leitura do conteudo vira ausencia', [['        const x = await LD.pede(LD.BASE + f.blob);', '        const x = await LD.pede(LD.BASE + f.blob).catch(() => ({ status: 404 }));']],
+      BAIXA403[0], BAIXA403[1]],
+    ['conteudo: 500 na leitura do conteudo vira ausencia', [['        const x = await LD.pede(LD.BASE + f.blob);', '        const x = await LD.pede(LD.BASE + f.blob).catch(() => ({ status: 404 }));']],
+      BAIXA500[0], BAIXA500[1]],
+    ['conteudo: o dia da saida anterior pelo UTC (02:00 UTC)', [['diaBRT(Date.parse(j.gerado)) !== diaBRT(agoraMs)', 'String(j.gerado).slice(0, 10) !== new Date(agoraMs).toISOString().slice(0, 10)']],
+      ANT_0200Z, chkDiaBRT],
+    ['conteudo: o dia da saida anterior pelo UTC (00:30 de Brasilia)', [['diaBRT(Date.parse(j.gerado)) !== diaBRT(agoraMs)', 'String(j.gerado).slice(0, 10) !== new Date(agoraMs).toISOString().slice(0, 10)']],
+      ANT_0030, chkDiaBRT],
+    ['conteudo: baixa tambem o que vai pela gravacao', [['    if (f.conteudo) {\n      const a = anterior', '    if (f.conteudo || f.blob) {\n      const a = anterior']], PRINCIPAL, chkPrincipal],
   ];
   /* Barrado pela guarda do gerador so conta se a mensagem dela NOMEIA o defeito plantado (senao a guarda pode ter barrado
    * outra coisa e o plantio nao provou nada). Sem a guarda, quem tem de barrar e a checagem deste ensaio. */
