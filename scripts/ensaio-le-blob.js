@@ -138,7 +138,7 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   const L = (n) => fs.readFileSync(path.join(__dirname, n), 'utf8'), W = (n) => fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', n), 'utf8');
   ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-way2-agg.js')), 'gen-way2-agg: hist pela lib');
   ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-executivo.js')), 'gen-executivo: hist pela lib');
-  ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url, \{ 'Accept-Encoding': 'gzip' \}\)/.test(L('gen-pr.js')), 'gen-pr: hist pela lib');
+  ok(/if \(LB\.ALVO\.test\(url\)( && !semCopia)?\) return LB\.bytes\(url, \{ 'Accept-Encoding': 'gzip' \}\)/.test(L('gen-pr.js')), 'gen-pr: hist pela lib');   /* fontes-logger (19/10): a migracao da irradiancia baixa o dia velho sem copia (`semCopia`) */
   ok(/ELET_LOCAL_DIR/.test(L('gen-dia-corrente.js')) && /LB\.ALVO\.test\(url\)/.test(L('gen-dia-corrente.js')), 'gen-dia-corrente: copia da rodada e hist pela lib');
   ok(/LB\.bytes\(BASE_PUB \+ `hist\/way2_\$\{dd\}\.json`\)/.test(L('gen-way2-recent.js')) && /copiaL/.test(L('gen-way2-recent.js')), 'gen-way2-recent: dia fechado pela lib e o ao vivo da copia local');
   ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
