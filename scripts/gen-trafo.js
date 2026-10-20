@@ -1,5 +1,9 @@
 /*
- * gen-trafo.js — os dois transformadores de forca da SE Mauriti -> dados/trafo_*.json
+ * gen-trafo.js — os dois transformadores de forca da SE Mauriti -> dados/trafo_scada_*.json (a COPIA DO SUPERVISORIO)
+ *
+ * 🔴 Desde o lote fonte-trafo-way2 (19/10/2026) as telas leem `trafo_*.json` do gen-trafo-way2.js: o lado de 230 kV pelo medidor de
+ *   faturamento (5 min, integralizado) e, desta copia, so as grandezas que o medidor nao tem. Este gerador continua igual por dentro
+ *   e grava `trafo_scada_5min/30min/60min/diario.json` (o nome se troca no `grava`).
  *
  * A PERGUNTA QUE ELE RESPONDE: como estao carregados o 04T1 e o 04T2, ao longo do tempo, e com que
  * equilibrio entre fases. Sao os mesmos dois trafos da pagina de Oleo Isolante — que hoje diz a
@@ -165,27 +169,10 @@ const GRANDEZAS = {
 const TEMPS = ['t_oleo', 't_oleo_cdc', 't_enrol'];
 
 // ---------- a PLACA -----------------------------------------------------------------------
-// Folha de dados do fabricante para o complexo. A regra do equipamento mora AQUI, no gerador, e
-// nao no JSONata de cada painel: e a mesma razao pela qual a interpretacao da norma do oleo mora
-// no gen-oleo — duplicar a constante em N paineis garante que uma copia envelheca diferente.
-const PLACA = {
-  fabricante: 'Hitachi Energy Chongqing Transformer',
-  tipo: 'trifasico, instalacao externa, imerso em oleo, nucleo envolvido',
-  ligacao: 'YNyn0yn0d1',
-  resfriamento: 'ONAN / ONAF1 / ONAF2',
-  tensao_kv: { at: 230, mt1: 34.5, mt2: 34.5, terciario: 13.8 },
-  // 🔴 TRES potencias, uma por estagio de ventilacao. Um numero so de "% de carregamento"
-  //   mentiria: o maximo medido, 187,5 MVA, e 81% de ONAF2 e 125% de ONAN.
-  potencia_at_mva: { onan: 150, onaf1: 180, onaf2: 230 },
-  potencia_mt_mva: { onan: 75, onaf1: 90, onaf2: 115 },
-  potencia_terciario_mva: 76,
-  // ⚠️ ELEVACAO sobre o ambiente, em kelvin — NAO e temperatura absoluta. O sensor le absoluto,
-  //   entao comparar exige o ambiente do instante. Ver a nota no cabecalho.
-  elevacao_k: { topo_oleo: 60, enrolamento_medio: 65, ponto_quente: 78 },
-  ambiente_projeto_c: { maximo: 47.5, media_anual: 26, minimo: 19 },
-  tap: { posicoes: 21, neutro: 11, passo_pct: 1.25 },
-  perdas_kw: { vazio: 90, carga_a_230mva: 600 },
-};
+// Folha de dados do fabricante para o complexo. A regra do equipamento mora no PIPELINE, e nao no JSONata de cada painel: e a
+// mesma razao pela qual a interpretacao da norma do oleo mora no gen-oleo. Desde o lote fonte-trafo-way2 (19/10/2026) ela mora na
+// lib-trafo-way2.js, que tambem publica o lado de 230 kV pelo medidor: uma escrita so para os dois geradores.
+const { PLACA } = require('./lib-trafo-way2.js');
 const NOMINAL = PLACA.potencia_at_mva.onaf2;   // o % publicado usa a plena, com os estagios no meta
 // Piso de PLAUSIBILIDADE, deliberadamente conservador. Nao e limiar de alarme nem corta dado: so
 // serve para CONTAR leitura que nenhuma das tres grandezas pode ter num transformador em Mauriti
@@ -360,7 +347,15 @@ function confereFisica(serie) {
 }
 
 // ---------- saida -------------------------------------------------------------------------------
+/* 🔴 lote fonte-trafo-way2 (19/10/2026): este gerador passa a publicar a COPIA DO SUPERVISORIO, com nome proprio
+   (`trafo_scada_<res>.json`). Os nomes `trafo_<res>.json`, que as telas leem, sao do gen-trafo-way2.js: lado de 230 kV pelo medidor
+   de faturamento, e daqui so as grandezas que o medidor nao tem (temperaturas, comutador, 34,5 kV). O nome se troca AQUI, num lugar
+   so, para cada chamada abaixo continuar dizendo qual passo grava. */
+const nomeDaCopia = (nome) => nome.replace(/^trafo_/, 'trafo_scada_');
 async function grava(nome, obj) {
+  nome = nomeDaCopia(nome);
+  obj = Object.assign({ copia_do_supervisorio: 'lado de 230 kV, temperaturas, comutador e 34,5 kV como o supervisório da subestação os exporta; '
+    + 'as telas leem trafo_<passo>.json, com o lado de 230 kV pelo medidor de faturamento' }, obj);
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, nome), gz);

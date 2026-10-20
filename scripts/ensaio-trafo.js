@@ -139,7 +139,9 @@ function monta(variante) {
 }
 const roda = (gen) => { try { return { ok: true, log: execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_DIR: IN, LOCAL_OUT_DIR: OUT }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
   catch (e) { return { ok: false, log: String(e.stdout || '') + String(e.stderr || '') }; } };
-const le = (n) => { const f = path.join(OUT, n); return fs.existsSync(f) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(f)).toString('utf8')) : { serie: [] }; };
+/* lote fonte-trafo-way2 (19/10/2026): o gen-trafo grava a COPIA DO SUPERVISORIO com nome proprio (`trafo_scada_<passo>.json`); os
+   nomes `trafo_<passo>.json` sao do gen-trafo-way2 (lado de 230 kV pelo medidor). O ensaio le a copia pelo nome velho do passo */
+const le = (n) => { const f = path.join(OUT, n.replace(/^trafo_/, 'trafo_scada_')); return fs.existsSync(f) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(f)).toString('utf8')) : { serie: [] }; };
 const arr = (x) => Number(x.toFixed(2));                                     // o valor como o export o publica
 const ultimaLinha = (log) => log.split('\n').filter(Boolean).slice(-1)[0] || '';
 
@@ -148,6 +150,11 @@ function cenario(gen, quais) {
   try {
     monta('normal');
     const r = roda(gen); R.roda = r.ok; if (!r.ok) R.erro = ultimaLinha(r.log);
+    // a copia nunca grava por cima do que as telas leem: so `trafo_scada_*`, os quatro, e com a marca da copia
+    const gravados = fs.existsSync(OUT) ? fs.readdirSync(OUT).sort() : [];
+    R.okCopia = gravados.join(' ') === 'trafo_scada_30min.json trafo_scada_5min.json trafo_scada_60min.json trafo_scada_diario.json'
+      && gravados.every((n) => !!JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUT, n))).toString('utf8')).copia_do_supervisorio);
+    R.txtCopia = gravados.join(' ');
     const C5 = le('trafo_5min.json'), C30 = le('trafo_30min.json'), C60 = le('trafo_60min.json'), CD = le('trafo_diario.json');
     const em = (C, d, min) => C.serie.find((x) => x.ms === msDe(d, min)) || {};
     const p5 = em(C5, PICO.d, PICO.min), m30 = em(C30, PICO.d, 720);
@@ -207,6 +214,7 @@ const GEN = path.join(__dirname, 'gen-trafo.js');
 const R = cenario(GEN);
 if (R.erro) ok(false, 'o gerador estourou: ' + R.erro);
 ok(R.roda, 'a rodada normal termina sem erro');
+ok(R.okCopia, 'grava so a copia do supervisorio (trafo_scada_5min/30min/60min/diario, com a marca), nunca trafo_<passo>.json: ' + R.txtCopia);
 ok(R.okFusao5, 'serie de 5 min: os 30 dias do corte, todos na grade (carimbo 1 ms antes arredondado), o pico de 5 min, os dois trafos e os lados de 34,5 kV: ' + R.txt);
 ok(R.ok5Campos, 'no 5 min o FP vai em modulo e a carga e % de 230 MVA');
 ok(R.okCongelado, 'temperatura congelada na planilha sai como sem dado (o export de 30 min fica), e e contada');
@@ -295,6 +303,7 @@ planta('5 min sem o corte de 30 dias', [['gen', 'const linhas = serie.filter((r)
 // carimbo em texto aceito vira instante sem data: o job cai (Invalid time value) em vez de publicar
 plantaErro('carimbo em texto aceito', [['lib', "if (!r || typeof r[0] !== 'number' || !isFinite(r[0]))", 'if (!r || r[0] == null)']], /Invalid time value|NaN/);
 planta('copias em ordem alfabetica', [['gen', 'arqs.ied.sort((x, y) => idDe(x.nome) - idDe(y.nome) || (x.nome < y.nome ? -1 : 1));', 'arqs.ied.sort((x, y) => (x.nome < y.nome ? -1 : 1));']], 'okCopias', ['normal', 'copias']);
+planta('copia grava no nome das telas', [['gen', "const nomeDaCopia = (nome) => nome.replace(/^trafo_/, 'trafo_scada_');", 'const nomeDaCopia = (nome) => nome;']], 'okCopia');
 planta('planilha curta entra sem conferir', [['gen', '    if (semConferir) { ied[t] = new Map(); continue; }', '    if (false) { ied[t] = new Map(); continue; }']], 'okCurta', ['normal', 'curta']);
 
 console.log(falhas ? '\n' + falhas + ' FALHA(S)' : '\nensaio-trafo: tudo ok');

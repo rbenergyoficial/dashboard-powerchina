@@ -47,8 +47,14 @@ jobs:
       #    de hora em hora, porque as fontes que ele mede sao diarias/trimestrais — 5 min seria
       #    baixar 1 MB do ONS 288x/dia para nada. `if: always()`: o selo importa MAIS quando o passo
       #    anterior falhou.
-      - name: Selos de frescor por fonte
+      # lote fonte-trafo-way2 (19/10/2026): os dois selos dos trafos (badges_trafo = copia do supervisorio, badges_trafo_230 = diario do
+      #    medidor) ensaiados sem rede, com o gerador de verdade e plantios. Vermelho aqui = o selo nao e regravado nesta rodada.
+      - name: Ensaio · selos dos transformadores (sem rede)
+        id: ensaio_selo
         if: always()
+        run: node scripts/ensaio-trafo-way2.js --selo
+      - name: Selos de frescor por fonte
+        if: ${{ always() && steps.ensaio_selo.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-fontes-saude.js

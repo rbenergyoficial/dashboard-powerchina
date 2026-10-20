@@ -15,6 +15,10 @@
 //
 // 🔴 LIMIARES COM FONTE NOMEADA — a cadencia de cada fonte, do proprio pipeline (pipeline.md):
 //   trafo   `trafo.yml` roda 1x/dia (10:38 UTC) sobre despejo diario  -> verde ate 36 h, ambar ate 72 h
+//           Desde o lote fonte-trafo-way2 (19/10/2026) sao DOIS selos: `badges_trafo` = a copia do supervisorio
+//           (`trafo_scada_diario.json`: temperatura, comutador e 34,5 kV, as paginas que so ele alimenta) e `badges_trafo_230` =
+//           o lado de 230 kV pelo medidor (`trafo_diario.json`, as paginas de 230 kV e o historico diario). Um selo so diria
+//           "fresco" sobre a temperatura parada com o export do supervisorio, ou "velho" sobre o medidor em dia.
 //   oleo    coleta TRIMESTRAL, blob gravado por push (sem cron)       -> verde ate 120 d, ambar ate 180 d
 //   ons     publicacao D+1 (consolidado 18:17 UTC)                     -> verde ate 36 h, ambar ate 60 h
 //   inversores (07/09/2026, lote invmt1): duas planilhas da equipe, lidas 2x/dia pelo `inversores.yml`.
@@ -63,9 +67,13 @@ const H = SELO.HORA, D = SELO.DIA;
 const sel = (b, ms, ok, alt, un) => Object.assign(b, SELO.frescor(ms, ok, alt, un));
 
 // cada fonte devolve os seus badges; erro vira badge vermelho, nunca excecao que derrube o job
-async function trafo() {
+/* `nome` = o diario que o selo mede; `rotulo` = quem mede. A copia do supervisorio ainda nao gravada (antes da primeira rodada do
+   lote fonte-trafo-way2): vale o `trafo_diario.json` SEM a marca do medidor, que era o produto inteiro do supervisorio */
+async function trafo(nome, rotulo) {
   try {
-    const t = await le('trafo_diario.json');
+    let t;
+    try { t = await le(nome); }
+    catch (e) { if (nome !== 'trafo_scada_diario.json' || !/HTTP 404/.test(e.message)) throw e; t = await le('trafo_diario.json'); if (t.esquema) throw e; }   // so a AUSENCIA (404) cai no antigo
     // a serie diaria e a lista cujo ultimo item tem `dia` — o nome da raiz nao e contrato
     // (`trafos` e o cadastro dos dois equipamentos; a serie vive em `dias`)
     const s = ['dias', 'serie', 'diario'].map((k) => t[k]).find((a) => Array.isArray(a) && a.length && a[a.length - 1].dia) || [];
@@ -74,10 +82,10 @@ async function trafo() {
     const fim = Date.parse(ult.dia + 'T23:59:59-03:00');          // o dia inteiro medido
     const h = horas(fim);
     return [
-      sel({ ic: '⚡', l: 'Supervisório', v: ddmm(ult.dia), u: 'último dia', c: cor(h, 36, 72) }, fim, 36 * H, 72 * H),
+      sel({ ic: '⚡', l: rotulo, v: ddmm(ult.dia), u: 'último dia', c: cor(h, 36, 72) }, fim, 36 * H, 72 * H),
       sel({ ic: '⏱', l: 'Idade', v: String(Math.round(h)), u: 'h', c: cor(h, 36, 72) }, fim, 36 * H, 72 * H, 'h'),
     ];
-  } catch (e) { return [{ ic: '⚡', l: 'Supervisório', v: 'sem leitura', u: '', c: VERMELHO }]; }
+  } catch (e) { return [{ ic: '⚡', l: rotulo, v: 'sem leitura', u: '', c: VERMELHO }]; }
 }
 async function oleo() {
   try {
@@ -156,21 +164,22 @@ async function way2() {
 }
 
 (async () => {
-  const [bt, bo, bn, bw, bi, bs, bh] = await Promise.all([trafo(), oleo(), ons(), way2(), inversores(), solarimetria(), historico()]);
+  const [bt, bo, bn, bw, bi, bs, bh, bt2] = await Promise.all([trafo('trafo_scada_diario.json', 'Supervisório'), oleo(), ons(), way2(), inversores(),
+    solarimetria(), historico(), trafo('trafo_diario.json', 'Medidores')]);
   // os rotulos nas tres linguas, como o selo original — a barra esta em paginas traduzidas
-  [bt, bo, bn, bi, bs, bh].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
+  [bt, bo, bn, bi, bs, bh, bt2].forEach((lista) => lista.forEach((b) => rot.localiza(b, ['l', 'u'])));
   const out = {
     gerado_em: new Date(AGORA).toISOString(),
     nota: 'Selos de frescor por FONTE. Cada lista mede a idade do ultimo DADO da fonte (dia, coleta ou instante), '
-      + 'nao a do arquivo. Limiares pela cadencia de cada fonte: supervisorio diario (36/72 h), oleo trimestral '
+      + 'nao a do arquivo. Limiares pela cadencia de cada fonte: supervisorio diario e lado de 230 kV pelo medidor, publicados uma vez por dia (36/72 h), oleo trimestral '
       + '(120/180 dias), ONS D+1 (36/60 h), planilha de substituicoes de inversores revisada mensalmente (30/60 dias), '
       + 'export mensal de alarmes do SCADA (45/75 dias do fim do mes coberto), estacao solarimetrica por export diario '
       + '(36/72 h), irradiancia verificada do ONS D+1 (36/60 h) e ultimo dia fechado do diario do medidor (36/72 h).',
-    badges_trafo: bt, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi, badges_solarimetria: bs, badges_historico: bh,
+    badges_trafo: bt, badges_trafo_230: bt2, badges_oleo: bo, badges_ons: bn, badges_way2: bw, badges_inversores: bi, badges_solarimetria: bs, badges_historico: bh,
   };
   const json = JSON.stringify(out);
   const resumo = (l) => l.map((b) => b.l + ' ' + b.v + (b.u ? ' ' + b.u : '') + ' ' + b.c).join(' · ');
-  console.log('trafo: ' + resumo(bt)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs)); console.log('hist : ' + resumo(bh));
+  console.log('trafo: ' + resumo(bt)); console.log('t230 : ' + resumo(bt2)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs)); console.log('hist : ' + resumo(bh));
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes'); return; }
   const { BlobServiceClient } = require('@azure/storage-blob');
   const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
