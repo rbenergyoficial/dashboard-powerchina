@@ -30,7 +30,16 @@
  *    razao do dia de cada entrada, 180 dias), sg_str_<k> e sg_curva_<k> (5 min, 7 dias), e sg_str_alarme (sem corrente e fracas pela
  *    lib-strings) e sg_str_entradas (interno). Esquema 7 do historico: a primeira rodada rele todos os zips.
  *
- * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1
+ * 🔴 DE ONDE VEM O ZIP (lote pa-sungrow, 20/10/2026): o fluxo pago do Power Automate copia os zips para o `sungrow-raw`; desde
+ *    18/10/2026 a maquina-ponte grava os mesmos zips no cofre (`backup-dados-scada/Sungrow_Logger/Sungrow_dados/<ano>/...`). O
+ *    nome do cofre vira o do sungrow-raw e a versao `~AAAAMMDD-HHMMSS` mais nova vale (lib-sungrow-cofre). FONTE escolhe:
+ *    `raw` (o sungrow-raw, como sempre), `cofre` (so o cofre: medicao) ou `uniao` (o historico do sungrow-raw e o cofre; no
+ *    nome dos dois vale o cofre). Zip RECUSADO pelo cofre (nome fora da forma, mesmo nome em dois anos) nao e lido e deixa a
+ *    rodada vermelha depois de gravar. SOMBRA=1 nao gera nada: compara o cofre com o sungrow-raw lote a lote e fica vermelho
+ *    se divergirem (CONFERE_BYTES=n baixa n pares do lote mais novo e compara byte a byte).
+ *
+ * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1 · FONTE=raw|cofre|uniao
+ *      · COFRE=backup-dados-scada · SOMBRA=1 · CONFERE_BYTES=n · VIVO_MIN=120 (lote mais novo que isso nao e julgado na sombra)
  *      ensaio: LOCAL_RAW_DIR (pasta com a mesma arvore M05/TS01/...) · LOCAL_SCADA_DIR · LOCAL_OUT_DIR · LOCAL_INV_SCADA
  *      · LOCAL_RAW_LISTA (recorte da pasta local, um caminho relativo por linha)
  */
@@ -48,6 +57,10 @@ const RAW = process.env.RAW || 'sungrow-raw';
 const SCADA_RAW = process.env.SCADA_RAW || 'scada-raw';
 const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
+const C = require('./lib-sungrow-cofre.js');
+const FONTE = process.env.FONTE || 'raw';
+const COFRE = process.env.COFRE || C.COFRE;
+if (!['raw', 'cofre', 'uniao'].includes(FONTE)) throw new Error('FONTE "' + FONTE + '" desconhecida (raw, cofre ou uniao)');
 const DIAS_5MIN = 7;                                        // a serie de 5 min do PID publicada (o resto vira resumo do dia)
 const TOL_VIDA = 0.5;                                       // kWh: contador de vida igual nas duas fontes (medido: 594/594)
 const ESQ_HIST = 8;                                         // 2: t0/t1 por inversor-dia e PID sem minutos com tensao; 3: PT100 do eletrocentro;
@@ -81,16 +94,75 @@ async function listaRaw() {
       if (e.isDirectory()) anda(path.join(d, e.name), r);
       else if (/^M\d\d\/TS\d\d\/[^/]+\/[^/]+\.zip$/i.test(r) && (!so || so.has(r))) out.push({ nome: r, bytes: fs.statSync(path.join(d, e.name)).size,
         ler: async () => fs.readFileSync(path.join(d, e.name)) }); } };
+    if (FONTE !== 'raw') throw new Error('LOCAL_RAW_DIR so vale com FONTE=raw');
     anda(process.env.LOCAL_RAW_DIR, '');
     return out;
   }
+  if (FONTE === 'raw') return listaRawAzure();
+  const { M, c } = await listaCofre();
+  const deCofre = [...M.zips].map(([nome, z]) => ({ nome, bytes: z.bytes, ler: async () => {
+    const buf = await c.getBlobClient(z.fonte).downloadToBuffer();
+    if (buf.length !== z.bytes) throw new Error(z.fonte + ': baixou ' + buf.length + ' B, a listagem do cofre diz ' + z.bytes);
+    if (z.md5 && require('crypto').createHash('md5').update(buf).digest('base64') !== z.md5) throw new Error(z.fonte + ': MD5 do baixado difere da listagem do cofre');
+    return buf; } }));
+  if (FONTE === 'cofre') return deCofre;
+  const U = C.uniao(await listaRawAzure(), deCofre);
+  console.log('  uniao: ' + U.filter((z) => z.origem === 'cofre').length + ' do cofre · ' + U.filter((z) => z.origem === 'raw').length + ' so no sungrow-raw');
+  return U;
+}
+async function listaRawAzure() {
   const c = svc().getContainerClient(RAW);
   const out = [];
   for await (const b of c.listBlobsFlat()) {
-    if (!/^M\d\d\/TS\d\d\/[^/]+\/[^/]+\.zip$/i.test(b.name)) continue;
+    if (!C.NOME_RAW.test(b.name)) continue;
     out.push({ nome: b.name, bytes: b.properties.contentLength, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
   }
   return out;
+}
+const md5b64 = (p) => (p && p.contentMD5 && p.contentMD5.length ? Buffer.from(p.contentMD5).toString('base64') : null);
+/* o cofre so e LIDO (contêiner com retencao imutavel): listBlobsFlat e downloadToBuffer. O que ele recusa fica contado em
+   `recusadosCofre` e pinta a rodada de vermelho no fim (depois de gravar o resto) */
+let recusadosCofre = 0;
+async function listaCofre() {
+  const c = svc().getContainerClient(COFRE);
+  const L = [];
+  for await (const b of c.listBlobsFlat({ prefix: C.PREFIXO })) {
+    L.push({ name: b.name, size: b.properties.contentLength, md5: md5b64(b.properties), lastModified: b.properties.lastModified });
+  }
+  const M = C.mapeia(L);
+  recusadosCofre = M.recusados.length;
+  console.log('cofre "' + COFRE + '/' + C.PREFIXO + '": ' + L.length + ' blob(s) · ' + M.zips.size + ' zip(s) com o nome do sungrow-raw · '
+    + [...M.zips.values()].filter((z) => z.versao).length + ' em versao ~ · ignorados ' + JSON.stringify(M.ignorados) + ' · recusados ' + M.recusados.length);
+  for (const r of M.recusados) console.log('::error::RECUSADO ' + r.nome + ': ' + r.motivo);
+  return { M, c };
+}
+
+/* SOMBRA=1 (lote pa-sungrow): nao gera nada. O cofre mapeado contra o sungrow-raw, lote a lote (lib-sungrow-cofre.compara);
+   vermelho com falha ou recusado. CONFERE_BYTES=n: os n pares de mesmo nome e tamanho gravados por ultimo, byte a byte */
+async function sombra() {
+  const { M, c } = await listaCofre();
+  const rc = svc().getContainerClient(RAW);
+  const raw = [];
+  for await (const b of rc.listBlobsFlat()) raw.push({ name: b.name, size: b.properties.contentLength, md5: md5b64(b.properties), lastModified: b.properties.lastModified });
+  const R = C.compara(M, raw, { agora: Date.now(), vivoMin: Number(process.env.VIVO_MIN || 120) });
+  console.log('sungrow-raw: ' + raw.length + ' blob(s) · lotes julgados ' + R.lotes.julgados + ', vivos ' + R.lotes.vivos + ', so no cofre ' + R.lotes.so_cofre
+    + ', so no sungrow-raw ' + R.lotes.so_raw + ' · nomes iguais ' + R.nomes_iguais);
+  for (const n of R.nomeadas) console.log('  (nomeada) ' + n);
+  for (const f of R.falhas) console.log('::error::' + f);
+  const n = Number(process.env.CONFERE_BYTES || 0);
+  let bIg = 0; const bDif = [];
+  if (n > 0) {
+    const ps = R.pares.slice().sort((a, b) => b[3] - a[3] || (a[1] < b[1] ? -1 : 1)).slice(0, n);
+    for (const [fonte, nome] of ps) {
+      const x = await c.getBlobClient(fonte).downloadToBuffer();
+      const y = await rc.getBlobClient(nome).downloadToBuffer();
+      if (x.equals(y)) bIg++; else { bDif.push(nome); console.log('::error::bytes diferentes: ' + fonte + ' x ' + nome); }
+    }
+    console.log('  conferencia byte a byte: ' + bIg + ' iguais, ' + bDif.length + ' diferentes (' + ps.length + ' pares mais novos)');
+  }
+  console.log('RESUMO ' + JSON.stringify({ modo: 'sombra', cofre_zips: M.zips.size, raw: raw.length, lotes: R.lotes, nomes_iguais: R.nomes_iguais,
+    falhas: R.falhas.length, nomeadas: R.nomeadas.length, recusados: M.recusados.length, ignorados: M.ignorados, bytes_iguais: bIg, bytes_diferentes: bDif.length }));
+  if (R.falhas.length || M.recusados.length || bDif.length) process.exitCode = 1;
 }
 
 /* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`). So o 404 do PROPRIO blob (BlobNotFound) devolve null, a
@@ -168,6 +240,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
 /* ------------------------------------------------------------------ principal ------------------------------------------ */
 (async () => {
   const t0 = Date.now();
+  if (process.env.SOMBRA === '1') { await sombra(); return; }
   let hist = REFAZER ? null : await leAnterior('sg_hist.json');
   /* 🔴 MIGRACAO POR MARCA: o historico de esquema 1 nao guarda a primeira e a ultima amostra do dia (t0, t1), sem as quais
      o dia parcial nao se prova; e o PID ainda carrega os minutos com tensao. Esquema velho = reler todos os zips, uma vez */
@@ -202,7 +275,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
   const novos = releDisp ? raw : raw.filter((z) => lidos.get(z.nome) !== z.bytes);
-  console.log('sungrow-raw: ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : releDisp ? ' (sem sg_disp_hist: todos)' : ''));
+  console.log('fonte ' + FONTE + ': ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : releDisp ? ' (sem sg_disp_hist: todos)' : ''));
   let dispFora = 0;
 
   const junta = (dias, linhas) => { for (const x of linhas) { const a = dias[x.d]; if (!a || x.n > a.n) dias[x.d] = x; } };
@@ -694,4 +767,5 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
       + ' · inversor-dias fora por parcial: ' + confRows.reduce((s, c) => s + c.n_parcial, 0)
       + ' · usina-dias fora de 1 %: ' + confRows.filter((c) => c.razao != null && Math.abs(c.razao - 1) > 0.01).map((c) => c.d + ' ' + c.ufv + ' ' + c.razao).join(', ')); }
   console.log('fim em ' + Math.round((Date.now() - t0) / 1000) + ' s');
+  if (recusadosCofre) { console.log('::error::' + recusadosCofre + ' zip(s) recusado(s) pelo cofre nao foram lidos (acima)'); process.exitCode = 1; }
 })().catch((e) => { console.error('ERRO ' + e.message); process.exit(1); });

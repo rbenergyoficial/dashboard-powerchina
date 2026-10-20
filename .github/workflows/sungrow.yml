@@ -53,6 +53,11 @@ jobs:
       # SCADA e plantios (SCADA de volta como fonte, sem leitura contada como parado, parado do supervisorio contado). Sem rede
       - name: Ensaio · dado de inversor das telas pelo logger (lib, sem rede)
         run: node scripts/ensaio-inv-logger.js --lib
+      # pa-sungrow (20/10/2026): os zips do logger pelo cofre (backup-dados-scada, gravado pela maquina-ponte) com o nome do sungrow-raw
+      # (lib-sungrow-cofre): versao ~ mais nova, recusados, comparacao lote a lote, e o gerador de ponta a ponta com o Azure forjado (as
+      # duas fontes dao produtos identicos), com plantios. Sem rede
+      - name: Ensaio · zips do logger pelo cofre (sem rede)
+        run: node scripts/ensaio-sungrow-cofre.js
       - name: Gerar sg_*.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -124,3 +129,16 @@ jobs:
         env:
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
         run: node scripts/ensaio-agente-dia.js
+      # 🔴 pa-sungrow EM SOMBRA (20/10/2026): o substituto do fluxo "Sungrow OneDrive RB para Blob" do Power Automate. SOMBRA=1 nao gera
+      # nada: compara o cofre (backup-dados-scada/Sungrow_Logger/Sungrow_dados/<ano>/..., com o nome mapeado) com o sungrow-raw, lote a
+      # lote, e confere byte a byte os 12 pares mais novos. Fica VERMELHO se um lote do sungrow-raw faltar no cofre, se um nome ou um
+      # tamanho divergir, ou se o cofre trouxer um zip fora da forma. Ultimo passo e sem pular nada acima. O PROMOVER tira este passo,
+      # poe FONTE: uniao no "Gerar sg_*.json" e desliga o fluxo no mesmo ato (um escritor so por blob)
+      - name: Sombra · o cofre contra o sungrow-raw (nao grava)
+        if: ${{ !cancelled() }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          RAW: sungrow-raw
+          SOMBRA: '1'
+          CONFERE_BYTES: '12'
+        run: node scripts/gen-sungrow.js
