@@ -82,6 +82,12 @@ jobs:
       # A guarda de fechamento da referencia do operador (Complexo somado das usinas x arquivo do conjunto) aceita UM
       # patamar por dia com nenhuma ou uma parcela no conjunto, e nada alem disso. A REGRA, em casos forjados e com os
       # defeitos plantados na propria lib, antes de gerar: cada afrouxamento passa em todo ensaio de produto.
+      # lote fonte-perfil-way2 (19/10/2026): a potencia do perfil e a do MEDIDOR de 5 min integralizada na meia hora (rotulo pelo fim: a
+      # meia hora T sao os rotulos T+5 a T+30, as seis), o pico de 5 min por usina e contrato (soma simultanea), e a irradiancia do executivo
+      # e a do DATALOGGER (dia completo, contratos ponderados pela potencia). A REGRA em dias forjados, com plantios na lib e no arquivador.
+      - name: Ensaio · as fontes diretas da Visao Executiva (regra)
+        run: node scripts/ensaio-fontes-exec.js --lib
+
       - name: Ensaio · a guarda da referencia do conjunto (regra)
         run: node scripts/ensaio-ref-conjunto.js
 
@@ -101,6 +107,15 @@ jobs:
           OUT_BLOB: executivo.json
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-executivo.js
+
+      # ... e o PRODUTO: o medidor do perfil recontado de D-2 e D-3, a verificada do operador intacta no termo do corte, a irradiancia
+      # do executivo refeita do datalogger; plantios em copias do produto. Arquivo de fonte regravado depois do executivo: dito, nao julgado.
+      - name: Ensaio · as fontes diretas da Visao Executiva (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+        run: node scripts/ensaio-fontes-exec.js --produto
 
       # A guarda da energia liquidada sobre o PRODUTO: a janela que o gerador acabou de gravar (guarda_liquida.json)
       # tem formato certo, so residuo de dia completo, mediana igual a refeita pela lib; enquanto a janela nunca encheu

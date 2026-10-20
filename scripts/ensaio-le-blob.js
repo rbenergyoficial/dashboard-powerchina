@@ -143,7 +143,7 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   ok(/LB\.bytes\(BASE_PUB \+ `hist\/way2_\$\{dd\}\.json`\)/.test(L('gen-way2-recent.js')) && /copiaL/.test(L('gen-way2-recent.js')), 'gen-way2-recent: dia fechado pela lib e o ao vivo da copia local');
   ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
   ok(/`way2_\$\{day\}\.json`\), buf\)/.test(L('gen-way2-recent.js')), 'gen-way2-recent: a copia do dia leva o nome e os bytes do hist que subiu');
-  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 2]]) {
+  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3]]) {   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
     const w = W(wf), iR = w.indexOf('Restaurar a copia do historico do medidor'), iG = w.indexOf('Guardar a copia do historico do medidor');
     const iC = w.indexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob');
     ok(iR > 0 && iC > iR && iG > w.lastIndexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob') && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === passos, wf + ': restaura ANTES do primeiro gerador, guarda DEPOIS do ultimo, ' + passos + ' passo(s) com CACHE_BLOB_DIR');

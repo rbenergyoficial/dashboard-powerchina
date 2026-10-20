@@ -167,6 +167,14 @@ function rollupDia(j, day) {
   for (const g in GRUPOS) ufv_slots[g] = cobre([].concat(...GRUPOS[g].map(u => UFV_CIRC[u])));
   const ufv_completo = {}; for (const u in ufv_slots) ufv_completo[u] = ufv_slots[u] >= SLOTS_COMPLETO;
 
+  // O PICO DE 5 MIN POR USINA E POR CONTRATO (lote fonte-perfil-way2, 19/10/2026): o maior registro de 5 min da SOMA dos circuitos da
+  // usina no MESMO instante (so instante com todos os circuitos lidos); o contrato, a soma SIMULTANEA dos circuitos das usinas dele
+  // (nunca a soma dos picos). A hora e o rotulo do registro (o fim dos 5 min). A regra mora na lib-fontes-exec (`picosDia`), que o
+  // ensaio-fontes-exec julga. Antes a Visao Executiva usava a maior media de UMA hora do arquivo por hora. Usina sem instante completo: null.
+  const PK = require('./lib-fontes-exec.js').picosDia(j, day);
+  const ufv_pico_mw = {}, ufv_pico_hora = {};
+  for (const e of Object.keys(UFV_CIRC).concat(Object.keys(GRUPOS))) { ufv_pico_mw[e] = PK[e] ? PK[e].mw : null; ufv_pico_hora[e] = PK[e] ? PK[e].hora : null; }
+
   return {
     dia: day,
     ene_ger_mwh: r(eneGer, 3),
@@ -176,6 +184,9 @@ function rollupDia(j, day) {
     ufv_liq_mwh,                                   // energia líquida por UFV (rateio MUST) — p/ PPA×ML
     ufv_ger_mwh,                                   // bruta por UFV nos circuitos de 34,5 kV (só a parte positiva) — cascata de perdas
     pico_mw: r(maxVal(g6233) / 1000, 3),
+    pico_hora: PK.Complexo ? PK.Complexo.hora : null,   // o instante do pico do conjunto (rotulo do registro de 5 min)
+    ufv_pico_mw,                                   // pico de 5 min por usina e por contrato (soma simultanea dos circuitos)
+    ufv_pico_hora,
     tr1_pico_mw: r(maxVal(g6196) / 1000, 3),
     tr2_pico_mw: r(maxVal(g6197) / 1000, 3),
     media_mw: r(horas > 0 ? eneGer / horas : 0, 3),

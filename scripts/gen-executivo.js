@@ -5,6 +5,10 @@
  *   - dados/ons_restricao_all.json         complexo, semi-hora: ts,ger,lim,disp,gref,razao,orig
  *   - dados/ons_irradiancia_YYYY_MM.json   POR UFV (CEFMT1..9 = M1..M9), semi-hora: ts,u,irr,inv,ge,gv
  *   - dados/way2_daily.json                nossa medição diária (bruta/líquida/por UFV)
+ *   - dados/hist/way2_<dia>.json           o medidor a 5 min: a potência ENTREGUE do perfil (`med_mw`), integralizada na meia hora
+ *   - dados/estacao_logger_30min.json      o datalogger das estações: a IRRADIÂNCIA do executivo (`irr_media`, `irr`), desde 19/10/2026
+ *   (lote fonte-perfil-way2: medidor e datalogger nas grandezas medidas; o operador fica na referência, na verificada e no corte —
+ *    lib-fontes-exec.js)
  *
  * FÓRMULAS — usa a definição JÁ VALIDADA do gen-ons-consolidado.js, não inventa:
  *   referencia = Σ(gref × H)                                        [MWh]
@@ -32,6 +36,9 @@ const { conferePares } = require('./lib-par-mwh.js');
 const DISP = require('./lib-disp-declarada.js');   // a disponibilidade declarada, na janela fixa (PROMOVER disp-janela)
 // a guarda da energia liquidada (teto do residuo numa janela de dias, nao so no mes): uma escrita, o ensaio usa a mesma
 const GL = require('./lib-guarda-liquida.js');
+// lote fonte-perfil-way2 (19/10/2026): a potencia do medidor na meia hora (perfil) e a irradiancia do datalogger (mes e dia) — uma escrita,
+// o ensaio-fontes-exec julga a mesma lib
+const FE = require('./lib-fontes-exec.js');
 // os campos da manchete que se movem dentro do dia, e o padrao numerico da casa — uma escrita so,
 // porque o remendo de 5 min refaz a MESMA conta quando a energia de hoje cresce
 const { r2, fmt, camposDoMes, camposMwh } = require('./lib-manchete.js');
@@ -267,6 +274,17 @@ function getJSON(url) {
     return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
   });
 }
+// 💰 o dia do medidor lido SO para preencher o perfil a primeira vez (lote fonte-perfil-way2): direto, sem copia em disco — senao ~30
+//    dias fechados (~120 MB) iriam para o cache do Actions e seriam restaurados em toda rodada por 4 dias (a mesma regra do gen-pr).
+//    So o 404 vira '404 <url>'; o resto estoura com a mensagem da lib.
+function getJSONdireto(url) {
+  return LD.pede(url).then((x) => {
+    if (x.status !== 200) throw new Error(x.status + ' ' + url);
+    let b = x.buf;
+    if (b[0] === 0x1f && b[1] === 0x8b) b = zlib.gunzipSync(b);
+    return JSON.parse(b.toString('utf8').replace(/^﻿/, ''));
+  });
+}
 // 🔴 CAMPO QUE VIRA TEXTO PUBLICO. Alguns campos do blob sao interpolados direto em
 //    `description` de painel — que qualquer pessoa com acesso de leitura le. O portao do lado do
 //    dashboard NAO alcanca isso: ele audita a description, e ali so existe a variavel; e quando a
@@ -344,6 +362,16 @@ async function writeOut(obj, nome, opts) {
 (async () => {
   const restr = await getJSON(BASE + 'ons_restricao_all.json');
   const daily = await getJSON(BASE + 'way2_daily.json');
+  // 🔴 A IRRADIANCIA DO EXECUTIVO E A DO DATALOGGER DAS ESTACOES (lote fonte-perfil-way2, 19/10/2026; regra do humano: irradiancia do
+  //    datalogger, integralizada). Ate aqui `irr_media` e o `irr` da serie diaria eram a irradiancia que o OPERADOR publica por usina, sob
+  //    o chip "datalogger" da tela. A regra (meias horas com sol, dia completo, peso da potencia nos agregados) mora na lib-fontes-exec.
+  //    So o 404 e ausencia (a irradiancia sai nula, dito no log); outra falha ou formato estranho ESTOURA.
+  let IRR_DL = null;
+  try { IRR_DL = FE.irrIndice(await getJSON(BASE + 'estacao_logger_30min.json')); }
+  catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('estacao_logger_30min: ' + e.message);
+    console.log('estacao_logger_30min.json ausente — a irradiancia do executivo sai nula'); }
+  const irrMesDL = (mes, e) => (IRR_DL ? FE.irrMes(IRR_DL, mes, e) : null);
+  const irrDiaDL = (dia, e) => (IRR_DL ? FE.irrDia(IRR_DL, dia, e) : null);
 
   // a referencia crua por usina so a partir de mar/26: antes disso o `ge` do ONS e inconsistente (o mesmo corte que
   // `geRuim` usa no mensal) e desenha-lo confundiria o defeito de set/25-fev/26 com o de julho
@@ -986,9 +1014,10 @@ async function writeOut(obj, nome, opts) {
       pr_livre_cobertura_pct: i.parN > 0 ? r2(100 * (i.parLivre || 0) / i.parN) : null,
       pr_cobertura_pct: i.pr_cob == null ? null : i.pr_cob,
       ...DISP.fecha(m, CAP_MW),      // disp_pct e disp_cobertura_pct, na janela 04:00–17:30
-      // ⚠️ num mes que o operador ainda nao publicou, o fallback `IRR[mes] || {irr_media: 0}`
-      // viraria "irradiancia media 0 W/m2" — noite permanente. Ausencia sai nula.
-      irr_media: oN(r2(i.irr_media)), ge_reconstruido_pct: oN(i.rec_pct),
+      // A IRRADIANCIA MEDIA do mes e a do DATALOGGER (lote fonte-perfil-way2): as meias horas com sol dos dias completos, a media
+      // das nove usinas ponderada pela potencia — a mesma conta do Complexo no `serie_ufv`. Nao depende do operador: o mes que ele
+      // ainda nao publicou tem irradiancia. Sem dia completo no mes, nula (nunca zero, que seria noite permanente).
+      irr_media: irrMesDL(mes, 'Complexo'), ge_reconstruido_pct: oN(i.rec_pct),
       // META do mês na série (planilha, jan/26→). set/25–dez/25 ficam null: o usuário não tem PPA de 2025.
       meta_gwh: (METAS.meses[mes] || {}).garantido_total != null ? r2(METAS.meses[mes].garantido_total / 1000) : null,
       meta_ppa_gwh: (METAS.meses[mes] || {}).garantido_ppa != null ? r2(METAS.meses[mes].garantido_ppa / 1000) : null,
@@ -1224,20 +1253,21 @@ async function writeOut(obj, nome, opts) {
       fonte: 'Planilha PPA (SharePoint), linha "Valor Garantido de ' + cur.lbl + '" — energia LIQUIDA',
       garantido_gwh: r2(mt.garantido_total / 1000), ppa_gwh: r2(mt.garantido_ppa / 1000),
       ml_gwh: r2(ML.reduce((a, u) => a + metaUfv[u], 0) / 1000),
-      ml_fonte: mt.ml_por_ufv
-        ? 'M1 vem da planilha (linha "Valor Garantido", coluna UFV Mauriti 10). M7 e M9 usam a MESMA '
-          + 'TAXA POR MW do PPA — ' + r2(mt.garantido_ppa / PPA.reduce((a, u) => a + CAP_UFV[u], 0))
-          + ' MWh/MW neste mes — por decisao do usuario em 02/08/2026. A planilha jogava todo o resto '
-          + 'nos dois, o que lhes dava quase o DOBRO da taxa das outras sete e derrubava o atingimento '
-          + 'deles por regua, nao por desempenho.'
+      // 20/10/2026: o texto descrevia a politica de 02/08 (M7/M9 na taxa do PPA), substituida em 16/08 (metasPorUfv)
+      ml_fonte: mt.ml_por_ufv || (Number(mt.garantido_total) > 0 && Number(mt.garantido_ppa) > 0)
+        ? 'Complexo e PPA: Valor Garantido da planilha de garantia. ML = Complexo - PPA ('
+          + r2((mt.garantido_total - mt.garantido_ppa) / 1000) + ' GWh), repartido entre M1/M7/M9 pela potencia instalada: a mesma '
+          + 'taxa por MW nos tres (' + r2((mt.garantido_total - mt.garantido_ppa) / ML.reduce((a, u) => a + CAP_UFV[u], 0))
+          + ' MWh/MW neste mes, contra ' + r2(mt.garantido_ppa / PPA.reduce((a, u) => a + CAP_UFV[u], 0))
+          + ' MWh/MW das usinas do PPA). Decisao do usuario em 16/08/2026.'
         : 'DERIVADA (mes anterior a correcao da planilha): o resto entre a meta do complexo ('
           + r2(mt.garantido_total / 1000) + ' GWh) e a do PPA (' + r2(mt.garantido_ppa / 1000)
           + ' GWh), rateado entre M1/M7/M9 pela Energia Equivalente.',
       por_ufv: metaUfv,
       nao_alocado_gwh: r2(naoAlocado / 1000),
-      nao_alocado_nota: 'O que a meta do complexo tem a MAIS do que a soma das nove usinas na taxa do '
-        + 'PPA. Nao e erro nem sobra para enterrar em ninguem: e a diferenca de criterio entre a meta '
-        + 'global e a do PPA, e fica EXPOSTA porque e pergunta para quem emite a meta.',
+      nao_alocado_nota: 'O que a meta do complexo tem a MAIS do que a soma das metas das nove usinas. Com a regra '
+        + 'de 16/08/2026 (ML = Complexo - PPA, repartido pela potencia) e zero por construcao; diferente de zero, as metas '
+        + 'por usina nao fecham com a do complexo e a diferenca fica EXPOSTA.',
       // dureza relativa: a diferenca de criterio entre a meta global e a do PPA recai TODA no ML
       ml_pct_p50: (() => { const eq = mt.equivalente_por_ufv || {};
         const e = ML.reduce((a, u) => a + num(eq[u]), 0);
@@ -1847,18 +1877,15 @@ async function writeOut(obj, nome, opts) {
     // multiplicar por 11 meses só engordava o blob).
     serie_dia_ufv: (() => {
       const out = [];
-      const med = a => a && a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
       const capPpa = PPA.reduce((a, u) => a + CAP_UFV[u], 0);
       // os dois grupos entram na serie diaria como se fossem usinas — ver o bloco que os soma abaixo
       const GRUPOS = { PPA, ML };
       const metaGrupo = (g, dias, MPU) => MPU ? r2(GRUPOS[g].reduce((a, u) => a + num(MPU[u]), 0) / dias) : null;
       meses.forEach(m => {
-        // irradiância do mês, por dia e por usina
-        const irrDiaU = {}, irrDiaC = {};
-        (CRU[m] || []).forEach(r => { if (!util(r)) return;
-          const d = String(r.ts).slice(0, 10), u = String(r.u).replace('CEFMT', 'M');
-          ((irrDiaU[d] = irrDiaU[d] || {})[u] = irrDiaU[d][u] || []).push(num(r.irr));
-          (irrDiaC[d] = irrDiaC[d] || []).push(num(r.irr)); });
+        // a irradiância de cada dia e entidade é a do DATALOGGER (lote fonte-perfil-way2): `irrDiaDL` — a média das meias horas com
+        // sol do dia COMPLETO da usina; contratos e Complexo, a média das usinas ponderada pela potência, tudo-ou-nada (lib-fontes-exec).
+        // Antes era a média das meias horas que o operador publica: de set/25 a jan/26 ele publicava até 1.290 W/m² (M4, 24/10/2025
+        // 11:00) e a média do dia saía até 357 W/m² acima do datalogger.
         // meta DAQUELE mês (não a do mês corrente) dividida pelos dias DAQUELE mês
         const mtm = METAS.meses[m] || null;
         const dias = new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
@@ -1884,12 +1911,12 @@ async function writeOut(obj, nome, opts) {
             const v = r2(num((x.ufv_liq_mwh || {})[u])), [fe, ho] = parte(v);
             out.push({ mes: m, dia: d, dia_num: dnum, ufv: u, liq_mwh: v,
               liq_fechada_mwh: fe, liq_hoje_mwh: ho,
-              irr: med((irrDiaU[d] || {})[u]) == null ? null : r2(med(irrDiaU[d][u])),
+              irr: irrDiaDL(d, u),
               meta_dia_mwh: metaDia(u), parcial: pc, encerrado: enc, ate }); });
           const vC = r2(num(x.ene_liq_mwh)), [feC, hoC] = parte(vC);
           out.push({ mes: m, dia: d, dia_num: dnum, ufv: 'Complexo', liq_mwh: vC,
             liq_fechada_mwh: feC, liq_hoje_mwh: hoC,
-            irr: med(irrDiaC[d]) == null ? null : r2(med(irrDiaC[d])),
+            irr: irrDiaDL(d, 'Complexo'),
             meta_dia_mwh: mtm ? r2(mtm.garantido_total / dias) : null, parcial: pc, encerrado: enc, ate });
           // PPA e ML sao GRUPOS, e ate aqui so existiam no mensal (`serie_ufv`). Sem eles, escolher
           // "PPA" com um mes no filtro do Sumario nao tinha serie diaria e o grafico caia de volta
@@ -1902,14 +1929,9 @@ async function writeOut(obj, nome, opts) {
           Object.entries(GRUPOS).forEach(([g, membros]) => {
             const vG = r2(membros.reduce((a, u) => a + num((x.ufv_liq_mwh || {})[u]), 0));
             const [feG, hoG] = parte(vG);
-            let sIrr = 0, sCap = 0;
-            membros.forEach(u => {
-              const i = med((irrDiaU[d] || {})[u]);
-              if (i != null) { sIrr += i * CAP_UFV[u]; sCap += CAP_UFV[u]; }
-            });
             out.push({ mes: m, dia: d, dia_num: dnum, ufv: g, liq_mwh: vG,
               liq_fechada_mwh: feG, liq_hoje_mwh: hoG,
-              irr: sCap > 0 ? r2(sIrr / sCap) : null,
+              irr: irrDiaDL(d, g),   // a media das usinas do contrato ponderada pela potencia, so com todas (lib-fontes-exec)
               meta_dia_mwh: metaGrupo(g, dias, MPUd), parcial: pc, encerrado: enc, ate });
           });
         });
@@ -2005,18 +2027,15 @@ async function writeOut(obj, nome, opts) {
     // grupos montados aqui a partir das constantes do topo: o `GRUPOS` do bloco 7 e local dele.
     const MEMBROS = { Complexo: Object.keys(CAP_UFV), PPA, ML };
     (out.serie_ufv || []).forEach(l => {
+      // IRRADIANCIA MEDIA da entidade no mes, do DATALOGGER (lote fonte-perfil-way2): as meias horas com sol dos dias completos da
+      // usina; para grupo e Complexo, a media das usinas PONDERADA pela capacidade (media simples deixaria o M9, de 9,8 MW, pesar igual
+      // ao M1, de 49,1 MW). Antes do `return` do mes sem o operador: a irradiancia nao depende dele.
+      l.irr_media = irrMesDL(l.mes, l.ufv);
       const I = IRR[l.mes]; if (!I) { l.pr_livre_pct = null; l.pr_livre_cobertura_pct = null; return; }
       const us = MEMBROS[l.ufv] || [l.ufv];
       const t = somaLivre(I, us);
       l.pr_livre_pct = prLivre(t.gv, t.ge, t.pares);
       l.pr_livre_cobertura_pct = t.par > 0 ? r2(100 * t.pares / t.par) : null;
-      // IRRADIANCIA MEDIA da entidade no mes, no mesmo recorte `util` do PR — e o eixo x do
-      // grafico de PR x irradiancia. Para grupo e a media PONDERADA pela capacidade das usinas:
-      // media simples deixaria o M9, de 9,8 MW, pesar igual ao M1, de 49,1 MW.
-      { let is = 0, ip = 0;
-        us.forEach(u => { const x = (I.porUfv || {})[u]; const c = CAP_UFV[u] || 0;
-          if (x && x.irrN > 0 && c > 0) { is += (x.irrSoma / x.irrN) * c; ip += c; } });
-        l.irr_media = ip > 0 ? r2(is / ip) : null; }
       // M7 nao tem serie propria no ONS (o registro dele e o circuito 2 do M3) — la o PR nao se
       // aplica, nem o publicado nem o livre. Mesma regra do `pr_pct`.
       if (l.pr_pct == null && l.fonte_realizado) l.pr_livre_pct = null;
@@ -3075,6 +3094,7 @@ async function writeOut(obj, nome, opts) {
   // na nuvem as duas curvas caem juntas; no corte o `gv` despenca com o `ge` intacto.
   {
     const perfil = [];
+    let MED_DIAS = {};   // dia -> { meias, completo }: a cobertura do medidor no perfil (lote fonte-perfil-way2)
     const diasJan = 30;
     const corte = new Date(Date.now() - 3 * 3600 * 1000 - diasJan * 86400000).toISOString().slice(0, 10);
     const porDia = {};   // dia -> hhmm -> ufv -> {irr,ge,gv}
@@ -3161,82 +3181,99 @@ async function writeOut(obj, nome, opts) {
       console.log('  potencial reconstruido em ' + est + ' slots (k local +-2h) · piso acionado em ' + piso);
     }
 
-    // ---- OS DIAS QUE O ONS AINDA NÃO PUBLICOU, pelo Way2 ----
-    // O perfil vinha 100% do ONS, que publica D+1/D+2 — então o dia de hoje e o de ontem não
-    // existiam no seletor, e quem abria o painel via anteontem como "o mais recente". O Way2 é D+0
-    // (snapshot de 5 min) e cobre esse vão.
-    // O QUE VEM: a potência ENTREGUE, agregada em 30 min para casar com o passo do ONS.
-    // O QUE NÃO VEM: irradiância e potencial — os dois só existem no ONS. Ficam null, e o gráfico
-    // abre buraco em vez de fingir dado. Cada ponto leva `fonte`, para o painel poder rotular.
+    // ---- A POTÊNCIA DO MEDIDOR, meia hora a meia hora (lote fonte-perfil-way2, 19/10/2026) ----
+    // REGRA DO HUMANO: potência e energia vêm do medidor de faturamento (5 min), integralizadas; o operador fica no CORTE.
+    // `med_mw` (campo NOVO, em toda linha do perfil, em todos os dias da janela) = a média das seis leituras de 5 min da meia hora
+    // [T, T+30) — o medidor rotula pelo FIM, então são os rótulos T+5 ... T+30 —, por circuito; a usina é a soma dos circuitos, todos
+    // com as seis; o Complexo é o ponto que soma os 22 (lib-fontes-exec, `meiasHoras`). Meia hora com leitura faltando não existe.
+    // `ent_mw` FICA como estava: a verificada do operador, o termo da conta do impedido (referência − verificada) que a tela faz meia
+    // hora a meia hora; trocá-la pelo medidor mudaria o corte, e o corte é do operador.
+    // Nos dias que o operador ainda não publicou, `ent_mw` segue sendo o medidor (`fonte: 'way2'`), agora pela MESMA meia hora do
+    // `med_mw`: o bloco antigo rotulava a meia hora pelo rótulo do medidor (`mi < 30 ? '00' : '30'`), deslocava a curva 5 min, punha a
+    // última leitura do dia (24:00) na meia hora da meia-noite do começo dele e fazia a média da meia hora com leitura faltando.
+    // ACUMULATIVO: o dia já lido do arquivo do medidor no perfil publicado com a marca (`med_fonte`, `med_dias[dia].lido`) é
+    // reaproveitado como saiu; os últimos REFAZ_MED dias (os que o executivo já lê do medidor nesta rodada) e todo dia sem a marca são relidos. O dia relido
+    // só para preencher (fora dos últimos) vem sem cópia em disco (getJSONdireto). Só o 404 é ausência.
     {
-      // 🔴 GUARDA QUE PRODUZ DATA INVALIDA NAO E GUARDA. O sentinela era '0000-00-00', e
-      // `new Date('0000-00-00T12:00:00Z')` da Invalid Date — a linha seguinte estoura com
-      // "Invalid time value", mensagem que nao aponta para nada. Com o perfil vazio nao ha vao a
-      // completar: o certo e nao entrar no bloco, dizendo por que.
-      const diasOns = [...new Set(perfil.map(x => x.dia))]
-        .filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s)).sort();
-      const ultOns = diasOns.pop();
-      const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
-      const faltam = [];
-      if (!ultOns) {
-        console.log('  perfil do ONS vazio — nada a completar pelo Way2 (o vao D+0 fica de fora)');
-      } else {
-        for (let d = new Date(ultOns + 'T12:00:00Z'); ; ) {
-          d = new Date(d.getTime() + 86400000);
-          const s = d.toISOString().slice(0, 10);
-          if (s > hoje) break; faltam.push(s);
-          if (faltam.length > 60) throw new Error('vao D+0 maior que 60 dias a partir de ' + ultOns
-            + ' — o detalhe do ONS parou de ser publicado');
+      // o mapa circuito -> usina que o lib/portal-vivo lê DESTE arquivo (a primeira `const CIRC`) tem de ser o da lib: um mapa só
+      const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205],
+        M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214],
+        M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };
+      if (JSON.stringify(CIRC) !== JSON.stringify(FE.CIRC)) throw new Error('perfil: o mapa de circuitos do gen-executivo difere do lib-horas');
+      const ENTS = Object.keys(CIRC).concat(['Complexo']);
+      const REFAZ_MED = 4;
+      const hojeP = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+      const limiteMed = new Date(Date.parse(hojeP + 'T00:00:00Z') - (REFAZ_MED - 1) * 86400000).toISOString().slice(0, 10);
+      const diasJanela = [];
+      for (let t = Date.parse(corte + 'T00:00:00Z'); ; t += 86400000) {
+        const s = new Date(t).toISOString().slice(0, 10); if (s > hojeP) break; diasJanela.push(s); }
+      const chave = (dia, h, u) => dia + '|' + h + '|' + u;
+      const MED = new Map();   // 'dia|h|ufv' -> MW, ou null (sem a meia hora inteira)
+      // o publicado: so com a marca; o dia fora dos ultimos REFAZ_MED dias que ja foi LIDO do arquivo do medidor (`lido`), como saiu —
+      // inclusive incompleto: o arquivo do dia fechado nao muda depois dos primeiros dias (os de set/26 perderam as duas ultimas leituras,
+      // 23:55 e 24:00, para sempre), e reler todo dia o que nunca completa custaria ~4 MB por dia por rodada.
+      let ant = null;
+      try { ant = await getJSON(BASE + 'perfil_dia.json'); }
+      catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('perfil_dia.json publicado ilegivel: ' + e.message); }
+      const marcaOk = !!ant && ant.med_fonte === FE.MED_FONTE && !!ant.med_dias && typeof ant.med_dias === 'object';
+      const reaproveita = new Set(marcaOk ? diasJanela.filter((d) => d < limiteMed && ant.med_dias[d] && ant.med_dias[d].lido === 1) : []);
+      if (reaproveita.size) for (const x of ant.perfil || []) if (reaproveita.has(x.dia) && x.med_mw !== undefined && ENTS.includes(x.ufv)) MED.set(chave(x.dia, x.h, x.ufv), x.med_mw);
+      const ler = diasJanela.filter((d) => !reaproveita.has(d));
+      const ausentes = [];
+      for (const dia of ler) {
+        let hist = null;
+        try { hist = await (dia >= limiteMed ? getJSON : getJSONdireto)(BASE + 'hist/way2_' + dia + '.json'); }
+        catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('perfil: o medidor de ' + dia + ' ilegivel: ' + e.message); }
+        if (!hist) { ausentes.push(dia); continue; }
+        for (const [k, o] of FE.meiasHoras(hist, dia)) {
+          const h = +k.slice(11, 13) + (+k.slice(14, 16)) / 60;
+          for (const u of ENTS) MED.set(chave(dia, h, u), o[u] == null ? null : r2(o[u]));
         }
       }
-      let novos = 0;
-      for (const dia of faltam) {
-        try {
-          const snap = await getJSON(BASE + 'hist/way2_' + dia + '.json');
-          const arr = snap.dados || [];
-          const val = (pid) => { const s = arr.find(x => x.pontoId === pid && x.nomeGrandeza === 'Demat');
-            const m = {}; (s ? s.valores : []).forEach(v => { if (v.valor != null) m[String(v.data).slice(11, 16)] = v.valor; });
-            return m; };
-          const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205],
-            M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214],
-            M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };
-          const mapa = { 6233: val(6233) };   // 6233 = medidor do COMPLEXO
-          Object.values(CIRC).flat().forEach(p => { mapa[p] = val(p); });
-          // MÉDIA POR PONTO, e só depois a soma. Somar leituras e dividir pela contagem total
-          // erraria sempre que um circuito faltasse um slot: o divisor mudava e o resultado escorria.
-          // Cada ponto vira a sua própria média na janela; depois somam-se as médias.
-          const medias = {};   // '15:30' -> pontoId -> MW médios na meia hora
-          for (const pid in mapa) for (const hm in mapa[pid]) {
-            const [hh, mi] = hm.split(':').map(Number);
-            const ch = String(hh).padStart(2, '0') + ':' + (mi < 30 ? '00' : '30');
-            ((medias[ch] = medias[ch] || {})[pid] = medias[ch][pid] || []).push(mapa[pid][hm]);
+      // toda linha do operador ganha o medidor da mesma meia hora (null onde o medidor nao tem a meia hora inteira)
+      const temLinha = new Set(perfil.map((x) => chave(x.dia, x.h, x.ufv)));
+      perfil.forEach((x) => { const v = MED.get(chave(x.dia, x.h, x.ufv)); x.med_mw = v === undefined ? null : v; });
+      // o dia que o operador ainda nao publicou: a linha do medidor (sem referencia nem irradiancia, que so ele tem), como antes;
+      // o dia dele com meia hora faltando: a linha so com o medidor (`ent_mw` nulo: a verificada nao existe ali)
+      const diasOns = new Set(perfil.map((x) => x.dia));
+      const faltam = []; let soMedidor = 0;
+      for (const dia of diasJanela) {
+        const doOperador = diasOns.has(dia);
+        if (!doOperador) faltam.push(dia);
+        for (let s = 0; s < FE.MEIAS_DIA; s++) {
+          const h = s / 2;
+          for (const u of ENTS) {
+            const k = chave(dia, h, u), v = MED.get(k);
+            if (v == null || temLinha.has(k)) continue;
+            if (doOperador) { soMedidor++;
+              perfil.push({ dia, h, ufv: u, irr: null, pot_mw: null, pot_est_mw: null, ent_mw: null, cap_mw: CAPACIDADE(u), med_mw: v }); }
+            else perfil.push({ dia, h, ufv: u, irr: null, pot_mw: null, pot_est_mw: null, ent_mw: v, cap_mw: CAPACIDADE(u), fonte: 'way2', med_mw: v });
           }
-          const mediaDe = (o, pid) => { const a = o[pid];
-            return a && a.length ? a.reduce((x, y) => x + y, 0) / a.length / 1000 : null; };
-          Object.keys(medias).sort().forEach(chave => {
-            const [hh, mm] = chave.split(':').map(Number), o = medias[chave];
-            const põe = (ufv, mw) => { if (mw == null) return;
-              perfil.push({ dia, h: hh + mm / 60, ufv, irr: null,
-                pot_mw: null, pot_est_mw: null, ent_mw: r2(mw), cap_mw: CAPACIDADE(ufv),
-                fonte: 'way2' }); };
-            // o Complexo vem do PRÓPRIO medidor, não da soma dos 22 circuitos: uma medição só,
-            // sem acumular o erro de 22. (Conferido: as duas dão o mesmo, 0,00% de diferença.)
-            põe('Complexo', mediaDe(o, 6233));
-            Object.keys(CIRC).forEach(u => {
-              let s = 0, achou = false;
-              CIRC[u].forEach(p => { const v = mediaDe(o, p); if (v != null) { s += v; achou = true; } });
-              põe(u, achou ? s : null);
-            });
-          });
-          novos++;
-        } catch (e) { /* snapshot do dia nao existe: segue */ }
+        }
       }
-      if (novos) console.log('  perfil estendido pelo Way2 em ' + novos + ' dia(s) apos o ONS ('
-        + faltam.join(', ') + ') — sem irradiancia/potencial, que so o ONS tem');
+      // a cobertura por dia: meias horas com as dez entidades medidas; completo = as 48 num dia fechado; lido = o arquivo do medidor do
+      // dia existia (o reaproveitamento da rodada seguinte le esta marca)
+      MED_DIAS = {};
+      const semArquivo = new Set(ausentes);
+      for (const dia of diasJanela) {
+        let k = 0;
+        for (let s = 0; s < FE.MEIAS_DIA; s++) if (ENTS.every((u) => MED.get(chave(dia, s / 2, u)) != null)) k++;
+        MED_DIAS[dia] = { meias: k, completo: k === FE.MEIAS_DIA && dia < hojeP ? 1 : 0, lido: semArquivo.has(dia) ? 0 : 1 };
+      }
+      if (!diasOns.size) console.log('  perfil do operador vazio — o perfil sai so com o medidor');
+      console.log('  medidor no perfil: ' + diasJanela.length + ' dias · ' + reaproveita.size + ' reaproveitados do publicado · ' + (ler.length - ausentes.length)
+        + ' lidos do medidor' + (ausentes.length ? ' · sem arquivo do medidor: ' + ausentes.join(', ') : '')
+        + (faltam.length ? ' · so o medidor (o operador ainda nao publicou): ' + faltam.join(', ') : '')
+        + (soMedidor ? ' · ' + soMedidor + ' linha(s) so do medidor em dia do operador' : ''));
     }
 
     const dias = [...new Set(perfil.map(x => x.dia))].sort();
-    const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, perfil }, 'perfil_dia.json', { gzip: true });
+    const MED_REGRA = 'med_mw: potencia ativa do medidor de faturamento na meia hora [T, T+30) (rotulo pelo inicio), media das seis leituras '
+      + 'de 5 min (rotuladas pelo fim, T+5 a T+30), todas presentes; usina = soma dos circuitos dela, todos com a meia hora inteira; Complexo = o '
+      + 'ponto que soma os 22 circuitos. ent_mw = a geracao verificada do operador (a do impedido, referencia menos verificada); nos dias que '
+      + 'o operador ainda nao publicou (fonte way2), o medidor.';
+    const tam = await writeOut({ gerado_em: new Date().toISOString(), dias, med_fonte: FE.MED_FONTE, med_regra: MED_REGRA, med_dias: MED_DIAS, perfil },
+      'perfil_dia.json', { gzip: true });
     console.log('perfil_dia.json OK · ' + dias.length + ' dias · ' + perfil.length + ' pontos · ' + Math.round(tam / 1024) + ' KB');
     // 🔴 perfil_recente.json — o recorte LEVE dos ultimos 8 dias, para o portal. O perfil inteiro
     //    pesa 1,6 MB na rede; a tela "Ao vivo" do portal precisa so de ontem e anteontem para
@@ -3246,9 +3283,10 @@ async function writeOut(obj, nome, opts) {
     {
       const rec = dias.slice(-8);
       const perfilRec = perfil.filter(x => rec.includes(x.dia));
-      const tamR = await writeOut({ gerado_em: new Date().toISOString(), dias: rec, perfil: perfilRec,
+      const tamR = await writeOut({ gerado_em: new Date().toISOString(), dias: rec, med_fonte: FE.MED_FONTE, med_regra: MED_REGRA,
+        med_dias: Object.fromEntries(rec.map((d) => [d, MED_DIAS[d] || null])), perfil: perfilRec,
         nota: 'Recorte dos ultimos 8 dias de perfil_dia.json, meia hora a meia hora, por entidade. '
-          + 'ent_mw e a geracao medida; pot_mw e a referencia do operador (chega com ~1 dia de atraso: '
+          + 'med_mw e a potencia do medidor (ver med_regra); ent_mw e a verificada do operador; pot_mw e a referencia do operador (chega com ~1 dia de atraso: '
           + 'o dia corrente vem sem ela, e isso e ausencia, nao zero).' }, 'perfil_recente.json', { gzip: true });
       console.log('perfil_recente.json OK · ' + rec.length + ' dias · ' + perfilRec.length + ' pontos · ' + Math.round(tamR / 1024) + ' KB');
     }
@@ -3257,7 +3295,13 @@ async function writeOut(obj, nome, opts) {
     out.perfil_dias = dias.slice().reverse().map(d => ({ dia: d }));
   }
 
-  // ---------- irradiância estimada por satélite, SÓ onde o ONS ainda não publicou ----------
+  // a marca da fonte da irradiância (`irr_media`, `irr`) — o ensaio-fontes-exec --produto a cobra e refaz os números dela
+  out.irr_fonte = IRR_DL ? FE.IRR_FONTE : null;
+
+  // ---------- irradiância estimada por satélite, SÓ onde o datalogger ainda não chegou ----------
+  // ⚠️ desde o lote fonte-perfil-way2 (19/10/2026) o `irr` do dia é o do DATALOGGER (chega na manhã seguinte); o texto abaixo, de
+  //    julho, fala do ONS, que era a fonte de então. O ajuste é refeito a cada execução contra o `irr` publicado, qualquer que seja a
+  //    fonte dele, e o `irr_sat` só sai no dia sem `irr` (hoje, e o dia em que o datalogger falhou).
   // O PROBLEMA: a irradiância do gráfico diário vem do ONS, que publica em D+1/D+2. Os dois últimos
   // dias ficam sem a linha âmbar justamente quando alguém pergunta "a geração caiu por causa do
   // sol ou por causa nossa?".

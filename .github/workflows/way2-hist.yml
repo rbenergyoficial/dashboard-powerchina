@@ -42,6 +42,9 @@ jobs:
       # PROMOVER w2-bruta-usina: a bruta de 34,5 kV por usina num dia sintetico ANTES de reescrever o diario.
       - name: Ensaio · bruta por usina (lib)
         run: node scripts/ensaio-w2-bruta-usina.js --lib
+      # lote fonte-perfil-way2: o pico de 5 min por usina e por contrato (soma simultanea) num dia forjado ANTES de reescrever o diario.
+      - name: Ensaio · pico de 5 min por usina e as fontes do executivo (lib)
+        run: node scripts/ensaio-fontes-exec.js --lib --pico
       # O rollup e reescrito INTEIRO pelo passo seguinte, e o container nao tem versionamento nem
       # soft-delete confirmado. O backup roda na MESMA execucao, imediatamente antes — backup de
       # ontem nao protege a reescrita de hoje. Se ele falhar, o job para e o rollup nao e tocado.
@@ -69,6 +72,13 @@ jobs:
         # roda mesmo se o ensaio da cobertura (passo anterior) reprovar: cada um relata o seu defeito
         if: ${{ !cancelled() && steps.rollup.outcome == 'success' }}
         run: node scripts/ensaio-w2-bruta-usina.js --produto
+      # lote fonte-perfil-way2: o pico de 5 min no blob recem-gravado (o dia mais recente recontado do arquivo de 5 min; enquanto o
+      # historico nao foi recalculado, declara o modo transicao)
+      - name: Ensaio · pico de 5 min por usina (blob publicado)
+        if: ${{ !cancelled() && steps.rollup.outcome == 'success' }}
+        env:
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+        run: node scripts/ensaio-fontes-exec.js --diario
       # PROMOVER assistente-portal: o resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
       # roda mesmo se um ensaio anterior reprovou (le os blobs publicados), e o ensaio dele refaz cada numero por codigo proprio
       - name: Ensaio · resumo do dia do assistente (lib, mundo forjado)
