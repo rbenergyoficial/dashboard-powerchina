@@ -10,6 +10,8 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4

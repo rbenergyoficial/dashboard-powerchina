@@ -38,6 +38,8 @@ permissions:
 jobs:
   gen:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     # A rodada diaria gasta pouco. O teto existe para a CARGA INICIAL, que percorre as quatro
     # janelas em blocos (11 dias por requisicao em 5 min, 138 em 1 hora).
     timeout-minutes: 90
