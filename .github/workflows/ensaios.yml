@@ -83,6 +83,8 @@ jobs:
       #    cenarios RODAM; o texto do alerta de cada um fica no log para leitura. Nao e asserção.
       - name: Ensaio · o vigia de MUST nos quatro cenarios (recortes reais de 23/08/2026)
         if: always()
+        env:   # Fase 2 (PROMOVER fase2-virada): o vigia lê must_5min.json e way2_watchdog.json de `dados` com credencial, não pelo endereço público
+          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-must-watchdog.js
 
       # O alerta de ultrapassagem do MUST no quarto de hora (alerta-must.js, PROMOVER pa-alerta): janela por dia BRT,
