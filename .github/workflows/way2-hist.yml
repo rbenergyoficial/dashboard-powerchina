@@ -29,6 +29,8 @@ concurrency:
 jobs:
   hist:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

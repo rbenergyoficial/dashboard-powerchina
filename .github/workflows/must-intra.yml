@@ -52,6 +52,8 @@ permissions:
 jobs:
   gen:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     # 🔴 90 min, e o numero saiu de MEDICAO. A carga historica de 23/08/2026 foi CANCELADA aos 60:
     # com o gerador pedindo tres grandezas por chamada em vez de uma, o custo por chamada subiu de
     # ~2 s para ~7,7 s (medido no log: 20 dias em 461 s com 3 chamadas por dia). As 665 chamadas da
