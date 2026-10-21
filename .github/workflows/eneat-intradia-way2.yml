@@ -16,6 +16,8 @@ permissions:
 jobs:
   gerar-eneat:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -22,6 +22,8 @@ concurrency:
 jobs:
   render:
     runs-on: ubuntu-latest
+    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
+      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     # Nove renderizacoes, cada uma com teto proprio de 3 min no gerador. O teto do job existe para
     # o caso de o renderer ficar mudo, e nao para a soma dos casos normais (~90 s no total).
     timeout-minutes: 30
