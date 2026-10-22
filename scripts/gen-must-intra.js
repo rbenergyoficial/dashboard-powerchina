@@ -109,6 +109,13 @@ const SUFIXO = { Demat: '', DematRec: '_v', DematDel: '_c' };
 // devolve HTTP 400, entao errar aqui falha alto em vez de publicar granularidade trocada.
 const INTERVALO_API = { 5: 'CincoMinutos', 15: 'QuinzeMinutos', 30: 'TrintaMinutos', 60: 'UmaHora' };
 const AMOSTRAS_DIA = { 5: 288, 15: 96, 30: 48, 60: 24 };
+// 🔴 ONTEM E RELIDO NAS PRIMEIRAS HORAS DO DIA, ENQUANTO ESTIVER INCOMPLETO (must-gerador, 22/10/2026). Ate aqui so o dia
+// corrente era relido; um dia ja presente nunca voltava a ser buscado. A ultima rodada antes da meia-noite nao tem o balde das
+// 00:00 (que e do dia que termina) nem o fim do dia medido, e nada os trazia depois: nos 90 dias do must_15min.json o balde das
+// 00:00 faltava em TODOS os dias. Agora ontem e buscado de novo enquanto nao tiver todos os intervalos com as 9 usinas, mas so
+// ate RELER_ONTEM_H horas depois da meia-noite: o provisorio fecha em minutos, e um medidor fora o dia inteiro nao pode virar
+// quatro chamadas a mais em cada rodada do dia seguinte.
+const RELER_ONTEM_H = 3;
 
 const RESOLUCOES = [
   { min: 5, dias: 30, blob: 'must_5min.json',
@@ -179,6 +186,14 @@ async function comRetry(q, token, tentativas = 5) {
 //
 // Isso e o que o ONS afere, e por isso o rotulo vai para o blob COMO A FONTE ENTREGA — converter
 // para borda esquerda seria reintroduzir uma convencao caseira entre a medicao e o painel.
+//
+// 🔴 SO ENTRA O MEDIDO: `qualidade` 0 (must-gerador, 22/10/2026). A Way2 entrega os ultimos intervalos do dia com
+// `qualidade` 2, um valor PROVISORIO: em 22/10 o total do conjunto vinha certo e a divisao por usina embaralhada (o M6 com
+// 67,44 MW num quarto de hora, acima dos 58,08 MW que os 165 inversores dele dao), e minutos depois veio o medido. Medido no
+// log da rodada das 16:15Z: 27 de 468 valores de 15 min com qualidade 2, os mais recentes de cada usina. O alerta mandou tres
+// avisos falsos com eles. A mesma regra do lib-trafo-way2: valor que nao e numero ou com qualidade diferente de 0 nao e
+// medida. O usina-instante descartado fica AUSENTE (a linha fica sem aquela usina e sem Complexo), e a rodada seguinte o
+// traz quando a Way2 o fechar.
 function montaLinhas(resp) {
   const linhas = new Map();   // instante ISO -> { t, ms, M1..M9, M1_g.., M1_c.., Complexo* }
   for (const g of GRANDEZAS) {
@@ -188,7 +203,13 @@ function montaLinhas(resp) {
       const s = (resp.dados || []).find(x => String(x.pontoId) === String(id)
         && x.nomeGrandeza === g);
       for (const v of (s ? s.valores || [] : [])) {
-        if (v.valor == null) continue;
+        // a qualidade TEM de vir como numero: em texto ('0'), o `!== 0` descartaria tudo e o dia de hoje seria apagado e
+        // regravado vazio em silencio. Estoura em vez disso.
+        if (v.qualidade != null && typeof v.qualidade !== 'number')
+          throw new Error('ponto ' + id + ' ' + g + ' com qualidade nao numerica (' + JSON.stringify(v.qualidade) + ') em ' + v.data
+            + ' — a forma da fonte mudou; o filtro do provisorio nao pode ser aplicado assim');
+        // so NUMERO e medida: '' e ' ' passariam pelo `== null` e o r() os faria 0 MW (lib-trafo-way2, mesma regra)
+        if (typeof v.valor !== 'number' || !isFinite(v.valor) || v.qualidade !== 0) continue;
         // a API devolve 'AAAA-MM-DDTHH:MM:SS' em hora local de Brasilia, sem offset
         const iso = String(v.data).slice(0, 19);
         const l = linhas.get(iso) || { t: iso + '-03:00', ms: Date.parse(iso + '-03:00') };
@@ -230,11 +251,9 @@ function montaLinhas(resp) {
   return [...linhas.values()].sort((a, b) => a.ms - b.ms);
 }
 
-// 🔴 MEDICAO, NAO FILTRO (must-provisorio, 22/10/2026). Em 22/10 a Way2 entregou as leituras das 12:05 as 12:20 como valor
-// PROVISORIO: o total do conjunto certo, a divisao por usina embaralhada (o M6 com 74,6 MW em 5 min, acima dos 58,08 MW que os
-// 165 inversores dele dao), e revisou tudo 15 min depois. O alerta mandou tres avisos falsos. Cada valor da fonte traz `qualidade`
-// (no medidor dos trafos, 0 = medido: lib-trafo-way2), e este gerador nunca a olhou. Aqui ele so CONTA, no dia corrente, quantos
-// valores de Demat chegam com cada qualidade e quais fogem de 0. Filtrar so depois de ver no log que o provisorio vem marcado.
+// O LOG DO QUE FOI DESCARTADO. Entrou no must-provisorio (22/10/2026) para medir se a Way2 marcava o provisorio, e marcava:
+// `qualidade` 2 nos valores mais recentes de cada usina. O filtro mora no montaLinhas (must-gerador); aqui fica so a contagem,
+// por qualidade, dos valores de Demat do dia buscado, e os ultimos que fugiram de 0 — o que a rodada deixou de publicar.
 function contaQualidade(resp) {
   const h = {}, fora = [];
   for (const id of IDS) {
@@ -247,6 +266,33 @@ function contaQualidade(resp) {
     }
   }
   return 'qualidade de Demat ' + JSON.stringify(h) + (fora.length ? ' · fora de 0 (ultimos): ' + fora.slice(-6).join(', ') : '');
+}
+
+// horas desde a meia-noite BRT de hoje
+const horasDoDia = () => (Date.now() - Date.parse(diaBRT(0) + 'T00:00:00-03:00')) / 3600000;
+
+// quantos intervalos do dia (de, ate] ja estao com as 9 usinas medidas
+function completas(mapa, de, ate) {
+  let n = 0;
+  for (const l of mapa.values())
+    if (l.ms > de && l.ms <= ate && PARQUES.every(p => typeof l[p] === 'number' && isFinite(l[p]))) n++;
+  return n;
+}
+
+// a grade de um dia que nao e o de hoje: devolve o defeito, ou null. Nada fora de (de, ate], nada fora
+// do passo, no maximo AMOSTRAS_DIA linhas e, com duas ou mais, o menor passo entre elas igual a resolucao.
+function grade(linhas, min, de, ate) {
+  const passo = min * 60000;
+  if (linhas.length > AMOSTRAS_DIA[min]) return 'voltou com ' + linhas.length + ' amostras, no maximo ' + AMOSTRAS_DIA[min];
+  const fora = linhas.find(l => !(l.ms > de && l.ms <= ate) || (l.ms - de) % passo !== 0);
+  if (fora) return 'voltou com ' + fora.t + ' fora da grade de ' + min + ' min';
+  const ms = linhas.map(l => l.ms).sort((a, b) => a - b);
+  if (ms.length > 1) {
+    let menor = Infinity;
+    for (let i = 1; i < ms.length; i++) menor = Math.min(menor, ms[i] - ms[i - 1]);
+    if (menor !== passo) return 'voltou com passo minimo de ' + (menor / 60000) + ' min';
+  }
+  return null;
 }
 
 // O dia D cobre (D 00:00, D+1 00:00] — o mesmo recorte que a fonte usa. Comparar por EPOCH, e nao
@@ -319,7 +365,7 @@ async function grava(nome, obj) {
     const m = new Map();
     for (const l of ((antigo || {}).serie || [])) m.set(l.t, l);
     const chaves = [...m.keys()].sort();
-    estado.set(res.min, { mapa: m, antes: m.size,
+    estado.set(res.min, { mapa: m, antes: m.size, mudou: false, removidas: new Map(),
       ultimoAntes: chaves.length ? chaves[chaves.length - 1] : '' });
   }
 
@@ -342,10 +388,21 @@ async function grava(nome, obj) {
     const hoje = off === 0;
     const { de, ate } = faixaDoDia(dia);
     // so busca se o alvo precisa deste dia: dentro da janela dele e ainda ausente. O dia corrente
-    // nunca conta como "ja presente", porque o que esta la esta incompleto.
+    // nunca conta como "ja presente", porque o que esta la esta incompleto. Ontem, nas primeiras
+    // RELER_ONTEM_H horas do dia, tambem nao, se ainda faltar intervalo (ver RELER_ONTEM_H).
+    const relerOntem = off === 1 && horasDoDia() < RELER_ONTEM_H;
     const precisa = alvos.filter(res => off <= res.dias
       && (hoje || FORCAR
-        || ![...estado.get(res.min).mapa.values()].some(l => l.ms > de && l.ms <= ate)));
+        || ![...estado.get(res.min).mapa.values()].some(l => l.ms > de && l.ms <= ate)
+        || (relerOntem && completas(estado.get(res.min).mapa, de, ate) < AMOSTRAS_DIA[res.min])));
+    // na hora seguinte ao fim da releitura, ontem ainda incompleto vira anotacao: o que faltar agora fica faltando
+    if (off === 1 && !relerOntem && horasDoDia() < RELER_ONTEM_H + 1) {
+      for (const res of alvos) {
+        const n = completas(estado.get(res.min).mapa, de, ate);
+        if (n < AMOSTRAS_DIA[res.min]) console.log('::warning::gen-must-intra: ' + dia + ' em ' + res.min + 'min fechou a releitura com '
+          + n + ' de ' + AMOSTRAS_DIA[res.min] + ' intervalos com as 9 usinas medidas (o resto ficou provisorio ou sem leitura)');
+      }
+    }
     if (!precisa.length) continue;
 
     const conta = [];
@@ -361,26 +418,40 @@ async function grava(nome, obj) {
       }
       buscados++;
       // so log: uma forma nova da resposta que quebre a contagem nao pode derrubar a rodada
-      if (hoje) {
-        try { console.log('  ' + dia + ' ' + res.min + 'min  ' + contaQualidade(resp)); }
-        catch (e) { console.log('  ' + dia + ' ' + res.min + 'min  qualidade de Demat: contagem falhou (' + e.message + ')'); }
-      }
+      // hoje e ontem sempre; dia mais antigo (recarga com FORCAR) so quando algum valor fugiu de 0: a distribuicao da qualidade
+      // nos dias antigos nunca foi medida, e um valor medido que a fonte passe a marcar diferente de 0 sai do historico
+      try {
+        const q = contaQualidade(resp);
+        if (off <= 1 || /fora de 0/.test(q)) console.log('  ' + dia + ' ' + res.min + 'min  ' + q);
+      } catch (e) { console.log('  ' + dia + ' ' + res.min + 'min  qualidade de Demat: contagem falhou (' + e.message + ')'); }
       const linhas = montaLinhas(resp);
-      // GUARDA DE GRANULARIDADE: um dia fechado tem de vir com o numero de amostras da resolucao
-      // pedida. Se a API entender o intervalo de outro jeito, isso aparece aqui em vez de virar
-      // um blob com o rotulo de uma resolucao e o conteudo de outra.
-      if (!hoje && linhas.length && linhas.length !== AMOSTRAS_DIA[res.min])
-        throw new Error(dia + ' em ' + res.min + 'min voltou com ' + linhas.length
-          + ' amostras, esperado ' + AMOSTRAS_DIA[res.min]
+      // GUARDA DE GRANULARIDADE: um dia que nao e o de hoje tem de vir na grade da resolucao pedida.
+      // Se a API entender o intervalo de outro jeito, isso aparece aqui em vez de virar um blob com o
+      // rotulo de uma resolucao e o conteudo de outra.
+      // ⚠️ Ate o must-gerador (22/10/2026) a guarda exigia o numero EXATO de amostras. Com o provisorio
+      // descartado, ontem relido logo depois da meia-noite pode vir com menos (o fim ainda em qualidade
+      // 2): a guarda passou a exigir a GRADE — nada fora do dia, nada fora do passo, nao mais amostras
+      // que a resolucao comporta, e o passo minimo entre amostras igual a resolucao (uma resposta de
+      // 30 min pedida como 15 cai aqui mesmo vindo pela metade).
+      if (!hoje && linhas.length) {
+        const err = grade(linhas, res.min, de, ate);
+        if (err) throw new Error(dia + ' em ' + res.min + 'min ' + err
           + ' — a fonte mudou a granularidade e o blob nao pode ser gravado assim');
+      }
       const st = estado.get(res.min);
       // o dia corrente e sempre reprocessado; a exclusao e por EPOCH, para nao apagar o balde
       // 00:00 que pertence ao dia ANTERIOR
       if (hoje) for (const [k, l] of [...st.mapa.entries()])
-        if (l.ms > de && l.ms <= ate) st.mapa.delete(k);
-      for (const l of linhas) st.mapa.set(l.t, l);
+        if (l.ms > de && l.ms <= ate) { st.mapa.delete(k); st.removidas.set(k, l); }
+      // a linha nova SUBSTITUI a antiga inteira: usina que era provisoria e continua sem medido sai
+      for (const l of linhas) {
+        const velha = st.mapa.get(l.t) || st.removidas.get(l.t);
+        if (!velha || JSON.stringify(velha) !== JSON.stringify(l)) st.mudou = true;
+        st.mapa.set(l.t, l);
+      }
+      if (hoje) { for (const k of st.removidas.keys()) if (!st.mapa.has(k)) st.mudou = true; st.removidas.clear(); }
       algum += linhas.length;
-      conta.push(res.min + 'min:' + linhas.length);
+      conta.push(res.min + 'min:' + linhas.length + (!hoje && linhas.length < AMOSTRAS_DIA[res.min] ? ' (INCOMPLETO)' : ''));
       await sleep(600);
     }
     if (!algum) { vazios++; console.log('  ' + dia + '  sem valor em nenhum ponto'); continue; }
@@ -419,7 +490,9 @@ async function grava(nome, obj) {
     // ⚠️ PODAR NAO MUDA CONTAGEM NEM ULTIMO INSTANTE, entao a guarda calaria a gravacao e o
     // esquema antigo sobreviveria — exatamente o que aconteceu com o remendo retroativo do `ms`.
     // Uma limpeza que a guarda engole e uma limpeza que nunca acontece.
-    if (serie.length === st.antes && ultimo === st.ultimoAntes && !FORCAR && !podadas) {
+    // 🔴 e VALOR que mudou sem mudar contagem nem ultimo instante (must-gerador, 22/10/2026): ontem relido troca o
+    // provisorio pelo medido nas mesmas linhas, e a guarda so por contagem calaria exatamente essa correcao.
+    if (serie.length === st.antes && ultimo === st.ultimoAntes && !FORCAR && !podadas && !st.mudou) {
       console.log('  ' + res.blob.padEnd(17) + ' nada novo (' + st.antes + ' linhas) — NAO regravado');
       continue;
     }

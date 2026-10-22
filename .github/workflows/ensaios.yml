@@ -105,6 +105,13 @@ jobs:
         if: always()
         run: node scripts/ensaio-alerta-must.js
 
+      # O gerador do MUST intradiario (gen-must-intra.js, PROMOVER must-gerador) EXECUTADO num processo a parte, com a Way2, o
+      # blob e o relogio forjados: o provisorio da Way2 (qualidade 2) nao entra, ontem e relido depois da meia-noite enquanto
+      # incompleto, a guarda de grade, e o valor revisado regrava o blob. Nada sai do runner.
+      - name: Ensaio · o gerador do MUST intradiario
+        if: always()
+        run: node scripts/ensaio-gen-must-intra.js
+
       # O mes corrente do ONS (repara-ons-mes.js, gravarMesCorrente; PROMOVER pa-ons) no formato do fluxo do Power Automate que
       # ele substitui: texto cru, so o dsc aparado, mes em UTC, topo do blob igual, e nunca piorar o que esta gravado.
       - name: Ensaio · o mes corrente do ONS no formato do fluxo

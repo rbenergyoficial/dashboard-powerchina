@@ -28,6 +28,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
+      # 🔴 a lib-le-dados le `dados` pelo SDK quando ha DADOS_STORAGE (fase 2). Sem o pacote o gerador caia
+      # na primeira leitura de blob ("Cannot find module '@azure/storage-blob'", 22/10/2026), latente desde
+      # a fase 2 porque este workflow so roda a mao. O must-intra.yml instala igual.
+      - run: npm i @azure/storage-blob@12
       - run: mkdir -p /tmp/ensaio
       - name: gen-must-intra em modo local
         env:
