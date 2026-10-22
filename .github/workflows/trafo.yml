@@ -1,7 +1,8 @@
 name: Transformadores da SE -> trafo_*.json (5, 15, 30 e 60 min e diario)
 on:
   schedule:
-    # 07:38 BRT — o arquivo diario do Trafo chega ao container por volta das 03:30 BRT, e o historico do medidor de ontem fecha a 00:10.
+    # 07:38 BRT — o zip de ontem do banco do supervisorio chega ao cofre pela ponte (liga 05:55; trafo-db, 22/10/2026: o export de
+    # 30 min, que chegava ~03:30, acabou em 15/10), e o historico do medidor de ontem fecha a 00:10.
     # Minuto quebrado de proposito: no :00 o agendador do GitHub atrasa 30 a 90 min.
     - cron: '38 10 * * *'
   workflow_dispatch:
@@ -35,11 +36,22 @@ jobs:
       # 🔴 lote fonte-trafo-way2 (19/10/2026): o gen-trafo grava a COPIA DO SUPERVISORIO (`trafo_scada_*.json`), com nome proprio. As
       #    telas leem `trafo_*.json`, do gen-trafo-way2 abaixo: lado de 230 kV pelo medidor de faturamento, e desta copia so o que o
       #    medidor nao mede (temperaturas, comutador, 34,5 kV).
+      # 💰 trafo-db (22/10/2026): o gerador le os zips diarios do banco do supervisorio no cofre (~340 KB por dia, ate um ano). A copia
+      #    em disco entre execucoes (`lib-cache-blob.js`) faz so o dia novo vir pela rede; o custo do storage e a saida.
+      - name: Restaurar a copia do banco do supervisorio
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-banco
+          key: scada-db-gen-trafo-${{ github.run_id }}
+          restore-keys: scada-db-gen-trafo-
       - name: Gerar trafo_scada_*.json (copia do supervisorio)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: scada-raw
           OUT_CONTAINER: dados
+          DB_CONTAINER: backup-dados-scada
+          # pasta PROPRIA: a .cache-blob e a do historico do medidor, guardada com outra chave mais abaixo
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-banco
           # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo' || '' }}
           # as planilhas do historiador tem ate 41 MB; o SheetJS chega a ~0,8 GB por planilha
@@ -48,6 +60,14 @@ jobs:
           if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
           node scripts/gen-trafo.js
           if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais.
+      - name: Guardar a copia do banco do supervisorio
+        if: ${{ !cancelled() && hashFiles('.cache-banco/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-banco
+          key: scada-db-gen-trafo-${{ hashFiles('.cache-banco/**/*.meta') }}
       # O lado de 230 kV pelo medidor NAO depende do passo acima: o export do supervisorio parou em 14/10/2026 e pode falhar; a copia
       # que ele gravou por ultimo continua no storage. Por isso `!cancelled()`.
       # Ensaio sem rede (mundo forjado, o gerador de verdade, plantios, e o --produto provado contra saida adulterada): vermelho aqui

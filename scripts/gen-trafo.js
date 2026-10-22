@@ -105,11 +105,31 @@
  *   Os produtos de 30 e 60 min continuam sendo a amostra no instante (:00 e :30), como antes; o de 5 min (30 dias) e o
  *   diario (pico e media) usam todos os instantes da serie fundida.
  *
- * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados
- *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio sem segredo.
+ * 🔴 O BANCO DO SUPERVISORIO (lote trafo-db, 22/10/2026): o export de 30 min acabou em 15/10/2026 e nao e mais fonte. O
+ *   historico do banco do E3 traz os dois trafos a cada 5 min no zip diario da subestacao (`MRT_AAAA-MM-DD.zip`, tabelas
+ *   `MRT_04T1.csv` e `MRT_04T2.csv`, o trafo pelo NOME da tabela, que e o caminho `SE_MRT.[04T1]` do dicionario de pontos),
+ *   no cofre (`backup-dados-scada`, prefixo `SCADA_DB/saida/`), com as MESMAS tags. So entra a extracao da media da reta
+ *   (`lib-scada-db.js`, METODOS_ACEITOS). A FUSAO: o banco vence o export e a planilha no mesmo instante e grandeza; onde
+ *   ele nao tem valor (o tap do 04T1 ate nov/2025, as temperaturas do 04T2 ate jan/2026), fica o que havia. Medido em
+ *   22/10/2026 nos dias em comum (96 dias do banco contra a copia do export):
+ *     - tensao: 0,01 a 0,07 % de diferenca; temperatura: 0,04 a 0,35 °C; tap igual e sempre inteiro;
+ *     - corrente e potencia: 1 a 3 % na mediana a 5 min — o banco e a MEDIA dos 5 min a partir do rotulo, o export a amostra
+ *       no instante; nas horas de nuvem a amostra pula e a media nao.
+ *   Por isso, nos instantes do banco, os produtos de 30 e 60 min sao a MEDIA dos valores de 5 min do balde, nao a amostra.
+ *   ⚠️ A GUARDA do banco e de ESCALA (tensao e corrente contra o export nos instantes comuns), nao de identidade: a carga se
+ *   divide quase meio a meio e nenhuma das duas grandezas separa o 04T1 do 04T2. A identidade e documental (o nome da tabela).
+ *
+ * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DB_CONTAINER=backup-dados-scada
+ *      LOCAL_DIR / LOCAL_OUT_DIR / LOCAL_DB_DIR (a pasta `saida` com AAAA-MM/MRT_*.zip) para ensaio sem segredo; SEM_DB=1 sem o banco.
  */
 const zlib = require('zlib');
 const IED = require('./lib-trafo-ied.js');
+const DB = require('./lib-scada-db.js');
+const { entradas } = require('./lib-zip.js');
+const DB_CONTAINER = process.env.DB_CONTAINER || 'backup-dados-scada';
+// a guarda de ESCALA do banco, nos instantes comuns com o export (medido 22/10/2026: tensao 0,01-0,07 % e corrente 1-4 % de
+// diferenca relativa mediana; kV no lugar de V, ou A no lugar de kA, daria 1000x). Folga de 10x sobre o medido.
+const DB_TOL = { v1ab: 0.01, i1a: 0.4 };
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
@@ -279,6 +299,69 @@ function leArquivo(buf, nome) {
 // ---------- guardas de identidade --------------------------------------------------------------
 // Confirmam, do proprio dado, que o ponto 1 e a ALTA e que as unidades sao kV/A/MVA. Se o export
 // trocar de layout, o job fica VERMELHO em vez de publicar corrente de 34,5 kV chamada de 230 kV.
+// ---------- o banco do supervisorio (lote trafo-db, 22/10/2026) ---------------------------------------
+// os zips MRT do cofre (o mais novo de cada dia, `DB.escolhe`), ou da pasta local no ensaio. Dia de hoje nao entra (parcial).
+async function listaZipsDb() {
+  if (/^(1|sim|true)$/i.test(process.env.SEM_DB || '')) return [];
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  if (process.env.LOCAL_DB_DIR) {
+    const fs = require('fs'), path = require('path');
+    const raiz = process.env.LOCAL_DB_DIR, nomes = [];
+    for (const m of fs.readdirSync(raiz)) if (/^\d{4}-\d{2}$/.test(m)) for (const f of fs.readdirSync(path.join(raiz, m))) nomes.push(DB.PREFIXO + m + '/' + f);
+    return [...DB.escolhe(nomes)].filter(([d]) => d < hoje)
+      .map(([dia, nome]) => ({ dia, nome, ler: async () => fs.readFileSync(path.join(raiz, nome.slice(DB.PREFIXO.length))) }));
+  }
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DB_CONTAINER);
+  const itens = new Map();
+  for await (const b of cont.listBlobsFlat({ prefix: DB.PREFIXO })) itens.set(b.name, b);
+  const esc = [...DB.escolhe([...itens.keys()])].filter(([d]) => d < hoje);
+  console.log('  banco "' + DB_CONTAINER + '/' + DB.PREFIXO + '": ' + esc.length + ' dia(s) com zip MRT'
+    + (esc.length ? ' · ' + esc[0][0] + ' a ' + esc[esc.length - 1][0] : ''));
+  const cache = require('./lib-cache-blob').abre(DB_CONTAINER);
+  return esc.map(([dia, nome]) => ({ dia, nome, ler: () => cache.baixa(cont, itens.get(nome)) }));
+}
+
+// um zip MRT -> { aceito, metodo, linhas: { '04T1': [{ ms, v: { chave: valor } }], '04T2': [...] } }. O trafo vem do NOME da
+// tabela; a grandeza, da tag com fronteira (`IED.casa`); entre colunas candidatas vale a que tem mais valor. Linha de outro dia
+// estoura: o zip de um dia nao pode trazer o vizinho calado.
+// o banco escreve ponto decimal e, em valor pequeno, notacao cientifica (`1.2e-05`), que o `num` do export recusa
+const numDb = (v) => { const t = String(v == null ? '' : v).trim(); if (!t) return null; const n = Number(t); return isFinite(n) ? n : null; };
+function leTrafoDb(buf, dia, nome) {
+  const ent = new Map(entradas(buf, nome).map((e) => [e.nome.split('/').pop(), e.dados]));
+  const m = ent.get('metodo.txt');
+  const metodo = m ? m.toString('utf8').replace(/^﻿/, '').trim() : null;
+  const out = { aceito: DB.METODOS_ACEITOS.includes(metodo), metodo, linhas: {} };
+  if (!out.aceito) return out;
+  for (const t of TRAFOS) {
+    const b = ent.get('MRT_' + t + '.csv');
+    if (!b) continue;
+    const L = b.toString('utf8').replace(/^﻿/, '').split(/\r?\n/).filter((x) => x.length);
+    if (L.length < 2) continue;
+    const cab = L[0].split(';').map((x) => x.trim());
+    const corpo = L.slice(1).map((l) => l.split(';'));
+    const col = {};
+    for (const [chave, pedaco] of Object.entries(GRANDEZAS)) {
+      let melhor = null, mn = 0;
+      cab.forEach((c, j) => {
+        if (j === 0 || !IED.casa(c, pedaco)) return;
+        const n = corpo.reduce((s, p) => s + (numDb(p[j]) != null ? 1 : 0), 0);
+        if (n > mn) { mn = n; melhor = j; }
+      });
+      if (melhor != null) col[chave] = melhor;
+    }
+    out.linhas[t] = corpo.map((p) => {
+      const ms = epoch(p[0]);
+      if (ms == null) return null;
+      if (diaDe(ms) !== dia) throw new Error(nome + '/MRT_' + t + '.csv: linha de ' + diaDe(ms) + ' no zip de ' + dia);
+      const v = {};
+      for (const [chave, j] of Object.entries(col)) { const x = numDb(p[j]); if (x != null) v[chave] = x; }
+      return { ms, v };
+    }).filter(Boolean);
+  }
+  return out;
+}
+
 function confereFisica(serie) {
   for (const t of TRAFOS) {
     const cheias = serie.filter((r) => r[t] && r[t].s != null && r[t].i1a != null && r[t].v1ab != null);
@@ -449,6 +532,38 @@ async function grava(nome, obj) {
     const reg = porMs.get(ms) || porMs.set(ms, { ms }).get(ms);
     reg[t] = Object.assign(reg[t] || {}, o); fundidos += 1;
   }
+  // ---- o BANCO do supervisorio (lote trafo-db): le, confere a ESCALA contra o que ja havia, e vence no mesmo instante ----
+  const banco = { '04T1': new Map(), '04T2': new Map() };
+  const bancoVelho = [];
+  for (const z of await listaZipsDb()) {
+    const r = leTrafoDb(await z.ler(), z.dia, z.nome);
+    if (!r.aceito) { bancoVelho.push(z.dia); continue; }
+    for (const t of TRAFOS) for (const l of (r.linhas[t] || [])) if (Object.keys(l.v).length) banco[t].set(l.ms, l.v);
+  }
+  if (bancoVelho.length) console.log('  banco: ' + bancoVelho.length + ' dia(s) ainda pela extracao antiga (sem metodo.txt da reta), fora · '
+    + bancoVelho[0] + ' a ' + bancoVelho[bancoVelho.length - 1]);
+  const banco5 = {};
+  for (const t of TRAFOS) {
+    if (!banco[t].size) continue;
+    for (const [k, tol] of Object.entries(DB_TOL)) {
+      const d = [];
+      for (const [ms, o] of banco[t]) { const e = (porMs.get(ms) || {})[t]; if (o[k] != null && e && e[k] != null && Math.abs(e[k]) > 1) d.push(Math.abs(o[k] - e[k]) / Math.abs(e[k])); }
+      if (d.length < MIN_COMUNS) { console.log('  guarda banco ' + t + ' ' + k + ': so ' + d.length + ' instante(s) comuns — sem conferencia de escala (a identidade e o nome da tabela)'); continue; }
+      d.sort((x, y) => x - y);
+      const m = d[d.length >> 1];
+      console.log('  guarda banco ' + t + ' ' + k + ': banco x anterior em ' + d.length + ' instantes comuns, diferenca relativa mediana ' + (m * 100).toFixed(2) + '%');
+      if (!(m < tol)) throw new Error('trafo ' + t + ' ' + k + ': o banco difere do que havia em ' + (m * 100).toFixed(1) + '% (mediana, '
+        + d.length + ' instantes; folga ' + (tol * 100) + '%). Escala ou unidade trocada — NAO fundir.');
+    }
+    const ms = [...banco[t].keys()].sort((a, b) => a - b);
+    banco5[t] = { de: iso(ms[0]), ate: iso(ms[ms.length - 1]) };
+    for (const [m, o] of banco[t]) {
+      const reg = porMs.get(m) || porMs.set(m, { ms: m }).get(m);
+      reg[t] = Object.assign(reg[t] || {}, o);
+      reg.db = true;   // o instante e MEDIA de 5 min: entra nos baldes de 30 e 60 min (abaixo), nao so a grade
+    }
+    console.log('  banco ' + t + ': ' + banco[t].size + ' instante(s) de 5 min · ' + banco5[t].de + ' a ' + banco5[t].ate);
+  }
   const serie = [...porMs.values()].sort((a, b) => a.ms - b.ms);
   if (!serie.length) throw new Error('nenhuma linha aproveitada de ' + arqs.length + ' arquivo(s)');
   // 🔴 A LEITURA IMPLAUSIVEL FICA, e e CONTADA — agora na serie FUNDIDA (a planilha viva substituiu os zeros do export)
@@ -473,9 +588,12 @@ async function grava(nome, obj) {
     gerado_em: new Date().toISOString(),
     trafos: TRAFOS,
     // Medido contra o medidor a 5 min: nao ha intervalo integrado, ha amostra pontual.
-    rotulo_de_tempo: 'amostra no instante do rótulo (não é média de intervalo)',
-    passo: '30 e 60 min: amostra do supervisório no instante; 5 min: valor do historiador da subestação, gravado por exceção '
-      + 'e interpolado entre registros (trechos de mais de 24 h com o mesmo valor descartados como congelados)',
+    rotulo_de_tempo: 'nos dias do banco do supervisório (banco_5min), média dos 5 minutos que começam no rótulo; antes dele, '
+      + 'amostra no instante do rótulo',
+    passo: 'nos dias do banco do supervisório: 5 min é a média do intervalo, e 30 e 60 min a média dos valores de 5 min do '
+      + 'intervalo; antes dele, 30 e 60 min são a amostra do supervisório no instante e 5 min o valor do historiador da '
+      + 'subestação, gravado por exceção e interpolado entre registros (trechos de mais de 24 h com o mesmo valor descartados '
+      + 'como congelados)',
     energia_derivada: 'p × passo é aproximação — amostra não integra; para energia, use o medidor',
     unidades: { i: 'A', v: 'kV', p: 'MW', q: 'MVAr', s: 'MVA',
       fp: 'modulo de cos(fi), 0..1', t_oleo: '°C', t_oleo_cdc: '°C', t_enrol: '°C', tap: 'degrau' },
@@ -492,10 +610,13 @@ async function grava(nome, obj) {
     congelados_5min: congelados,
     // ate onde a planilha do historiador (5 min) cobre cada trafo; depois disso, so o export de 30 min. Nulo = sem planilha
     historiador_5min: TRAFOS.reduce((o, t) => { o[t] = historiador[t] || null; return o; }, {}),
+    // de onde ate onde o banco do supervisorio (media de 5 min) cobre cada trafo (lote trafo-db). Nulo = sem banco
+    banco_5min: TRAFOS.reduce((o, t) => { o[t] = banco5[t] || null; return o; }, {}),
   };
   const saidas = [];
-  // 30 e 60 min: SO os instantes da grade de 30 min (amostra no instante, como sempre foi); os de 5 min ficam para o 5min
-  const serie30 = serie.filter((r) => r.ms % 1800000 === 0);
+  // 30 e 60 min: os instantes da grade de 30 min (amostra no instante, como sempre foi) e, desde o trafo-db, TODOS os do banco:
+  // la o valor e a media de 5 min, e a media dos seis de um balde de 30 min e a media do balde, nao uma amostra
+  const serie30 = serie.filter((r) => r.ms % 1800000 === 0 || r.db);
   for (const { min, dias } of RESOLUCOES) {
     const corte = ultimo - (dias - 1) * 86400e3;
     const baldes = new Map();

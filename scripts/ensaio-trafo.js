@@ -137,8 +137,58 @@ function monta(variante) {
   if (variante === 'alheia') planilha('204_11.12 A 09.01.xlsx', ['M1_TS1_INV01_P'], [20], (d, min) => [100 + min]);
   if (variante === 'mistura') planilha('205_11.12 A 09.01.xlsx', ['UCT1_MON_CMMXU1_A_phsA_INT ()', 'UCT2_MON_CMMXU1_A_phsA_INT ()'], [20], (d, min) => [5 + min, 7 + min]);
 }
-const roda = (gen) => { try { return { ok: true, log: execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_DIR: IN, LOCAL_OUT_DIR: OUT }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+// ---- o banco do supervisorio (lote trafo-db, 22/10/2026): zips MRT forjados, no formato da extracao ----
+// dias 36-38 pela extracao aceita (corrente +0,7 A e temperatura +0,5 °C sobre a forja, para a precedencia se ver; o 04T1 com
+// tap 7, o 04T2 SEM a coluna do tap); dia 39 pela extracao antiga (sem a marca da reta), que nao entra
+const DBD = path.join(raiz, 'db');
+const DIAS_DB = [36, 37, 38];
+const Ib = (t, d, min) => I(t, d, min) + 0.7;
+const TEMPb = (k, t, d, min) => TEMP[k](Ib(t, d, min), min) + 0.5;
+const CRC32 = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc = (b) => { let c = 0xFFFFFFFF; for (const x of b) c = CRC32[(c ^ x) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipa(arquivos) {
+  const loc = [], cen = []; let off = 0;
+  for (const [nome, txt] of Object.entries(arquivos)) {
+    const dados = Buffer.from(txt, 'utf8'), comp = zlib.deflateRawSync(dados), n = Buffer.from(nome, 'utf8');
+    const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(8, 8);
+    h.writeUInt32LE(crc(dados), 14); h.writeUInt32LE(comp.length, 18); h.writeUInt32LE(dados.length, 22); h.writeUInt16LE(n.length, 26);
+    const c = Buffer.alloc(46); c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(8, 10);
+    c.writeUInt32LE(crc(dados), 16); c.writeUInt32LE(comp.length, 20); c.writeUInt32LE(dados.length, 24); c.writeUInt16LE(n.length, 28); c.writeUInt32LE(off, 42);
+    loc.push(h, n, comp); cen.push(c, n); off += 30 + n.length + comp.length;
+  }
+  const C = Buffer.concat(cen), e = Buffer.alloc(22); e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(cen.length / 2, 8); e.writeUInt16LE(cen.length / 2, 10);
+  e.writeUInt32LE(C.length, 12); e.writeUInt32LE(off, 16);
+  return Buffer.concat([...loc, C, e]);
+}
+function tabelaDb(t, d, opc) {
+  const u = t === '04T1' ? 'UCT1' : 'UCT2', r = t === '04T1' ? 'URT1' : 'URT2', g = 'IEC_61850.' + u + '.' + u + '_MON_', a = 'IEC_61850.' + r + '.' + r + '_ANN_MVGGIO12_';
+  const cols = [...['A', 'B', 'C'].map((f) => [g + 'CMMXU1_A_phs' + f, 'i']), ...['AB', 'BC', 'CA'].map((f) => [g + 'VMMXU1_PPV_phs' + f, 'v']),
+    [g + 'CVMMXN1_VolAmp', 's'], [g + 'CVMMXN1_Watt', 'p'], [g + 'CVMMXN1_VolAmpr', 'q'], [g + 'CVMMXN1_PwrFact', 'fp'],
+    [a + 'AnIn30_InstMag_f', 't_oleo'], [a + 'AnIn31_InstMag_f', 't_oleo_cdc'], [a + 'AnIn32_InstMag_f', 't_enrol'], [g + 'CVMMXN2_Watt', 'p2']];
+  if (t === '04T1') cols.push([a + 'AnIn16_InstMag_f', 'tap']);
+  const L = ['inicio_5min;' + cols.map((c) => c[0]).join(';')];
+  for (let min = 0; min < 1440; min += 5) {
+    const i = Ib(t, d, min), v = V(d, min) * (opc.vezes || 1), s = Math.sqrt(3) * V(d, min) * i / 1000, p = FP(min) * s;
+    const val = { i, v, s, p, q: -Math.sqrt(Math.max(0, s * s - p * p)), fp: -FP(min), p2: p / 2, tap: 7 };
+    const ds = opc.outroDia && min === 1435 ? dia(d + 1) : dia(d);
+    L.push(ds + ' ' + String(min / 60 | 0).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0') + ';'
+      + cols.map(([, k]) => (val[k] != null ? val[k] : TEMPb(k, t, d, min))).join(';'));
+  }
+  return '﻿' + L.join('\r\n') + '\r\n';
+}
+function bancoForja(variante) {
+  fs.rmSync(DBD, { recursive: true, force: true });
+  for (const d of [...DIAS_DB, 39]) {
+    const m = path.join(DBD, dia(d).slice(0, 7)); fs.mkdirSync(m, { recursive: true });
+    const opc = { vezes: variante === 'banco_escala' ? 1000 : 1, outroDia: variante === 'banco_dia' && d === 37 };
+    fs.writeFileSync(path.join(m, 'MRT_' + dia(d) + '.zip'), zipa({ 'MRT_04T1.csv': tabelaDb('04T1', d, opc), 'MRT_04T2.csv': tabelaDb('04T2', d, opc),
+      'metodo.txt': d === 39 ? 'media_segurada_v1\n' : 'media_da_reta_entre_registros_v3\n' }));
+  }
+}
+// SEM_DB=1 por padrao: sem a pasta do banco, o gerador iria ao cofre de verdade quando houver credencial no ambiente (o CI tem)
+const roda = (gen, extra) => { try { return { ok: true, log: execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_DIR: IN, LOCAL_OUT_DIR: OUT, SEM_DB: '1' }, extra || {}), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
   catch (e) { return { ok: false, log: String(e.stdout || '') + String(e.stderr || '') }; } };
+const COM_DB = { LOCAL_DB_DIR: DBD, SEM_DB: '' };
 /* lote fonte-trafo-way2 (19/10/2026): o gen-trafo grava a COPIA DO SUPERVISORIO com nome proprio (`trafo_scada_<passo>.json`); os
    nomes `trafo_<passo>.json` sao do gen-trafo-way2 (lado de 230 kV pelo medidor). O ensaio le a copia pelo nome velho do passo */
 const le = (n) => { const f = path.join(OUT, n.replace(/^trafo_/, 'trafo_scada_')); return fs.existsSync(f) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(f)).toString('utf8')) : { serie: [] }; };
@@ -205,6 +255,27 @@ function cenario(gen, quais) {
       R.txtCurta = (x.log.match(/.*04T2.*/g) || []).slice(0, 6).join(' | ') + ' · 5min ' + em(S5, 20, 5)['04T2_i1a'] + ' · 30min ' + em(S30, 20, 0)['04T2_i1a'] + ' esperado ' + arr(I('04T2', 20, 0));
       R.okCurta = x.ok && /04T2 i1a: so \d+ instante\(s\) comuns com o export — a planilha deste trafo NAO entra/.test(x.log)
         && em(S5, 20, 5)['04T2_i1a'] === undefined && em(S30, 20, 0)['04T2_i1a'] === arr(I('04T2', 20, 0)); }
+    // ---- o banco do supervisorio (lote trafo-db) ----
+    if (faz('banco')) {
+      monta('normal'); bancoForja('banco'); const x = roda(gen, COM_DB);
+      const B5 = le('trafo_5min.json'), B30 = le('trafo_30min.json'), B60 = le('trafo_60min.json');
+      const b5 = (t, k, d, min) => em(B5, d, min)[t + '_' + k];
+      const mediaIb = (t, d, ini, n) => r2(Array.from({ length: n }, (_, k) => Ib(t, d, ini + 5 * k)).reduce((s, v) => s + v, 0) / n);
+      R.txtBanco = (x.ok ? '' : 'ERRO ' + ultimaLinha(x.log) + ' · ') + '5min 37 12:05 i1a ' + b5('04T1', 'i1a', 37, 725) + ' (banco ' + r2(Ib('04T1', 37, 725)) + ')'
+        + ' · 30min 37 12:00 ' + em(B30, 37, 720)['04T1_i1a'] + ' (media ' + mediaIb('04T1', 37, 720, 6) + ')';
+      R.okBanco5 = x.ok && b5('04T1', 'i1a', 37, 725) === r2(Ib('04T1', 37, 725)) && b5('04T2', 't_oleo', 37, 725) === r2(TEMPb('t_oleo', '04T2', 37, 725))
+        && b5('04T1', 'i1a', 35, 725) === r2(I('04T1', 35, 725));
+      R.okBanco30 = x.ok && em(B30, 37, 720)['04T1_i1a'] === mediaIb('04T1', 37, 720, 6) && em(B30, 35, 720)['04T1_i1a'] === arr(I('04T1', 35, 720));
+      R.okBanco60 = x.ok && em(B60, 37, 720)['04T1_i1a'] === mediaIb('04T1', 37, 720, 12);
+      R.okBancoTap = x.ok && em(B30, 37, 720)['04T1_tap'] === 7 && em(B30, 37, 720)['04T2_tap'] === 8 && b5('04T2', 'tap', 37, 725) === undefined;
+      const BM = B5.banco_5min || {};
+      R.okBancoMeta = x.ok && ['04T1', '04T2'].every((t) => BM[t] && BM[t].de === iso(msDe(36, 0)) && BM[t].ate === iso(msDe(38, 1435)))
+        && /nos dias do banco do supervisório/.test(B30.passo || '');
+      R.okBancoVelho = x.ok && /banco: 1 dia\(s\) ainda pela extracao antiga/.test(x.log) && b5('04T1', 'i1a', 39, 725) === r2(I('04T1', 39, 725));
+      R.okBancoGuarda = x.ok && /guarda banco 04T1 v1ab: banco x anterior em \d+ instantes comuns/.test(x.log);
+    }
+    if (faz('banco_escala')) { monta('normal'); bancoForja('banco_escala'); const x = roda(gen, COM_DB); R.okBancoEscala = x.ok === false && /04T\d v1ab: o banco difere do que havia/.test(x.log); }
+    if (faz('banco_dia')) { monta('normal'); bancoForja('banco_dia'); const x = roda(gen, COM_DB); R.okBancoDia = x.ok === false && /MRT_04T1\.csv: linha de \d{4}-\d{2}-\d{2} no zip de/.test(x.log); }
   } catch (e) { R.erro = String(e.message).split('\n')[0]; }
   return R;
 }
@@ -237,6 +308,15 @@ ok(R.okIgnora, 'planilha com o nome do periodo mas sem tag de trafo e ignorada c
 ok(R.okSem, 'sem planilha nenhuma: o 5 min sai so com a grade de 30 min e o meta diz que nao ha historiador');
 ok(R.okCopias, 'duas copias da mesma planilha: vence a de id maior (a mais nova), nao a ordem alfabetica');
 ok(R.okCurta, 'planilha com menos de 100 instantes comuns com o export nao entra, e o log diz' + (R.okCurta ? '' : ': ' + R.txtCurta));
+ok(R.okBanco5, 'banco: vence o export e a planilha no 5 min (corrente e temperatura); dia sem banco fica com a planilha' + (R.okBanco5 ? '' : ': ' + R.txtBanco));
+ok(R.okBanco30, 'banco: o 30 min e a MEDIA dos seis de 5 min do balde; dia sem banco segue a amostra da grade' + (R.okBanco30 ? '' : ': ' + R.txtBanco));
+ok(R.okBanco60, 'banco: o 60 min e a media dos doze de 5 min');
+ok(R.okBancoTap, 'banco: o tap do 04T1 vem do banco (7); o 04T2 sem a coluna fica com o do export (8), e o 5 min nao inventa');
+ok(R.okBancoMeta, 'banco: o meta diz de quando a quando o banco cobre cada trafo, e o passo explica a media');
+ok(R.okBancoVelho, 'banco: o zip da extracao antiga (sem a marca da reta) nao entra, e o log diz');
+ok(R.okBancoGuarda, 'banco: a guarda de escala confere contra o que havia nos instantes comuns');
+ok(R.okBancoEscala, 'banco com a tensao em outra escala (x1000) derruba o job na guarda');
+ok(R.okBancoDia, 'banco com linha de outro dia derruba o job');
 
 console.log('\nplantios (cada um roda o normal e as variantes que importam; o plantado tem de rodar e reprovar so na regra)');
 const LIB = path.join(__dirname, 'lib-trafo-ied.js');
@@ -276,11 +356,11 @@ planta('congelado por planilha, antes da fusao', [
   ['gen', "  const ied = { '04T1': new Map(), '04T2': new Map() };", "  const ied = { '04T1': new Map(), '04T2': new Map() }; const congeladosPre = {};"],
   ['gen', "    const tir = IED.tiraCongelados(ied[t], Object.keys(IED.GRANDEZAS_IED));\n    for (const [k, n] of Object.entries(tir)) congelados[t + '|' + k] = n;",
     "    for (const [k, n] of Object.entries(congeladosPre)) if (k.startsWith(t)) congelados[k] = n;"]], 'okFronteira');
-planta('o export vence a planilha', [['gen', 'reg[t] = Object.assign(reg[t] || {}, o);', 'reg[t] = Object.assign({}, o, reg[t] || {});']], 'okPrecedencia');
+planta('o export vence a planilha', [['gen', 'reg[t] = Object.assign(reg[t] || {}, o); fundidos += 1;', 'reg[t] = Object.assign({}, o, reg[t] || {}); fundidos += 1;']], 'okPrecedencia');
 plantaErro('carimbo truncado', [['lib', 'Math.round(((x - 25569) * 86400000 + 3 * 3600e3) / PASSO) * PASSO', 'Math.floor(((x - 25569) * 86400000 + 3 * 3600e3) / PASSO) * PASSO']], /a planilha do historiador difere do export/);
 planta('VolAmp sem fronteira (planilha e export)', [['lib', "const casa = (tag, pedaco) => new RegExp(pedaco + '(?![A-Za-z0-9])').test(tag);", 'const casa = (tag, pedaco) => tag.includes(pedaco);']], 'okVolAmp');
 planta('VolAmp sem fronteira so no export', [['gen', '        if (IED.casa(c, pedaco)) {', '        if (c.includes(pedaco)) {']], 'okVolAmp');
-planta('30 min com os instantes de 5 min', [['gen', 'const serie30 = serie.filter((r) => r.ms % 1800000 === 0);', 'const serie30 = serie;']], 'ok30');
+planta('30 min com os instantes de 5 min', [['gen', 'const serie30 = serie.filter((r) => r.ms % 1800000 === 0 || r.db);', 'const serie30 = serie;']], 'ok30');
 planta('60 min com os instantes de 5 min', [['gen', '    for (const r of serie30) {', '    for (const r of (min === 60 ? serie : serie30)) {']], 'ok60');
 planta('diario so com a grade de 30 min', [['gen', '  for (const r of serie) {\n    const d = diaDe(r.ms);', '  for (const r of serie30) {\n    const d = diaDe(r.ms);']], 'okDiario');
 planta('guarda so da corrente', [['gen', "for (const k of ['i1a', 'v1ab', 'p'])", "for (const k of ['i1a'])"]], 'okTensao', ['normal', 'tensao']);
@@ -305,6 +385,12 @@ plantaErro('carimbo em texto aceito', [['lib', "if (!r || typeof r[0] !== 'numbe
 planta('copias em ordem alfabetica', [['gen', 'arqs.ied.sort((x, y) => idDe(x.nome) - idDe(y.nome) || (x.nome < y.nome ? -1 : 1));', 'arqs.ied.sort((x, y) => (x.nome < y.nome ? -1 : 1));']], 'okCopias', ['normal', 'copias']);
 planta('copia grava no nome das telas', [['gen', "const nomeDaCopia = (nome) => nome.replace(/^trafo_/, 'trafo_scada_');", 'const nomeDaCopia = (nome) => nome;']], 'okCopia');
 planta('planilha curta entra sem conferir', [['gen', '    if (semConferir) { ied[t] = new Map(); continue; }', '    if (false) { ied[t] = new Map(); continue; }']], 'okCurta', ['normal', 'curta']);
+// lote trafo-db (22/10/2026): cada regra do banco com o seu plantio
+planta('o banco nao entra', [['gen', '    if (!r.aceito) { bancoVelho.push(z.dia); continue; }', '    { bancoVelho.push(z.dia); continue; }']], 'okBanco5', ['normal', 'banco']);
+planta('30 min so na grade (amostra) no dia do banco', [['gen', 'const serie30 = serie.filter((r) => r.ms % 1800000 === 0 || r.db);', 'const serie30 = serie.filter((r) => r.ms % 1800000 === 0);']], 'okBanco30', ['normal', 'banco']);
+planta('extracao antiga entra', [['gen', 'const out = { aceito: DB.METODOS_ACEITOS.includes(metodo), metodo, linhas: {} };', 'const out = { aceito: true, metodo, linhas: {} };']], 'okBancoVelho', ['normal', 'banco']);
+planta('guarda de escala do banco calada', [['gen', '      if (!(m < tol)) throw new Error(\'trafo \' + t + \' \' + k + \': o banco difere', '      if (false) throw new Error(\'trafo \' + t + \' \' + k + \': o banco difere']], 'okBancoEscala', ['normal', 'banco_escala']);
+planta('linha de outro dia aceita no banco', [['gen', '      if (diaDe(ms) !== dia) throw new Error(', '      if (false) throw new Error(']], 'okBancoDia', ['normal', 'banco_dia']);
 
 console.log(falhas ? '\n' + falhas + ' FALHA(S)' : '\nensaio-trafo: tudo ok');
 process.exit(falhas ? 1 : 0);
