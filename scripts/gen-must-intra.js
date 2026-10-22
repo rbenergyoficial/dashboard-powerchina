@@ -230,6 +230,25 @@ function montaLinhas(resp) {
   return [...linhas.values()].sort((a, b) => a.ms - b.ms);
 }
 
+// 🔴 MEDICAO, NAO FILTRO (must-provisorio, 22/10/2026). Em 22/10 a Way2 entregou as leituras das 12:05 as 12:20 como valor
+// PROVISORIO: o total do conjunto certo, a divisao por usina embaralhada (o M6 com 74,6 MW em 5 min, acima dos 58,08 MW que os
+// 165 inversores dele dao), e revisou tudo 15 min depois. O alerta mandou tres avisos falsos. Cada valor da fonte traz `qualidade`
+// (no medidor dos trafos, 0 = medido: lib-trafo-way2), e este gerador nunca a olhou. Aqui ele so CONTA, no dia corrente, quantos
+// valores de Demat chegam com cada qualidade e quais fogem de 0. Filtrar so depois de ver no log que o provisorio vem marcado.
+function contaQualidade(resp) {
+  const h = {}, fora = [];
+  for (const id of IDS) {
+    const s = (resp.dados || []).find(x => String(x.pontoId) === String(id) && x.nomeGrandeza === 'Demat');
+    for (const v of (s ? s.valores || [] : [])) {
+      if (v.valor == null) continue;
+      const q = String(v.qualidade);
+      h[q] = (h[q] || 0) + 1;
+      if (q !== '0') fora.push(PONTOS[id].parque + ' ' + String(v.data).slice(11, 16) + ' q' + q);
+    }
+  }
+  return 'qualidade de Demat ' + JSON.stringify(h) + (fora.length ? ' · fora de 0 (ultimos): ' + fora.slice(-6).join(', ') : '');
+}
+
 // O dia D cobre (D 00:00, D+1 00:00] — o mesmo recorte que a fonte usa. Comparar por EPOCH, e nao
 // por prefixo de texto, e o que impede apagar o balde 00:00 que pertence ao dia anterior.
 const faixaDoDia = dia => ({
@@ -341,6 +360,11 @@ async function grava(nome, obj) {
         continue;
       }
       buscados++;
+      // so log: uma forma nova da resposta que quebre a contagem nao pode derrubar a rodada
+      if (hoje) {
+        try { console.log('  ' + dia + ' ' + res.min + 'min  ' + contaQualidade(resp)); }
+        catch (e) { console.log('  ' + dia + ' ' + res.min + 'min  qualidade de Demat: contagem falhou (' + e.message + ')'); }
+      }
       const linhas = montaLinhas(resp);
       // GUARDA DE GRANULARIDADE: um dia fechado tem de vir com o numero de amostras da resolucao
       // pedida. Se a API entender o intervalo de outro jeito, isso aparece aqui em vez de virar

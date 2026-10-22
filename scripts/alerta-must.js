@@ -18,6 +18,30 @@
  * O DIA e o do inicio do intervalo em BRT: o rotulo e o FIM do intervalo, e o balde das 00:00 pertence ao dia
  * anterior (a mesma convencao do gen-must-intra).
  *
+ * 🔴 SO SE JULGA LEITURA ASSENTADA (must-provisorio, 22/10/2026). Os tres primeiros avisos (M2, M6 e M7, 22/10 12:30 BRT)
+ *    eram FALSOS: a Way2 entrega os ultimos intervalos do dia como valor provisorio, com o total do conjunto certo e a divisao
+ *    por usina embaralhada (o M6 com 67,44 MW no quarto de hora, 137 %), e revisou tudo 15 min depois (M6 40,7 MW, 82,9 %).
+ *    Em 90 dias (8.541 quartos de hora) nenhum quarto de hora completo passou de 100 %; os 4 "acima" eram os dois incompletos
+ *    de 22/10. Por isso uma linha so e julgada quando:
+ *    - o quarto de hora fechou ha pelo menos MADURO_MIN do `gerado_em` (a hora da leitura na fonte, nao a do alerta) E os
+ *      quartos de hora seguintes ate MADURO_MIN depois dele ja chegaram com valor (os dois seguintes). Medido em 22/10: na
+ *      leitura das 12:30 BRT o provisorio ia ate 12:20 (10 a 25 min de idade); na das 12:45 o que tinha 25 min ou mais ja
+ *      estava revisado. 30 min e o primeiro multiplo de 15 que cobre isso, com uma medicao so. Os seguintes, e nao so o
+ *      gerado_em, porque o provisorio e "o fim do que chegou": o gerador nao rele ontem depois da meia-noite (o fim de ontem
+ *      pode ter ficado congelado no provisorio) e a Way2 pode entregar com horas de atraso (a ultima linha longe do gerado_em).
+ *      A regra e por linha, e nao pelo ultimo quarto de hora de cada dia, para nao deixar de julgar o 23:45 e o 00:00.
+ *      ⚠️ Medido em 22/10 nos 90 dias do blob: o balde das 00:00 nunca chega (o gerador so rele o dia corrente, e a ultima
+ *      rodada antes da virada ainda nao o tem), entao o 23:30 e o 23:45 de cada dia ficam sem os seguintes e nao sao julgados.
+ *      E noite, com geracao zero; o defeito e do gerador e esta registrado no livro (must-provisorio);
+ *    - as 9 usinas tem valor (o provisorio de 22/10 veio sem o M9). Linha assentada sem todas fica de fora, e a rodada anota
+ *      ::warning:: com o dia, a contagem e as usinas que faltam: nesses quartos de hora uma ultrapassagem das outras usinas NAO
+ *      e avisada por e-mail. Decisao do lote: o provisorio de 22/10 so se distinguiu do medido pela usina faltando, e em 90 dias
+ *      nenhum quarto de hora passou de 100 % (o PPC segura em 99,5 %); o medidor fora e avisado pelo vigia da Way2;
+ *    - nenhuma usina passa do TETO FISICO: inversores x 352 kW (SG350HX, potencia CA maxima; inversores da lib-placa). Valor
+ *      acima do que a usina consegue entregar e leitura errada, nao ultrapassagem: a linha inteira sai (o embaralhamento
+ *      infla uma usina e murcha outra) e vira ::warning::, sem e-mail.
+ *    O aviso de uma ultrapassagem de verdade chega 30 a 45 min depois do quarto de hora, em vez de 15 a 30.
+ *
  * DEDUP: um evento por parque por dia (`chave`), com `soSeNova` — a issue aberta e a memoria. Intervalos novos do
  * mesmo parque no mesmo dia, depois do primeiro aviso, nao geram outro e-mail. Janela: hoje e ontem (o dado de
  * ontem ainda pode chegar atrasado).
@@ -27,18 +51,21 @@
  *    do repositorio (nunca escrito aqui: o repo e publico). Depois de julgar, cada evento tem de ter sido ENVIADO ou
  *    ja estar aberto (dedup); e-mail '-' ou FALHOU, ou issue FALHOU (sem memoria o aviso se repetiria a cada 15 min),
  *    derrubam a rodada.
- * 🔴 VACUIDADE E DEFEITO: parque M1..M9 sem contrato > 0, janela de hoje e ontem sem nenhuma linha julgada (gerador
- *    parado), ou `ms` que nao bate com o `t` da linha (convencao do gerador mudou) -> exit 1. "0 eventos" so vale com
- *    intervalos julgados.
+ * 🔴 VACUIDADE E DEFEITO: parque M1..M9 sem contrato > 0 ou sem placa, `gerado_em` ilegivel, janela de hoje e ontem sem
+ *    nenhuma linha julgada (gerador parado, ou o dia inteiro sem as 9 usinas), ou `ms` que nao bate com o `t` da linha
+ *    (convencao do gerador mudou) -> exit 1. "0 eventos" so vale com intervalos julgados.
  *
  * Env: MUST_ARQ (arquivo local, para o ensaio) · BLOB_BASE · MAIL_* e AZ_MAIL_* (lib-alerta) · AGORA_MS (ensaio)
  */
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
+const { PLACA } = require('./lib-placa');
 const zlib = require('zlib');
 const fs = require('fs');
 
 const BASE = process.env.BLOB_BASE || 'https://rbenergydata.blob.core.windows.net/dados/';
 const PASSO_MIN = 15;
+const MADURO_MIN = 30;
+const KW_MAX_INV = 352;   // SG350HX: potencia CA maxima, 110 % dos 320 kW nominais
 const PARQUES = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
 const PECAS = ['MAIL_PARA', 'MAIL_DE', 'AZ_MAIL_TENANT_ID', 'AZ_MAIL_CLIENT_ID'];
 const BRT_MS = 3 * 3600 * 1000;
@@ -48,30 +75,57 @@ const dm = (d) => d.slice(8, 10) + '/' + d.slice(5, 7);
 const hora = (t) => String(t).slice(11, 16);
 const num = (v, c) => v.toFixed(c).replace('.', ',');
 
-/** Confere a forma do blob: os 9 parques com contrato e o `ms` igual ao `t` de cada linha. Estoura no primeiro erro. */
+const valido = (v) => typeof v === 'number' && isFinite(v);
+/** o maximo que a usina consegue entregar, em MW: inversores x 352 kW */
+const tetoFisico = (p) => PLACA[p].inversores * KW_MAX_INV / 1000;
+
+/** Confere a forma do blob: os 9 parques com contrato e placa, o `gerado_em` legivel e o `ms` igual ao `t` de cada linha.
+ *  Estoura no primeiro erro. */
 function confere(j) {
   const C = j.contratos || {};
   const sem = PARQUES.filter((p) => !(C[p] > 0) || !(j.parques || []).includes(p));
   if (sem.length) throw new Error('must_15min.json sem contrato ou sem coluna para ' + sem.join(', '));
+  const semPlaca = PARQUES.filter((p) => !(PLACA[p] && PLACA[p].inversores > 0));
+  if (semPlaca.length) throw new Error('lib-placa sem inversores para ' + semPlaca.join(', '));
+  if (!isFinite(Date.parse(j.gerado_em))) throw new Error('must_15min.json com gerado_em ilegivel: ' + j.gerado_em);
   for (const l of j.serie || []) {
     if (Date.parse(l.t) !== l.ms) throw new Error('must_15min.json: ms ' + l.ms + ' nao bate com t ' + l.t + ' (convencao do gerador mudou?)');
   }
 }
 
-/** Agrupa por dia (BRT, inicio do intervalo) e parque os intervalos acima do contratado, nos dias pedidos.
- *  `julgados` conta as linhas da janela: zero quer dizer que nada foi olhado. */
+/** Agrupa por dia (BRT, inicio do intervalo) e parque os intervalos acima do contratado, nos dias pedidos, so nas linhas
+ *  assentadas (ver o cabecalho). `julgados` conta as linhas julgadas: zero quer dizer que nada foi olhado. As linhas da janela
+ *  que ficaram de fora saem contadas: `recentes` (fecharam ha menos de MADURO_MIN do gerado_em, ou sem os quartos de hora
+ *  seguintes entregues), `incompletas` (sem as 9
+ *  usinas; `faltas` diz, por dia, quantas e quais usinas faltaram) e `implausiveis` (alguma usina acima do teto fisico; a lista
+ *  traz linha, usina, valor e teto). */
 function ultrapassagens(j, dias) {
   const C = j.contratos || {};
   const parques = PARQUES.filter((p) => C[p] > 0);
+  const limite = Date.parse(j.gerado_em) - MADURO_MIN * 60000;
+  /* os instantes que chegaram com valor de alguma usina: o quarto de hora so assenta com os seguintes entregues */
+  const comValor = new Set((j.serie || []).filter((l) => PARQUES.some((p) => valido(l[p]))).map((l) => l.ms));
+  const seguintes = (ms) => { for (let m = PASSO_MIN; m <= MADURO_MIN; m += PASSO_MIN) if (!comValor.has(ms + m * 60000)) return false; return true; };
   const ev = new Map();
-  let julgados = 0;
+  let julgados = 0, recentes = 0, incompletas = 0;
+  const implausiveis = [], faltas = {};
   for (const l of j.serie || []) {
     const dia = diaBRT(l.ms - PASSO_MIN * 60000);
     if (!dias.includes(dia)) continue;
+    if (!(l.ms <= limite) || !seguintes(l.ms)) { recentes++; continue; }
+    const faltam = PARQUES.filter((p) => !valido(l[p]));
+    if (faltam.length) {
+      incompletas++;
+      const f = faltas[dia] || (faltas[dia] = { n: 0, parques: [] });
+      f.n++; faltam.forEach((p) => { if (!f.parques.includes(p)) f.parques.push(p); });
+      continue;
+    }
+    const fora = PARQUES.filter((p) => l[p] > tetoFisico(p));
+    if (fora.length) { fora.forEach((p) => implausiveis.push({ t: l.t, parque: p, valor: l[p], teto: tetoFisico(p) })); continue; }
     julgados++;
     for (const p of parques) {
       const v = l[p];
-      if (typeof v !== 'number' || !isFinite(v) || !(v > C[p])) continue;
+      if (!(v > C[p])) continue;
       const k = dia + '|' + p;
       const e = ev.get(k) || { dia, parque: p, contrato: C[p], n: 0, pico: -Infinity, t_pico: null, t_primeiro: l.t };
       e.n++;
@@ -80,7 +134,8 @@ function ultrapassagens(j, dias) {
     }
   }
   const lista = [...ev.values()].sort((a, b) => (a.dia + a.parque).localeCompare(b.dia + b.parque));
-  lista.julgados = julgados;
+  Object.keys(faltas).forEach((d) => faltas[d].parques.sort());
+  Object.assign(lista, { julgados, recentes, incompletas, implausiveis, faltas });
   return lista;
 }
 
@@ -125,8 +180,21 @@ async function main({ alerta = require('./lib-alerta').alerta, agora = Number(pr
   confere(j);
   const ev = ultrapassagens(j, dias);
   console.log('alerta-must: ' + ev.length + ' evento(s) em ' + dias.join(' e ') + ' · ' + ev.julgados + ' intervalos julgados de '
-    + (j.serie || []).length + ' linhas, gravado ' + j.gerado_em);
-  if (!ev.julgados) { console.error('::error::alerta-must: nenhum intervalo de ' + dias.join(' ou ') + ' no blob — gerador parado?'); return 1; }
+    + (j.serie || []).length + ' linhas, gravado ' + j.gerado_em + ' · fora do julgamento: ' + ev.recentes + ' recentes, '
+    + ev.incompletas + ' sem as 9 usinas, ' + ev.implausiveis.length + ' valor(es) acima do teto fisico');
+  for (const [d, f] of Object.entries(ev.faltas)) {
+    console.error('::warning::alerta-must: ' + f.n + ' quarto(s) de hora assentado(s) de ' + dm(d) + ' sem ' + f.parques.join(', ')
+      + ' ficaram fora do julgamento — ultrapassagem das outras usinas nesses intervalos nao e avisada');
+  }
+  for (const x of ev.implausiveis) {
+    console.error('::warning::alerta-must: ' + x.parque + ' com ' + num(x.valor, 2) + ' MW no quarto de hora terminado em ' + x.t
+      + ', acima do teto fisico de ' + num(x.teto, 2) + ' MW — leitura errada da fonte, linha fora do julgamento');
+  }
+  if (!ev.julgados) {
+    console.error('::error::alerta-must: nenhum intervalo julgado em ' + dias.join(' ou ') + ' (' + ev.recentes + ' recentes, '
+      + ev.incompletas + ' sem as 9 usinas, ' + ev.implausiveis.length + ' acima do teto) — gerador parado ou medidor fora?');
+    return 1;
+  }
   let falhou = 0;
   for (const e of ev) {
     const out = await alerta(acaoDe(e));
@@ -136,6 +204,6 @@ async function main({ alerta = require('./lib-alerta').alerta, agora = Number(pr
   return falhou ? 1 : 0;
 }
 
-module.exports = { ultrapassagens, acaoDe, diaBRT, confere, main };
+module.exports = { ultrapassagens, acaoDe, diaBRT, confere, main, tetoFisico, MADURO_MIN };
 
 if (require.main === module) main().then((c) => process.exit(c)).catch((e) => { console.error('ERRO:', e.message); process.exit(1); });
