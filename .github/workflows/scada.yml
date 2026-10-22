@@ -9,15 +9,8 @@ on:
       diag_cols:
         description: 'Listar colunas (diagnostico reativa)'
         default: '0'
-      vigia_modo:
-        description: 'vigia da intake: vigiar (padrao) ou medir (so imprime a distribuicao)'
-        default: 'vigiar'
-      # 🔴 So serve para MEDIR outro container. O vigia RECUSA `vigiar` onde o limiar nao foi
-      #    medido, entao apontar isto para `inversores-raw` no modo padrao falha alto — que e o
-      #    comportamento certo, e nao um acidente.
-      vigia_container:
-        description: 'container a inspecionar: scada-raw (padrao) ou inversores-raw (so com medir)'
-        default: 'scada-raw'
+      # scada-db (22/10/2026): sairam `vigia_modo` e `vigia_container`, que so serviam ao vigia da intake do scada-raw (o export
+      # de 30 min, que acabou em 15/10 e nao e mais fonte). O vigia agora e o do banco, que nao tem modo de medir: o prazo e regra.
 concurrency:
   group: gen-scada
   cancel-in-progress: true
@@ -52,6 +45,10 @@ jobs:
           path: .cache-blob
           key: scada-raw-gen-scada-${{ github.run_id }}
           restore-keys: scada-raw-gen-scada-
+      # scada-db (22/10/2026): a regra do banco (soma pelo unifilar, tudo-ou-nada, a extracao da reta, o banco vence a planilha so
+      # no dia completo) e julgada ANTES de gravar; reprovou, o gerador nao roda e o blob do ar fica como estava.
+      - name: Ensaio · o SCADA pelo banco do supervisorio (ensaio-scada-db)
+        run: node scripts/ensaio-scada-db.js
       - name: Gerar scada_comparativo.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -72,18 +69,18 @@ jobs:
 
       # 🔴 `always()`: a hora em que o vigia mais importa e quando o passo acima falhou.
       #    E ele NAO derruba o job — o alerta e a saida dele, nao o codigo de retorno.
-      - name: Vigia da intake do SCADA
+      # scada-db (22/10/2026): o vigia e o do BANCO (o ultimo dia com zip da extracao da reta no cofre, D ate D+2 12:00 BRT), no
+      # lugar do vigia da intake do scada-raw, que alertava a cada rodada desde que o export de 30 min acabou (15/10).
+      - name: Vigia do banco do supervisorio
         if: always()
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          RAW_CONTAINER: ${{ github.event.inputs.vigia_container || 'scada-raw' }}
-          MODO: ${{ github.event.inputs.vigia_modo || 'vigiar' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}
           MAIL_PARA: ${{ vars.MAIL_PARA }}
-        run: node scripts/gen-scada-intake-watchdog.js
+        run: node scripts/gen-scada-db-vigia.js
 
       # 🔴 O `inversores-raw` e a intake da pagina de Inversores, e ate 02/09/2026 ninguem o
       #    vigiava — a mesma cegueira que deixou a solarimetria tres dias atras sem nada ficar
@@ -92,7 +89,8 @@ jobs:
       #
       # ⚠️ So no agendamento das 11:30, e a condicao diz isso literalmente. O container recebe ~2
       #    arquivos por semana; tres verificacoes por dia sobre um limiar de 7 dias nao
-      #    acrescentam nada. Por despacho, use a entrada `vigia_container`.
+      #    acrescentam nada. Para medir fora do agendamento: `RAW_CONTAINER=inversores-raw MODO=medir node
+      #    scripts/gen-scada-intake-watchdog.js` (a entrada `vigia_container` saiu no scada-db, 22/10/2026).
       - name: Vigia da intake dos Inversores
         if: always() && github.event.schedule == '30 11 * * *'
         env:

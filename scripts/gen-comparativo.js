@@ -415,17 +415,29 @@ function scadaDiarioParaMapa(sc, deDia) {
 // SOMA das tres amostras, o mesmo trapezio sai da reta entre baldes vizinhos: e(T) = r(T) + (r(T+15) - r(T)) / 6
 // (2,5 min de 15) — exato quando a potencia varia em reta; medido 0,62% e 4,5%. O fator geral e 2,5 / passo.
 // Sem o balde seguinte (o fim da serie, ou um buraco) o balde fica de fora: ausencia, nunca retangulo misturado.
-const SCADA_INTEGRACAO = 'trapezio';
-function trapezio(mapa, passoMin) {
+//
+// 🔴 DESDE 17/10/2026 o supervisorio vem do HISTORICO DO BANCO, e la o valor de 5 min e a MEDIA da potencia no
+//    intervalo: a energia ja e exata e o trapezio a deformaria (espalharia meio intervalo para o vizinho). O gerador do
+//    SCADA lista em `media_5min` o dia e a usina que vieram do banco (`mediaDe`); neles o balde passa como esta. A
+//    marca mudou de nome para que a primeira rodada remonte cada resolucao inteira uma vez.
+const SCADA_INTEGRACAO = 'trapezio+media5';
+function mediaDe(sc) {
+  const s = new Set();
+  for (const [d, us] of Object.entries((sc && sc.media_5min) || {})) for (const p of us) s.add(d + '|' + p);
+  return s;
+}
+function trapezio(mapa, passoMin, media) {
   const f = 2.5 / passoMin;
   const out = new Map();
   for (const [chave, l] of mapa) {
+    const dia = chave.slice(0, 10);
     const prox = mapa.get(new Date(Date.parse(chave + ':00Z') + passoMin * 60000).toISOString().slice(0, 16));
-    if (!prox) continue;
     const o = {};
     let algum = false;
     for (const p of PARQUES) {
-      if (l[p] == null || prox[p] == null) continue;
+      if (l[p] == null) continue;
+      if (media && media.has(dia + '|' + p)) { o[p] = l[p]; algum = true; continue; }
+      if (!prox || prox[p] == null) continue;
       o[p] = l[p] + (prox[p] - l[p]) * f;
       algum = true;
     }
@@ -531,7 +543,7 @@ module.exports = {
   PONTOS, PARQUES, TAG_ONS, PREFIXO, AMOSTRAS_DIA, RESOLUCOES,
   leBlob, lerONS, way2ParaMapa, way2DiarioParaMapa, diasPorBloco, somaDias,
   scadaParaMapa, scadaDiarioParaMapa, agrega, agregaDia, montaSerie, chaveBRT,
-  trapezio, precisaMigrar, SCADA_INTEGRACAO, agregaCompleto,
+  trapezio, mediaDe, precisaMigrar, SCADA_INTEGRACAO, agregaCompleto,
 };
 
 if (require.main !== module) return;
@@ -573,7 +585,7 @@ if (require.main !== module) return;
     catch (e) { throw new Error('nao consegui ler ' + res.blob + ': ' + e.message); }
     const migra = precisaMigrar(antigo, res);
     const de = migra ? diaBRT(res.dias - 1) : deDia;
-    if (migra) console.log('    SCADA ainda por retangulo no ar: remontando a janela inteira (' + res.dias + ' dias, desde ' + de + ')');
+    if (migra) console.log('    marca do metodo do SCADA diferente da no ar (' + ((antigo && antigo.scada_integracao) || 'nenhuma') + '): remontando a janela inteira (' + res.dias + ' dias, desde ' + de + ')');
 
     // --- Way2 ---------------------------------------------------------------------------------
     const mWay2 = await buscaEmBlocos(
@@ -582,12 +594,13 @@ if (require.main !== module) return;
     console.log('    Way2:  ' + mWay2.size + ' baldes');
 
     // --- SCADA --------------------------------------------------------------------------------
-    // energia do intervalo pelo TRAPEZIO entre amostras (`trapezio`); o diario e o total do dia do supervisorio
+    // energia do intervalo pelo TRAPEZIO entre amostras (`trapezio`), salvo no dia que veio do banco (media de 5 min,
+    // `mediaDe`); o diario e o total do dia do supervisorio
     let mScada = new Map();
     if (diario && scada) mScada = scadaDiarioParaMapa(scada, de);
-    else if (res.min === 5 && scada5) mScada = trapezio(scadaParaMapa(scada5, de, 'intra5', 5), 5);
-    else if (res.min === 15 && scada) mScada = trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15);
-    else if (res.min > 15 && scada) mScada = agregaCompleto(trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15), 15, res.min);
+    else if (res.min === 5 && scada5) mScada = trapezio(scadaParaMapa(scada5, de, 'intra5', 5), 5, mediaDe(scada5));
+    else if (res.min === 15 && scada) mScada = trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15, mediaDe(scada));
+    else if (res.min > 15 && scada) mScada = agregaCompleto(trapezio(scadaParaMapa(scada, de, 'intra15', 15), 15, mediaDe(scada)), 15, res.min);
     console.log('    SCADA: ' + mScada.size + ' baldes'
       + (res.min === 5 && !scada5 ? '  (o blob de 5 min ainda nao existe)' : ''));
 
@@ -697,9 +710,11 @@ if (require.main !== module) return;
       scada_integracao: diario ? 'total_do_dia' : SCADA_INTEGRACAO,
       scada_metodo: diario
         ? 'O supervisorio entra pelo total do dia que ele mesmo apura.'
-        : 'O supervisorio registra potencia amostrada a cada 5 minutos. A energia de cada intervalo sai da '
-          + 'media entre amostras vizinhas (regra do trapezio), que acompanha a energia medida pelo '
-          + 'medidor de faturamento melhor que somar as amostras do intervalo.',
+        : 'Desde que o historico do banco do supervisorio esta disponivel, o valor de cada 5 minutos e a media '
+          + 'da potencia no intervalo, e a energia e essa media multiplicada pela duracao. Nos dias anteriores, '
+          + 'em que so havia a potencia lida a cada 5 minutos, a energia do intervalo sai da media entre leituras '
+          + 'vizinhas (regra do trapezio), que acompanha a energia do medidor de faturamento melhor que somar as '
+          + 'leituras.',
       rotulo_de_tempo: 'O instante e o INICIO do intervalo: o valor em T cobre de T a T mais '
         + (diario ? '1 dia' : res.min + ' min') + '. O operador nacional e o supervisorio ja '
         + 'rotulam assim; a serie do medidor rotula pelo fim e foi deslocada um intervalo na '

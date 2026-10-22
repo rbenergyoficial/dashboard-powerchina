@@ -10,6 +10,12 @@
  *
  * Idempotente: carrega o JSON existente no blob e faz merge por (parque, dia) — reprocessar nao duplica.
  *
+ * 🔴 DESDE 17/10/2026 A FONTE PRINCIPAL E O BANCO do supervisorio (`lib-scada-db.js`): zip diario da subestacao no
+ *    `backup-dados-scada`, prefixo `SCADA_DB/saida/`, com a MEDIA de cada 5 min por circuito. Em todo dia que o banco
+ *    traz completo para a usina, ele vence a planilha; a planilha fica para os dias que o banco nao tem (o banco guarda
+ *    ~1 ano em janela movel). O dia e a usina que vieram do banco ficam em `media_5min`, porque ali a energia ja e
+ *    exata e o Comparativo nao aplica o trapezio.
+ *
  * Env:
  *   DADOS_STORAGE  = connection string da storage (Secret) — obrigatorio no modo blob
  *   RAW_CONTAINER  = container das planilhas cruas (default: scada-raw)
@@ -17,6 +23,9 @@
  *   OUT_BLOB       = nome do blob de saida (default: scada_comparativo.json)
  *   LOCAL_DIR      = (teste) pasta local com os .xlsx; se setado, ignora o blob de entrada
  *   LOCAL_OUT      = (teste) grava o JSON nesse caminho local em vez do blob
+ *   DB_CONTAINER   = container do banco (default: backup-dados-scada)
+ *   LOCAL_DB_DIR   = (teste) pasta local `saida` com AAAA-MM/MRT_AAAA-MM-DD.zip; se setado, ignora o blob do banco
+ *   SEM_DB=1       = (teste) nao le o banco, so as planilhas
  */
 const XLSX = require('xlsx');
 
@@ -269,6 +278,39 @@ async function loadRawBuffers() {
   return out;
 }
 
+// ---- o BANCO do supervisorio (17/10/2026) ----
+// Le so os zips `MRT_` (subestacao, ~340 KB por dia); os das usinas nao entram. A copia em disco da execucao anterior
+// vale como no scada-raw (`lib-cache-blob.js`): so o dia novo vem pela rede.
+const DB_CONTAINER = process.env.DB_CONTAINER || 'backup-dados-scada';
+async function loadDbZips() {
+  const DB = require('./lib-scada-db');
+  if (/^(1|sim|true)$/i.test(process.env.SEM_DB || '')) return [];
+  if (process.env.LOCAL_DB_DIR) {
+    const fs = require('fs'), path = require('path');
+    const raiz = process.env.LOCAL_DB_DIR;
+    const nomes = [];
+    for (const m of fs.readdirSync(raiz)) {
+      if (!/^\d{4}-\d{2}$/.test(m)) continue;
+      for (const f of fs.readdirSync(path.join(raiz, m))) nomes.push(DB.PREFIXO + m + '/' + f);
+    }
+    return [...DB.escolhe(nomes)].map(([dia, nome]) => ({ dia, nome,
+      buf: fs.readFileSync(path.join(raiz, nome.slice(DB.PREFIXO.length))) }));
+  }
+  const svc = await getBlobClient();
+  const cont = svc.getContainerClient(DB_CONTAINER);
+  const itens = new Map();
+  for await (const b of cont.listBlobsFlat({ prefix: DB.PREFIXO })) itens.set(b.name, b);
+  const escolhidos = DB.escolhe([...itens.keys()]);
+  console.log('BANCO "' + DB_CONTAINER + '/' + DB.PREFIXO + '": ' + itens.size + ' blob(s) · ' + escolhidos.size
+    + ' dia(s) com zip MRT' + (escolhidos.size ? ' · ' + [...escolhidos.keys()][0] + ' a ' + [...escolhidos.keys()].pop() : ''));
+  const cache = require('./lib-cache-blob').abre(DB_CONTAINER);
+  const out = [];
+  for (const [dia, nome] of escolhidos) out.push({ dia, nome, buf: await cache.baixa(cont, itens.get(nome)) });
+  cache.poda();
+  cache.resumo();
+  return out;
+}
+
 // O blob de 5 minutos e SEPARADO e limitado. Enfiar o detalhe fino no scada_comparativo.json
 // triplicaria um arquivo que ja levava ~10 s para baixar, e penalizaria toda pagina que so quer o
 // diario. A janela cobre com folga a do comparativo de 5 min (30 dias).
@@ -396,9 +438,14 @@ async function writeOut(obj) {
     gerado: new Date().toISOString(),
     resolucao_min: 5,
     unidade: 'MWh por intervalo de 5 minutos',
-    origem: 'Potencia ativa em MW amostrada de 5 em 5 minutos no supervisorio da usina; a energia '
-      + 'do intervalo e a potencia multiplicada pela duracao. O arquivo ja traz energia.',
+    origem: 'Potencia ativa dos circuitos de 34,5 kV de cada usina, no supervisorio da usina. Nos dias listados em '
+      + 'media_5min o valor vem do historico do banco do supervisorio e e a MEDIA da potencia em cada 5 minutos, '
+      + 'entao a energia do intervalo e a media multiplicada pela duracao, sem aproximacao. Nos demais dias vem da '
+      + 'planilha exportada, com a potencia lida a cada 5 minutos. O arquivo ja traz energia.',
     janela_dias: JANELA_5MIN,
+    // dia -> usinas cujo valor e a media do banco (o Comparativo nao aplica o trapezio nelas)
+    media_5min: Object.fromEntries(Object.keys(cinco).filter((d) => (resto.media_5min || {})[d])
+      .map((d) => [d, resto.media_5min[d]])),
     intra5: cinco,
   };
   if (process.env.LOCAL_OUT) {
@@ -432,7 +479,11 @@ async function writeOut(obj) {
 
 (async () => {
   const raws = await loadRawBuffers();
-  if (!raws.length) { console.log('Nenhuma planilha .xlsx em "' + RAW_CONTAINER + '" — nada a processar (ok).'); return; }
+  const zips = await loadDbZips();
+  if (!raws.length && !zips.length) {
+    console.log('Nenhuma planilha .xlsx em "' + RAW_CONTAINER + '" nem zip do banco em "' + DB_CONTAINER + '" — nada a processar (ok).');
+    return;
+  }
   const out = await loadExistingOut();
   if (!out.diario) out.diario = {};
   if (!out.intra15) out.intra15 = {};
@@ -440,6 +491,14 @@ async function writeOut(obj) {
   // estruturas PARALELAS de potencia reativa (MVAr medio) — mesma forma da ativa
   if (!out.diario_reativa) out.diario_reativa = {};
   if (!out.intra15_reativa) out.intra15_reativa = {};
+  // dia -> usinas que vieram do BANCO (media de 5 min). Quem grava da planilha desmarca; o banco, adiante, marca.
+  if (!out.media_5min) out.media_5min = {};
+  const marca = (d, pk) => { const l = new Set(out.media_5min[d] || []); l.add(pk); out.media_5min[d] = [...l].sort(); };
+  const desmarca = (d, pk) => {
+    if (!out.media_5min[d]) return;
+    out.media_5min[d] = out.media_5min[d].filter((x) => x !== pk);
+    if (!out.media_5min[d].length) delete out.media_5min[d];
+  };
   // Guarda anti-parcial: operadores sobem só o dia ANTERIOR (D-1) até 08:00. Um arquivo de HOJE
   // (ou futuro) é sempre parcial/em-progresso e pode vir corrompido (ex.: M5 07/13 = 775 MWh,
   // 3,5x um dia real) — nunca entra no diário/intra15. Também purga dias >= hoje que já tenham
@@ -454,6 +513,7 @@ async function writeOut(obj) {
   // mesma purga anti-parcial na reativa
   for (const pk of Object.keys(out.diario_reativa)) for (const d of Object.keys(out.diario_reativa[pk])) if (d >= hojeBRT) delete out.diario_reativa[pk][d];
   for (const d of Object.keys(out.intra15_reativa)) if (d >= hojeBRT) delete out.intra15_reativa[d];
+  for (const d of Object.keys(out.media_5min)) if (d >= hojeBRT) delete out.media_5min[d];
   if (purgados) console.log('Purgados', purgados, 'registros de hoje/futuro (>= ' + hojeBRT + ') do blob existente.');
   let parks = 0, days = new Set();
   for (const { name, buf } of raws) {
@@ -486,11 +546,13 @@ async function writeOut(obj) {
       if (d >= hojeBRT) continue;                            // nunca grava hoje/futuro (parcial/corrompido)
       if (gapOnly && out.diario[pk][d] != null) continue;   // nao sobrescreve dia ja existente
       out.diario[pk][d] = +diario[d].toFixed(2); days.add(d); escritos++;
+      desmarca(d, pk);
     }
     for (const d in intra15) {
       if (d >= hojeBRT) continue;
       if (!out.intra15[d]) out.intra15[d] = {};
       if (gapOnly && out.intra15[d][pk] != null) continue;
+      desmarca(d, pk);
       out.intra15[d][pk] = intra15[d].map(v => +v.toFixed(3));
       if (intra5[d]) {
         if (!out.intra5[d]) out.intra5[d] = {};
@@ -517,6 +579,63 @@ async function writeOut(obj) {
     console.log('OK', name, '->', pk, (gapOnly ? '(M10->M1 so buracos)' : ''),
       '| ativa:', escritos, 'dias', reativa ? ('| reativa: ' + reaEscritos + ' dias') : '');
   }
+  // ---- o BANCO do supervisorio vence a planilha no dia que traz completo (17/10/2026) ----
+  // Completo = os 288 intervalos com todos os circuitos da usina. Dia do banco pela metade so entra onde a planilha
+  // nao tem o dia (ou onde o que esta la ja era do banco): substituir um dia inteiro por meio dia apagaria energia.
+  // Dia incompleto entra sem total do dia — o total de um dia com buraco seria menor que o real e pareceria corte.
+  const DB = require('./lib-scada-db');
+  const r3 = (v) => (v == null ? null : +v.toFixed(3));
+  const porDia = new Map();
+  const dbIgnorados = [], dbMetodoVelho = [];
+  for (const z of zips) {
+    if (z.dia >= hojeBRT) continue;
+    let lido;
+    try { lido = DB.leZip(z.buf, z.dia, z.nome); }
+    catch (e) { console.warn('BANCO IGNORADO (' + e.message + ')'); dbIgnorados.push(z.nome); continue; }
+    if (!lido.aceito) { dbMetodoVelho.push(z.dia); continue; }
+    porDia.set(z.dia, lido);
+  }
+  if (dbMetodoVelho.length) console.log('BANCO: ' + dbMetodoVelho.length + ' dia(s) ainda pela extracao antiga (sem metodo.txt da reta), '
+    + 'fora ate serem refeitos · ' + dbMetodoVelho[0] + ' a ' + dbMetodoVelho[dbMetodoVelho.length - 1]);
+  const rtcDb = DB.reparaRtc(porDia);
+  if (rtcDb.dias) {
+    const pct = rtcDb.razao == null ? '?' : (rtcDb.razao * 100).toFixed(0) + '%';
+    if (rtcDb.aplicado) console.log('RTC M3 [banco] CUB10.1 dobrado ate 11/07 · era ' + pct + ' das irmas · ' + rtcDb.dias + ' dias');
+    else console.warn('RTC M3 [banco] NAO aplicado (guard): CUB10.1 em ' + pct + ' das irmas, fora de 35-70% · ' + rtcDb.dias + ' dias');
+  }
+  const db = { completos: 0, parciais: 0, preservados: 0, dias: new Set() };
+  for (const [d, z] of porDia) {
+    if (z.faltam.length) console.warn('BANCO ' + d + ': sem o(s) cubiculo(s) ' + z.faltam.join(', '));
+    for (const [pk, u] of Object.entries(DB.usinasDoDia(z.circ))) {
+      const doBanco = (out.media_5min[d] || []).includes(pk);
+      if (!u.completo && out.diario[pk] && out.diario[pk][d] != null && !doBanco) { db.preservados++; continue; }
+      const { e15, q15 } = DB.para15(u.e5, u.q5);
+      if (!out.diario[pk]) out.diario[pk] = {};
+      if (u.completo) out.diario[pk][d] = +u.e5.reduce((a, b) => a + b, 0).toFixed(2);
+      else delete out.diario[pk][d];
+      (out.intra15[d] = out.intra15[d] || {})[pk] = e15.map(r3);
+      (out.intra5[d] = out.intra5[d] || {})[pk] = u.e5.map(r3);
+      const vs = u.q5.filter((v) => v != null);
+      if (!out.diario_reativa[pk]) out.diario_reativa[pk] = {};
+      if (vs.length) {
+        (out.intra15_reativa[d] = out.intra15_reativa[d] || {})[pk] = q15.map(r3);
+        out.diario_reativa[pk][d] = { media: r3(vs.reduce((a, b) => a + b, 0) / vs.length),
+          min: r3(Math.min(...vs)), max: r3(Math.max(...vs)), n: vs.length };
+      } else {
+        if (out.intra15_reativa[d]) delete out.intra15_reativa[d][pk];
+        delete out.diario_reativa[pk][d];
+      }
+      marca(d, pk);
+      db.dias.add(d); days.add(d);
+      if (u.completo) db.completos++; else db.parciais++;
+    }
+  }
+  if (porDia.size) {
+    const ds = [...db.dias].sort();
+    console.log('BANCO: ' + porDia.size + ' dia(s) lidos · ' + db.completos + ' usina-dia completos · ' + db.parciais
+      + ' parcial(is) sem total do dia · ' + db.preservados + ' parcial(is) onde a planilha tem o dia inteiro (mantida)'
+      + (ds.length ? ' · ' + ds[0] + ' a ' + ds[ds.length - 1] : ''));
+  }
   // limpeza: remove parques nao-canonicos residuais do blob (ex.: M10 legado = M1)
   const removidos = [];
   for (const pk of Object.keys(out.diario)) if (!CANON.has(pk)) { delete out.diario[pk]; removidos.push(pk); }
@@ -526,6 +645,10 @@ async function writeOut(obj) {
   await writeOut(out);
   console.log(`Gravado ${OUT_BLOB}: ${parks} parques, ${days.size} dias novos/atualizados, ${Object.keys(out.intra15).length} dias no total.`);
   if (rtcAplicados) console.log(`Reparo RTC do M3 aplicado em ${rtcAplicados} arquivo(s) (circuito 2 dobrado ate 11/07).`);
+  if (dbIgnorados.length) {
+    console.log(`\nATENCAO: ${dbIgnorados.length} zip(s) do banco ignorado(s) por formato fora do esperado:`);
+    dbIgnorados.slice(0, 20).forEach(f => console.log('  - ' + f));
+  }
   if (ignorados.length) {
     console.log(`
 ATENCAO: ${ignorados.length} planilha(s) ignorada(s) por nao ter coluna de potencia ativa.`);

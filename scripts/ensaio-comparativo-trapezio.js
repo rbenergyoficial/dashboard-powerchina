@@ -5,7 +5,7 @@
  * Sem rede. Importa as pecas do gen-comparativo (quem sobe) e julga contra a integral EXATA de potencias sinteticas:
  * numa rampa o trapezio acerta e o retangulo (o metodo anterior) erra — o ensaio prova as duas coisas, para que um
  * retorno ao retangulo reprove. Confere tambem buraco, virada de dia, a remontagem unica pela marca e a ligacao no
- * corpo principal.
+ * corpo principal. Desde 17/10/2026, o dia que veio do banco do supervisorio (media de 5 min) passa sem trapezio (caso 8).
  *
  * uso: node scripts/ensaio-comparativo-trapezio.js
  */
@@ -89,6 +89,20 @@ console.log('7. o corpo do gerador usa o trapezio nas quatro resolucoes e grava 
   ok(/res\.min > 15 && scada\) mScada = agregaCompleto\(trapezio\(/.test(corpo), '30 e 60 min pela soma COMPLETA de trapezios de 15');
   ok(/scada_integracao: diario \? 'total_do_dia' : SCADA_INTEGRACAO/.test(corpo), 'marca gravada no blob');
   ok(/const de = migra \? diaBRT\(res\.dias - 1\) : deDia/.test(corpo), 'sem marca, a janela e a da resolucao'); }
+
+console.log('8. dia do BANCO (media de 5 min, `media_5min`): o balde passa como esta, sem trapezio (17/10/2026)');
+{ const r = new Map([[chave(1, 600), { M1: 1, M2: 1 }], [chave(1, 605), { M1: 3, M2: 3 }]]);
+  const media = C.mediaDe({ media_5min: { '2026-10-01': ['M1'] } });
+  const t = C.trapezio(r, 5, media);
+  ok(t.get(chave(1, 600)).M1 === 1 && t.get(chave(1, 605)).M1 === 3, 'M1 do banco: 10:00 e 10:05 iguais ao publicado, inclusive o ultimo balde');
+  ok(perto(t.get(chave(1, 600)).M2, 2) && !('M2' in (t.get(chave(1, 605)) || {})), 'M2 (planilha) no mesmo dia segue pelo trapezio');
+  ok(perto(C.trapezio(r, 5).get(chave(1, 600)).M1, 2), 'plantio: sem a marca, o M1 do banco seria deformado (1 -> 2)');
+  ok(C.mediaDe(null).size === 0 && C.mediaDe({}).size === 0, 'blob sem a marca: nenhum dia e do banco');
+  ok(C.precisaMigrar({ scada_integracao: 'trapezio' }, { min: 15, dias: 90 }) === true, 'blob com a marca anterior (so trapezio): remonta uma vez');
+  const src = fs.readFileSync(path.join(__dirname, 'gen-comparativo.js'), 'utf8').replace(/\r\n/g, '\n');
+  const corpo = src.slice(src.indexOf("if (require.main !== module) return;"));
+  ok(/trapezio\(scadaParaMapa\(scada5, de, 'intra5', 5\), 5, mediaDe\(scada5\)\)/.test(corpo), '5 min le a marca do arquivo de 5 min');
+  ok((corpo.match(/'intra15', 15\), 15, mediaDe\(scada\)\)/g) || []).length === 2, '15, 30 e 60 min leem a marca do arquivo principal'); }
 
 console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));
 process.exit(falhas ? 1 : 0);

@@ -56,6 +56,15 @@ jobs:
         if: always()
         run: node scripts/ensaio-comparativo-trapezio.js
 
+      # O supervisorio lido do BANCO (lote scada-db, 22/10/2026): soma pelo unifilar, tudo-ou-nada por intervalo, o zip mais novo,
+      # o RTC do M3, o banco vence a planilha so no dia completo, so a extracao da reta entra, e o vigia do banco (D+2 12:00 BRT).
+      # Zips sinteticos e o gerador de verdade em processo filho; cada regra com o seu plantio. No scada.yml roda antes do gerador.
+      - name: Ensaio · o SCADA pelo banco do supervisorio e o vigia dele (lib-scada-db, gen-scada, gen-scada-db-vigia)
+        if: always()
+        run: |
+          npm i --no-save xlsx@0.18.5
+          node scripts/ensaio-scada-db.js
+
       - name: Ensaio · os quatro eventos do vigia da Way2 deduplicam e fecham
         if: always()
         run: node scripts/ensaio-way2-watchdog-canal.js
