@@ -1,7 +1,7 @@
 name: Inversores SCADA -> inv_scada_supervisorio.json (comparacao; o inv_scada.json das telas e do logger desde 19/10/2026)
 on:
-  schedule:
-    - cron: '47 12 * * *' # 09:47 BRT — depois do export do SCADA (~03:00 BRT) e do scada.yml
+  # export-att-fim (22/10/2026, decisão do humano): o export _ATT do supervisório acabou em 15/10 e NÃO é mais fonte; este
+  # workflow só lia esse export. Sai do relógio e fica só no disparo manual (o inv_scada.json das telas é do logger).
   workflow_dispatch:
     inputs:
       dias:

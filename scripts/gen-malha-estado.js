@@ -130,8 +130,8 @@ const lerHora = (lista, campo) => (j) => mais(ultimo(j[lista], (x) => instante(x
 const lerMedidor = (j) => mais(instante(j.medidor_ate), 5);
 
 /* Os arquivos do conteiner de dados que o portal le, com o workflow que GRAVA cada um (lido nos geradores em 19/10/2026), e desde o
- * malha-vigia-mais (20/10/2026) tambem os produtos dos paineis que estavam fora e congelados: perdas de 30 e 60 min, historico das
- * entradas de string, inversores do supervisorio hora a hora e os transformadores de 5, 15, 30 e 60 min (39 fontes).
+ * malha-vigia-mais (20/10/2026) tambem os transformadores de 5, 15, 30 e 60 min; desde o export-att-fim (22/10/2026) sem os sete
+ * produtos do export _ATT do supervisorio, que nao e mais fonte (32 fontes).
  * `id` e a chave publica da fonte (a pagina traduz); nunca o nome do arquivo. `conteudo`: onde esta o fim do dado (acima);
  * `conteudo: null` = sem campo de data legivel, fica pela gravacao (o porque ao lado).
  * Ficaram FORA, porque a data de gravacao nao mede a execucao: os que so regravam quando o conteudo muda (dia em curso por
@@ -168,17 +168,10 @@ const FONTES = [
   { id: 'ons_indicadores', etapa: 'pub', blob: 'ons_kpis.json', wf: ['ons-consolidado.yml'], conteudo: CDIA((j) => mais(instante(j.ultimo_dado), 30)) },
   { id: 'estacao_30min', etapa: 'pub', blob: 'estacao_logger_30min.json', wf: ['estacao-logger.yml'], conteudo: CDIA(lerMeiaHora('serie', 't'), PONTE) },
   { id: 'estacao_dia', etapa: 'pub', blob: 'estacao_dia.json', wf: ['estacao-logger.yml'], conteudo: CDIA(lerDia('serie', 'd'), PONTE) },
-  { id: 'perdas_inversor', etapa: 'pub', blob: 'perdas_inv_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // supervisorio; o perdas_inv.json e do logger (sungrow.yml) desde 19/10/2026
-  { id: 'perdas_dia', etapa: 'pub', blob: 'perdas_diario_scada.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },   // idem, fonte-inv-logger
-  /* malha-vigia-mais (20/10/2026, decisao do humano): os produtos dos paineis que ficavam fora da lista. Os do supervisorio seguem do
-   * supervisorio (dia D pela ponte de D+1) e saem do prazo quando o export para; amostra de meia hora com rotulo no inicio soma 30 min,
-   * a hora soma 60; o historico das entradas, o ULTIMO dia em que alguma entrada foi julgada string real */
-  { id: 'perdas_30', etapa: 'pub', blob: 'perdas_30min.json', wf: ['perdas.yml'], conteudo: CDIA(lerMeiaHora('serie', 't'), PONTE) },
-  { id: 'perdas_60', etapa: 'pub', blob: 'perdas_60min.json', wf: ['perdas.yml'], conteudo: CDIA(lerHora('serie', 't'), PONTE) },
-  { id: 'strings_entradas', etapa: 'pub', blob: 'pvstr_entradas.json', wf: ['perdas.yml'], conteudo: CDIA(lerDia('serie', 'ultimo_ok'), PONTE) },
-  { id: 'inversores_scada', etapa: 'pub', blob: 'inv_scada_supervisorio.json', wf: ['inv-scada.yml'],   // o inv_scada.json e do logger (sungrow.yml)
-    conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },
-  { id: 'inversores_scada_hora', etapa: 'pub', blob: 'inv_scada_hora.json', wf: ['inv-scada.yml'], conteudo: CDIA((j) => fimDoDia(j.escopo && j.escopo.ate), PONTE) },
+  /* export-att-fim (22/10/2026, decisao do humano: o export _ATT do supervisorio NAO e mais fonte; acabou em 15/10): sairam da conta
+   * os sete produtos dele (perdas_inv_scada, perdas_diario_scada, perdas_30min, perdas_60min, pvstr_entradas, inv_scada_supervisorio,
+   * inv_scada_hora). O logger publica perdas_inv, perdas_diario e inv_scada; os de 30 e 60 min e a hora eram so do Grafana. As copias
+   * ficam no conteiner: os geradores do logger conferem que existem (lib-inv-logger, gen-pvstr-logger, gen-ts-setpoint) */
   /* registro de trocas: troca que nao acontece nao e dado velho; o que envelhece e a planilha da equipe, revista todo mes
    * (regra do selo dos inversores, gen-fontes-saude.js, lote invmt1: 30 d, ressalva ate 60 d) */
   { id: 'inversores_registro', etapa: 'pub', blob: 'inversores.json', wf: ['inversores.yml'],

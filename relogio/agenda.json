@@ -12,9 +12,6 @@
  "executivo.yml": [
   "0 13 4,9-22 * * *"
  ],
- "inv-scada.yml": [
-  "0 47 12 * * *"
- ],
  "inversores.yml": [
   "0 22 0,12,18 * * *"
  ],
@@ -32,9 +29,6 @@
  ],
  "ons-consolidado.yml": [
   "0 17 18 * * *"
- ],
- "perdas.yml": [
-  "0 12 14 * * *"
  ],
  "portal-dia.yml": [
   "0 10,40 3-5 * * *"

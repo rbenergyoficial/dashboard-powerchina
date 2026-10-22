@@ -1,11 +1,8 @@
 name: Perdas (cascata CC -> CA -> medidor) -> perdas_*.json
 on:
-  schedule:
-    # 11:12 BRT — DEPOIS do comparativo (10:40 BRT), de quem ele lê o medidor de faturamento.
-    # 🔴 A ordem importa: no horário anterior (09:52 BRT) ele leria sempre o blob da rodada da
-    # véspera, e a comparação inversor-contra-medidor ficaria um dia atrás sem avisar.
-    # Minuto quebrado de propósito: no :00 o agendador do GitHub atrasa 30 a 90 min.
-    - cron: '12 14 * * *'
+  # export-att-fim (22/10/2026, decisão do humano): o export _ATT do supervisório acabou em 15/10 e NÃO é mais fonte. Este
+  # workflow só lia esse export (scada-raw) e publica as cópias do supervisório (perdas_*_scada, perdas_30/60min, pvstr_entradas):
+  # sai do relógio e fica só no disparo manual. As cópias ficam no contêiner (os geradores do logger conferem que existem).
   workflow_dispatch:
     inputs:
       dias:

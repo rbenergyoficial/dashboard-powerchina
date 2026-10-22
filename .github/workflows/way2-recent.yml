@@ -91,21 +91,9 @@ jobs:
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-dia-corrente.js
-      # As perdas de PV alimentam o card de cobertura da medicao, e o `perdas.yml` declara
-      # uma execucao por dia no cron — que o agendador do GitHub as vezes simplesmente nao
-      # entrega (nao rodou em 31/08). Aqui ele e coberto pelo job que roda de verdade, mas
-      # SO quando o resultado ja esta velho: o passo custa ~3 min e nao pode sair a cada
-      # cinco minutos. A guarda trata 404 e erro como velho — nao gerar custa um dia de
-      # pagina parada, gerar a toa custa tres minutos.
-      - name: O blob de perdas está velho?
-        id: idade_perdas
-        # fonte-inv-logger (19/10/2026): o perdas_diario.json e do logger (sungrow.yml); o que o gen-perdas grava e a copia do supervisorio
-        run: node scripts/idade-blob.js perdas_diario_scada.json 3 5
-      - name: Perdas de PV (cobre o agendador)
-        if: steps.idade_perdas.outputs.velho == 'true'
-        env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-        run: node scripts/gen-perdas.js
+      # export-att-fim (22/10/2026): saiu daqui o atalho que rodava o gen-perdas quando a cópia do supervisório ficava velha. O
+      # export _ATT acabou em 15/10 e não é mais fonte: a cópia fica velha para sempre e o atalho regravava o mesmo dado a cada
+      # 5 min (3 min de execução). As perdas das telas são do logger (sungrow.yml).
       # 🔴 A REGRA DE COR DO SELO ESTA DUPLICADA no ensaio, porque o gerador nao a exporta. Divida
       # assumida — e esta e a guarda contra ela apodrecer: o ensaio confere os sete casos sinteticos
       # (incluindo o de 23/08, dois medidores de 230 kV fora) e depois compara o proprio resultado
