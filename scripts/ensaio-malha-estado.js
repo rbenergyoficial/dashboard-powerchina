@@ -529,6 +529,21 @@ async function regras() {
   ok(S && S.tentativas === 2 && S.versao === 1, 'o diario vence o teste mais novo do mesmo dia');
   S = await G.escolheDiario(it(D, ['060000', '070000']), D, le({ [p('060000')]: v1(D, 'diario', 'falhou', 1, TUDO_FALHA), [p('070000')]: v1(D, 'diario', 'ok', 2, TUDO_OK) }));
   ok(S && S.resultado === 'ok', 'entre dois diarios, vale o mais novo');
+  /* malha-ciclo-vazio (23/10/2026): o ciclo SEM NADA NOVO (0 arquivos nas tres fontes da usina, nenhuma em falha) nao cobre o da manha */
+  const vazio = () => { const x = v1(D, 'diario', 'ok', 1, { inv: 'ressalva', est: 'ressalva', scada: 'ressalva', cofre: 'ok', od: 'ok' });
+    for (const k of ['inversores', 'estacoes', 'scada_db']) x.fontes[k].arquivos_vm = 0; return x; };
+  const casoVazio = async (Gx) => [
+    await Gx.escolheDiario(it(D, ['065900', '083500']), D, le({ [p('065900')]: v1(D, 'diario', 'ok', 2, TUDO_OK), [p('083500')]: vazio() })),
+    await Gx.escolheDiario(it(D, ['083500']), D, le({ [p('083500')]: vazio() })),
+    await Gx.escolheDiario(it(D, ['065900', '083500']), D, le({ [p('065900')]: v1(D, 'diario', 'ok', 2, TUDO_OK), [p('083500')]: v1(D, 'diario', 'falhou', 1, TUDO_FALHA) })),
+  ];
+  { const [a, b, c] = await casoVazio(G);
+    ok(a && a.tentativas === 2 && a.fontes.inversores.resultado === 'ok', 'o ciclo vazio das 08:35 nao cobre o da manha que trouxe arquivo (23/10)');
+    ok(b && b.fontes.inversores.resultado === 'ressalva' && G.cicloVazio(b), 'dia so com ciclo vazio fica com ele');
+    ok(c && c.resultado === 'falhou', 'ciclo mais novo que FALHOU continua valendo (falha nao e vazio)');
+    const Mv = require(mutante('ciclo_vazio_cobre', [['    if (!cicloVazio(S)) { if (vazio)', '    if (true) { if (vazio)']]));
+    const [ma] = await casoVazio(Mv);
+    ok(ma && ma.fontes.inversores.resultado === 'ressalva', 'plantio: sem a regra, o ciclo vazio cobre o da manha (o caso acima reprovaria)'); }
   S = await G.escolheDiario(it(D, ['150000']), D, le({ [p('150000')]: v1(D, 'teste', 'ok', 1, TUDO_OK) }));
   ok(S === null, 'dia so com teste = sem estado');
   S = await G.escolheDiario(it(D, ['']), D, le({ [p('')]: v0(D, 'ok', 1, true) }));

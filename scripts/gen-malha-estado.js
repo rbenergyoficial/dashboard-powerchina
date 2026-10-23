@@ -450,6 +450,11 @@ async function escolheDiario(itens, dia, le) {
     if (!m || m[1] !== dia) throw new Error('estado da ponte com nome fora do formato: ' + String(it.nome).slice(PREFIXO_ESTADO.length));
     return { nome: it.nome, mod: it.mod, hora: m[2] || '' };
   }).sort((a, b) => b.hora.localeCompare(a.hora) || ((b.mod || 0) - (a.mod || 0)));
+  /* malha-ciclo-vazio (23/10/2026): um ciclo SEM NADA NOVO (as tres fontes da usina com 0 arquivos, nenhuma em falha, ponte ok) nao
+     cobre um ciclo mais cedo do mesmo dia que trouxe arquivo. Em 23/10 os pedidos de relatorio das 08:33 ligaram a ponte, ela rodou de
+     novo o ciclo da usina, nao achou nada e marcou as fontes como ressalva: o lado da usina inteiro ficou laranja com o dado em dia.
+     Ciclo que falhou nao e vazio e continua valendo. Dia so com ciclos vazios fica com o mais novo. */
+  let vazio = null;
   for (const c of cand) {
     const buf = await le(c.nome);
     if (!buf) continue;
@@ -459,9 +464,17 @@ async function escolheDiario(itens, dia, le) {
     const modo = j.modo;
     if (modo === 'teste') continue;
     if (modo !== undefined && modo !== 'diario') throw new Error('estado da ponte com modo desconhecido em ' + onde);
-    return normaliza(j, modo === undefined ? 0 : 1, c.mod, onde);
+    const S = normaliza(j, modo === undefined ? 0 : 1, c.mod, onde);
+    if (!cicloVazio(S)) { if (vazio) console.log('estado da ponte ' + dia + ': ' + onde + ' (pulado o ciclo sem nada novo ' + vazio.onde + ')'); return S; }
+    if (!vazio) vazio = Object.assign(S, { onde });
   }
-  return null;
+  if (vazio) { console.log('estado da ponte ' + dia + ': so ciclo(s) sem nada novo, vale ' + vazio.onde); delete vazio.onde; }
+  return vazio;
+}
+function cicloVazio(S) {
+  if (!S || S.versao !== 1 || !S.fontes || S.resultado !== 'ok') return false;
+  const us = ['inversores', 'estacoes', 'scada_db'].map((k) => S.fontes[k]);
+  return us.every((f) => f.arquivos_vm === 0 && f.resultado !== 'falha');
 }
 async function estadosPorDia(fonte, hoje) {
   const por = {};
@@ -833,5 +846,5 @@ async function main() {
 }
 
 if (require.main === module) main().catch((e) => { console.error('ERRO: ' + (e && e.message ? e.message : e)); process.exit(1); });
-else module.exports = { FONTES, ETAPAS, PONTE_ETAPAS, CODIGOS, PA, prazoMin, prazoDe, proximo, proximaPonte, estadoFrescor, escolheDiario,
+else module.exports = { FONTES, ETAPAS, PONTE_ETAPAS, CODIGOS, PA, prazoMin, prazoDe, proximo, proximaPonte, estadoFrescor, escolheDiario, cicloVazio,
   etapasPonte, etapaProc, monta, confere, normaliza, diaBRT, prazoConteudo, fimDoConteudo, instante, fimDoDia, WAY2_LAT_MIN, PONTE_MIN, FOLGA_MAX_MIN };
