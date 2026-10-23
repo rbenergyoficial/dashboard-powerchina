@@ -86,6 +86,10 @@ const GATILHOS = ['restricao_sem_registro', 'linha_ilegivel', 'mediana_do_dia_fo
    aqui, em vez de o caso C plantar um defeito que nao existe mais. */
 const TIPOS_ILEGIVEIS = ['ano_impossivel', 'data_ilegivel', 'hora_ilegivel', 'pot_ilegivel'];
 const HOJE = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);   // o mesmo corte da auditoria
+/* 🔴 ppc-fase2 (23/10/2026): a auditoria roda aqui SEM credencial nenhuma, e desde o conteiner `dados` privado (21/10) ela nao le
+   o arquivo do operador nacional pelo endereco publico (409): o ensaio caia na linha de base e a auditoria de verdade ficava
+   SKIPPED. O ensaio grava o arquivo que ELE leu (o mesmo da contagem independente) e o entrega pelo ONS_LOCAL. */
+let ONS_ARQ = null;
 
 const leJson = (p) => JSON.parse(zlib.gunzipSync(fs.readFileSync(p)).toString('utf8'));
 const gravaJson = (p, o) => fs.writeFileSync(p, zlib.gzipSync(Buffer.from(JSON.stringify(o))));
@@ -97,9 +101,11 @@ function roda(registro, rotulo) {
   const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio_ppc_' + rotulo + '_'));
   const arq = path.join(pasta, 'registro.json');
   gravaJson(arq, registro);
-  const env = Object.assign({}, process.env, { PPC_LOCAL: arq, PPC_DE: DE, LOCAL_OUT_DIR: pasta });
+  if (!ONS_ARQ) throw new Error('roda antes do arquivo do operador nacional');
+  const env = Object.assign({}, process.env, { PPC_LOCAL: arq, ONS_LOCAL: ONS_ARQ, PPC_DE: DE, LOCAL_OUT_DIR: pasta });
   delete env.SECO;
   delete env.DADOS_STORAGE;   // sem credencial no ambiente: nem por engano o ensaio publica
+  delete env.DADOS_SAS;       // nem a de leitura da maquina: a rodada local fica igual a do GitHub (ppc-fase2)
   let ok = true, saida;
   try { saida = execFileSync(process.execPath, [AUDITOR], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch (e) { ok = false; saida = String(e.stdout || '') + String(e.stderr || ''); }
@@ -167,6 +173,10 @@ const copia = () => JSON.parse(JSON.stringify(base));
 const ons0 = await baixa('ons_restricao_all.json');
 const serie = ons0.consolidado || ons0.linhas || ons0.serie;
 if (!Array.isArray(serie) || !serie.length) throw new Error('o arquivo do operador nacional veio sem serie');
+const pastaOns = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio_ppc_ons_'));
+ONS_ARQ = path.join(pastaOns, 'ons_restricao_all.json');
+gravaJson(ONS_ARQ, ons0);
+process.on('exit', () => { try { fs.rmSync(pastaOns, { recursive: true, force: true }); } catch (e) { /* rascunho */ } });
 const onsLim = new Map();   // chave 'AAAA-MM-DD HH:MM' -> limite; a ultima linha da chave vale, como na auditoria
 for (const r of serie) {
   const ts = String(r.ts || '');

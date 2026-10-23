@@ -30,6 +30,8 @@
  *
  * uso: node audita-ppc-ons.js            (le os dois blobs publicados e grava a auditoria)
  *      PPC_LOCAL=<arquivo.json>          le o registro de um arquivo, para ensaio
+ *      ONS_LOCAL=<arquivo.json>          le o arquivo do operador nacional de um arquivo (gzip), para ensaio: o ensaio roda a
+ *                                        auditoria SEM credencial e lhe entrega o arquivo que ele mesmo leu (ppc-fase2, 23/10/2026)
  */
 'use strict';
 const zlib = require('zlib');
@@ -91,7 +93,9 @@ function dataDosDefeitos(eventos, defeitos) {
   const eventos = (reg.eventos || []).filter((e) => (e.dia || String(e.ts).slice(0, 10)) >= DE);
   if (!eventos.length) throw new Error('o registro nao tem evento nenhum de ' + DE + ' em diante');
 
-  const ons0 = await puxa(BASE + 'ons_restricao_all.json');
+  const ons0 = process.env.ONS_LOCAL
+    ? JSON.parse(zlib.gunzipSync(require('fs').readFileSync(process.env.ONS_LOCAL)).toString('utf8'))
+    : await puxa(BASE + 'ons_restricao_all.json');
   const serie = ons0.consolidado || ons0.linhas || ons0.serie;
   if (!Array.isArray(serie) || !serie.length) throw new Error('o arquivo do operador nacional veio sem serie');
 
