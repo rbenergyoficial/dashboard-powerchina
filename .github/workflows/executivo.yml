@@ -205,7 +205,12 @@ jobs:
       - name: Ensaio · a troca do conjunto chega ao benchmark (produto)
         run: node scripts/ensaio-ref-conjunto.js --produto
 
+      # 🔴 irr-independente (23/10/2026): a irradiancia nao le nada do executivo nem do benchmark. Sem o `if`, um ensaio de
+      # PRODUTO vermelho acima (a retencao do 15/10 no ensaio-ref-conjunto, 22/10) pulava este passo, e o PR ficava preso no
+      # ultimo dia com irradiancia (21/10). O workflow segue vermelho pelo ensaio que reprovou; a irradiancia, nao.
       - name: Gerar irr_ufv.json (solarimetria por UFV)
+        id: gen_irr
+        if: ${{ !cancelled() }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -229,6 +234,7 @@ jobs:
       # (plantios: o SCADA de volta e o trapezio na media reprovam); a hora do irr_60min so com as duas meias horas e a media delas
       # (plantio: a hora de uma meia hora so reprova); o scada_w nao e o gti_w sob outro nome. Antes do PR, que le esta irradiancia.
       - name: Ensaio · a solarimetria do datalogger, integralizada (produto)
+        if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-irr-datalogger.js --produto
@@ -236,17 +242,20 @@ jobs:
       # e o PRODUTO: nenhum trecho travado na serie de 30 min publicada; o M5 travado reinserido reprova. Depois de gerar
       # e antes do PR, que le esta irradiancia (e refaz os dias com leitura retirada).
       - name: Ensaio · a leitura travada sai da serie (produto)
+        if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
         run: node scripts/ensaio-irr-travada.js --produto
 
       # ... e o M7 do ONS no produto: a conferencia publicada no irr_ufv.json e REFEITA da fonte crua e tem de bater mes a mes (o fio do
       # gerador: chave, slot, referencia), e o irr_plano_30min tem ons_w_M7 em toda leitura do M7 nos meses conferidos e nenhum nos retirados
       - name: Ensaio · o M7 da irradiancia do ONS (produto)
+        if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
         run: node scripts/ensaio-irr-ons-tag.js --produto
 
       # ... e o NOME da grandeza nas tres linguas (PROMOVER irr-rotulo): a regra em casos forjados e, no irr_ufv.json recem
       # gravado, toda linha de `qualidade` com `grandeza_pt`/`_en`/`_zh` da lib — a traducao da pagina troca o `_pt` pela
       # irma so com essa paridade. Cada plantio reprova pelo que plantou.
       - name: Ensaio · o nome da grandeza nas tres linguas (lib e produto)
+        if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
         run: node scripts/ensaio-irr-rotulo.js
 
       # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
