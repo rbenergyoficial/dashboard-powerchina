@@ -1,7 +1,7 @@
-name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min) e sp_ts_*.json (setpoint por eletrocentro)
+name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min)
 on:
   schedule:
-    - cron: '17 13 * * *' # 10:17 BRT — depois do export do SCADA (~03:00 BRT) e do inv-scada.yml; o lote do logger chega de dia
+    - cron: '17 13 * * *' # 10:17 BRT — o lote do logger chega de dia
   workflow_dispatch:
     inputs:
       refazer:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-    timeout-minutes: 240
+    timeout-minutes: 120  # a recarga completa (refazer=1 ou esquema novo) mediu ~65 min; a rodada do dia, no maximo 13 min em 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,7 +25,7 @@ jobs:
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
       # inteiro, busca funda e sua memoria, migracao de esquema, saude do inversor e o dicionario de codigos contra o
       # manual, o eletrocentro de 5 min e as horas fora da rede, com plantios. Sem rede: julga a regra antes de gerar. A
-      # primeira rodada depois de um esquema novo do historico rele todos os zips (perto de 40 min; timeout 240).
+      # primeira rodada depois de um esquema novo do historico rele todos os zips (perto de 40 min, ~65 medidos; timeout 120).
       - name: Ensaio do logger Sungrow (sem rede)
         id: r_sungrow
         if: ${{ !cancelled() }}
@@ -35,16 +35,11 @@ jobs:
         id: r_contador
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-contador-dia.js perdas
-      # a soma por eletrocentro da potencia e do setpoint de despacho (SCADA, 30 min): carimbo sem leitura nulo, acumulo, contrato da fonte e leitura do blob, com plantios
-      - name: Ensaio · potencia e setpoint por eletrocentro (sem rede)
-        id: r_ts_setpoint
-        if: ${{ !cancelled() }}
-        run: node scripts/ensaio-ts-setpoint.js
       # a disponibilidade dos inversores (lib-sungrow-disp, sg_disp_dia.json): estado pela Tabela 2 pelo NOME da coluna,
       # heranca do ultimo estado valido atravessando a meia-noite, falta de leitura fora da conta, irradiancia da estacao,
       # so o inversor que ocupa a posicao no dia, Complexo pela capacidade instalada; o gerador de ponta a ponta (logger
       # forjado fora do historico, recarga sem historico, estacao ausente aborta), com plantios. Sem rede. A primeira rodada
-      # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 240 min)
+      # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 120 min)
       - name: Ensaio · disponibilidade dos inversores pelo logger (sem rede)
         id: r_disp
         if: ${{ !cancelled() }}
@@ -116,7 +111,7 @@ jobs:
         run: node scripts/ensaio-inv-logger.js --produto
       # strings-logger (19/10/2026): pvstr_hora_<usina> e pvstr_str_<usina>_<ts> das telas pelo logger, refeitos do sg_curva/sg_str que o
       # gen-sungrow acabou de gravar. Na PRIMEIRA rodada semeia a copia do supervisorio (pvstr_hora_<usina>_scada, pvstr_str_<u>_<ts>_scada)
-      # que o gen-perdas passa a gravar e o gen-ts-setpoint le logo abaixo; nome antigo ja do logger sem a copia aborta sem gravar
+      # que o gen-perdas passa a gravar; nome antigo ja do logger sem a copia aborta sem gravar
       - name: Gerar pvstr_hora e pvstr_str pelo logger
         id: pvstr_logger
         if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
@@ -131,14 +126,9 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-pvstr-logger.js --produto
-      # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora_<usina>_scada, a copia do supervisorio
-      # que o gen-perdas grava desde strings-logger) guarda 7 dias, entao um dia sem rodar nao perde nada
-      - name: Gerar sp_ts_<usina>_<ts>.json
-        if: ${{ !cancelled() && steps.r_ts_setpoint.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
-        env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          OUT: dados
-        run: node scripts/gen-ts-setpoint.js
+      # O setpoint por eletrocentro (sp_ts_<usina>_<ts>.json, gen-ts-setpoint) saiu daqui em 24/10/2026: a fonte e o export do
+      # supervisorio, encerrado em 15/10, e o passo regravava todo dia o mesmo dado parado em 14/10 com o job verde. O arquivo fica
+      # publicado como esta, com a data dele; o gerador e o ensaio ficam no repositorio para quando houver fonte nova.
       # PROMOVER assistente-portal: o resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
       # roda mesmo se um ensaio anterior reprovou (le os blobs publicados), e o ensaio dele refaz cada numero por codigo proprio
       - name: Ensaio · resumo do dia do assistente (lib, mundo forjado)
