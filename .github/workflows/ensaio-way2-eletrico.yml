@@ -1,8 +1,9 @@
 name: Ensaio · Way2 Eletrico (compara o gerador com o fluxo, sem publicar)
 
-# Este ensaio NAO grava nada. Ele busca da API da Way2 pelo gerador novo, baixa o blob que o fluxo
-# do Power Automate escreveu, e compara. E o crivo que autoriza aposentar o fluxo — sem ele,
-# "parece igual" nao e igual, e a coleta do ao-vivo e o unico dado que nao tem de onde ser refeito.
+# Este ensaio NAO grava nada. `comparar` busca da API da Way2 pelo gerador e compara com o
+# way2_eletrico.json publicado, que o proprio gerador grava no way2-recent.yml de 5 em 5 min: diz se a
+# coleta de agora cobre o que ja esta no ar, nao prova a regra do gerador. `local` grava em arquivo e
+# sobe como artefato, para inspecao.
 
 on:
   workflow_dispatch:

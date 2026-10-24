@@ -1,11 +1,7 @@
 name: Way2 · energia do mês e demanda do mês (substituto do fluxo do Power Automate)
 
-# Substitui o fluxo "Way2 → Azure Blob Sync" do Power Automate (10 min), que sai com o Premium em 09/11/2026: as mesmas tres
-# chamadas, gravando way2_energia_mes.json, way2_energia_antmes.json e way2_must.json com o corpo da resposta como veio.
-#
-# 🔴 GRAVA desde o PROMOVER pa-way2-mes (20/10/2026): a sombra (pa-way2-mes-sombra, 18/10) rodou 300 vezes em 48 h, todas verdes,
-# com 549 ponto x dia iguais nos tres blobs e nenhum dia fechado diferente. O fluxo do Power Automate e desligado no mesmo ato
-# (um escritor so por blob). SOMBRA=1 continua valendo para comparar a mao.
+# Tres chamadas a Way2, gravando way2_energia_mes.json, way2_energia_antmes.json e way2_must.json com o corpo da resposta como
+# veio. Um escritor so por blob. SOMBRA=1 compara com o publicado sem gravar.
 on:
   schedule:
     - cron: '4,14,24,34,44,54 * * * *'  # a cada 10 min, fora do :00

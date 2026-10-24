@@ -101,9 +101,7 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
         run: node scripts/gen-must-watchdog.js
-      # 🔴 ULTRAPASSAGEM DO MUST NO QUARTO DE HORA (PROMOVER pa-alerta, decisao D2 de 18/10/2026).
-      # Substitui o e-mail do fluxo "Way2 MUST Intradia" do Power Automate, que sai com o Premium em
-      # 09/11 e nunca avisou: o filtro dele comparava hora local com UTC (300 execucoes, zero e-mail).
+      # 🔴 ULTRAPASSAGEM DO MUST NO QUARTO DE HORA, por e-mail e issue.
       # Le o must_15min.json que o passo de cima acabou de gravar. O ensaio vem antes e e barato, e o
       # alerta SO RODA SE ELE PASSAR: regra quebrada nao manda e-mail falso nem cala em silencio (o
       # vermelho do ensaio ja e o aviso). O alerta roda mesmo com o gerador falho (o dado de ontem

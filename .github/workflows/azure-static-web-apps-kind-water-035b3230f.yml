@@ -22,14 +22,8 @@ jobs:
           lfs: false
           # (a guarda do index.html, que comparava com o commit anterior, saiu com a aposentadoria)
           fetch-depth: 2
-      # 🔴 SITE APOSENTADO em 18/10/2026 (decisao D1 do humano, lote pa-ociosos do plano de
-      # desligar o Power Automate). O index.html da raiz era o unico leitor de cinco blobs que so o
-      # Power Automate grava, e nada mais aponta para este endereco (varrido em 18/10: repositorio,
-      # 97 dashboards do Grafana e o portal). Agora este endereco publica so o aviso da pasta
-      # site-aposentado/, que leva ao Portal Corporativo e desinstala o service worker antigo.
-      # O index.html antigo continua no repositorio; voltar e reverter o commit.
-      # A guarda "o index.html nao pode encolher" saiu junto: ela protegia o site que nao e mais
-      # publicado.
+      # 🔴 ENDERECO APOSENTADO: publica so o aviso da pasta site-aposentado/, que leva ao Portal
+      # Corporativo e desinstala o service worker antigo. O index.html antigo continua no repositorio.
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1

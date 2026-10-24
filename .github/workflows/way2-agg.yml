@@ -45,12 +45,11 @@ jobs:
           FORCAR: ${{ github.event.inputs.forcar }}
           RESOLUCOES: ${{ github.event.inputs.resolucoes }}
         run: node --max-old-space-size=4096 scripts/gen-way2-agg.js
-      # 🔴 Selos de frescor POR FONTE (Lote B, 06/09/2026): o cabecalho de seis paginas dizia
-      #    "11 min · 24/24" (Way2) sobre dado de trafo com 2,7 dias e de oleo com 75. Roda aqui,
-      #    de hora em hora, porque as fontes que ele mede sao diarias/trimestrais — 5 min seria
+      # 🔴 Selos de frescor POR FONTE: cada pagina mostra a idade da fonte que ela le, e nao a do medidor.
+      #    Roda aqui, de hora em hora, porque as fontes que ele mede sao diarias/trimestrais — 5 min seria
       #    baixar 1 MB do ONS 288x/dia para nada. `if: always()`: o selo importa MAIS quando o passo
       #    anterior falhou.
-      # lote fonte-trafo-way2 (19/10/2026): os dois selos dos trafos (badges_trafo = copia do supervisorio, badges_trafo_230 = diario do
+      # Os dois selos dos trafos (badges_trafo = copia do supervisorio, badges_trafo_230 = diario do
       #    medidor) ensaiados sem rede, com o gerador de verdade e plantios. Vermelho aqui = o selo nao e regravado nesta rodada.
       - name: Ensaio · selos dos transformadores (sem rede)
         id: ensaio_selo

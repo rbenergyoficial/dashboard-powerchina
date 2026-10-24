@@ -3,15 +3,10 @@ name: Relogio · publicar no Azure
 # Publica o Function App que dispara os workflows. O relogio NAO coleta e NAO gera nada: toda a
 # logica continua nos geradores do repo, com as guardas que eles ja tem.
 #
-# 🔴 ESTE WORKFLOW NUNCA PUBLICOU NADA — e reportava `success` a cada push (02/09/2026).
-# A variavel `RELOGIO_APP_NAME` nunca foi definida, entao o gate saia com `ok=false` e TODOS os
-# passos seguintes eram pulados. O job ficava verde. O que rodava no ar era o pacote de 01/09,
-# publicado a mao pelo `az`, e duas correcoes posteriores nunca chegaram nele.
+# 🔴 Variavel ou destino ausente FALHA o job (passo "O destino existe?"): um gate que pulasse os passos
+# seguintes deixaria o job verde sem publicar nada.
 #
-# ⚠️ E o motivo de o segredo nunca ter sido criado: o `publish-profile` NAO EXISTE neste app. Ele
-# esta em **Flex Consumption**, que nao emite perfil de publicacao — `az functionapp deployment
-# list-publishing-credentials` responde "not currently supported for Azure Functions on the Flex
-# Consumption plan". O workflow foi escrito para um plano que o app nao usa.
+# ⚠️ Sem `publish-profile`: o app esta em **Flex Consumption**, que nao emite perfil de publicacao.
 #
 # 🔴 A AUTENTICACAO AGORA E OIDC, E NAO HA SEGREDO NENHUM NESTE CAMINHO.
 # Em vez de guardar uma senha de service principal, o GitHub troca um token de identidade proprio

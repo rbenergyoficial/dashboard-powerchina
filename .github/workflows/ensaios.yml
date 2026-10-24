@@ -110,7 +110,7 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/ensaio-must-watchdog.js
 
-      # O alerta de ultrapassagem do MUST no quarto de hora (alerta-must.js, PROMOVER pa-alerta): janela por dia BRT,
+      # O alerta de ultrapassagem do MUST no quarto de hora (alerta-must.js): janela por dia BRT,
       # fronteira do balde das 00:00, dedup, e vermelho quando o canal esta incompleto ou nada foi julgado. So casos
       # fabricados; o mesmo ensaio roda tambem antes do alerta no must-intra.yml, e o alerta so roda se ele passar.
       - name: Ensaio · o alerta de ultrapassagem do MUST (15 min)
@@ -124,8 +124,7 @@ jobs:
         if: always()
         run: node scripts/ensaio-gen-must-intra.js
 
-      # O mes corrente do ONS (repara-ons-mes.js, gravarMesCorrente; PROMOVER pa-ons) no formato do fluxo do Power Automate que
-      # ele substitui: texto cru, so o dsc aparado, mes em UTC, topo do blob igual, e nunca piorar o que esta gravado.
+      # O mes corrente do ONS (repara-ons-mes.js, gravarMesCorrente) no formato do blob mensal: texto cru, so o dsc aparado, mes em UTC, topo do blob igual, e nunca piorar o que esta gravado.
       - name: Ensaio · o mes corrente do ONS no formato do fluxo
         if: always()
         run: node scripts/ensaio-ons-mes-corrente.js
@@ -143,8 +142,8 @@ jobs:
         if: always()
         run: node scripts/ensaio-malha-estado.js
 
-      # O substituto do fluxo "Way2 → Azure Blob Sync" (gen-way2-mes.js; PROMOVER pa-way2-mes-sombra / pa-way2-mes): as tres
-      # chamadas do fluxo, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.
+      # A energia e a demanda do mes da Way2 (gen-way2-mes.js): as tres
+      # chamadas, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.
       - name: Ensaio · energia e demanda do mes da Way2 (substituto do fluxo)
         if: always()
         run: node scripts/ensaio-way2-mes.js

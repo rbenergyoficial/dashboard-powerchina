@@ -39,7 +39,7 @@ jobs:
       # O proprio gerador tem portao: revalida contra os meses de referencia valida do ONS e
       # ABORTA sem gravar se o erro passar do limite. Job vermelho aqui significa modelo fora de
       # calibracao, e o blob antigo continua no ar — que e o comportamento certo.
-      # 🔴 So meses FECHADOS entram no portao (11/10/2026): com o mes em curso dentro, o veredito virava entre rodadas do
+      # 🔴 So meses FECHADOS entram no portao: com o mes em curso dentro, o veredito virava entre rodadas do
       #    mesmo dia so com a republicacao do operador. A REGRA, antes de gerar; o PRODUTO, logo depois.
       #    O gemeo depende do consolidado e da regra DELE, nao do ensaio do mes corrente: daqui para baixo todo passo tem `if` proprio.
       - name: Ensaio · o portao do gemeo julga so meses fechados (regra)
@@ -77,17 +77,15 @@ jobs:
       # planta uma linha ilegivel e desloca a potencia de um dia inteiro, exigindo o gatilho certo
       # em cada caso. Auditoria vista so no caminho feliz nao esta testada.
       #
-      # ⚠️ Os dois passos do PPC dependem SO do consolidado, nao do gemeo: o portao de calibracao do
-      # gemeo reprovou em 11/10/2026 (vies do mes aberto -8,38 %, limite +-8) e, com o `if` padrao,
-      # pulou a auditoria que ia publicar a correcao da mesa em 04/10. Passo vermelho que nada tem a
-      # ver com o registro nao desliga a auditoria dele.
+      # ⚠️ Os dois passos do PPC dependem SO do consolidado, nao do gemeo: passo vermelho que nada tem
+      # a ver com o registro nao desliga a auditoria dele.
       - name: Ensaio da auditoria do PPC
         id: ensaio_ppc
         if: ${{ !cancelled() && steps.consolidado.outcome == 'success' }}
         run: node scripts/ensaio-ppc.js
       # Vermelho aqui significa uma destas tres, e nenhuma delas se conserta no pipeline:
       #   · o operador nacional limitou e a mesa nao registrou (corte sem registro);
-      #   · ha linha ilegivel no recorte (foi o `11/09/20206`, 18 linhas invisiveis);
+      #   · ha linha ilegivel no recorte (data ou hora que nao se le);
       #   · um dia inteiro saiu desalinhado (mediana acima do limiar, contra 0,000 MW medidos).
       # A divergencia de BORDA e o atraso de registro vao publicados SEM alarme: sao conhecidos,
       # medidos, e quem os resolve e a mesa, nao o codigo.
