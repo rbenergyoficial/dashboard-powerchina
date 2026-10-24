@@ -63,6 +63,12 @@ jobs:
         if: always()
         run: node scripts/ensaio-cache-blob.js
 
+      # A saida propria pela copia em disco: o GET condicional da lib-le-dados para os nomes do padrao, a copia so
+      # com o 304 do storage, o escritor que lembra a etag do upload e a fiacao no sungrow.yml; sem as variaveis, nada muda.
+      - name: Ensaio · a saida propria pela copia em disco (lib-le-dados)
+        if: always()
+        run: node scripts/ensaio-saidas-proprias.js
+
       # O SCADA do comparativo vira energia pelo trapezio entre amostras, e a meia hora so sai completa (10/10/2026).
       - name: Ensaio · o SCADA do comparativo pelo trapezio
         if: always()

@@ -29,6 +29,58 @@
 const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
+const fs = require('fs');
+const path = require('path');
+
+/* A SAÍDA PRÓPRIA pela cópia em disco (24/10/2026). Medido em 24/10: o sungrow relê a cada rodada ~430 MB do que
+   ele mesmo gravou (sg_*), na rodada seguinte e nos passos seguintes do mesmo job. Com LE_DADOS_PROPRIOS (regex de nomes) e CACHE_BLOB_DIR
+   no passo, o GET de um nome que casa vai com If-None-Match da cópia em disco: 304 = a cópia vale (o storage confirmou que é o mesmo blob);
+   200 = vem inteiro e a cópia é trocada. O escritor chama lembra(nome, etag, bytes) logo depois de gravar, com a etag que o upload
+   devolveu. A cópia só é usada com a confirmação do storage: blob regravado por outro escritor muda a etag e vem pela rede. Sem as duas
+   variáveis, nada muda (os outros workflows não as têm). Uma linha de resumo no fim do processo. */
+const PROP = process.env.LE_DADOS_PROPRIOS && process.env.CACHE_BLOB_DIR ? new RegExp(process.env.LE_DADOS_PROPRIOS) : null;
+const EP = { copia: 0, rede: 0, lembrados: 0, bytesCopia: 0, bytesRede: 0, podados: 0 };
+const USADOS = new Set();   // os nomes que este processo leu da cópia, trocou ou lembrou: a poda do escritor apaga o resto
+function dirP() {
+  if (!PROP) return null;
+  const d = path.join(process.env.CACHE_BLOB_DIR, 'proprios');
+  try { fs.mkdirSync(d, { recursive: true }); return d; } catch (e) { return null; }
+}
+const arqP = (nome) => encodeURIComponent(nome);
+function leP(d, nome) {
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(d, arqP(nome) + '.meta'), 'utf8'));
+    const b = fs.readFileSync(path.join(d, arqP(nome)));
+    if (!m.etag || m.bytes !== b.length) return null;
+    USADOS.add(nome); return { etag: m.etag, buf: b };
+  } catch (e) { return null; }
+}
+function gravaP(d, nome, etag, buf) {
+  if (!d || !etag || !Buffer.isBuffer(buf)) return false;
+  try {
+    const f = path.join(d, arqP(nome));
+    fs.writeFileSync(f + '.tmp', buf); fs.renameSync(f + '.tmp', f);   // dado primeiro, marca por último
+    fs.writeFileSync(f + '.meta', JSON.stringify({ etag, bytes: buf.length, nome }));
+    USADOS.add(nome); return true;
+  } catch (e) { return false; }   // sem cópia: a próxima leitura vem pela rede
+}
+function lembra(nome, etag, buf) { if (PROP && PROP.test(nome) && gravaP(dirP(), nome, etag, buf)) EP.lembrados++; }
+/* a poda (só o ESCRITOR chama, no fim, depois de gravar tudo): sai do disco a cópia de nome que esta rodada não leu nem lembrou — o nome que
+   deixou de ser gravado não viaja para sempre no cache do workflow */
+function podaProprios() {
+  const d = dirP(); if (!d) return 0;
+  for (const f of fs.readdirSync(d)) {
+    const nome = decodeURIComponent(f.replace(/\.(meta|tmp)$/, ''));
+    if (!USADOS.has(nome)) { try { fs.unlinkSync(path.join(d, f)); if (/\.meta$/.test(f)) EP.podados++; } catch (e) { } }
+  }
+  return EP.podados;
+}
+function resumoProprios() {
+  const mb = (b) => (b / 1048576).toFixed(1);
+  return 'saidas proprias (' + process.env.LE_DADOS_PROPRIOS + '): ' + EP.copia + ' da copia (' + mb(EP.bytesCopia) + ' MB) · ' + EP.rede
+    + ' da rede (' + mb(EP.bytesRede) + ' MB) · ' + EP.lembrados + ' lembradas ao gravar' + (EP.podados ? ' · ' + EP.podados + ' podadas' : '');
+}
+if (PROP) process.on('exit', () => { if (EP.copia || EP.rede || EP.lembrados) console.log('  ' + resumoProprios()); });
 
 const BASE = process.env.DADOS_BASE_PUB || 'https://rbenergydata.blob.core.windows.net/dados/';
 const CONTEINER = 'dados';
@@ -112,6 +164,20 @@ function pede(url, headers, metodo) {
   metodo = metodo || 'GET';
   const nome = nomeDe(url);
   if (!nome) return pedeHttp(url, metodo, headers);
+  if (PROP && metodo === 'GET' && PROP.test(nome) && !(headers && (headers['If-None-Match'] || headers['if-none-match']))) return pedeProprio(url, nome, headers);
+  return pedeDados(url, nome, headers, metodo);
+}
+/* a saída própria: o GET condicional pela cópia; quem chama recebe o mesmo de sempre (200 com os bytes, ou 404) */
+async function pedeProprio(url, nome, headers) {
+  const d = dirP(), c = d ? leP(d, nome) : null;
+  const x = await pedeDados(url, nome, c ? Object.assign({}, headers || {}, { 'If-None-Match': c.etag }) : headers, 'GET');
+  if (x.status === 304 && c) { EP.copia++; EP.bytesCopia += c.buf.length; return { status: 200, etag: c.etag, ultimaMod: x.ultimaMod || null, buf: c.buf, bytes: c.buf.length }; }
+  if (x.status === 304) throw new Error('HTTP 304 sem copia dados/' + nome);   // não acontece: o 304 só vem com a etag da cópia
+  if (x.status === 200) { EP.rede++; EP.bytesRede += x.buf.length; gravaP(d, nome, x.etag, x.buf); }
+  if (x.status === 404 && d) { try { fs.unlinkSync(path.join(d, arqP(nome) + '.meta')); } catch (e) { } }
+  return x;
+}
+function pedeDados(url, nome, headers, metodo) {
   const m = modo();
   if (m === 'sdk') return pedeSdk(nome, metodo, headers);
   if (m === 'sas') {
@@ -131,4 +197,4 @@ async function json(url) {
 }
 function cabecalho(url) { return pede(url, null, 'HEAD'); }
 
-module.exports = { pede, bytes, json, cabecalho, modo, nomeDe, BASE, _usa: (c) => { CONT = c; }, _zeraAviso: () => { avisou = false; } };
+module.exports = { pede, bytes, json, cabecalho, modo, nomeDe, BASE, lembra, podaProprios, resumoProprios, _est: EP, _usa: (c) => { CONT = c; }, _zeraAviso: () => { avisou = false; } };

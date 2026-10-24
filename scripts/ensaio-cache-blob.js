@@ -147,8 +147,8 @@ function item(blobs, nome, comMd5 = true) {
       && /- name: Gerar sg_\*\.json[\s\S]*?actions\/cache\/save@v4[\s\S]*?path: \.cache-sungrow/.test(wf), 'sungrow.yml restaura a copia antes do gen-sungrow e guarda depois');
     /* revisor-workflow 24/10 (RW-001, RW-002, RW-004): o restore nao herda o success() (os ensaios acima rodam com !cancelled() e o gerador
        nao depende de todos); o save so depois do gerador inteiro; a poda depois da busca funda (ela le export velho na mesma rodada) */
-    ok(/- name: Copia dos exports do SCADA[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');
-    ok(/- name: Guardar a copia dos exports do SCADA[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outcome == 'success'/.test(wf), 'sungrow.yml: a copia so e guardada com o gerador verde');
+    ok(/- name: Copia da rodada anterior \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');
+    ok(/- name: Guardar a copia da rodada \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outcome == 'success'/.test(wf), 'sungrow.yml: a copia so e guardada com o gerador verde');
     ok(src.indexOf('CACHE_SC.poda()') > src.indexOf("busca funda: '") && src.indexOf("busca funda: '") > 0, 'gen-sungrow.js: a poda vem depois da busca funda'); }
 
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));

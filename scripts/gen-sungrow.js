@@ -193,8 +193,9 @@ async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
   const c = svc().getContainerClient(OUT);
-  await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
+  const up = await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
+  if (OUT === 'dados') LD.lembra(nome, up.etag, gz);   // a proxima leitura deste blob (nesta rodada ou na seguinte) vem pela copia (304)
   return gz.length;
 }
 
@@ -765,6 +766,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);
   pesos['sg_hist.json'] = await escreve('sg_hist.json', H);
   pesos['sg_lidos.json'] = await escreve('sg_lidos.json', { gerado_em: agora, zips: Object.fromEntries(lidos) });
+  if (!process.env.LOCAL_OUT_DIR) LD.podaProprios();   // a copia do sg_* que esta rodada nao gravou nem leu sai do disco (e do cache)
   for (const [k, v] of Object.entries(pesos)) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');
   const cf = confRows.filter((c) => c.n >= 10);
   if (cf.length) { const rz = cf.map((c) => c.razao).sort((a, b) => a - b);
