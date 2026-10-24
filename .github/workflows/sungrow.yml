@@ -14,7 +14,7 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
+    env:   # toda leitura de `dados` pela lib-le-dados com credencial (o contêiner não é público)
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 120  # a recarga completa (refazer=1 ou esquema novo) mediu ~65 min; a rodada do dia, no maximo 13 min em 30
     steps:
@@ -50,21 +50,21 @@ jobs:
         id: r_str
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow-str.js
-      # strings-logger (19/10/2026): a curva de 30 min por inversor e a razao de cada string (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>)
+      # A curva de 30 min por inversor e a razao de cada string (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>)
       # pelo logger, a MEDIA das seis leituras de 5 min (lib-pvstr-logger). Mundo forjado com a conta refeita no ensaio, o gerador de
       # ponta a ponta (semente da copia do supervisorio, abortos sem gravar), o nome da copia no gen-perdas, com plantios. Sem rede
       - name: Ensaio · strings de 30 min pelo logger (lib, sem rede)
         id: r_pvstr
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-pvstr-logger.js --lib
-      # fonte-inv-logger (19/10/2026): perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger (lib-inv-logger), e a posicao
-      # vaga no mesmo logger (o export do SCADA parou em 14/10). Mundo forjado com a conta a mao, o gen-sungrow de ponta a ponta sem
+      # perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger (lib-inv-logger), e a posicao vaga no mesmo logger
+      # (o inversor que entra numa troca sem export do SCADA para casar). Mundo forjado com a conta a mao, o gen-sungrow de ponta a ponta sem
       # SCADA e plantios (SCADA de volta como fonte, sem leitura contada como parado, parado do supervisorio contado). Sem rede
       - name: Ensaio · dado de inversor das telas pelo logger (lib, sem rede)
         id: r_inv_logger
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-inv-logger.js --lib
-      # pa-sungrow (20/10/2026): os zips do logger pelo cofre (backup-dados-scada, gravado pela maquina-ponte) com o nome do sungrow-raw
+      # Os zips do logger pelo cofre (backup-dados-scada, gravado pela maquina-ponte) com o nome do sungrow-raw
       # (lib-sungrow-cofre): versao ~ mais nova, recusados, comparacao lote a lote, e o gerador de ponta a ponta com o Azure forjado (as
       # duas fontes dao produtos identicos), com plantios. Sem rede
       - name: Ensaio · zips do logger pelo cofre (sem rede)
@@ -112,7 +112,7 @@ jobs:
         with:
           path: .cache-sungrow
           key: sungrow-scada-${{ hashFiles('.cache-sungrow/**/*.meta') }}
-      # a cascata da usina no dia (PROMOVER sg-perdas): n_cc, ecc e eca do sg_saude.json sao exatamente a soma refeita dos inversores
+      # a cascata da usina no dia: n_cc, ecc e eca do sg_saude.json sao exatamente a soma refeita dos inversores
       # com o dia inteiro (sg_saude_<usina>.json); tres plantios em memoria reprovam. E o que a pagina Confiabilidade e perdas le
       - name: Ensaio · a cascata da usina no dia (produto)
         id: cascata
@@ -121,7 +121,7 @@ jobs:
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-sungrow-cascata.js
-      # fonte-inv-logger (19/10/2026): os blobs de inversor que o portal, o Grafana e o assistente leem (perdas_diario, perdas_inv,
+      # Os blobs de inversor que o portal, o Grafana e o assistente leem (perdas_diario, perdas_inv,
       # strings_alarme, inv_scada), refeitos do que o gen-sungrow acabou de gravar. Na primeira rodada semeia a copia do supervisorio
       # (perdas_diario_scada, perdas_inv_scada) que o gen-perdas passa a gravar e o Comparativo le
       - name: Gerar perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger
@@ -143,7 +143,7 @@ jobs:
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-inv-logger.js --produto
-      # strings-logger (19/10/2026): pvstr_hora_<usina> e pvstr_str_<usina>_<ts> das telas pelo logger, refeitos do sg_curva/sg_str que o
+      # pvstr_hora_<usina> e pvstr_str_<usina>_<ts> das telas pelo logger, refeitos do sg_curva/sg_str que o
       # gen-sungrow acabou de gravar. Na PRIMEIRA rodada semeia a copia do supervisorio (pvstr_hora_<usina>_scada, pvstr_str_<u>_<ts>_scada)
       # que o gen-perdas passa a gravar; nome antigo ja do logger sem a copia aborta sem gravar
       - name: Gerar pvstr_hora e pvstr_str pelo logger
@@ -164,10 +164,9 @@ jobs:
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-pvstr-logger.js --produto
-      # O setpoint por eletrocentro (sp_ts_<usina>_<ts>.json, gen-ts-setpoint) saiu daqui em 24/10/2026: a fonte e o export do
-      # supervisorio, encerrado em 15/10, e o passo regravava todo dia o mesmo dado parado em 14/10 com o job verde. O arquivo fica
-      # publicado como esta, com a data dele; o gerador e o ensaio ficam no repositorio para quando houver fonte nova.
-      # PROMOVER assistente-portal: o resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
+      # O setpoint por eletrocentro (sp_ts_<usina>_<ts>.json) nao e gerado aqui: a fonte dele e o export do supervisorio, que nao chega
+      # mais. O gerador e o ensaio ficam no repositorio para quando houver fonte nova.
+      # O resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
       # roda mesmo se um ensaio anterior reprovou (le os blobs publicados), e o ensaio dele refaz cada numero por codigo proprio
       - name: Ensaio · resumo do dia do assistente (lib, mundo forjado)
         id: agente_lib
@@ -185,11 +184,11 @@ jobs:
         env:
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
         run: node scripts/ensaio-agente-dia.js
-      # 🔴 pa-sungrow EM SOMBRA (20/10/2026): o substituto do fluxo "Sungrow OneDrive RB para Blob" do Power Automate. SOMBRA=1 nao gera
+      # EM SOMBRA: o cofre como fonte dos zips, no lugar da copia de hoje para o sungrow-raw. SOMBRA=1 nao gera
       # nada: compara o cofre (backup-dados-scada/Sungrow_Logger/Sungrow_dados/<ano>/..., com o nome mapeado) com o sungrow-raw, lote a
       # lote, e confere byte a byte os 12 pares mais novos. Fica VERMELHO se um lote do sungrow-raw faltar no cofre, se um nome ou um
-      # tamanho divergir, ou se o cofre trouxer um zip fora da forma. Ultimo passo e sem pular nada acima. O PROMOVER tira este passo,
-      # poe FONTE: uniao no "Gerar sg_*.json" e desliga o fluxo no mesmo ato (um escritor so por blob)
+      # tamanho divergir, ou se o cofre trouxer um zip fora da forma. Ultimo passo e sem pular nada acima. Para trocar de fonte: tirar
+      # este passo, por FONTE: uniao no "Gerar sg_*.json" e desligar a copia antiga no mesmo ato (um escritor so por blob)
       - name: Sombra · o cofre contra o sungrow-raw (nao grava)
         if: ${{ !cancelled() }}
         env:
