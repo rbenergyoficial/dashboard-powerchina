@@ -24,6 +24,7 @@ on:
       - '.github/workflows/way2-agg.yml'
       - '.github/workflows/way2-recent.yml'
       - '.github/workflows/trafo-medidor.yml'   # trafo-alvo-ensaio (24/10/2026): a fiacao da copia do supervisorio
+      - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
   workflow_dispatch: {}
 
 permissions:

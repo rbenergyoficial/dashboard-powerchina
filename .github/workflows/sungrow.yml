@@ -73,6 +73,14 @@ jobs:
         run: node scripts/ensaio-sungrow-cofre.js
       # Cada gerador depende so dos ensaios de regra das libs DELE (lote5-workflows): o do setpoint e o das strings de 30 min nao barram
       # o sg_*; a cascata (produto do sg_saude) barra so o gen-inv-logger, que le o sg_saude.
+      # custo-sungrow (24/10/2026): a copia em disco dos exports do SCADA que a identificacao le (lib-cache-blob); sem ela, ~201 MB pela rede
+      - name: Copia dos exports do SCADA (execucao anterior)
+        if: ${{ !cancelled() }}   # como os ensaios acima: o restore nao herda o success(), senao um ensaio que nao barra o gerador faria o gerador baixar tudo
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-sungrow
+          key: sungrow-scada-${{ github.run_id }}
+          restore-keys: sungrow-scada-
       - name: Gerar sg_*.json
         id: gen_sg
         if: ${{ !cancelled() && steps.r_sungrow.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_cofre.outcome == 'success' && steps.r_inv_logger.outcome == 'success' }}
@@ -82,9 +90,19 @@ jobs:
           SCADA_RAW: scada-raw
           OUT: dados
           REFAZER: ${{ github.event.inputs.refazer }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
           # a primeira rodada do esquema 7 (sg-logger-str) rele todos os zips e guarda o pico das strings de cada inversor-dia: folga de memoria
           NODE_OPTIONS: --max-old-space-size=6144
         run: node scripts/gen-sungrow.js
+      # a copia guardada so quando mudou (a chave e o hash das marcas): a rodada sem export novo nao regrava o cache; so depois do gerador
+      # inteiro (a poda roda no fim da identificacao). Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais
+      - name: Guardar a copia dos exports do SCADA
+        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && hashFiles('.cache-sungrow/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-sungrow
+          key: sungrow-scada-${{ hashFiles('.cache-sungrow/**/*.meta') }}
       # a cascata da usina no dia (PROMOVER sg-perdas): n_cc, ecc e eca do sg_saude.json sao exatamente a soma refeita dos inversores
       # com o dia inteiro (sg_saude_<usina>.json); tres plantios em memoria reprovam. E o que a pagina Confiabilidade e perdas le
       - name: Ensaio · a cascata da usina no dia (produto)

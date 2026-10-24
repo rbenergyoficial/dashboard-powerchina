@@ -130,12 +130,26 @@ function item(blobs, nome, comMd5 = true) {
     const antes = c.downloads; await abre('scada-raw', d).baixa(c, item(blobs, n));
     ok(c.downloads === antes, 'marca antiga reconhecida, sem download'); }
 
-  console.log('12. os geradores do bruto passam pela copia (os tres do scada-raw e, desde o custo-ppc, o do ppc-raw)');
+  console.log('12. os geradores do bruto passam pela copia (os tres do scada-raw e, desde o custo-ppc, o do ppc-raw; desde o custo-sungrow, os exports do gen-sungrow)');
   for (const g of ['gen-scada.js', 'gen-inv-scada.js', 'gen-perdas.js', 'gen-ppc.js']) {
     const src = fs.readFileSync(path.join(__dirname, g), 'utf8');
     ok(/require\('\.\/lib-cache-blob'\)\.abre\(RAW_CONTAINER\)/.test(src) && /\.baixa\((c|cont), (b|e\.item)\)/.test(src), g + ' abre a copia e baixa por ela');
     ok(/\.poda\(\)/.test(src) && /\.resumo\(\)/.test(src), g + ' poda e resume');
   }
+  /* custo-sungrow (24/10/2026): o gen-sungrow le os exports do SCADA (scada-raw) pela copia; o workflow restaura e guarda o diretorio */
+  { const src = fs.readFileSync(path.join(__dirname, 'gen-sungrow.js'), 'utf8');
+    const ex = src.slice(src.indexOf('async function exportsScada'), src.indexOf('async function vidaDoExport'));
+    ok(/require\('\.\/lib-cache-blob'\)\.abre\(SCADA_RAW\)/.test(src) && /ler: async \(\) => CACHE_SC\.baixa\(c, b\)/.test(ex) && ex.length > 0 && !/downloadToBuffer/.test(ex),
+      'gen-sungrow.js baixa os exports do SCADA pela copia (e nenhum download direto na leitura deles)');
+    ok(/CACHE_SC\.poda\(\); CACHE_SC\.resumo\(\)/.test(src), 'gen-sungrow.js poda e resume a copia dos exports');
+    const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'sungrow.yml'), 'utf8');
+    ok(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-sungrow/.test(wf) && /actions\/cache\/restore@v4[\s\S]*?path: \.cache-sungrow[\s\S]*?- name: Gerar sg_\*\.json/.test(wf)
+      && /- name: Gerar sg_\*\.json[\s\S]*?actions\/cache\/save@v4[\s\S]*?path: \.cache-sungrow/.test(wf), 'sungrow.yml restaura a copia antes do gen-sungrow e guarda depois');
+    /* revisor-workflow 24/10 (RW-001, RW-002, RW-004): o restore nao herda o success() (os ensaios acima rodam com !cancelled() e o gerador
+       nao depende de todos); o save so depois do gerador inteiro; a poda depois da busca funda (ela le export velho na mesma rodada) */
+    ok(/- name: Copia dos exports do SCADA[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');
+    ok(/- name: Guardar a copia dos exports do SCADA[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outcome == 'success'/.test(wf), 'sungrow.yml: a copia so e guardada com o gerador verde');
+    ok(src.indexOf('CACHE_SC.poda()') > src.indexOf("busca funda: '") && src.indexOf("busca funda: '") > 0, 'gen-sungrow.js: a poda vem depois da busca funda'); }
 
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));
   process.exit(falhas ? 1 : 0);

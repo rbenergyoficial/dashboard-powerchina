@@ -58,6 +58,10 @@ const SCADA_RAW = process.env.SCADA_RAW || 'scada-raw';
 const OUT = process.env.OUT || 'dados';
 const REFAZER = !!process.env.REFAZER;
 const C = require('./lib-sungrow-cofre.js');
+/* custo-sungrow (24/10/2026): os exports do SCADA que a identificacao le (os K_EXPORTS mais novos de cada usina, ~201 MB por rodada,
+   medido em 24/10) nao mudam depois de gravados e o export parou em 14/10: a copia em disco da execucao anterior vale (lib-cache-blob,
+   etag, tamanho e MD5 da listagem). So o export novo, ou o da busca funda, vem pela rede. Sem CACHE_BLOB_DIR nada muda */
+const CACHE_SC = require('./lib-cache-blob').abre(SCADA_RAW);
 const FONTE = process.env.FONTE || 'raw';
 const COFRE = process.env.COFRE || C.COFRE;
 if (!['raw', 'cofre', 'uniao'].includes(FONTE)) throw new Error('FONTE "' + FONTE + '" desconhecida (raw, cofre ou uniao)');
@@ -205,7 +209,7 @@ async function exportsScada() {
       .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_SCADA_DIR, n)) }));
   } else {
     const c = svc().getContainerClient(SCADA_RAW);
-    for await (const b of c.listBlobsFlat()) if (CARIMBO.test(b.name.split('/').pop())) arqs.push({ nome: b.name, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+    for await (const b of c.listBlobsFlat()) if (CARIMBO.test(b.name.split('/').pop())) arqs.push({ nome: b.name, ler: async () => CACHE_SC.baixa(c, b) });
   }
   const porU = new Map();
   for (const a of arqs) { const m = a.nome.split('/').pop().match(CARIMBO); const u = parque(m[1]);
@@ -390,6 +394,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   }
   for (const sn of Object.keys(busca)) if (ident[sn] || !H.inv[sn]) delete busca[sn];
   if (lidosFundo) console.log('  busca funda: ' + lidosFundo + ' export(s) mais velhos lidos');
+  if (!process.env.LOCAL_SCADA_DIR) { CACHE_SC.poda(); CACHE_SC.resumo(); }   // custo-sungrow: so fica no disco o export que esta rodada leu
   /* -------- a POSICAO VAGA NO MESMO LOGGER (fonte-inv-logger, 19/10/2026): o export do SCADA parou em 14/10/2026, e o inversor que
      entra numa troca depois disso nao casa com contador nenhum. Quem ainda esta sem posicao assume a posicao vaga do mesmo logger,
      quando ela e unica e ele e o unico candidato (D.posicaoPelaVaga). A atribuicao e REVISTA a cada rodada: se o dono volta a ter
