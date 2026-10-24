@@ -134,12 +134,13 @@ function confere(pv, elet, CIRC) {
   kp('Complexo', pv.curva, pv.outorga_mw, pv, 'pct_outorga');
   // a potencia de cada circuito (PROMOVER portal-cap-circuito): a tabela lida no unifilar do SCADA, transcrita AQUI de novo
   // (referencia independente da lib), circuito a circuito na ordem C1..C3; e a soma de cada usina = a capacidade dela
-  const CAPREF = { M1: [16.38, 19.65, 13.08], M2: [12.27, 12.285], M3: [13.097, 19.633, 16.38], M4: [13.08, 16.37, 19.66],
-    M5: [19.66, 9.816, 19.634], M6: [19.639, 16.366, 13.105], M7: [14.733], M8: [13.088, 19.66, 16.362], M9: [9.822] };
+  // cap-circuitos (23/10/2026): a tabela "Dados corretos" do humano, transcrita AQUI de novo; o M2 com 24,555 / 2 em cada circuito
+  const CAPREF = { M1: [16.370, 19.644, 13.096], M2: [24.555 / 2, 24.555 / 2], M3: [13.096, 19.644, 16.370], M4: [13.096, 16.370, 19.644],
+    M5: [19.644, 9.822, 19.644], M6: [19.644, 16.370, 13.096], M7: [14.733], M8: [13.096, 19.644, 16.370], M9: [9.822] };
   cont.cap = 0; let capTot = 0;
   for (const [u, ps] of Object.entries(CIRC)) {
     const caps = ps.map(p => (C.find(c => c.pid === p) || {}).cap_mw);
-    caps.forEach((v, i) => { if (v !== (CAPREF[u] || [])[i]) f.push(u + ' · C' + (i + 1) + ': potencia instalada ' + v + ' MW, o unifilar diz ' + (CAPREF[u] || [])[i]); else cont.cap++; });
+    caps.forEach((v, i) => { if (v !== (CAPREF[u] || [])[i]) f.push(u + ' · C' + (i + 1) + ': potencia instalada ' + v + ' MW, a tabela de potencias diz ' + (CAPREF[u] || [])[i]); else cont.cap++; });
     const s = caps.reduce((a, v) => a + (v || 0), 0); capTot += s;
     if (L.CAP && Math.abs(s - L.CAP[u]) > 1e-6) f.push(u + ': os circuitos somam ' + s.toFixed(3) + ' MW, a usina tem ' + L.CAP[u]);
   }

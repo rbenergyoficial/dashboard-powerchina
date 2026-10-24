@@ -49,8 +49,11 @@ const CAP = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.11,
 // (PROMOVER portal-cap-circuito). Fonte: os unifilares de 34,5 kV do SCADA (telas B1/B2 e B3/B4), o numero sob "UFV MAURITI N"
 // de cada alimentador, lido em 05/10/2026. A soma de cada usina fecha com CAP, e a ordem foi conferida pela energia do dia: com
 // ela os 22 circuitos ficam entre 8,97 e 9,43 MWh/MW (o M7 inteiro, 7,94). Sem a mesma quantidade de circuitos do mapa, nao publica.
-const CAP_CIRC = { M1: [16.38, 19.65, 13.08], M2: [12.27, 12.285], M3: [13.097, 19.633, 16.38], M4: [13.08, 16.37, 19.66],
-  M5: [19.66, 9.816, 19.634], M6: [19.639, 16.366, 13.105], M7: [14.733], M8: [13.088, 19.66, 16.362], M9: [9.822] };
+// 🔴 cap-circuitos (23/10/2026): os valores passam a ser os da tabela "Dados corretos" do humano (3 casas, mesma ordem C1..C3; o
+//    unifilar do SCADA mostrava o numero arredondado de outro jeito e as somas por usina nao fechavam todas). O M2 grava 12,2775
+//    em cada circuito (24,555 / 2, decisao do humano; a tela mostra 12,278): assim cada usina fecha com CAP e o conjunto com 343,77.
+const CAP_CIRC = { M1: [16.37, 19.644, 13.096], M2: [12.2775, 12.2775], M3: [13.096, 19.644, 16.37], M4: [13.096, 16.37, 19.644],
+  M5: [19.644, 9.822, 19.644], M6: [19.644, 16.37, 13.096], M7: [14.733], M8: [13.096, 19.644, 16.37], M9: [9.822] };
 
 const r = (v, c = 2) => (v == null || !isFinite(v) ? null : Math.round(v * 10 ** c) / 10 ** c);
 const GRUPO = { PPA: ['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ML: ['M1', 'M7', 'M9'] };
