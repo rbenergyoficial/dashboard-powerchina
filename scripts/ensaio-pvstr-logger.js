@@ -332,9 +332,12 @@ function fecha(H, SA, curvas, u) {
     const meias = l.pca.reduce((a, x) => a + (x == null ? 0 : x * 0.5), 0);
     const r = s.eca - meias - resto;
     /* folga: o arredondamento da potencia publicada (0,05 kW em cada leitura de 5 min), o das meias horas (0,005 kW x 0,5 h) e o do
-       proprio eca (2 casas); teto: cada leitura fora da grade publicada vale no maximo o piso de geracao do logger (P_GER_W) */
+       proprio eca (2 casas); teto: cada leitura fora da grade publicada vale no maximo o piso de geracao do logger (P_GER_W), e cada
+       leitura que FALTA dentro do registro (o logger nao gravou; a meia hora dela sai do produto, tudo-ou-nada) vale no maximo a maior
+       das vizinhas. Sem isso uma leitura perdida em pleno dia (M8 TS7/INV05 23/10 07:40, ~300 kW, 25 kWh) reprovava o produto certo */
     const nL = cv.p.filter((x) => x != null).length;
-    const tol = 0.05 * 5 / 60 * nL + 0.0025 * l.h.length + 0.005, teto = (288 - cv.p.length) * (P_GER_W / 1000) * 5 / 60 + tol;
+    const furo = cv.p.reduce((a, x, j) => (x != null ? a : a + Math.max(0, cv.p[j - 1] || 0, cv.p[j + 1] || 0) * 0.1 * 5 / 60), 0);
+    const tol = 0.05 * 5 / 60 * nL + 0.0025 * l.h.length + 0.005, teto = (288 - cv.p.length) * (P_GER_W / 1000) * 5 / 60 + furo + tol;
     out.n += 1; out.resid.push(r);
     if (r < -tol || r > teto) { out.fora += 1; if (out.ex.length < 5) out.ex.push(u + ' ' + l.d + ' ' + l.ts + '/' + l.inv + ' ' + r.toFixed(2) + ' kWh (teto ' + teto.toFixed(1) + ')'); }
     if (min(cv.h0) % 30) out.grade += 1;
