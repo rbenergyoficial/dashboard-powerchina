@@ -17,7 +17,11 @@
  * ⚠️ Nao grava nada e nao toca em blob: monta eventos em memoria e chama a mesma funcao que o
  *    gerador chama. Ensaio que exercitasse outra escrita da regra nao provaria nada sobre ela.
  *
- * uso: node ensaio-ppc-duracao.js
+ * uso: node ensaio-ppc-duracao.js [--regra | --produto]
+ *   --regra    so B..F (casos montados, sem rede): roda ANTES de gerar
+ *   --produto  so A (o blob publicado): roda DEPOIS de gerar. Antes de gerar, blob ausente ou vazio
+ *              reprovava e pulava o unico passo que o recria
+ *   sem opcao  os dois (uso local)
  */
 'use strict';
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
@@ -42,8 +46,12 @@ function caso(nome, eventos, esperaMin, esperaAberta) {
     + ' e veio ' + (r ? r.minutos + ' min / aberta=' + r.aberta : 'nada'));
 }
 
-/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o erro dela propaga como esta. */
-const baixa = () => LD.pede(URL).then((r) => {
+/* Fase 2: o transporte e o da lib-le-dados (credencial para `dados`); o erro dela propaga como esta.
+   No modo ensaio do ppc.yml (LOCAL_OUT_DIR) o gerador nao publica: julga-se o arquivo que ELE acabou de montar. */
+const LOCAL = process.env.LOCAL_OUT_DIR ? require('path').join(process.env.LOCAL_OUT_DIR, 'ppc_restricao.json') : '';
+const baixa = () => (LOCAL
+  ? Promise.resolve({ status: require('fs').existsSync(LOCAL) ? 200 : 404, buf: require('fs').existsSync(LOCAL) ? require('fs').readFileSync(LOCAL) : null })
+  : LD.pede(URL)).then((r) => {
   /* 🔴 So o 404 significa ausente. Qualquer outra falha de leitura estoura, em vez de virar
      "primeira execucao" — a licao que o leBlob do MUST e o leitor do ONS ja pagaram. */
   if (r.status === 404) throw new Error('o registro ainda nao foi publicado');
@@ -52,7 +60,9 @@ const baixa = () => LD.pede(URL).then((r) => {
   return JSON.parse(b.toString('utf8'));
 });
 
-(async () => {
+const SO = process.argv.includes('--regra') ? 'regra' : process.argv.includes('--produto') ? 'produto' : 'ambos';
+
+async function produto() {
   console.log('A · o blob publicado, contra uma recomputacao independente');
   const j = await baixa();
   const eventos = j.eventos || [];
@@ -80,8 +90,9 @@ const baixa = () => LD.pede(URL).then((r) => {
   /* ⚠️ o piso tem de ser ALCANCAVEL pelo ensaio: se um dia nunca fechasse aberto, o caso C seria
      a unica prova, e ela e fabricada. Medido em 12/09/2026: 4 dias reais na janela. */
   ok('dias com restricao aberta no registro real: ' + abertas);
+}
 
-  console.log('');
+function regra() {
   console.log('B..F · o degrau, em casos montados');
   const D = '2026-01-15';
   caso('B · restrito 08:00, livre 10:00, livre 12:00', [
@@ -99,6 +110,12 @@ const baixa = () => LD.pede(URL).then((r) => {
     ev(D, 8, 0, 200), ev(D, 9, 0, P.PLENA), ev(D, 11, 0, 250), ev(D, 12, 0, P.PLENA)], 120, 0);
 
   caso('F · um lancamento so, restrito', [ev(D, 8, 0, 200)], 0, 1);
+}
+
+(async () => {
+  console.log('modo: ' + SO);
+  if (SO !== 'regra') { await produto(); console.log(''); }
+  if (SO !== 'produto') regra();
 
   console.log('');
   if (mau) { console.log('🔴 ENSAIO REPROVOU em ' + mau + ' ponto(s).'); process.exit(1); }

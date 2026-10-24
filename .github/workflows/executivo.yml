@@ -57,18 +57,26 @@ jobs:
 
       # A leitura de irradiancia TRAVADA sai da meia hora e da hora da estacao (23/09/2026: a estacao do M5 repetiu 0,26 W/m2
       # das 05:00 as 11:30 e o PR do conjunto saiu 79,92 %). A REGRA, em casos forjados, antes de gerar qualquer coisa.
+      # Os ensaios de REGRA da irradiancia e do PR rodam com `!cancelled()`: um vermelho de outro ensaio acima nao os pula, e o
+      # gerador de cada um depende so deles (gen_irr e gen-pr, mais abaixo).
       - name: Ensaio · a leitura travada sai da serie (regra)
+        id: irr_regra_trav
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-irr-travada.js --lib
 
       # lote fonte-pr-logger (19/10/2026): a estacao das telas e do PR e o DATALOGGER, integralizado (meia hora = media das tres medias
       # de 10 min, tudo-ou-nada; chuva soma, bateria minimo, direcao vetorial). A REGRA em CSIXML forjado, com plantios (amostra no
       # lugar da integral, meia hora incompleta contada, chuva promediada, direcao aritmetica), antes de gerar
       - name: Ensaio · a solarimetria do datalogger, integralizada (regra)
+        id: irr_regra_log
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-irr-datalogger.js --lib
 
       # o M7 da irradiancia do ONS (PROMOVER irr-ons-m7): o CEFMT7 e o M7 na irradiancia, conferido mes a mes contra o datalogger
       # do M7 e do M3. So a REGRA aqui (casos forjados e sete plantios): o mes 'retirado' e a guarda funcionando, nao reprova o job
       - name: Ensaio · o M7 da irradiancia do ONS (regra)
+        id: irr_regra_ons
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-irr-ons-tag.js --lib
 
       # O historico da projecao (meta, gerado e o que a projecao diria com 5..25 dias fechados, por mes fechado) e o
@@ -79,6 +87,8 @@ jobs:
       # O PR por usina e por contrato (energia dos circuitos, irradiacao da estacao da usina, placa CC dela): a REGRA,
       # em casos forjados, antes de gerar.
       - name: Ensaio · o PR por usina e por contrato (regra)
+        id: pr_regra
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-pr-ufv.js --lib
 
       # A guarda de fechamento da referencia do operador (Complexo somado das usinas x arquivo do conjunto) aceita UM
@@ -91,6 +101,8 @@ jobs:
         run: node scripts/ensaio-fontes-exec.js --lib
 
       - name: Ensaio · a guarda da referencia do conjunto (regra)
+        id: refconj_regra
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-ref-conjunto.js
 
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
@@ -205,12 +217,18 @@ jobs:
       - name: Ensaio · a troca do conjunto chega ao benchmark (produto)
         run: node scripts/ensaio-ref-conjunto.js --produto
 
-      # 🔴 irr-independente (23/10/2026): a irradiancia nao le nada do executivo nem do benchmark. Sem o `if`, um ensaio de
-      # PRODUTO vermelho acima (a retencao do 15/10 no ensaio-ref-conjunto, 22/10) pulava este passo, e o PR ficava preso no
-      # ultimo dia com irradiancia (21/10). O workflow segue vermelho pelo ensaio que reprovou; a irradiancia, nao.
+      # o NOME da grandeza nas tres linguas (lib-irr-rotulo, que o gen-irradiancia chama antes de gravar): a REGRA, em casos forjados.
+      # Aqui, logo antes da irradiancia, e nao no topo: so ela usa a lib, e daqui para baixo todo passo tem `if` proprio.
+      - name: Ensaio · o nome da grandeza nas tres linguas (regra)
+        id: irr_regra_rot
+        if: ${{ !cancelled() }}
+        run: node scripts/ensaio-irr-rotulo.js --lib
+
+      # 🔴 A irradiancia nao le nada do executivo nem do benchmark: nenhum ensaio de PRODUTO acima a pula (senao o PR fica preso
+      # no ultimo dia com irradiancia). Ela depende so dos QUATRO ensaios de regra das libs dela; regra quebrada nao chega ao blob.
       - name: Gerar irr_ufv.json (solarimetria por UFV)
         id: gen_irr
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.irr_regra_trav.outcome == 'success' && steps.irr_regra_log.outcome == 'success' && steps.irr_regra_ons.outcome == 'success' && steps.irr_regra_rot.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -254,28 +272,29 @@ jobs:
       # ... e o NOME da grandeza nas tres linguas (PROMOVER irr-rotulo): a regra em casos forjados e, no irr_ufv.json recem
       # gravado, toda linha de `qualidade` com `grandeza_pt`/`_en`/`_zh` da lib — a traducao da pagina troca o `_pt` pela
       # irma so com essa paridade. Cada plantio reprova pelo que plantou.
-      - name: Ensaio · o nome da grandeza nas tres linguas (lib e produto)
+      - name: Ensaio · o nome da grandeza nas tres linguas (produto)
         if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
-        run: node scripts/ensaio-irr-rotulo.js
+        run: node scripts/ensaio-irr-rotulo.js --produto
 
       # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
-      # irr_60min que o passo anterior grava) e com `always()`: se a irradiancia falhar, o PR recalcula com a
-      # publicada — os dias sem irradiacao nova simplesmente nao fecham.
+      # irr_60min que o passo anterior grava): se a irradiancia falhar ou for pulada, o PR recalcula com a
+      # publicada — os dias sem irradiacao nova simplesmente nao fecham. Depende so dos ensaios de regra das
+      # libs dele (lib-pr, lib-ref-conjunto): o arquivo acumula, e regra quebrada ficaria nos dias publicados.
       - name: Gerar pr.json (Performance Ratio no 230 kV)
-        if: always()
+        if: ${{ !cancelled() && steps.pr_regra.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-pr.js
 
       - name: Ensaio · o PR confere com o executivo e com o medidor
-        if: always()
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-pr.js
 
       # ... e o PRODUTO pr_ufv.json: contratos e meses refeitos, o corte da usina igual ao do executivo, e a soma das nove
       # usinas contra o 230 kV nos dias com as mesmas horas validas (entre 1,000 e 1,010).
       - name: Ensaio · o PR por usina e por contrato (produto)
-        if: always()
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-pr-ufv.js --produto
 
       # O que a manchete de fato publicou para o mes aberto, por entidade e dias fechados, num arquivo que so cresce. No FIM

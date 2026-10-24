@@ -25,11 +25,10 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12 xlsx@0.18
-      # A duracao sob restricao e publicada por este gerador, entao o ensaio dela roda ANTES de
-      # gerar: ele le o blob PUBLICO, nao precisa de segredo nenhum, e reprova o metodo ingenuo
-      # ("do primeiro ao ultimo lancamento restrito"), que erra em 97 dos 115 dias.
-      - name: Ensaio da duracao sob restricao
-        run: node scripts/ensaio-ppc-duracao.js
+      # A REGRA da duracao sob restricao, em casos montados e sem rede, ANTES de gerar: reprova o
+      # metodo ingenuo ("do primeiro ao ultimo lancamento restrito"), que erra em 97 dos 115 dias.
+      - name: Ensaio da duracao sob restricao (regra)
+        run: node scripts/ensaio-ppc-duracao.js --regra
       # A fusao das copias com o publicado: a copia mais nova manda nos dias que cobre, e linha que a
       # mesa corrigiu sai do ar. So dados plantados; reprova a fusao antiga, que nunca apagava.
       - name: Ensaio da fusao das copias da planilha
@@ -39,6 +38,7 @@ jobs:
       # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao
       # este workflow: um job verde nao prova que o dado e novo.
       - name: Gerar ppc_restricao.json
+        id: gen
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: ppc-raw
@@ -48,3 +48,10 @@ jobs:
           if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
           node scripts/gen-ppc.js
           if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
+      # ... e o PRODUTO: o blob publicado contra uma recomputacao independente, DEPOIS de gerar. Antes do
+      # gerador, um blob ausente ou vazio reprovava e pulava o unico passo que o recria.
+      - name: Ensaio da duracao sob restricao (produto)
+        if: ${{ !cancelled() && steps.gen.outcome == 'success' }}
+        env:   # no modo ensaio, o arquivo que o gerador montou em vez do publicado
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc' || '' }}
+        run: node scripts/ensaio-ppc-duracao.js --produto
