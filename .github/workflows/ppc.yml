@@ -37,10 +37,19 @@ jobs:
       # pasta esta sincronizada. Se ele parar, este job continua rodando e republicando o que ja
       # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao
       # este workflow: um job verde nao prova que o dado e novo.
+      # 💰 custo-ppc (24/10/2026): a copia em disco das planilhas da execucao anterior (`lib-cache-blob.js`); so a planilha nova vem
+      #    pela rede. Antes, todas eram baixadas de hora em hora (~1,2 GB/dia de saida do storage, medido em 24/10).
+      - name: Restaurar a copia das planilhas do PPC
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache-ppc
+          key: ppc-raw-${{ github.run_id }}
+          restore-keys: ppc-raw-
       - name: Gerar ppc_restricao.json
         id: gen
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-ppc
           RAW_CONTAINER: ppc-raw
           OUT_CONTAINER: dados
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc' || '' }}
@@ -55,3 +64,12 @@ jobs:
         env:   # no modo ensaio, o arquivo que o gerador montou em vez do publicado
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc' || '' }}
         run: node scripts/ensaio-ppc-duracao.js --produto
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: sem planilha
+      #    nova, a execucao nao regrava o cache.
+      - name: Guardar a copia das planilhas do PPC
+        if: ${{ !cancelled() && hashFiles('.cache-ppc/**/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .cache-ppc
+          key: ppc-raw-${{ hashFiles('.cache-ppc/**/*.meta') }}

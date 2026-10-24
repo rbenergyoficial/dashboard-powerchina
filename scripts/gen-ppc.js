@@ -34,6 +34,7 @@ const XLSX = require('xlsx');
 const P = require('./lib-ppc.js');
 
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'ppc-raw';
+const CACHE = require('./lib-cache-blob').abre(RAW_CONTAINER);   // custo-ppc: a copia em disco das planilhas (CACHE_BLOB_DIR)
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const LOCAL_DIR = process.env.LOCAL_DIR || '';
 const LOCAL_OUT_DIR = process.env.LOCAL_OUT_DIR || '';
@@ -88,13 +89,9 @@ async function listaArquivos() {
   }
   for await (const b of c.listBlobsFlat()) {
     if (!/\.xlsx$/i.test(b.name) || !PREFIXO.test(b.name)) continue;
-    out.push({ nome: b.name, quando: (b.properties.lastModified || new Date()).toISOString(),
-      leia: async () => {
-        const d = await c.getBlobClient(b.name).download();
-        const p = [];
-        for await (const ch of d.readableStreamBody) p.push(ch);
-        return Buffer.concat(p);
-      } });
+    // 💰 custo-ppc (24/10/2026): a planilha bruta nao muda depois de gravada (o nome leva o carimbo). Pela copia da execucao
+    //    anterior quando ela confere com a listagem (`lib-cache-blob.js`); so a planilha NOVA vem pela rede. Antes: todas, de hora em hora
+    out.push({ nome: b.name, quando: (b.properties.lastModified || new Date()).toISOString(), leia: () => CACHE.baixa(c, b) });
   }
   // o carimbo do nome e monotonico por construcao, entao a ordem alfabetica e a cronologica
   out.sort((a, b) => (a.nome < b.nome ? -1 : a.nome > b.nome ? 1 : 0));
@@ -203,4 +200,5 @@ async function grava(nome, obj) {
   console.log('ppc_restricao.json: ' + eventos.length + ' eventos (' + novos + ' novos) · '
     + resumo.length + ' dias · ' + defeitos.length + ' defeito(s) · ' + Math.round(n / 1024) + ' KB gzipado');
   if (resumo.length) console.log('  de ' + resumo[0].dia + ' a ' + resumo[resumo.length - 1].dia);
+  CACHE.poda(); CACHE.resumo();   // custo-ppc: so fica no disco o que esta execucao leu; uma linha no log com a copia e a rede
 })().catch((e) => { console.error('FALHOU: ' + e.message); process.exit(1); });

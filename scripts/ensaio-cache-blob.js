@@ -130,8 +130,8 @@ function item(blobs, nome, comMd5 = true) {
     const antes = c.downloads; await abre('scada-raw', d).baixa(c, item(blobs, n));
     ok(c.downloads === antes, 'marca antiga reconhecida, sem download'); }
 
-  console.log('12. os tres geradores do scada-raw passam pela copia');
-  for (const g of ['gen-scada.js', 'gen-inv-scada.js', 'gen-perdas.js']) {
+  console.log('12. os geradores do bruto passam pela copia (os tres do scada-raw e, desde o custo-ppc, o do ppc-raw)');
+  for (const g of ['gen-scada.js', 'gen-inv-scada.js', 'gen-perdas.js', 'gen-ppc.js']) {
     const src = fs.readFileSync(path.join(__dirname, g), 'utf8');
     ok(/require\('\.\/lib-cache-blob'\)\.abre\(RAW_CONTAINER\)/.test(src) && /\.baixa\((c|cont), (b|e\.item)\)/.test(src), g + ' abre a copia e baixa por ela');
     ok(/\.poda\(\)/.test(src) && /\.resumo\(\)/.test(src), g + ' poda e resume');
