@@ -41,6 +41,9 @@ async function leBlob(nome) {
     const f = path.join(process.env.LOCAL_IN_DIR, nome);
     return fs.existsSync(f) ? desembrulha(fs.readFileSync(f)) : null;
   }
+  // trafo-um-escritor (23/10/2026): a copia do supervisorio muda uma vez por dia e e lida de 15 em 15 min: vai pela leitura
+  // condicional da lib-le-blob (304 pela copia em disco). As saidas anteriores mudam toda rodada: leitura normal
+  if (/^trafo_scada_/.test(nome)) return desembrulha(await require('./lib-le-blob.js').bytes(BASE + nome, { 'Accept-Encoding': 'gzip' }));
   return desembrulha(await require('./lib-le-dados.js').bytes(BASE + nome));
 }
 async function leHist(dia, completo) {

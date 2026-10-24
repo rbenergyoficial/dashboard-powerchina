@@ -378,6 +378,9 @@ function meta(o) {
       : 'temperaturas, posição do comutador e os dois lados de 34,5 kV vêm do supervisório da subestação, que o medidor não mede: '
         + 'amostra no instante (30 e 60 min) ou valor de 5 min do historiador; param quando a exportação do supervisório para',
     supervisorio_ate: o.supAte || null,
+    // trafo-um-escritor (23/10/2026): QUAL copia do supervisorio entrou (o gerado_em dela). O --produto compara so com a mesma copia;
+    // a copia regravada depois (o trafo.yml grava sem ordem com o trafo-medidor.yml) fica para a rodada seguinte
+    supervisorio_gerado_em: o.semSup ? null : ((o.metaSup && o.metaSup.gerado_em) || null),
     medidor_ate: o.medAte || null,
     medicao_desde: o.desde || null,
     placa: PLACA,

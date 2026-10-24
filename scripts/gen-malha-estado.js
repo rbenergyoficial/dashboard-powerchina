@@ -185,13 +185,15 @@ const FONTES = [
   { id: 'logger_saude', etapa: 'pub', blob: 'sg_saude.json', wf: ['sungrow.yml'], conteudo: CDIA(lerDia('usina_dia', 'd'), PONTE) },
   { id: 'logger_disp', etapa: 'pub', blob: 'sg_disp_dia.json', wf: ['sungrow.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
   { id: 'supervisorio', etapa: 'pub', blob: 'portal_scada.json', wf: ['scada.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), PONTE) },
-  { id: 'trafo_dia', etapa: 'pub', blob: 'trafo_diario.json', wf: ['trafo.yml'], conteudo: CDIA(lerDia('serie', 'dia'), PONTE) },
-  /* malha-vigia-mais: o lado de 230 kV pelo medidor de faturamento (fonte-trafo-way2), lido do historico do medidor com a latencia
-   * da medicao; o trafo.yml roda uma vez por dia, entao o periodo seguinte chega na execucao do dia seguinte */
-  { id: 'trafo_5', etapa: 'pub', blob: 'trafo_5min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
-  { id: 'trafo_15', etapa: 'pub', blob: 'trafo_15min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
-  { id: 'trafo_30', etapa: 'pub', blob: 'trafo_30min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
-  { id: 'trafo_60', etapa: 'pub', blob: 'trafo_60min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },
+  /* trafo-um-escritor (23/10/2026): os `trafo_*.json` (o lado de 230 kV pelo medidor de faturamento, com a temperatura, o comutador e o
+   * 34,5 kV da copia do supervisorio) tem UM escritor, o trafo-medidor.yml, de 15 em 15 min. O trafo.yml grava so a copia do
+   * supervisorio (`trafo_scada_*.json`), que chega pela ponte uma vez por dia e nao e vigiada aqui. O dia a dia segue o medidor: fecha a
+   * meia-noite e entra na intradia seguinte, sem esperar a ponte */
+  { id: 'trafo_dia', etapa: 'pub', blob: 'trafo_diario.json', wf: ['trafo-medidor.yml'], conteudo: CDIA(lerDia('serie', 'dia')) },
+  { id: 'trafo_5', etapa: 'pub', blob: 'trafo_5min.json', wf: ['trafo-medidor.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_15', etapa: 'pub', blob: 'trafo_15min.json', wf: ['trafo-medidor.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_30', etapa: 'pub', blob: 'trafo_30min.json', wf: ['trafo-medidor.yml'], conteudo: C5(lerMedidor) },
+  { id: 'trafo_60', etapa: 'pub', blob: 'trafo_60min.json', wf: ['trafo-medidor.yml'], conteudo: C5(lerMedidor) },
   { id: 'medidor_dia', etapa: 'pub', blob: 'way2_daily.json', wf: ['way2-hist.yml'], conteudo: CDIA(lerDia('dias', 'dia')) },
 ];
 

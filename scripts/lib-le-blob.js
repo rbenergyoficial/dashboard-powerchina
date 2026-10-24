@@ -7,7 +7,8 @@
  * (~4 MB cada) relido por geradores de 5 em 5 min e de hora em hora — o mesmo dia fechado, que nao muda, baixado de novo a cada rodada,
  * e o mesmo dia lido varias vezes na MESMA rodada (o agregador lia os mesmos 4 dias uma vez por resolucao).
  *
- * O que faz, so para os arquivos do historico do medidor (`/hist/way2_`); qualquer outro endereco passa direto, como antes:
+ * O que faz, so para os arquivos do historico do medidor (`/hist/way2_`) e as copias do supervisorio dos transformadores
+ * (`trafo_scada_<res>.json`, desde 23/10/2026); qualquer outro endereco passa direto, como antes:
  *   · na mesma rodada, o mesmo arquivo e baixado UMA vez (memoria);
  *   · com CACHE_BLOB_DIR (a copia que o actions/cache traz da execucao anterior), o pedido vai com If-None-Match: o storage responde
  *     304 sem corpo quando o arquivo nao mudou, e a copia vale. Arquivo que mudou vem inteiro (200) e a copia e trocada.
@@ -24,7 +25,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const ALVO = /\/hist\/way2_\d{4}-\d{2}-\d{2}\.json(\?|$)/;
+// trafo-um-escritor (23/10/2026): tambem as copias do supervisorio dos transformadores (`trafo_scada_<res>.json`), que o
+// gen-trafo-way2 le de 15 em 15 min e mudam uma vez por dia (o trafo.yml): 304 pela copia em disco no resto do dia. Os outros geradores
+// so mandam para a lib o que casa com ALVO e nao leem esses nomes.
+const ALVO = /\/(hist\/way2_\d{4}-\d{2}-\d{2}|trafo_scada_(5min|30min|60min|diario))\.json(\?|$)/;
 const MEMO = new Map();
 const EST = { memoria: 0, copia: 0, rede: 0, bytesRede: 0, bytesPoupados: 0, direto: 0 };
 const VIDA_MS = 4 * 86400e3;

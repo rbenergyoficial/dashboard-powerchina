@@ -262,6 +262,8 @@ if (MODO === 'lib') {
       dd.push(o);
     }
     C.dia = { serie: dd, temperaturas_implausiveis: { '04T2|t_oleo': 7 }, rotulos: { t_oleo: 'oleo' }, fonte_dos_nomes: 'lista', placa: { velha: true } };
+    // a copia forjada traz o gerado_em, como toda copia real (gen-trafo): o plantio da temperatura diferente passa pelo ramo que roda no ar
+    for (const k of Object.keys(C)) C[k].gerado_em = '2026-01-01T03:00:00.000Z';
     return C;
   }
   const NOMES = { 5: 'trafo_5min.json', 15: 'trafo_15min.json', 30: 'trafo_30min.json', 60: 'trafo_60min.json', dia: 'trafo_diario.json' };
@@ -512,7 +514,7 @@ if (MODO === 'lib') {
   planta('o dia de hoje no diario', [['gen', '    if (dia < HOJE) o.dia = T.diario(dia, mapa);', '    o.dia = T.diario(dia, mapa);']], naRegra('normal', 'okHoje'));
 
   /* ---- o ensaio de PRODUTO tambem prova que reprova: o --produto deste arquivo sobre a saida forjada (passa) e sobre ela adulterada ---- */
-  function produto(muda, base, hist, semCopia) {
+  function produto(muda, base, hist, semCopia, mudaSup) {
     const B = base || Rn;
     const dir = path.join(raiz, 'prod' + (++seq));
     fs.mkdirSync(dir, { recursive: true });
@@ -522,6 +524,7 @@ if (MODO === 'lib') {
       fs.writeFileSync(path.join(dir, f), gz(o));
     }
     if (!semCopia) gravaSup(dir, C);
+    if (mudaSup) for (const f of fs.readdirSync(dir).filter((x) => /^trafo_scada_/.test(x))) { const o = desembrulha(fs.readFileSync(path.join(dir, f))); mudaSup(f, o); fs.writeFileSync(path.join(dir, f), gz(o)); }
     try { return { ok: true, log: execFileSync('node', [__filename, '--produto'], { env: Object.assign({}, process.env, { BASE_DADOS: dir, HIST_DIR: hist || HIST, HOJE }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
     catch (e) { return { ok: false, log: String(e.stdout || '') + String(e.stderr || '') }; }
   }
@@ -540,6 +543,11 @@ if (MODO === 'lib') {
   ok(reprova(produto((f, o) => { if (f === 'trafo_60min.json') o.serie[5]['04T1_v1ab'] = 239; }), /FALHA so campos declarados.*04T1_v1ab/), '--produto reprova a tensao entre fases do supervisorio de volta (v1ab)');
   ok(reprova(produto((f, o) => { if (f === 'trafo_30min.json') em5(o, msDe(dia(37), 720), '04T1_t_oleo', 1); }), /FALHA temperatura, comutador e 34,5 kV iguais/), '--produto reprova temperatura diferente da copia');
   ok(reprova(produto((f, o) => { if (f === 'trafo_diario.json') delete o.esquema; }), /FALHA os cinco com a marca/), '--produto reprova sem a marca do esquema');
+  // trafo-um-escritor: a copia regravada pelo trafo.yml depois da leitura do gerador nao e a que o produto leu: nao vira vermelho falso, e
+  // o log diz. A marca e a IDENTIDADE da copia, nao a hora: uma copia de marca ANTERIOR a do produto, mas outra, tambem fica para depois
+  { const P = produto((f, o) => { if (f === 'trafo_30min.json') em5(o, msDe(dia(37), 720), '04T1_t_oleo', 1); }, null, null, false, (f, o) => { o.gerado_em = '2025-12-31T23:00:00.000Z'; });
+    ok(P.ok && /diferente da que o produto leu/.test(P.log), '--produto nao reprova a copia diferente da que o produto leu, mesmo de marca anterior (a comparacao fica para a rodada seguinte, dita no log)'); }
+  ok(desembrulha(fs.readFileSync(path.join(Rn.outDir, 'trafo_30min.json'))).supervisorio_gerado_em === C['30min'].gerado_em, 'o produto registra a marca da copia que leu (supervisorio_gerado_em)');
   ok(reprova(produto(null, null, null, true), /FALHA copia do supervisorio ausente \(trafo_scada_30min\.json, trafo_scada_diario\.json\)/), '--produto sem a copia do supervisorio reprova dizendo a causa');
   ok(reprova(produto((f, o) => { if (f === 'trafo_5min.json') { o.serie.push({ ms: msDe(dia(37), 2), t: 'x', '04T1_p': 1 }); o.serie.sort((a, b) => a.ms - b.ms); } }), /FALHA o publicado e o medidor recontado.*publicado sem o medidor/),
     '--produto reprova linha publicada sem o intervalo no medidor (o inverso da recontagem)');
@@ -675,12 +683,18 @@ if (MODO === 'lib') {
   // sem a copia nao ha com o que comparar: a causa vai na mensagem (o gerador herdou as grandezas do supervisorio do anterior)
   const semCopia = ['30min', 'diario'].filter((k) => !SUP[k]);
   if (semCopia.length) ok(false, 'copia do supervisorio ausente (' + semCopia.map((k) => 'trafo_scada_' + k + '.json').join(', ') + '): temperatura, comutador e 34,5 kV publicados vem herdados da rodada anterior e nao se conferem; o gen-trafo nao gravou a copia');
+  // trafo-um-escritor (23/10/2026): a copia e gravada pelo trafo.yml, sem ordem com este workflow. Compara so com a MESMA copia que o
+  // produto leu (a marca `supervisorio_gerado_em` dele = o gerado_em da copia); outra copia fica para a rodada seguinte (dita no log),
+  // nunca vira vermelho falso. Produto sem a marca (anterior ao lote): compara como antes
+  const depois = [];
   for (const [k, campos, chave] of [['30min', SUP_INT, 'ms'], ['diario', SUP_DIA, 'dia']]) {
     if (!SUP[k]) continue;
+    if (O[k].supervisorio_gerado_em !== undefined && O[k].supervisorio_gerado_em !== (SUP[k].gerado_em || null)) { depois.push('trafo_scada_' + k + ' (no ar a copia de ' + SUP[k].gerado_em + ', o produto leu a de ' + O[k].supervisorio_gerado_em + ')'); continue; }
     const pubM = new Map(O[k].serie.map((l) => [l[chave], l]));
     for (const s of SUP[k].serie.slice(-500)) { const l = pubM.get(s[chave]); if (!l) continue; for (const t of TR) for (const c of campos) if (s[t + '_' + c] != null) { supComp += 1; if (l[t + '_' + c] !== s[t + '_' + c]) supDif += 1; } }
   }
-  if (!semCopia.length) ok(supComp > 0 && supDif === 0, 'temperatura, comutador e 34,5 kV iguais a copia do supervisorio na mesma chave (' + supComp + ' valores, ' + supDif + ' diferentes)');
+  if (depois.length) console.log('  ..   copia do supervisorio diferente da que o produto leu, comparada na rodada seguinte: ' + depois.join('; '));
+  if (!semCopia.length && depois.length < 2) ok(supComp > 0 && supDif === 0, 'temperatura, comutador e 34,5 kV iguais a copia do supervisorio na mesma chave (' + supComp + ' valores, ' + supDif + ' diferentes)');
   try { if (!process.env.HIST_DIR) require('./lib-le-blob.js').resumo(); } catch (e) { /* sem lib */ }
   console.log(falhas.length ? '\n' + falhas.length + ' FALHA(S)' : '\nensaio-trafo-way2 --produto: tudo ok');
   process.exit(falhas.length ? 1 : 0);

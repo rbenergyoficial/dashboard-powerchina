@@ -1,16 +1,28 @@
-name: Transformadores da SE -> lado de 230 kV pelo medidor (intradia, 15 min)
+name: Transformadores da SE -> trafo_*.json (lado de 230 kV pelo medidor, 15 min)
 # 🔴 trafo-medidor-intradia (23/10/2026). O medidor de faturamento chega a cada 5 min (o historico do dia corrente e regravado pelo
-#    way2-recent), mas os `trafo_*.json` so eram refeitos no trafo.yml, uma vez por dia: a pagina Transformadores mostrava o 230 kV
-#    parado no horario da ultima execucao diaria. Aqui roda SO o lado do medidor (gen-trafo-way2), de 15 em 15 min; a copia do
-#    supervisorio (`trafo_scada_*.json`) continua do trafo.yml, que segue igual (o supervisorio chega uma vez por dia).
-# ⚠️ Grupo de concorrencia PROPRIO: no mesmo grupo do trafo.yml uma execucao intradia pendente cancelaria a diaria pendente. As duas
-#    gravam o mesmo `trafo_*.json` a partir das mesmas fontes; quem grava por ultimo vence, e a proxima execucao intradia acerta.
-# 💰 Por execucao: o dia corrente do historico (~4 MB; os dias fechados voltam 304 pela copia em disco) e as saidas anteriores e as
-#    copias do supervisorio (~9 MB).
+#    way2-recent), e os `trafo_*.json` so eram refeitos uma vez por dia: a pagina Transformadores mostrava o 230 kV parado no horario
+#    da ultima execucao diaria.
+# 🔴 trafo-um-escritor (23/10/2026): este e o UNICO escritor dos `trafo_*.json`. O gen-trafo-way2
+#    e acumulativo (no incremental guarda das saidas anteriores tudo o que nao rele); com um segundo escritor em outro grupo, uma
+#    intradia que leu o anterior antes de um completo gravar devolveria o produto velho por cima dele, com os dois verdes. O completo
+#    (forcar=1) e o ensaio moram aqui; o trafo.yml grava so a copia do supervisorio (`trafo_scada_*.json`), que entra na rodada seguinte.
+# 💰 Por execucao: o dia corrente do historico (~4 MB; os dias fechados voltam 304 pela copia em disco), as saidas anteriores (~5 MB) e
+#    as copias do supervisorio (304 pela copia em disco: mudam uma vez por dia).
 on:
   schedule:
+    # de 15 em 15 min, 24 h (BRT = UTC-3, o mesmo minuto): 1 min depois do way2-recent (:10, :25, :40, :55), que regrava o historico do
+    # dia; nunca no :00, onde o agendador do GitHub atrasa. Quem dispara de verdade e o relogio do Azure (relogio/agenda.json).
     - cron: '11,26,41,56 * * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ensaio:
+        description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
+        required: false
+        default: ''
+      forcar:
+        description: 'refaz o historico inteiro do medidor (1 = sim; ~830 dias de ~4 MB)'
+        required: false
+        default: ''
 concurrency:
   group: gen-trafo-medidor
   cancel-in-progress: false
@@ -19,16 +31,17 @@ jobs:
     runs-on: ubuntu-latest
     env:   # Fase 2: toda leitura de `dados` pela lib-le-dados com credencial
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-    timeout-minutes: 15
+    timeout-minutes: 45   # o completo (forcar=1) le ~830 dias; a intradia leva ~1 min
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
-      # O mesmo ensaio sem rede do trafo.yml (mundo forjado, o gerador de verdade, plantios): vermelho aqui = nada abaixo publica.
+      # Ensaio sem rede (mundo forjado, o gerador de verdade, plantios): vermelho aqui = nada abaixo publica.
       - name: Ensaio · lado de 230 kV pelo medidor (sem rede)
         run: node scripts/ensaio-trafo-way2.js --lib
-      # A mesma copia do historico do medidor do trafo.yml (mesmo prefixo de chave): os dias fechados voltam 304.
+      # a copia em disco do historico do medidor e das copias do supervisorio: os dias fechados e a copia sem mudanca voltam 304.
+      # O modo completo nao usa a copia (~3 GB).
       - name: Restaurar a copia do historico do medidor
         uses: actions/cache/restore@v4
         with:
@@ -39,13 +52,21 @@ jobs:
         id: medidor
         env:
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          FORCAR: ${{ github.event.inputs.forcar }}
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo-medidor' || '' }}
           NODE_OPTIONS: --max-old-space-size=6144
-        run: node scripts/gen-trafo-way2.js
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-trafo-way2.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
+      # Sobre o PUBLICADO, depois de gravar: marca, so campos declarados, os dois ultimos dias completos recontados do medidor (conta
+      # propria) e o supervisorio igual a copia que o produto leu. No ensaio do workflow nada foi publicado: nao roda.
       - name: Ensaio · o publicado contra o medidor recontado
-        if: ${{ !cancelled() && steps.medidor.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.medidor.outcome == 'success' && !github.event.inputs.ensaio }}
         env:
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/ensaio-trafo-way2.js --produto
+      # ⚠️ Falhar ao guardar a copia nao derruba o job. A chave e o hash das marcas: execucao sem dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor
         if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta') != '' }}
         continue-on-error: true

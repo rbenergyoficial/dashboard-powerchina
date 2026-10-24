@@ -67,7 +67,7 @@ const AG_FIX = {
   'estacao-logger.yml': ['0 23 8 * * *', '0 33 15 * * *'], 'executivo.yml': ['0 13 4,9-22 * * *'], 'inv-scada.yml': ['0 47 12 * * *'],
   'inversores.yml': ['0 22 12,18 * * *'], 'must-intra.yml': ['0 */15 * * * *'], 'ons-consolidado.yml': ['0 17 18 * * *'],
   'perdas.yml': ['0 12 14 * * *'], 'ppc.yml': ['0 23 * * * *'], 'sager-disp.yml': ['0 47 7,13 * * *'],
-  'scada.yml': ['0 30 11 * * *', '0 0 17,21 * * *'], 'sungrow.yml': ['0 17 13 * * *'], 'trafo.yml': ['0 38 10 * * *'],
+  'scada.yml': ['0 30 11 * * *', '0 0 17,21 * * *'], 'sungrow.yml': ['0 17 13 * * *'], 'trafo.yml': ['0 38 10 * * *'], 'trafo-medidor.yml': ['0 11,26,41,56 * * * *'],
   'way2-agg.yml': ['0 5 * * * *'], 'way2-hist.yml': ['0 30 3 * * *'], 'way2-recent.yml': ['0 */5 * * * *'],
 };
 const precisa = [...new Set(G.FONTES.flatMap((f) => f.wf))];
@@ -76,7 +76,7 @@ if (faltaFix.length) { console.error('FALHA: a agenda de ensaio nao tem ' + falt
 const W = Object.keys(AG_FIX).length;
 const agendaFix = path.join(TMP, 'agenda.json');
 fs.writeFileSync(agendaFix, JSON.stringify(AG_FIX));
-const semTrafo = Object.assign({}, AG_FIX); delete semTrafo['trafo.yml'];
+const semTrafo = Object.assign({}, AG_FIX); delete semTrafo['trafo-medidor.yml'];   // trafo-um-escritor: o workflow das fontes do trafo
 const agendaSemTrafo = path.join(TMP, 'agenda_sem_trafo.json');
 fs.writeFileSync(agendaSemTrafo, JSON.stringify(semTrafo));
 
@@ -187,22 +187,23 @@ const FIX = {
   logger_saude: [{ usina_dia: [{ d: D1 }] }, true, okC(750, 2177, FIM_D1)],
   logger_disp: [{ serie: [{ dia: D1 }] }, true, okC(750, 2177, FIM_D1)],
   supervisorio: [{ ultimo_dia: D1 }, true, okC(750, 2070, FIM_D1)],
-  trafo_dia: [{ serie: [{ dia: '2026-10-17' }, { dia: D1 }] }, true, okC(750, 2018, FIM_D1)],
+  /* trafo-um-escritor: o dia do medidor fecha a meia-noite (03:00 UTC) e entra na intradia seguinte (03:11): 24h11 + a folga de 1 execucao (15) = 1466 */
+  trafo_dia: [{ serie: [{ dia: '2026-10-17' }, { dia: D1 }] }, true, okC(750, 1466, FIM_D1)],
   medidor_dia: [{ dias: [{ dia: D1 }] }, false, okC(750, 1590, FIM_D1)],
-  /* medidor, 5 min, pela execucao diaria do trafo (10:38 UTC): o ultimo intervalo lido comeca 07:15 de Brasilia, fim 10:20 UTC (310 min
-   * antes de AGORA); o seguinte termina 10:25 + 16 = 10:41, depois da execucao do dia: R1 20/10 10:38 (24h18 = 1458) + 120 = 1578.
-   * O supervisorio do trafo (temperaturas) parou no dia 14 e NAO conta */
-  trafo_5: [{ medidor_ate: '2026-10-19 07:15', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T10:15:00Z'), t: '2026-10-19 07:15' }] }, true, okC(310, 1578, '2026-10-19T10:20:00Z')],
-  /* RE-001: o trafo_15 e o trafo_60 com o medidor lido fora da agenda (execucao manual, como em 20/10 15:24): fim 12:10 de Brasilia =
-   * 15:10 UTC, 20 min antes; o seguinte (15:15 + 16 = 15:31) cai na execucao de 20/10 10:38: 19h28 + 2 h = 1288 (o dia fechado daria 2728) */
-  trafo_15: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: null, serie: [{ ms: Date.parse('2026-10-19T15:05:00Z'), t: '2026-10-19 12:05' }] }, true, okC(20, 1288, '2026-10-19T15:10:00Z')],
-  trafo_30: [{ medidor_ate: '2026-10-19 07:15', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T10:00:00Z'), t: '2026-10-19 07:00' }] }, false, okC(310, 1578, '2026-10-19T10:20:00Z')],
-  trafo_60: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: '2026-10-14 23:00', serie: [{ ms: Date.parse('2026-10-19T15:00:00Z'), t: '2026-10-19 12:00' }] }, true, okC(20, 1288, '2026-10-19T15:10:00Z')],
+  /* medidor, 5 min, pela intradia de 15 em 15 min (trafo-medidor.yml :11 :26 :41 :56; trafo-um-escritor, 23/10/2026): o ultimo intervalo
+   * lido comeca 12:05 de Brasilia, fim 15:10 UTC (20 min antes de AGORA); o seguinte termina 15:15 + 16 = 15:31, e a intradia das
+   * 15:41 o publica: 31 + a folga de 1 execucao (15) = 46 (ok). O supervisorio do trafo (temperaturas) parou no dia 14 e NAO conta */
+  trafo_5: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T15:05:00Z'), t: '2026-10-19 12:05' }] }, true, okC(20, 46, '2026-10-19T15:10:00Z')],
+  /* RE-001: o trafo_15 e o trafo_60 com o medidor lido fora da agenda (execucao manual): fim 12:10 de Brasilia = 15:10 UTC, 20 min antes;
+   * o seguinte (15:15 + 16 = 15:31) cai na intradia das 15:41: 31 + a folga (15) = 46 */
+  trafo_15: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: null, serie: [{ ms: Date.parse('2026-10-19T15:05:00Z'), t: '2026-10-19 12:05' }] }, true, okC(20, 46, '2026-10-19T15:10:00Z')],
+  trafo_30: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: '2026-10-14 23:30', serie: [{ ms: Date.parse('2026-10-19T15:00:00Z'), t: '2026-10-19 12:00' }] }, false, okC(20, 46, '2026-10-19T15:10:00Z')],
+  trafo_60: [{ medidor_ate: '2026-10-19 12:05', supervisorio_ate: '2026-10-14 23:00', serie: [{ ms: Date.parse('2026-10-19T15:00:00Z'), t: '2026-10-19 12:00' }] }, true, okC(20, 46, '2026-10-19T15:10:00Z')],
 };
 /* malha-vigia-mais: a lista declarada AQUI, fora do gerador (id -> workflow que grava). Fonte que some do gerador, ou muda de workflow,
  * reprova; o total tambem e escrito a mao */
 const VIGIA_MAIS = {   /* export-att-fim: sem os quatro do supervisorio (perdas de 30 e 60 min, entradas de string, inversores hora a hora) */
-  trafo_5: 'trafo.yml', trafo_15: 'trafo.yml', trafo_30: 'trafo.yml', trafo_60: 'trafo.yml' };
+  trafo_5: 'trafo-medidor.yml', trafo_15: 'trafo-medidor.yml', trafo_30: 'trafo-medidor.yml', trafo_60: 'trafo-medidor.yml' };   // trafo-um-escritor
 const N_FONTES = 32, N_PUB = 30;   // export-att-fim (22/10/2026): 39 - 7 do export _ATT do supervisorio
 /* RE-005: a conferencia da lista, aplicada ao gerador de verdade e a um mutante (a fonte que falta, ou que mudou, pelo id) */
 const faltaVigia = (Gx) => Object.entries(VIGIA_MAIS).filter(([id, w]) => { const f = Gx.FONTES.find((x) => x.id === id); return !f || f.etapa !== 'pub' || !f.conteudo || f.wf.join() !== w; }).map(([id]) => id);
@@ -570,10 +571,11 @@ async function regras() {
   ok(R.ponte.st === 'ok' && ['inv', 'est', 'scada', 'vm', 'vpn', 'cofre', 'onedrive'].every((k) => R[k].st === 'sem' && R[k].motivo === 'sem_fontes_v0'), 'versao 0: a ponte pelo resultado, o resto sem (sem_fontes_v0)');
 
   /* proc (malha-v2): `fa` so quando um workflow PAROU DE GRAVAR. Os workflows e as fontes sao os do mapa do gerador:
-   * ppc.yml grava registro_mesa; trafo.yml grava trafo_dia e os quatro do medidor; must-intra.yml nao grava nada do frescor
+   * ppc.yml grava registro_mesa; trafo-medidor.yml grava trafo_dia e os quatro do medidor (o trafo.yml, so a copia, que nao e vigiada); must-intra.yml nao grava nada do frescor
    * (export-att-fim: o perdas.yml, que fazia o papel do workflow de varios arquivos, saiu do frescor). */
   ok(G.FONTES.filter((f) => f.wf.includes('ppc.yml')).map((f) => f.id).join() === 'registro_mesa'
-    && G.FONTES.filter((f) => f.wf.includes('trafo.yml')).map((f) => f.id).join() === 'trafo_dia,trafo_5,trafo_15,trafo_30,trafo_60'
+    && G.FONTES.filter((f) => f.wf.includes('trafo-medidor.yml')).map((f) => f.id).join() === 'trafo_dia,trafo_5,trafo_15,trafo_30,trafo_60'
+    && !G.FONTES.some((f) => f.wf.includes('trafo.yml'))
     && !G.FONTES.some((f) => f.wf.includes('perdas.yml') || f.wf.includes('inv-scada.yml'))
     && !G.FONTES.some((f) => f.wf.includes('must-intra.yml')), 'premissa do caso: o mapa fonte -> workflow do gerador');
   const runs = (...cs) => cs.map((c) => ({ c, t: AGORA_MS }));
@@ -599,13 +601,13 @@ async function regras() {
   ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 3, vermelhos: 1, parados: 1 }), 'vermelho na unica execucao que ha com o arquivo atrasado: fa');
   x = pr([{ wf: 'must-intra.yml', runs: runs('failure', 'failure') }], FR({ registro_mesa: 'fa', ons_restricao: 'sem' }));
   ok(casa(x, 'at', 'workflow_vermelho', { ok: 0, total: 2, vermelhos: 1, parados: 0 }), 'vermelho nas 2 ultimas num workflow que nao grava nada do frescor: at (workflow_vermelho)');
-  x = pr([{ wf: 'trafo.yml', runs: runs('failure', 'failure') }, verde], FR({ trafo_5: 'at' }));
+  x = pr([{ wf: 'trafo-medidor.yml', runs: runs('failure', 'failure') }, verde], FR({ trafo_5: 'at' }));
   ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 4, vermelhos: 1, parados: 1 }), 'workflow com dois arquivos, um no prazo e um atrasado: fa (basta um)');
   x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, verde], FR({ ons_restricao: 'fa', trafo_dia: 'sem' }));
   ok(casa(x, 'at', 'workflow_vermelho_grava', { ok: 2, total: 4, vermelhos: 1, parados: 0 }), 'arquivo atrasado de OUTRO workflow nao para o vermelho: at (workflow_vermelho_grava)');
   x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, { wf: 'must-intra.yml', runs: runs('failure', 'success') }], FR());
   ok(casa(x, 'at', 'workflow_vermelho', { ok: 1, total: 4, vermelhos: 2, parados: 0 }), 'um vermelho que grava e um que nao grava nada do frescor: at (workflow_vermelho), vermelhos 2');
-  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, { wf: 'trafo.yml', runs: runs('failure', 'failure') }, verde], FR({ registro_mesa: 'at', trafo_dia: 'fa' }));
+  x = pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }, { wf: 'trafo-medidor.yml', runs: runs('failure', 'failure') }, verde], FR({ registro_mesa: 'at', trafo_dia: 'fa' }));
   ok(casa(x, 'fa', 'workflow_vermelho', { ok: 2, total: 6, vermelhos: 2, parados: 2 }), 'dois workflows que pararam de gravar: fa, parados 2');
   est = null; try { pr([{ wf: 'ppc.yml', runs: runs('failure', 'failure') }], FR().filter((f) => f.id !== 'registro_mesa')); } catch (e) { est = e; }
   ok(!!est && /frescor sem a fonte registro_mesa/.test(est.message), 'frescor sem a fonte de um workflow vermelho estoura (nao inventa "no prazo")');
@@ -620,14 +622,14 @@ async function regras() {
     && I('2026-10-19') === null && I(1792377000000) === null && I('19/10/2026 12:00') === null, 'instante: sem fuso = Brasilia; com fuso, o dele; o resto nao e instante');
   ok(FD('2026-10-14') === Date.parse('2026-10-15T03:00:00Z') && FD('2026-10') === null && FD(null) === null, 'fim do dia de Brasilia: 00:00 do dia seguinte');
   const PC = (id, E) => { const f = G.FONTES.find((x) => x.id === id); if (!f || !f.conteudo) return null; return G.prazoConteudo(f.conteudo, f.wf, AG_FIX, Date.parse(E)); };
-  ok(PC('trafo_dia', '2026-10-15T03:00:00Z') === 2018, 'trafo (dia 14): o dia 15 sai da VM na ponte de 16/10 05:55 e o trafo o publica as 10:38 UTC: 31h38 + 2 h = 2018 min');
+  ok(PC('trafo_dia', '2026-10-15T03:00:00Z') === 1466, 'trafo (dia 14): o dia 15 do medidor fecha 16/10 03:00 UTC e a intradia das 03:11 o publica: 24h11 + 15 = 1466 min');
   ok(PC('logger_disp', '2026-10-19T03:00:00Z') === 2177, 'logger: sungrow 13:17 UTC do dia seguinte: 34h17 + 2 h = 2177 min (o selo da casa: 36 h)');
   ok(PC('pr', '2026-10-19T03:00:00Z') === 2293, 'PR: ponte -> estacao 15:33 -> executivo 16:13: 37h13 + a folga de 1 execucao (1 h) = 2293 min');
   ok(PC('ons_restricao', '2026-10-19T03:00:00Z') === 2477, 'operador nacional: o dia seguinte no consolidado das 18:17 UTC: 39h17 + 2 h = 2477 min');
   ok(PC('medidor_dia', '2026-10-19T03:00:00Z') === 1590, 'dia do medidor: way2-hist 03:30 UTC: 24h30 + 2 h = 1590 min');
   ok(PC('ao_vivo', '2026-10-19T22:50:00Z') === 30, 'medicao de 5 min: 5 + 16 de latencia, a execucao seguinte, + 1 execucao = 30 min');
   ok(PC('inversores_registro', '2026-10-15T12:00:00Z') === 43200, 'registro de trocas: prazo fixo de 30 dias (revisao mensal)');
-  ok(G.estadoFrescor(7010, PC('trafo_dia', '2026-10-15T03:00:00Z')) === 'fa', 'o caso de hoje: trafo com o dia 14, lido 7010 min depois (prazo 2018): fa');
+  ok(G.estadoFrescor(7010, PC('trafo_dia', '2026-10-15T03:00:00Z')) === 'fa', 'o caso de 20/10: trafo com o dia 14, lido 7010 min depois (prazo 1466): fa');
   const FC = (id, corpo, gz) => { const f = G.FONTES.find((x) => x.id === id); if (!f || !f.conteudo) return undefined; let b = Buffer.from(typeof corpo === 'string' ? corpo : JSON.stringify(corpo)); if (gz) b = zlib.gzipSync(b); return G.fimDoConteudo(f.conteudo, b); };
   ok(FC('trafo_dia', { serie: [{ dia: '2026-10-14' }, { dia: '2026-10-13' }, { x: 1 }, null] }, true) === Date.parse('2026-10-15T03:00:00Z'), 'conteudo em gzip: o MAIOR dia da serie, linhas sem dia ignoradas');
   ok(FC('selo_medidores', '﻿' + JSON.stringify({ ancora: '2026-10-19T19:50:00' })) === Date.parse('2026-10-19T22:50:00Z'), 'conteudo com BOM');
@@ -642,9 +644,9 @@ async function regras() {
     'as fontes do vigia (os quatro do trafo) na lista, pelo conteudo e com o workflow declarado; ' + N_FONTES + ' fontes, ' + N_PUB + ' da publicacao'
     + (faltaV.length ? ': falta ou difere ' + faltaV.join(', ') : ' (gerador: ' + G.FONTES.length + ')'));
   const TRAFOS_ID = ['trafo_5', 'trafo_15', 'trafo_30', 'trafo_60'];
-  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-19T10:20:00Z') === 1578),
-    'trafo pelo medidor: o intervalo seguinte (10:25 + 16 = 10:41) passa da execucao das 10:38: a do dia seguinte, 24h18 + 2 h = 1578 min');
-  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-20T15:10:00Z') === 1288), 'os quatro trafos, execucao fora da agenda as 15:24 (o caso de hoje): ate 21/10 10:38, 19h28 + 2 h = 1288 min (o dia fechado daria 2728)');
+  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-19T10:20:00Z') === 36),
+    'trafo pelo medidor (intradia de 15 min, trafo-um-escritor): o intervalo seguinte (10:25 + 16 = 10:41) entra na intradia das 10:41: 21 + 15 = 36 min');
+  ok(TRAFOS_ID.every((id) => PC(id, '2026-10-20T15:10:00Z') === 46), 'os quatro trafos, leitura fora da agenda: o seguinte (15:15 + 16 = 15:31) na intradia das 15:41: 31 + 15 = 46 min');
   /* RE-004: com o scada.yml as 07:00 UTC a ponte (08:55) muda o resultado: R1 22/10 07:00 (3120) + 120 = 3240; sem ela, 1800
    * (export-att-fim: era o perdas.yml e o inv-scada.yml, que sairam do frescor; a regra e a mesma) */
   const AG_CEDO = Object.assign({}, AG_FIX, { 'scada.yml': ['0 0 7 * * *'] });
@@ -708,7 +710,7 @@ async function processos() {
   /* `undefined` some no JSON: o conteiner deixa de existir no mundo falso */
   const CENARIOS_ESTOURA = {
     cofre404: [{ sdk: mundoCofre({ 'backup-dados-scada': undefined }), gh: GH_PRINCIPAL }, chkEstoura('cofre 404 ContainerNotFound'), /ContainerNotFound/],
-    semPrazo: [{ sdk: mundoCofre(), gh: GH_PRINCIPAL, agenda: agendaSemTrafo }, (r) => chkEstoura('agenda sem o workflow de uma fonte')(r).concat(r.out ? frescorComPrazo(r.out) : []), /sem prazo: trafo\.yml/],
+    semPrazo: [{ sdk: mundoCofre(), gh: GH_PRINCIPAL, agenda: agendaSemTrafo }, (r) => chkEstoura('agenda sem o workflow de uma fonte')(r).concat(r.out ? frescorComPrazo(r.out) : []), /sem prazo: trafo-medidor\.yml/],
     pub404: [{ http: { pubSumiu: true } }, chkEstoura('conteiner publico 404 ContainerNotFound'), /ContainerNotFound/],
   };
   for (const [nome, [cen, chk, motivo]] of Object.entries(CENARIOS_ESTOURA)) {
@@ -777,7 +779,7 @@ async function processos() {
   const CONG = { trafo_dia: { corpo: { serie: [{ dia: '2026-10-13' }, { dia: '2026-10-14' }] } }, sager_disp: { corpo: { serie: [{ t: '2026-10-14T23:30' }] } },
     supervisorio: { corpo: { ultimo_dia: '2026-10-14' } } };
   const fa14 = (prazo) => ({ st: 'fa', idade_min: 6510, prazo_min: prazo, medida: 'conteudo', ate: '2026-10-15T03:00:00Z', gravado: MOD5Z });
-  const ESP_CONG = Object.assign({}, ESP_VERDE, { trafo_dia: fa14(2018), sager_disp: fa14(1847), supervisorio: fa14(2070) });
+  const ESP_CONG = Object.assign({}, ESP_VERDE, { trafo_dia: fa14(1466), sager_disp: fa14(1847), supervisorio: fa14(2070) });   // trafo_dia: o dia do medidor na intradia (24h11 + 15)
   /* o plantio nao e vazio: pela gravacao (a regra antiga), os tres congelados estariam no prazo */
   const velho = ['trafo_dia', 'sager_disp', 'supervisorio'].map((id) => { const f = G.FONTES.find((x) => x.id === id); return G.estadoFrescor((AGORA_MS - dadosDe(CONG)[f.blob].mod) / 60000, G.prazoDe(AG_FIX, f.wf)); });
   ok(velho.every((s) => s === 'ok') && ['trafo_dia', 'sager_disp', 'supervisorio'].every((id) => dadosDe(CONG)[BLOB[id]].mod === MOD5),
@@ -799,7 +801,7 @@ async function processos() {
   const ESP_ANT = Object.assign({}, ESP_VERDE, { logger_disp: Object.assign(okC(810, 2237, '2026-10-19T02:00:00Z'), { gravado: MOD5Z }) });
   const MUNDOS_C = {
     verde: [{ sdk: mundoDados(DADOS_VERDE) }, ESP_VERDE, { st: 'ok', n: { no_prazo: 30, total: 30 } }, NOMES_C],
-    'congelado em 14/10, regravado hoje': [{ sdk: mundoDados(dadosDe(CONG)), gh: { 'trafo.yml': verm2('failure', 'failure') } }, ESP_CONG,
+    'congelado em 14/10, regravado hoje': [{ sdk: mundoDados(dadosDe(CONG)), gh: { 'trafo-medidor.yml': verm2('failure', 'failure') } }, ESP_CONG,
       { st: 'fa', n: { no_prazo: 27, total: 30 }, proc: { st: 'fa', motivo: 'workflow_vermelho' } }, NOMES_C],
     'conteudo ilegivel': [{ sdk: mundoDados(dadosDe(ILEG)) }, ESP_ILEG, { st: 'fa', n: { no_prazo: 28, total: 30 } }, NOMES_C],
     'saida anterior do mesmo dia': [{ sdk: mundoDados(DADOS_VERDE, { 'portal-admin': { blobs: anterior('2026-10-19T15:15:00Z') } }) }, ESP_ANT,
@@ -810,20 +812,21 @@ async function processos() {
   /* malha-vigia-mais. SUPERVISORIO PARADO (export-att-fim: so o supervisorio do scada.yml, regravado ha 5 min com o dado no dia 14: fa
    * pelo conteudo; o scada.yml vermelho nas 2 so com ele fora do prazo: o proc vai a fa por ele), e o trafo com o medidor em dia e o
    * supervisorio dele parado no dia 14 (ok). MEDIDOR PARADO: o medidor_ate no dia 15 e linhas so do supervisorio no fim da serie, ate o dia 19 (fa: 15/10
-   * 10:20 a 19/10 15:30 = 6070 min, prazo 1578) */
+   * 10:20 a 19/10 15:30 = 6070 min, prazo 36: o seguinte termina 10:25 + 16 = 10:41, a intradia das 10:41, 21 + 15) */
   const SUP14 = { supervisorio: { corpo: { ultimo_dia: '2026-10-14' } } };
   const ESP_SUP14 = Object.assign({}, ESP_VERDE, { supervisorio: fa14(2070) });
   const MED15 = { medidor_ate: '2026-10-15 07:15', supervisorio_ate: '2026-10-19 07:00', serie: [{ t: '2026-10-15 07:15' }, { t: '2026-10-19 07:00' }] };
   const TRAFOS = ['trafo_5', 'trafo_15', 'trafo_30', 'trafo_60'];
   const ESP_MED15 = Object.assign({}, ESP_VERDE);
-  for (const id of TRAFOS) ESP_MED15[id] = { st: 'fa', idade_min: 6070, prazo_min: 1578, medida: 'conteudo', ate: '2026-10-15T10:20:00Z', gravado: MOD5Z };
+  for (const id of TRAFOS) ESP_MED15[id] = { st: 'fa', idade_min: 6070, prazo_min: 36, medida: 'conteudo', ate: '2026-10-15T10:20:00Z', gravado: MOD5Z };
   /* premissa: pela gravacao (a regra de antes do lote, com as fontes fora da lista nem medidas) os oito sairiam ok */
   const velhoV = [...Object.keys(SUP14), ...TRAFOS].map((id) => { const f = G.FONTES.find((x) => x.id === id); return f ? G.estadoFrescor((AGORA_MS - MOD5) / 60000, G.prazoDe(AG_FIX, f.wf)) : 'fora da lista'; });
   ok(velhoV.every((s) => s === 'ok'), 'premissa dos mundos do vigia: os cinco regravados ha 5 min sairiam ok pela gravacao (' + velhoV.join(', ') + ')');
-  /* RE-002: o medidor sem leitura (medidor_ate nulo) com o supervisorio e a serie em dia: sem registro, com o prazo da gravacao (26 h) */
+  /* RE-002: o medidor sem leitura (medidor_ate nulo) com o supervisorio e a serie em dia: sem registro, com o prazo da gravacao (a cadencia de
+   * 15 min do trafo-medidor.yml, 2 x 15 = 30) */
   const MEDNULO = { medidor_ate: null, supervisorio_ate: '2026-10-19 12:00', serie: [{ t: '2026-10-19 12:00' }] };
   const ESP_MEDNULO = Object.assign({}, ESP_VERDE);
-  for (const id of TRAFOS) ESP_MEDNULO[id] = { st: 'sem', idade_min: null, prazo_min: 1560, medida: 'conteudo', ate: null, gravado: MOD5Z };
+  for (const id of TRAFOS) ESP_MEDNULO[id] = { st: 'sem', idade_min: null, prazo_min: 30, medida: 'conteudo', ate: null, gravado: MOD5Z };
   Object.assign(MUNDOS_C, {
     'vigia: medidor sem leitura, supervisorio e serie em dia': [{ sdk: mundoDados(dadosDe(Object.fromEntries(TRAFOS.map((id) => [id, { corpo: MEDNULO }])))) }, ESP_MEDNULO,
       { st: 'fa', n: { no_prazo: 26, total: 30 } }, NOMES_C],
@@ -859,7 +862,7 @@ async function processos() {
   }
   const MC = (k) => MUNDOS_C[k][0];
   /* malha-vigia-mais: as ancoras dos plantios (as linhas do gerador, uma vez cada) e os dois mundos do vigia */
-  const L_T5 = "  { id: 'trafo_5', etapa: 'pub', blob: 'trafo_5min.json', wf: ['trafo.yml'], conteudo: C5(lerMedidor) },";
+  const L_T5 = "  { id: 'trafo_5', etapa: 'pub', blob: 'trafo_5min.json', wf: ['trafo-medidor.yml'], conteudo: C5(lerMedidor) },";
   const L_SUP = "  { id: 'supervisorio', etapa: 'pub', blob: 'portal_scada.json', wf: ['scada.yml'], conteudo: CDIA((j) => fimDoDia(j.ultimo_dia), PONTE) },";
   const L_MED = 'const lerMedidor = (j) => mais(instante(j.medidor_ate), 5);';
   const K_SUP = 'vigia: supervisorio parado no dia 14, medidor em dia', K_MED = 'vigia: medidor parado no dia 15, supervisorio seguindo';
