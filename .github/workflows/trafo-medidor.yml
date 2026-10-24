@@ -40,6 +40,9 @@ jobs:
       # Ensaio sem rede (mundo forjado, o gerador de verdade, plantios): vermelho aqui = nada abaixo publica.
       - name: Ensaio · lado de 230 kV pelo medidor (sem rede)
         run: node scripts/ensaio-trafo-way2.js --lib
+      # a leitura condicional (lib-le-blob) e a fiacao DESTE gerador: a copia do supervisorio volta 304 na rodada seguinte (sem rede)
+      - name: Ensaio · a leitura condicional da copia do supervisorio
+        run: node scripts/ensaio-le-blob.js --so trafo-medidor
       # a copia em disco do historico do medidor e das copias do supervisorio: os dias fechados e a copia sem mudanca voltam 304.
       # O modo completo nao usa a copia (~3 GB).
       - name: Restaurar a copia do historico do medidor

@@ -23,6 +23,7 @@ on:
       - '.github/workflows/executivo.yml'
       - '.github/workflows/way2-agg.yml'
       - '.github/workflows/way2-recent.yml'
+      - '.github/workflows/trafo-medidor.yml'   # trafo-alvo-ensaio (24/10/2026): a fiacao da copia do supervisorio
   workflow_dispatch: {}
 
 permissions:

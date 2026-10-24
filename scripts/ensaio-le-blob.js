@@ -27,7 +27,8 @@ const { EventEmitter } = require('events');
 let falhas = 0, casos = 0;
 const SO = (() => { const i = process.argv.indexOf('--so'); return i > 0 ? process.argv[i + 1] : ''; })();
 const DE = { 'way2-agg': ['gen-way2-agg.js', 'way2-agg.yml'],
-  'way2-recent': ['gen-way2-recent.js', 'gen-way2-eletrico.js', 'gen-dia-corrente.js', 'way2-recent.yml'] };
+  'way2-recent': ['gen-way2-recent.js', 'gen-way2-eletrico.js', 'gen-dia-corrente.js', 'way2-recent.yml'],
+  'trafo-medidor': ['gen-trafo-way2.js', 'trafo-medidor.yml'] };   // trafo-alvo-ensaio (24/10/2026): as copias do supervisorio pela lib
 if (SO && !DE[SO]) { console.error('--so desconhecido: ' + SO + ' (' + Object.keys(DE).join(', ') + ')'); process.exit(1); }
 const julga = (alvo) => !SO || DE[SO].includes(alvo);
 function ok(cond, msg) { casos++; if (!cond) { falhas++; console.log('  REPROVADO · ' + msg); } else console.log('  ok · ' + msg); }
@@ -131,6 +132,20 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   for (let k = 1; k <= 10; k++) { const u = 'https://exemplo/dados/hist/way2_2026-09-' + ('0' + k).slice(-2) + '.json'; STO.set(u, { etag: '"m' + k + '"', buf: Buffer.from('{"k":' + k + '}') }); await LB.bytes(u); }
   ok(LB._memo.size === 8 && !LB._memo.has('https://exemplo/dados/hist/way2_2026-09-01.json'), 'memoria limitada a 8 dias, sai o mais antigo');
 
+  /* trafo-alvo-ensaio (24/10/2026): o ramo das copias do supervisorio dos transformadores no ALVO (trafo-um-escritor, e57bcf0). A copia
+     muda uma vez por dia e o gen-trafo-way2 a le de 15 em 15 min: na rodada seguinte, 304 pela copia em disco. O produto (trafo_5min)
+     muda toda rodada e continua direto, sem copia */
+  console.log('8b2. a copia do supervisorio dos transformadores: 304 na rodada seguinte; o produto, direto');
+  const UT = 'https://exemplo/dados/trafo_scada_5min.json', UP = 'https://exemplo/dados/trafo_5min.json';
+  STO.set(UT, { etag: '"0xT"', buf: Buffer.from('{"serie":["sup"]}') }); STO.set(UP, { etag: '"0xP"', buf: Buffer.from('{"serie":["med"]}') });
+  LB = nova(LIB); LOG.length = 0; await LB.bytes(UT);
+  ok(LOG.length === 1 && LOG[0].inm === null && fs.readdirSync(pub).some((f) => f.endsWith('.meta') && JSON.parse(fs.readFileSync(path.join(pub, f), 'utf8')).url === UT), 'trafo_scada_5min: primeira leitura vai a rede e guarda a copia');
+  LB = nova(LIB); LOG.length = 0; const ts = await LB.bytes(UT);
+  ok(LOG.length === 1 && LOG[0].inm === '"0xT"' && ts.toString() === '{"serie":["sup"]}' && LB._est.copia === 1 && LB._est.rede === 0, 'trafo_scada_5min: rodada seguinte com If-None-Match, 304, bytes da copia');
+  ok(['trafo_scada_30min', 'trafo_scada_60min', 'trafo_scada_diario'].every((n) => LB.ALVO.test('https://exemplo/dados/' + n + '.json')) && !LB.ALVO.test('https://exemplo/dados/trafo_scada_15min.json'), 'o ALVO casa as quatro copias publicadas (5, 30 e 60 min e o diario) e so elas');
+  LB = nova(LIB); LOG.length = 0; await LB.bytes(UP); LB = nova(LIB); LOG.length = 0; await LB.bytes(UP);
+  ok(LOG.length === 1 && LOG[0].inm === null && !fs.readdirSync(pub).some((f) => f.endsWith('.meta') && JSON.parse(fs.readFileSync(path.join(pub, f), 'utf8')).url === UP), 'trafo_5min (o produto): direto, sem If-None-Match e sem copia');
+
   if (julga('gen-way2-agg.js')) {
   console.log('8c. o agregador: 200, 404 e 500 pela funcao de leitura de verdade');
   delete require.cache[require.resolve('./lib-le-blob')]; delete require.cache[require.resolve('./gen-way2-agg')];
@@ -152,7 +167,8 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   if (julga('gen-way2-recent.js')) ok(/LB\.bytes\(BASE_PUB \+ `hist\/way2_\$\{dd\}\.json`\)/.test(L('gen-way2-recent.js')) && /copiaL/.test(L('gen-way2-recent.js')), 'gen-way2-recent: dia fechado pela lib e o ao vivo da copia local');
   if (julga('gen-way2-eletrico.js')) ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
   if (julga('gen-way2-recent.js')) ok(/`way2_\$\{day\}\.json`\), buf\)/.test(L('gen-way2-recent.js')), 'gen-way2-recent: a copia do dia leva o nome e os bytes do hist que subiu');
-  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3]].filter(([w]) => julga(w))) {   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
+  if (julga('gen-trafo-way2.js')) ok(/if \(\/\^trafo_scada_\/\.test\(nome\)\) return desembrulha\(await require\('\.\/lib-le-blob\.js'\)\.bytes\(BASE \+ nome/.test(L('gen-trafo-way2.js')), 'gen-trafo-way2: a copia do supervisorio pela lib (trafo-alvo-ensaio)');
+  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3], ['trafo-medidor.yml', 2]].filter(([w]) => julga(w))) {   /* + trafo-medidor (trafo-alvo-ensaio): o gerador e o --produto */   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
     const w = W(wf), iR = w.indexOf('Restaurar a copia do historico do medidor'), iG = w.indexOf('Guardar a copia do historico do medidor');
     const iC = w.indexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob');
     ok(iR > 0 && iC > iR && iG > w.lastIndexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob') && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === passos, wf + ': restaura ANTES do primeiro gerador, guarda DEPOIS do ultimo, ' + passos + ' passo(s) com CACHE_BLOB_DIR');
