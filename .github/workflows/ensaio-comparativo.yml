@@ -37,6 +37,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
+      # com DADOS_STORAGE no job a lib-le-dados le `dados` pelo SDK: sem o pacote, o primeiro passo cai com "Cannot find module"
+      - run: npm i @azure/storage-blob@12
 
       # As pecas que nao dependem do segredo — deslocamento, alinhamento, fechamento das tres,
       # esquema, agregacao e a guarda de granularidade.

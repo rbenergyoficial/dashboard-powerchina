@@ -14,7 +14,9 @@
  *   8. os geradores e os workflows estao ligados (fonte): hist/way2 pela lib, copia local da rodada, cache restaurado antes e guardado depois.
  * PLANTIOS (cada um TEM de reprovar): a lib sem o If-None-Match; a lib que devolve a copia mesmo com 200 novo.
  *
- * uso: node scripts/ensaio-le-blob.js
+ * uso: node scripts/ensaio-le-blob.js [--so way2-agg | --so way2-recent]
+ *   --so <workflow>  a lib (1-8b) e, no item 9, so os geradores que rodam NAQUELE workflow e o proprio .yml. Sem isso um lote
+ *                    que mexe so no gen-pr congelava os agregados e o ao vivo. Sem opcao: tudo (o ensaios.yml, a cada push).
  */
 const fs = require('fs');
 const os = require('os');
@@ -23,6 +25,11 @@ const https = require('https');
 const { EventEmitter } = require('events');
 
 let falhas = 0, casos = 0;
+const SO = (() => { const i = process.argv.indexOf('--so'); return i > 0 ? process.argv[i + 1] : ''; })();
+const DE = { 'way2-agg': ['gen-way2-agg.js', 'way2-agg.yml'],
+  'way2-recent': ['gen-way2-recent.js', 'gen-way2-eletrico.js', 'gen-dia-corrente.js', 'way2-recent.yml'] };
+if (SO && !DE[SO]) { console.error('--so desconhecido: ' + SO + ' (' + Object.keys(DE).join(', ') + ')'); process.exit(1); }
+const julga = (alvo) => !SO || DE[SO].includes(alvo);
 function ok(cond, msg) { casos++; if (!cond) { falhas++; console.log('  REPROVADO · ' + msg); } else console.log('  ok · ' + msg); }
 
 // ---- storage falso ----
@@ -124,6 +131,7 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   for (let k = 1; k <= 10; k++) { const u = 'https://exemplo/dados/hist/way2_2026-09-' + ('0' + k).slice(-2) + '.json'; STO.set(u, { etag: '"m' + k + '"', buf: Buffer.from('{"k":' + k + '}') }); await LB.bytes(u); }
   ok(LB._memo.size === 8 && !LB._memo.has('https://exemplo/dados/hist/way2_2026-09-01.json'), 'memoria limitada a 8 dias, sai o mais antigo');
 
+  if (julga('gen-way2-agg.js')) {
   console.log('8c. o agregador: 200, 404 e 500 pela funcao de leitura de verdade');
   delete require.cache[require.resolve('./lib-le-blob')]; delete require.cache[require.resolve('./gen-way2-agg')];
   const AG = require('./gen-way2-agg');
@@ -133,22 +141,23 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   STO.set('https://exemplo/dados/hist/way2_2026-08-03.json', { status: 500 });
   let m5 = ''; try { await AG.fetchBlob('https://exemplo/dados/hist/way2_2026-08-03.json'); } catch (er) { m5 = er.message; }
   ok(/^HTTP 500 /.test(m5), '500: estoura, como antes');
+  }
 
-  console.log('9. ligacao nos geradores e nos workflows (fonte)');
+  console.log('9. ligacao nos geradores e nos workflows (fonte)' + (SO ? ' · so o ' + SO : ''));
   const L = (n) => fs.readFileSync(path.join(__dirname, n), 'utf8'), W = (n) => fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', n), 'utf8');
-  ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-way2-agg.js')), 'gen-way2-agg: hist pela lib');
-  ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-executivo.js')), 'gen-executivo: hist pela lib');
-  ok(/if \(LB\.ALVO\.test\(url\)( && !semCopia)?\) return LB\.bytes\(url, \{ 'Accept-Encoding': 'gzip' \}\)/.test(L('gen-pr.js')), 'gen-pr: hist pela lib');   /* fontes-logger (19/10): a migracao da irradiancia baixa o dia velho sem copia (`semCopia`) */
-  ok(/ELET_LOCAL_DIR/.test(L('gen-dia-corrente.js')) && /LB\.ALVO\.test\(url\)/.test(L('gen-dia-corrente.js')), 'gen-dia-corrente: copia da rodada e hist pela lib');
-  ok(/LB\.bytes\(BASE_PUB \+ `hist\/way2_\$\{dd\}\.json`\)/.test(L('gen-way2-recent.js')) && /copiaL/.test(L('gen-way2-recent.js')), 'gen-way2-recent: dia fechado pela lib e o ao vivo da copia local');
-  ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
-  ok(/`way2_\$\{day\}\.json`\), buf\)/.test(L('gen-way2-recent.js')), 'gen-way2-recent: a copia do dia leva o nome e os bytes do hist que subiu');
-  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3]]) {   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
+  if (julga('gen-way2-agg.js')) ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-way2-agg.js')), 'gen-way2-agg: hist pela lib');
+  if (julga('gen-executivo.js')) ok(/if \(LB\.ALVO\.test\(url\)\) return LB\.bytes\(url\)/.test(L('gen-executivo.js')), 'gen-executivo: hist pela lib');
+  if (julga('gen-pr.js')) ok(/if \(LB\.ALVO\.test\(url\)( && !semCopia)?\) return LB\.bytes\(url, \{ 'Accept-Encoding': 'gzip' \}\)/.test(L('gen-pr.js')), 'gen-pr: hist pela lib');   /* fontes-logger (19/10): a migracao da irradiancia baixa o dia velho sem copia (`semCopia`) */
+  if (julga('gen-dia-corrente.js')) ok(/ELET_LOCAL_DIR/.test(L('gen-dia-corrente.js')) && /LB\.ALVO\.test\(url\)/.test(L('gen-dia-corrente.js')), 'gen-dia-corrente: copia da rodada e hist pela lib');
+  if (julga('gen-way2-recent.js')) ok(/LB\.bytes\(BASE_PUB \+ `hist\/way2_\$\{dd\}\.json`\)/.test(L('gen-way2-recent.js')) && /copiaL/.test(L('gen-way2-recent.js')), 'gen-way2-recent: dia fechado pela lib e o ao vivo da copia local');
+  if (julga('gen-way2-eletrico.js')) ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
+  if (julga('gen-way2-recent.js')) ok(/`way2_\$\{day\}\.json`\), buf\)/.test(L('gen-way2-recent.js')), 'gen-way2-recent: a copia do dia leva o nome e os bytes do hist que subiu');
+  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3]].filter(([w]) => julga(w))) {   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
     const w = W(wf), iR = w.indexOf('Restaurar a copia do historico do medidor'), iG = w.indexOf('Guardar a copia do historico do medidor');
     const iC = w.indexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob');
     ok(iR > 0 && iC > iR && iG > w.lastIndexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob') && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === passos, wf + ': restaura ANTES do primeiro gerador, guarda DEPOIS do ultimo, ' + passos + ' passo(s) com CACHE_BLOB_DIR');
   }
-  ok((W('way2-recent.yml').match(/ELET_LOCAL_DIR: \$\{\{ runner\.temp \}\}\/eletrico/g) || []).length === 3, 'way2-recent: a copia local da rodada nos 3 passos (coleta, snapshot, dia em curso)');
+  if (julga('way2-recent.yml')) ok((W('way2-recent.yml').match(/ELET_LOCAL_DIR: \$\{\{ runner\.temp \}\}\/eletrico/g) || []).length === 3, 'way2-recent: a copia local da rodada nos 3 passos (coleta, snapshot, dia em curso)');
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));

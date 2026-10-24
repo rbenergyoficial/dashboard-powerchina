@@ -19,6 +19,10 @@ on:
     paths:
       - 'scripts/**'
       - '.github/workflows/ensaios.yml'
+      # a fiacao da copia do historico do medidor nesses tres e julgada aqui (ensaio-le-blob, item 9), e so aqui para o executivo
+      - '.github/workflows/executivo.yml'
+      - '.github/workflows/way2-agg.yml'
+      - '.github/workflows/way2-recent.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -44,6 +48,12 @@ jobs:
       - name: Ensaio · canal de alerta abre, comenta, fecha e deduplica (lib-alerta)
         if: always()
         run: node scripts/ensaio-lib-alerta.js
+
+      # A leitura condicional do historico do medidor (lib-le-blob) e a fiacao de TODOS os geradores que a usam. Nos workflows de
+      # producao (way2-agg, way2-recent) roda so a parte de cada um: um lote que mexe no gen-pr nao congela o agregado nem o ao vivo.
+      - name: Ensaio · a leitura condicional do historico do medidor (lib-le-blob, todos os geradores)
+        if: always()
+        run: node scripts/ensaio-le-blob.js
 
       # 💰 A copia do scada-raw entre execucoes (10/10/2026) so vale quando confere com a listagem, e nunca esconde
       #    falha de download. Container simulado, sem rede; confere tambem que os tres geradores passam por ela.

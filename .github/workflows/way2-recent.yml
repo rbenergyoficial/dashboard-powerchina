@@ -62,7 +62,7 @@ jobs:
 
       # O ensaio da leitura condicional (sem rede, ~1 s): a lib quebrada para aqui, antes do snapshot e do dia em curso que a usam.
       - name: Ensaio · leitura condicional do historico do medidor
-        run: node scripts/ensaio-le-blob.js
+        run: node scripts/ensaio-le-blob.js --so way2-recent   # a lib e a fiacao dos geradores DESTE job; a dos outros, no ensaios.yml
       - name: Snapshot hoje + way2_recent.json
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}

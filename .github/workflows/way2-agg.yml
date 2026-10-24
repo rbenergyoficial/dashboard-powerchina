@@ -31,7 +31,7 @@ jobs:
       # O ensaio da leitura condicional (sem rede): a lib que deixa de mandar o If-None-Match, ou que devolve a copia velha com
       # arquivo novo, para aqui, antes de ler qualquer dia.
       - name: Ensaio · leitura condicional do historico do medidor
-        run: node scripts/ensaio-le-blob.js
+        run: node scripts/ensaio-le-blob.js --so way2-agg   # a lib e a fiacao DESTE gerador; a dos outros, no ensaios.yml a cada push
       - name: Restaurar a copia do historico do medidor
         uses: actions/cache/restore@v4
         with:

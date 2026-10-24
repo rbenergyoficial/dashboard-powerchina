@@ -280,6 +280,10 @@ async function gerarKpis(rows) {
   // mensais só toca no mês corrente e para às 23:00 UTC do último dia — antes de o ONS publicar
   // esse dia. Sem isto, o último dia de CADA mês se perde para sempre (jun/26 e jul/26 perderam).
   // Consolidar dados furados só espalharia o furo, então o reparo vem primeiro.
+  // 🔴 PULA_MES_CORRENTE=1 (ons-consolidado.yml, quando o ensaio do mes corrente reprova): so a etapa do mes corrente, que e o
+  //    que o ensaio julga, deixa de gravar. O reparo dos meses fechados segue (le pelo proprio baixarMes e nunca piora o gravado), e a
+  //    consolidacao tambem. Sem isso o ensaio vermelho pulava o passo inteiro, e o _all, o gemeo e a auditoria do PPC paravam junto.
+  const PULA = process.env.PULA_MES_CORRENTE === '1';
   console.log('Reparo de meses incompletos:');
   try {
     const { repararMeses } = require('./repara-ons-mes.js');
@@ -294,7 +298,8 @@ async function gerarKpis(rows) {
   // dado. 🔴 Erro aqui NAO para a consolidacao (os meses fechados seguem), mas deixa o job VERMELHO: agora este e o unico
   // escritor do mes corrente, e mes parado em silencio e o defeito que o vermelho existe para mostrar.
   console.log('Mês corrente:');
-  await require('./repara-ons-mes.js').etapaMesCorrente(upload, BASE);
+  if (PULA) console.log('  PULADO: o ensaio do mes corrente reprovou nesta rodada (o mes corrente fica como esta gravado)');
+  else await require('./repara-ons-mes.js').etapaMesCorrente(upload, BASE);
   console.log('');
 
   // Restrição: 1 linha por ts (nível complexo)

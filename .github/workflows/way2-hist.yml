@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       dias:
-        description: 'Quantos dias pra trás processar (backfill). 1 = só ontem.'
+        description: 'Quantos dias pra trás processar (backfill). 3 = ontem e os dois anteriores (o agendado).'
         required: false
-        default: '1'
+        default: '3'
       forcar:
         description: "Re-baixar dias já arquivados? '1' para sim."
         required: false
@@ -60,7 +60,11 @@ jobs:
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
-          DIAS: ${{ github.event.inputs.dias || '1' }}
+          # 3 e nao 1: o dia ja arquivado so refaz o rollup a partir do hist (sem API), entao os dois dias anteriores custam duas
+          # leituras do storage. Isso recupera o dia de ate duas rodadas vermelhas seguidas (antes ele ficava fora do way2_daily de
+          # vez) e, com UM DIA de atraso, o dia que o portal-dia completou no hist depois das 03:30 (ele regrava ate 05:40 UTC). O
+          # horario fica: o executivo das 04:13 UTC fecha o dia anterior com este rollup.
+          DIAS: ${{ github.event.inputs.dias || '3' }}
           FORCAR: ${{ github.event.inputs.forcar || 'false' }}
           PARAR_APOS_VAZIOS: ${{ github.event.inputs.parar || '7' }}
         run: node scripts/gen-way2-hist.js

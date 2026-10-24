@@ -165,6 +165,15 @@ const falha = async (opc, re) => {
       const iE = fonte.indexOf("require('./repara-ons-mes.js').etapaMesCorrente(upload, BASE)"), iC = fonte.indexOf("prefix: 'ons_restricao_'");
       assert.ok(iE > 0, 'o consolidador nao chama a etapa do mes corrente');
       assert.ok(iC > iE, 'a etapa tem de vir antes de consolidar a restricao');
+      // lote4-workflows: com o ensaio deste arquivo vermelho, o workflow passa PULA_MES_CORRENTE=1 e o consolidador pula SO a etapa do
+      // mes corrente (o reparo e a consolidacao seguem). A fiacao: a variavel sai do resultado do ensaio, nunca de um valor fixo.
+      const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'ons-consolidado.yml'), 'utf8').replace(/\r\n/g, '\n');
+      const fn = fonte.replace(/\r\n/g, '\n');
+      assert.ok(/- name: Ensaio do mes corrente do ONS[^\n]*\n\s+id: ensaio_mes\n/.test(wf), 'o ensaio do mes corrente sem `id: ensaio_mes`');
+      assert.ok(wf.includes("PULA_MES_CORRENTE: ${{ steps.ensaio_mes.outcome != 'success' && '1' || '' }}"), 'PULA_MES_CORRENTE nao sai do resultado do ensaio');
+      assert.ok(/id: consolidado\n\s+if: \$\{\{ !cancelled\(\) \}\}\n/.test(wf), 'o consolidado sem `if: !cancelled()`: o ensaio vermelho o pularia');
+      assert.ok(fn.includes("process.env.PULA_MES_CORRENTE === '1'") && /if \(PULA\)[^\n]*\n\s*else await require\('\.\/repara-ons-mes\.js'\)\.etapaMesCorrente\(upload, BASE\)/.test(fn), 'o consolidador nao pula a etapa com PULA');
+      assert.ok(!/if \(PULA\)[^\n]*\n\s*else try/.test(fn), 'o PULA nao pode pular o reparo dos meses fechados');
     });
   } finally { console.log = log; console.warn = warn; console.error = err; process.exitCode = exitAntes; }
   console.log('ensaio-ons-mes-corrente: ' + n + ' casos ok');
