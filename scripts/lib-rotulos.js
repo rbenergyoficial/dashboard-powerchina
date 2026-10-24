@@ -144,6 +144,16 @@ const MES_N = { jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6, jul: 7, ago: 8, 
 
 // ⚠️ Prefixo variável + cauda fixa: `Sensação 32°` só tem tradução na cauda. A lista guarda a
 //    forma, não o valor, senão a cada grau novo faltaria uma entrada.
+// Forma a partir de um MOLDE com lacunas {1}, {2}...: o texto fixo casa literalmente e cada lacuna leva o mesmo valor nas tres
+// linguas. Para texto longo com numero no meio, onde escrever a regex a mao erraria um escape.
+function molde(pt, en, zh) {
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('^' + pt.split(/\{\d\}/).map(esc).join('(.+?)') + '$');
+  const ordem = (pt.match(/\{\d\}/g) || []).map((x) => Number(x[1]));
+  const preenche = (alvo) => (m) => alvo.replace(/\{(\d)\}/g, (_, k) => m[ordem.indexOf(Number(k)) + 1]);
+  return { re, en: preenche(en), zh: preenche(zh) };
+}
+
 const FORMAS = [
   { re: /^Sensação (.+)$/, en: (m) => 'Feels like ' + m[1], zh: (m) => '体感 ' + m[1] },
   // nome do medidor: `SE · TR1` tem a sigla da subestação em português; `M1 · C1` é código
@@ -184,6 +194,36 @@ const FORMAS = [
   { re: /^ONS · dia (\d+) de (\d+) \(D\+1\)$/,
     en: (m) => 'ONS · day ' + m[1] + ' of ' + m[2] + ' (D+1)',
     zh: (m) => 'ONS · 第 ' + m[1] + ' 天 / 共 ' + m[2] + ' 天（D+1）' },
+
+  // --- dica dos blocos do cabecalho do ONS (ons_kpis.json, tiles[].t) -----------------------
+  // 🔴 O texto e o do gen-ons-consolidado, com os numeros no meio: a forma casa o texto INTEIRO e so o numero passa. Mudou o
+  //    texto la, a forma deixa de casar e o relatorio volta a acusar o rotulo sem traducao (e a guarda).
+  molde('{1} GWh — controle de frequência no SIN: há geração demais no sistema e a frequência sobe, então o corte é para equilibrar '
+    + 'carga. O ONS registra invariavelmente "Controle de frequência do SIN"',
+    '{1} GWh — frequency control of the SIN: there is too much generation in the system and the frequency rises, so the '
+    + 'curtailment balances the load. The ONS invariably records "Frequency control of the SIN"',
+    '{1} GWh — 国家互联电网频率控制：系统内发电过剩、频率升高，因此限电以平衡负荷。ONS 一律记录为 "国家互联电网频率控制"'),
+  molde('{1} GWh — corte motivado por limitações operativas da rede: carregamento de linha ou transformador, limite de fluxo entre '
+    + 'subsistemas',
+    '{1} GWh — curtailment caused by operational limits of the grid: line or transformer loading, flow limit between subsystems',
+    '{1} GWh — 因电网运行限制而限电：线路或变压器过载、子系统间的潮流限制'),
+  molde('{1} GWh — indisponibilidade externa: um equipamento de terceiro fora de operação limita o escoamento',
+    '{1} GWh — external unavailability: a third-party piece of equipment out of operation limits the power export',
+    '{1} GWh — 外部不可用：第三方设备停运，限制了电力送出'),
+  molde('COMISSIONAMENTO (pré-COD), 21/jan a 21/nov/2025 — antes da operação comercial. GERADO {1} GWh: energia líquida medida '
+    + 'pelo Way2 (medidor de faturamento). CORTADO {2} GWh: é ESTIMATIVA, faixa de ±15% — a Sinapse registra a ocorrência mas não '
+    + 'traz geração de referência, então a energia frustrada é reconstruída pela irradiância medida e pela capacidade em teste '
+    + '(apuração {3}, {4}). As {5} h de restrição vêm da Sinapse (Iqony). Os KPIs à esquerda são do ONS, que só publica a partir do '
+    + 'COD, e por isso NÃO incluem nada disto. O detalhe mês a mês está na seção DESDE O INÍCIO.',
+    'COMMISSIONING (pre-COD), Jan 21 to Nov 21, 2025 — before commercial operation. GENERATED {1} GWh: net energy measured by Way2 '
+    + '(billing meter). CURTAILED {2} GWh: this is an ESTIMATE, ±15% band — Sinapse records the event but carries no reference '
+    + 'generation, so the curtailed energy is rebuilt from the measured irradiance and the capacity under test (assessment {3}, '
+    + '{4}). The {5} h of restriction come from Sinapse (Iqony). The KPIs on the left are from the ONS, which only publishes from '
+    + 'COD onwards, and so do NOT include any of this. The month-by-month detail is in the SINCE THE BEGINNING section.',
+    '调试期（商运前），2025 年 1 月 21 日至 11 月 21 日 — 商业运行之前。已发电 {1} GWh：由 Way2（结算电表）计量的净电量。限电 {2} '
+    + 'GWh：为估算值，误差范围 ±15% — Sinapse 记录了事件，但不提供参考发电量，因此限电损失电量依据实测辐照度和测试容量重建（核算 {3}，'
+    + '{4}）。{5} 小时的限电时长来自 Sinapse（Iqony）。左侧 KPI 取自 ONS，ONS 仅自 COD 起发布数据，因此不包含以上任何内容。逐月明细见 '
+    + '"自投产以来" 一节。'),
 ];
 
 
