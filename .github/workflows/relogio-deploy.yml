@@ -43,6 +43,7 @@ env:
 jobs:
   publicar:
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # teto: 3x a maior duracao medida, com piso de 10 min (4,3 min, ultimas execucoes ate 23/10/2026); run presa sem teto tira o workflow do relogio
     # `id-token: write` e o que permite ao job pedir o token de identidade do GitHub. Sem ele o
     # `azure/login` falha — e e a unica permissao a mais que o OIDC exige.
     permissions:

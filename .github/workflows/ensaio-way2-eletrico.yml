@@ -20,6 +20,7 @@ concurrency:
 jobs:
   ensaio:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # teto: 3x a maior duracao medida, com piso de 10 min (0,5 min, ultimas execucoes ate 23/10/2026); run presa sem teto tira o workflow do relogio
     env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     steps:

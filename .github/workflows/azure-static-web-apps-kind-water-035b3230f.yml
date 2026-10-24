@@ -13,6 +13,7 @@ jobs:
   build_and_deploy_job:
     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
     runs-on: ubuntu-latest
+    timeout-minutes: 55  # teto: 3x a maior duracao medida, com piso de 10 min (17,5 min, ultimas execucoes ate 23/10/2026); run presa sem teto tira o workflow do relogio
     name: Build and Deploy Job
     steps:
       - uses: actions/checkout@v3
@@ -46,6 +47,7 @@ jobs:
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # teto minimo: job curto que so roda ao fechar pull request; run presa sem teto tira o workflow do relogio
     name: Close Pull Request Job
     steps:
       - name: Close Pull Request
