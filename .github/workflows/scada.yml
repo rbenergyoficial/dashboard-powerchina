@@ -87,12 +87,20 @@ jobs:
       #    vermelho. Limiar proprio (170/336 h), MEDIDO no proprio container: la o deposito e
       #    humano, ~2 por semana, e as 50 h do SCADA acenderiam quase sempre.
       #
-      # ⚠️ So no agendamento das 11:30, e a condicao diz isso literalmente. O container recebe ~2
-      #    arquivos por semana; tres verificacoes por dia sobre um limiar de 7 dias nao
-      #    acrescentam nada. Para medir fora do agendamento: `RAW_CONTAINER=inversores-raw MODO=medir node
-      #    scripts/gen-scada-intake-watchdog.js` (a entrada `vigia_container` saiu no scada-db, 22/10/2026).
+      # ⚠️ So na rodada das 11:30 UTC. O container recebe ~2 arquivos por semana; tres verificacoes
+      #    por dia sobre um limiar de 7 dias nao acrescentam nada. Duas origens contam como essa rodada:
+      #    o cron das 11:30 entregue pelo agendador do GitHub (traz `github.event.schedule`, com qualquer
+      #    atraso), e o dispatch, que e como o relogio dispara (pontual, sem o cron), feito antes das 15 UTC.
+      #    So o primeiro valia, e o passo era pulado nos dias em que so o relogio rodava. Os crons de 17 e
+      #    21 UTC atrasados chegam com o schedule deles e ficam fora. Nos dias em que o GitHub tambem
+      #    entrega o das 11:30, o vigia roda duas vezes: com a intake em alerta, sao dois avisos no dia.
+      #    Para medir fora da rodada: `RAW_CONTAINER=inversores-raw MODO=medir node scripts/gen-scada-intake-watchdog.js`.
+      - name: A rodada e a das 11:30 UTC?
+        id: rodada
+        if: always()
+        run: echo "manha=$([ "$(date -u +%H)" -lt 15 ] && echo 1 || echo 0)" >> "$GITHUB_OUTPUT"
       - name: Vigia da intake dos Inversores
-        if: always() && github.event.schedule == '30 11 * * *'
+        if: always() && (github.event.schedule == '30 11 * * *' || (github.event_name == 'workflow_dispatch' && steps.rodada.outputs.manha == '1'))
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: inversores-raw

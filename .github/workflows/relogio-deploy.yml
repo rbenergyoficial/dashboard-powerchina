@@ -37,6 +37,10 @@ on:
     paths: ['relogio/**']
   workflow_dispatch:
 
+concurrency:   # dois pushes seguidos: o segundo deploy espera, e a conferencia por nome nao le o pacote do outro
+  group: relogio-deploy
+  cancel-in-progress: false
+
 env:
   APP: ${{ vars.RELOGIO_APP_NAME }}
 
@@ -103,11 +107,22 @@ jobs:
       # respondeu `Running` com `errors: 0`, e havia ZERO funcoes: sem permissao Unix nos
       # arquivos, o Flex monta o pacote e o host nao consegue le-lo. O unico sinal honesto e
       # perguntar ao host quantas funcoes ele enxerga.
+      # O esperado sai do mesmo lugar que o app: um temporizador por linha da agenda (nome como no src/index.js) mais cada
+      # app.http. "Pelo menos uma" passava com so a sonda de saude registrada, e os workflows sem temporizador caiam para o
+      # agendador do GitHub sem aviso.
       - name: O host enxerga as funcoes?
         run: |
-          n=$(az functionapp function list -g rg-dashboard -n "${{ env.APP }}" --query "length(@)" -o tsv)
-          echo "funcoes registradas: $n"
-          if [ "${n:-0}" -lt 1 ]; then
-            echo "::error::O deploy respondeu sucesso e o host nao registrou funcao nenhuma."
-            exit 1
-          fi
+          az functionapp function list -g rg-dashboard -n "${{ env.APP }}" --query "[].name" -o json > "$RUNNER_TEMP/funcoes.json"
+          node -e '
+          const fs = require("fs");
+          const tem = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/funcoes.json", "utf8")).map((n) => String(n).split("/").pop());
+          const quer = [];
+          for (const [wf, crons] of Object.entries(require("./relogio/agenda.json")))
+            crons.forEach((_, i) => quer.push("dispara-" + wf.replace(/\.yml$/, "") + (crons.length > 1 ? "-" + (i + 1) : "")));
+          for (const m of fs.readFileSync("relogio/src/index.js", "utf8").matchAll(/app\.http\(\x27([^\x27]+)\x27/g)) quer.push(m[1]);
+          const falta = quer.filter((n) => !tem.includes(n)), sobra = tem.filter((n) => !quer.includes(n));
+          console.log("funcoes registradas: " + tem.length + " · esperadas: " + quer.length);
+          if (falta.length) console.log("::error::O host nao registrou: " + falta.join(", "));
+          if (sobra.length) console.log("::error::O host tem funcao fora da agenda: " + sobra.join(", "));
+          if (falta.length || sobra.length) process.exit(1);
+          '
