@@ -78,7 +78,7 @@ jobs:
       - name: Ensaio · a saida propria pela copia em disco (sem rede)
         id: r_proprios
         if: ${{ !cancelled() }}
-        run: node scripts/ensaio-saidas-proprias.js
+        run: node scripts/ensaio-saidas-proprias.js --so sungrow
       # A copia em disco da rodada anterior: os exports do SCADA que a identificacao le (lib-cache-blob; sem ela, ~201 MB pela rede) e os
       # sg_* que o gerar gravou (lib-le-dados; o storage confirma com 304 que nao mudaram)
       - name: Copia da rodada anterior (exports do SCADA e sg_*)

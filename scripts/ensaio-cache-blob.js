@@ -131,7 +131,7 @@ function item(blobs, nome, comMd5 = true) {
     ok(c.downloads === antes, 'marca antiga reconhecida, sem download'); }
 
   console.log('12. os geradores do bruto passam pela copia (os tres do scada-raw e, desde o custo-ppc, o do ppc-raw; desde o custo-sungrow, os exports do gen-sungrow)');
-  for (const g of ['gen-scada.js', 'gen-inv-scada.js', 'gen-perdas.js', 'gen-ppc.js']) {
+  for (const g of ['gen-scada.js', 'gen-inv-scada.js', 'gen-perdas.js', 'gen-ppc.js', 'gen-trafo.js']) {   // gen-trafo: as planilhas do historiador (custo-trafo)
     const src = fs.readFileSync(path.join(__dirname, g), 'utf8');
     ok(/require\('\.\/lib-cache-blob'\)\.abre\(RAW_CONTAINER\)/.test(src) && /\.baixa\((c|cont), (b|e\.item)\)/.test(src), g + ' abre a copia e baixa por ela');
     ok(/\.poda\(\)/.test(src) && /\.resumo\(\)/.test(src), g + ' poda e resume');
@@ -150,6 +150,22 @@ function item(blobs, nome, comMd5 = true) {
     ok(/- name: Copia da rodada anterior \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');
     ok(/- name: Guardar a copia da rodada \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outcome == 'success'/.test(wf), 'sungrow.yml: a copia so e guardada com o gerador verde');
     ok(src.indexOf('CACHE_SC.poda()') > src.indexOf("busca funda: '") && src.indexOf("busca funda: '") > 0, 'gen-sungrow.js: a poda vem depois da busca funda'); }
+
+  /* custo-trafo (24/10/2026): o trafo.yml guarda a copia do bruto em DUAS entradas (o banco e as planilhas do historiador), cada uma com
+     a sua chave; o gerar com CACHE_BLOB_DIR; restore antes e save depois de cada pasta */
+  { const wt = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'trafo.yml'), 'utf8').replace(/\r\n/g, '\n');
+    const ps = wt.split(/\n      - name: /).slice(1).map((p) => ({ nome: p.split('\n')[0].trim(), corpo: p }));
+    const iG = ps.findIndex((p) => /^Gerar trafo_scada_/.test(p.nome));
+    const par = (pasta, chave) => {
+      const r = ps.findIndex((p) => /actions\/cache\/restore@/.test(p.corpo) && p.corpo.indexOf('path: .cache-banco/' + pasta + '\n') >= 0);
+      const s = ps.findIndex((p) => /actions\/cache\/save@/.test(p.corpo) && p.corpo.indexOf('path: .cache-banco/' + pasta + '\n') >= 0);
+      return r >= 0 && s >= 0 && r < iG && s > iG && ps[s].corpo.indexOf("key: " + chave + "-${{ hashFiles('.cache-banco/" + pasta + "/*.meta') }}") >= 0
+        && ps[r].corpo.indexOf('restore-keys: ' + chave + '-') >= 0;
+    };
+    ok(iG >= 0 && /CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-banco\n/.test(ps[iG].corpo), 'trafo.yml: o gerar com CACHE_BLOB_DIR .cache-banco');
+    ok(par('backup-dados-scada', 'scada-db-gen-trafo') && par('scada-raw', 'scada-raw-gen-trafo'),
+      'trafo.yml: o banco e as planilhas em entradas separadas, restore antes e save depois, cada uma com a chave da propria pasta');
+    ok(!ps.some((p) => /path: \.cache-banco\n/.test(p.corpo)), 'trafo.yml: nenhuma entrada com a pasta .cache-banco inteira (a chave mudaria todo dia com as planilhas dentro)'); }
 
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));
   process.exit(falhas ? 1 : 0);

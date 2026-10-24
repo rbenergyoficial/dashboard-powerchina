@@ -61,8 +61,9 @@ async function grava(nome, obj) {
   const { BlobServiceClient } = require('@azure/storage-blob');
   if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
   const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
+  const up = await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
+  if (OUT_CONTAINER === 'dados') require('./lib-le-dados.js').lembra(nome, up.etag, gz);   // o ensaio de produto do mesmo job le pela copia (304)
   return gz.length;
 }
 

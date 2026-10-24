@@ -32,21 +32,28 @@ jobs:
       # 🔴 lote fonte-trafo-way2 (19/10/2026): o gen-trafo grava a COPIA DO SUPERVISORIO (`trafo_scada_*.json`), com nome proprio. As
       #    telas leem `trafo_*.json`, do gen-trafo-way2 (trafo-medidor.yml): lado de 230 kV pelo medidor de faturamento, e desta copia so o que o
       #    medidor nao mede (temperaturas, comutador, 34,5 kV).
-      # 💰 trafo-db (22/10/2026): o gerador le os zips diarios do banco do supervisorio no cofre (~340 KB por dia, ate um ano). A copia
-      #    em disco entre execucoes (`lib-cache-blob.js`) faz so o dia novo vir pela rede; o custo do storage e a saida.
+      # A copia em disco do bruto do supervisorio entre execucoes (lib-cache-blob), em DUAS entradas de cache, cada uma com a sua chave:
+      #    o banco (zips diarios no cofre, ~340 KB por dia, ate um ano: ganha um dia novo por execucao) e as planilhas do historiador e os CSV
+      #    do scada-raw (~360 MB que nao mudam: a entrada so e regravada quando chega arquivo novo). So o arquivo novo vem pela rede.
       - name: Restaurar a copia do banco do supervisorio
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
-          path: .cache-banco
+          path: .cache-banco/backup-dados-scada
           key: scada-db-gen-trafo-${{ github.run_id }}
           restore-keys: scada-db-gen-trafo-
+      - name: Restaurar a copia das planilhas do historiador
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/scada-raw
+          key: scada-raw-gen-trafo-${{ github.run_id }}
+          restore-keys: scada-raw-gen-trafo-
       - name: Gerar trafo_scada_*.json (copia do supervisorio)
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW_CONTAINER: scada-raw
           OUT_CONTAINER: dados
           DB_CONTAINER: backup-dados-scada
-          # a copia do banco do supervisorio entre execucoes (so o dia novo vem pela rede)
+          # a copia do bruto entre execucoes: .cache-banco/backup-dados-scada (o banco) e .cache-banco/scada-raw (planilhas e CSV)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-banco
           # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo' || '' }}
@@ -56,14 +63,21 @@ jobs:
           if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
           node scripts/gen-trafo.js
           if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi
-      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais.
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas de cada pasta.
       - name: Guardar a copia do banco do supervisorio
-        if: ${{ !cancelled() && hashFiles('.cache-banco/**/*.meta') != '' }}
+        if: ${{ !cancelled() && hashFiles('.cache-banco/backup-dados-scada/*.meta') != '' }}
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
-          path: .cache-banco
-          key: scada-db-gen-trafo-${{ hashFiles('.cache-banco/**/*.meta') }}
+          path: .cache-banco/backup-dados-scada
+          key: scada-db-gen-trafo-${{ hashFiles('.cache-banco/backup-dados-scada/*.meta') }}
+      - name: Guardar a copia das planilhas do historiador
+        if: ${{ !cancelled() && hashFiles('.cache-banco/scada-raw/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/scada-raw
+          key: scada-raw-gen-trafo-${{ hashFiles('.cache-banco/scada-raw/*.meta') }}
       # 🔴 trafo-um-escritor (23/10/2026): o lado de 230 kV pelo medidor (gen-trafo-way2, `trafo_*.json`) saiu daqui. Ele roda SO no
       #    trafo-medidor.yml, de 15 em 15 min, com o forcar e o ensaio que moravam neste workflow: dois workflows gravando o mesmo
       #    `trafo_*.json` em grupos diferentes deixavam uma intradia devolver o produto velho por cima de um completo. A copia que este

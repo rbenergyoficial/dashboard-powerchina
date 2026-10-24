@@ -201,6 +201,10 @@ const NOMINAL = PLACA.potencia_at_mva.onaf2;   // o % publicado usa a plena, com
 const IMPLAUSIVEL = 10;
 
 // ---------- entrada ---------------------------------------------------------------------------
+/* As planilhas do historiador (~35 MB cada, 11 hoje) e os CSV do supervisorio nao mudam depois de gravados: pela copia em disco da execucao
+   anterior (lib-cache-blob: etag, tamanho e MD5 da listagem), so o arquivo novo vem pela rede. Medido em 24/10/2026 pelo registro de leituras
+   do storage: ~360 MB por execucao, sempre as mesmas planilhas. Sem CACHE_BLOB_DIR nada muda */
+let CACHE_RAW = null;
 async function listaArquivos() {
   if (process.env.LOCAL_DIR) {
     const fs = require('fs'), path = require('path');
@@ -216,13 +220,14 @@ async function listaArquivos() {
   const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
   const out = []; let total = 0;
   out.ied = [];
+  CACHE_RAW = require('./lib-cache-blob').abre(RAW_CONTAINER);
   for await (const b of c.listBlobsFlat()) {
     total++;
     if (IED.ARQ_IED.test(b.name)) { out.ied.push({ nome: b.name, bytes: b.properties.contentLength || 0,
-      ler: async () => c.getBlobClient(b.name).downloadToBuffer() }); continue; }
+      ler: async () => CACHE_RAW.baixa(c, b) }); continue; }
     if (!CARIMBO.test(b.name)) continue;
     out.push({ nome: b.name, bytes: b.properties.contentLength || 0,
-      ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+      ler: async () => CACHE_RAW.baixa(c, b) });
   }
   // 🔴 a guarda diz o TOTAL, nao so o casado: "0 candidatos" sem denominador ja me fez concluir
   // que um arquivo nao existia quando o padrao e que estava errado.
@@ -502,6 +507,7 @@ async function grava(nome, obj) {
       + (r.linhas.length ? ' · ' + iso(r.linhas[0].ms) + ' a ' + iso(r.linhas[r.linhas.length - 1].ms) : '')
       + (r.recusadas ? ' · ' + r.recusadas + ' linha(s) sem carimbo' : ''));
   }
+  if (CACHE_RAW) { CACHE_RAW.poda(); CACHE_RAW.resumo(); }   // so fica no disco o bruto que esta execucao leu
   const congelados = {}, historiador = {};
   for (const t of TRAFOS) {
     if (!ied[t].size) continue;

@@ -43,8 +43,12 @@ jobs:
       # a leitura condicional (lib-le-blob) e a fiacao DESTE gerador: a copia do supervisorio volta 304 na rodada seguinte (sem rede)
       - name: Ensaio · a leitura condicional da copia do supervisorio
         run: node scripts/ensaio-le-blob.js --so trafo-medidor
+      # a leitura pela copia em disco do proprio produto (lib-le-dados): o GET condicional, a copia so com o 304 do storage e o gravador que
+      # lembra a etag do upload. Vermelho aqui = o gerar nao roda. Sem rede
+      - name: Ensaio · a saida propria pela copia em disco (sem rede)
+        run: node scripts/ensaio-saidas-proprias.js --so trafo-medidor
       # a copia em disco do historico do medidor e das copias do supervisorio: os dias fechados e a copia sem mudanca voltam 304.
-      # O modo completo nao usa a copia (~3 GB).
+      # O modo completo nao usa a copia (~3 GB). A pasta leva tambem a copia dos trafo_* (proprios), fora da chave: so vale com 304.
       - name: Restaurar a copia do historico do medidor
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -55,6 +59,7 @@ jobs:
         id: medidor
         env:
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^trafo_(5min|15min|30min|60min|diario)\.json$'   # lembra a etag de cada trafo_* gravado (a leitura dos anteriores vai condicional)
           FORCAR: ${{ github.event.inputs.forcar }}
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/trafo-medidor' || '' }}
           NODE_OPTIONS: --max-old-space-size=6144
@@ -68,6 +73,7 @@ jobs:
         if: ${{ !cancelled() && steps.medidor.outcome == 'success' && !github.event.inputs.ensaio }}
         env:
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^trafo_(5min|15min|30min|60min|diario)\.json$'   # le pela copia (304) os trafo_* que o gerar acabou de gravar
         run: node scripts/ensaio-trafo-way2.js --produto
       # ⚠️ Falhar ao guardar a copia nao derruba o job. A chave e o hash das marcas: execucao sem dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor
