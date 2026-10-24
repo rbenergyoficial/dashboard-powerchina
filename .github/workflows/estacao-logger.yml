@@ -14,8 +14,8 @@ jobs:
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       # campo pelo nome, meia hora T = media de T+10, T+20 e T+30 (tudo-ou-nada), M10 = usina 1, duplicados e 3 s fora; com plantios
@@ -31,7 +31,7 @@ jobs:
         run: node scripts/ensaio-irr-datalogger.js --lib
       # 💰 ~4 mil arquivos de 128 KB: so o arquivo novo vem pela rede (lib-cache-blob.js); cache proprio deste workflow
       - name: Restaurar a copia do backup-dados-scada
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-blob
           key: backup-dados-scada-estacao-${{ github.run_id }}
@@ -47,7 +47,7 @@ jobs:
       - name: Guardar a copia do backup-dados-scada
         if: ${{ !cancelled() && hashFiles('.cache-blob/**/*.meta') != '' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-blob
           key: backup-dados-scada-estacao-${{ hashFiles('.cache-blob/**/*.meta') }}

@@ -18,8 +18,8 @@ jobs:
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 120  # a recarga completa (refazer=1 ou esquema novo) mediu ~65 min; a rodada do dia, no maximo 13 min em 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
@@ -83,7 +83,7 @@ jobs:
       # sg_* que o gerar gravou (lib-le-dados; o storage confirma com 304 que nao mudaram)
       - name: Copia da rodada anterior (exports do SCADA e sg_*)
         if: ${{ !cancelled() }}   # como os ensaios acima: o restore nao herda o success(), senao um ensaio que nao barra o gerador faria o gerador baixar tudo
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-sungrow
           key: sungrow-scada-${{ github.run_id }}
@@ -108,7 +108,7 @@ jobs:
       - name: Guardar a copia da rodada (exports do SCADA e sg_*)
         if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && hashFiles('.cache-sungrow/**/*.meta') != '' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-sungrow
           key: sungrow-scada-${{ hashFiles('.cache-sungrow/**/*.meta') }}

@@ -9,8 +9,9 @@ name: Ensaios de logica (a cada push em scripts/)
 #
 # Por que num workflow proprio, e nao nos workflows de dado: e no PUSH que um ensaio de logica pode
 # reprovar (e quando o codigo muda); e ha ensaio que le blob publico, entao num job de 5 ou 15 min um
-# estranhamento do dado travaria a publicacao. Nenhum usa segredo: o GitHub e o canal de alerta sao
-# SIMULADOS dentro dos ensaios, e os geradores rodam com saida local.
+# estranhamento do dado travaria a publicacao. O GitHub e o canal de alerta sao SIMULADOS dentro dos
+# ensaios, e os geradores rodam com saida local. A unica credencial e a de LEITURA do conteiner `dados`
+# (DADOS_LEITURA, SAS de politica revogavel): um ensaio que tentasse gravar em producao falha.
 #
 # ⚠️ Cada passo roda com `if: always()`: um ensaio vermelho nao esconde o resultado dos outros.
 on:
@@ -37,12 +38,12 @@ concurrency:
 jobs:
   ensaiar:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    env:   # leitura de `dados` pela lib-le-dados com a SAS so de leitura; nenhum passo deste job tem a chave da conta
+      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       # os geradores julgados importam o cliente do Azure no topo, mesmo sem usa-lo no modo local
       - run: npm i @azure/storage-blob@12
@@ -112,9 +113,7 @@ jobs:
       #    cenarios RODAM; o texto do alerta de cada um fica no log para leitura. Nao e asserção.
       - name: Ensaio · o vigia de MUST nos quatro cenarios (recortes reais de 23/08/2026)
         if: always()
-        env:   # Fase 2 (PROMOVER fase2-virada): o vigia lê must_5min.json e way2_watchdog.json de `dados` com credencial, não pelo endereço público
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-        run: node scripts/ensaio-must-watchdog.js
+        run: node scripts/ensaio-must-watchdog.js   # le must_5min.json e way2_watchdog.json com a SAS de leitura do job
 
       # O alerta de ultrapassagem do MUST no quarto de hora (alerta-must.js): janela por dia BRT,
       # fronteira do balde das 00:00, dedup, e vermelho quando o canal esta incompleto ou nada foi julgado. So casos

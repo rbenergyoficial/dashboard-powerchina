@@ -64,7 +64,7 @@ try {
   const meia = passos.filter((p) => tem(p, 'P') !== tem(p, 'D') && !/^Gerar sg_/.test(p.nome) && tem(p, 'P'));
   ok(passos.filter((p) => tem(p, 'P') && !tem(p, 'D')).length === 0 && meia.length === 0, 'nenhum passo com o padrão sem o diretório');
   const iE = passos.findIndex((p) => /^Ensaio · a saida propria pela copia/.test(p.nome)), iG = passos.findIndex((p) => p.nome === 'Gerar sg_*.json');
-  const iS = passos.findIndex((p) => /path: \.cache-sungrow/.test(p.corpo) && /actions\/cache\/save@v4/.test(p.corpo));
+  const iS = passos.findIndex((p) => /path: \.cache-sungrow/.test(p.corpo) && /actions\/cache\/save@(?:v4|[0-9a-f]{40})/.test(p.corpo));
   ok(iE >= 0 && iE < iG && /id: r_proprios/.test(passos[iE].corpo) && /steps\.r_proprios\.outcome == 'success'/.test(passos[iG].corpo),
     'o ensaio da saída própria roda antes do gerar, e o gerar depende dele');
   ok(iS > iG && /steps\.gen_sg\.outcome == 'success'/.test(passos[iS].corpo), 'a pasta é guardada depois do gerar, só com o gerar verde');

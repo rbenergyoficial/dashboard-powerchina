@@ -21,8 +21,8 @@ jobs:
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12 xlsx@0.18
       # A REGRA da duracao sob restricao, em casos montados e sem rede, ANTES de gerar: reprova o
@@ -40,7 +40,7 @@ jobs:
       # 💰 custo-ppc (24/10/2026): a copia em disco das planilhas da execucao anterior (`lib-cache-blob.js`); so a planilha nova vem
       #    pela rede. Antes, todas eram baixadas de hora em hora (~1,2 GB/dia de saida do storage, medido em 24/10).
       - name: Restaurar a copia das planilhas do PPC
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-ppc
           key: ppc-raw-${{ github.run_id }}
@@ -69,7 +69,7 @@ jobs:
       - name: Guardar a copia das planilhas do PPC
         if: ${{ !cancelled() && hashFiles('.cache-ppc/**/*.meta') != '' }}
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-ppc
           key: ppc-raw-${{ hashFiles('.cache-ppc/**/*.meta') }}

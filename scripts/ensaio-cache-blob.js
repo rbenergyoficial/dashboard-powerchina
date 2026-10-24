@@ -143,8 +143,8 @@ function item(blobs, nome, comMd5 = true) {
       'gen-sungrow.js baixa os exports do SCADA pela copia (e nenhum download direto na leitura deles)');
     ok(/CACHE_SC\.poda\(\); CACHE_SC\.resumo\(\)/.test(src), 'gen-sungrow.js poda e resume a copia dos exports');
     const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'sungrow.yml'), 'utf8');
-    ok(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-sungrow/.test(wf) && /actions\/cache\/restore@v4[\s\S]*?path: \.cache-sungrow[\s\S]*?- name: Gerar sg_\*\.json/.test(wf)
-      && /- name: Gerar sg_\*\.json[\s\S]*?actions\/cache\/save@v4[\s\S]*?path: \.cache-sungrow/.test(wf), 'sungrow.yml restaura a copia antes do gen-sungrow e guarda depois');
+    ok(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-sungrow/.test(wf) && /actions\/cache\/restore@(?:v4|[0-9a-f]{40})[\s\S]*?path: \.cache-sungrow[\s\S]*?- name: Gerar sg_\*\.json/.test(wf)
+      && /- name: Gerar sg_\*\.json[\s\S]*?actions\/cache\/save@(?:v4|[0-9a-f]{40})[\s\S]*?path: \.cache-sungrow/.test(wf), 'sungrow.yml restaura a copia antes do gen-sungrow e guarda depois');
     /* revisor-workflow 24/10 (RW-001, RW-002, RW-004): o restore nao herda o success() (os ensaios acima rodam com !cancelled() e o gerador
        nao depende de todos); o save so depois do gerador inteiro; a poda depois da busca funda (ela le export velho na mesma rodada) */
     ok(/- name: Copia da rodada anterior \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');

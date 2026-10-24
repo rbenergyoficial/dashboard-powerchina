@@ -44,8 +44,8 @@ jobs:
     # janelas em blocos (11 dias por requisicao em 5 min, 138 em 1 hora).
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       # O SCADA vira energia pelo trapezio entre amostras (10/10/2026); sem rede, julga as pecas que o gerador usa.
