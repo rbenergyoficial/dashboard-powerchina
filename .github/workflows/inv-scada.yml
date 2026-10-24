@@ -20,9 +20,9 @@ on:
         description: 'so inventariar o container (1 = sim, nao grava nada)'
         required: false
         default: ''
-concurrency:
+concurrency:   # acumulativo (historico de 365 dias, tres blobs em sequencia): o segundo disparo espera
   group: gen-inv-scada
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest

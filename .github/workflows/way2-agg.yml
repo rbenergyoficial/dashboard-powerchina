@@ -9,7 +9,8 @@ on:
         description: 'csv de blobs para limitar (vazio = os 3)'
         default: ''
   schedule:
-    - cron: '5 * * * *'
+    - cron: '8 * * * *'  # de hora em hora, no minuto 8: depois da rodada das :05 do way2-recent (maior duracao medida
+                         # 1,7 min), que grava o hist/way2_<hoje> que este le, e antes da das :10
 concurrency:
   group: way2-agg
   cancel-in-progress: false

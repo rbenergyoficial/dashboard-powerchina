@@ -8,7 +8,7 @@ name: Way2 · energia do mês e demanda do mês (substituto do fluxo do Power Au
 # (um escritor so por blob). SOMBRA=1 continua valendo para comparar a mao.
 on:
   schedule:
-    - cron: '4,14,24,34,44,54 * * * *'
+    - cron: '4,14,24,34,44,54 * * * *'  # a cada 10 min, fora do :00
   workflow_dispatch: {}
 concurrency:
   group: gen-way2-mes

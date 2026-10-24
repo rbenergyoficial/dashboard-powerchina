@@ -12,7 +12,7 @@ name: Malha de dados (estado para o portal admin)
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '4,19,34,49 * * * *'
+    - cron: '4,19,34,49 * * * *'  # a cada 15 min, fora do :00
 
 permissions:
   contents: read

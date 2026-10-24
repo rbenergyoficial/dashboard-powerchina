@@ -6,7 +6,7 @@ name: Benchmark NE 2025 (uso pontual, blob separado)
 # POR QUE UM WORKFLOW A PARTE, e nao esticar a janela do executivo.yml: aquele job
 # roda 15x por dia e ja le ~390 MB dos dados abertos do ONS. Estender a janela para
 # set/25 poe cada uma das 15 rodadas em ~950 MB para reler meses FECHADOS, que nunca
-# mudam. A pergunta que este workflow responde e pontual — "o vizinho Abaiara resgata
+# mudam. A pergunta que este workflow responde e pontual — "a usina vizinha de referencia resgata
 # o corte de set-nov/25, que a nossa referencia do ONS nao mede?" — e a resposta cabe
 # num blob separado, lido a mao.
 #
@@ -26,6 +26,10 @@ on:
         description: 'Blob de saida (nunca benchmark_ne.json)'
         required: true
         default: 'benchmark_ne_2025.json'
+
+concurrency:   # dois disparos nao gravam o mesmo blob juntos
+  group: gen-benchmark-2025
+  cancel-in-progress: false
 
 jobs:
   gen:

@@ -2,8 +2,8 @@ name: SCADA -> scada_comparativo.json (diario)
 on:
   schedule:
     - cron: '30 11 * * *' # 08:30 BRT (UTC-3)
-    - cron: '0 17 * * *'  # 14:00 BRT
-    - cron: '0 21 * * *'  # 18:00 BRT
+    - cron: '7 17 * * *'  # 14:07 BRT · min 7 foge do :00
+    - cron: '7 21 * * *'  # 18:07 BRT
   workflow_dispatch:
     inputs:
       diag_cols:

@@ -27,9 +27,9 @@ permissions:
   issues: write
   # e o de e-mail troca a identidade do proprio job por um token do Graph, sem segredo
   id-token: write
-concurrency:
+concurrency:   # grava o estado dos alarmes: rodada cancelada no meio reenviaria o aviso na seguinte
   group: vigia
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   vigia:
     runs-on: ubuntu-latest
@@ -48,15 +48,18 @@ jobs:
       #     de ter mandado e-mail, mexido em issue e gravado o estado. `--rapido`: sem as contraprovas (~300 processos), que
       #     provam o ENSAIO e rodam inteiras no ensaios.yml a cada push em scripts/.
       - name: Ensaio do vigia de resultado
+        # teto proprio: travado, ele vira FALHA do passo (o vigia de cadencia abaixo, com !cancelled(), ainda roda), e nao o
+        # estouro do job, que cancela tudo e o cala
+        timeout-minutes: 4
         run: node scripts/ensaio-vigia-resultado.js --rapido
 
       # 1 · O RELOGIO ESTA TOCANDO? Compara a idade da ultima execucao de CADA workflow da agenda
       #     com o maior intervalo que o proprio cron dele produz, vezes a tolerancia. Cobre o caso
       #     que nenhum job cobre sozinho: o job nao RODAR.
-      #     ⚠️ `if: always()` de proposito: com o ensaio acima vermelho o job ja fica vermelho, mas o vigia de cadencia
+      #     ⚠️ `if: !cancelled()` de proposito: com o ensaio acima vermelho o job ja fica vermelho, mas o vigia de cadencia
       #        nao pode calar junto — um relogio parado e justamente o que ninguem mais avisa.
       - name: Vigia de cadência (o relógio está tocando?)
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -69,8 +72,8 @@ jobs:
 
       # 2 · O SELO CONSEGUE FICAR VERMELHO? Le os blobs PUBLICOS e exige que todo selo que mostra
       #     idade carregue a ancora e os limiares — sem eles o selo congela no ultimo valor bom
-      #     quando o gerador para, que foi o defeito de 13/09/2026. Roda com `always()` porque um
+      #     quando o gerador para, que foi o defeito de 13/09/2026. Roda com `!cancelled()` porque um
       #     vigia de cadencia vermelho e exatamente quando o selo mais importa.
       - name: Ensaio do selo de frescor
-        if: always()
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-selo-frescor.js

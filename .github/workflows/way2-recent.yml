@@ -125,10 +125,10 @@ jobs:
         run: if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-eletrico.js --produto; else node scripts/ensaio-portal-eletrico.js --produto; fi
       # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
       # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
-      # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com always():
+      # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com !cancelled():
       # vermelho aqui nao tira do job nada que venha antes, e o vigia abaixo roda de qualquer jeito.
       - name: Resumo do assistente de voz (agente_om.json)
-        if: always()
+        if: ${{ !cancelled() }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-agente-om.js

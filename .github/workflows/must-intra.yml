@@ -1,6 +1,6 @@
 name: MUST intradiário -> must_5min / 15min / 30min / 60min
 
-# Roda 10 min depois do must.yml, que ja acordou a API da Way2 no mesmo horario.
+# Nos minutos 7, 22, 37 e 52, fora do minuto do must.yml (03:45 UTC).
 #
 # JOB SEPARADO do must.yml de proposito: sao dois produtos com falhas independentes. O diario
 # alimenta o ranking e a situacao por parque; o intradiario alimenta a forma da curva. Juntos, uma
@@ -13,7 +13,7 @@ on:
     #
     # 15 min e nao 5: o cron do GitHub Actions atrasa de 30 a 90 min quando pedido no :00, e uma
     # cadencia mais curta so acumularia execucoes atrasadas sem melhorar a latencia real.
-    - cron: '*/15 * * * *'
+    - cron: '7,22,37,52 * * * *'  # a cada 15 min, fora do :00
   workflow_dispatch:
     inputs:
       dias:
