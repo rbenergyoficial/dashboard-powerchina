@@ -27,12 +27,18 @@ jobs:
       # manual, o eletrocentro de 5 min e as horas fora da rede, com plantios. Sem rede: julga a regra antes de gerar. A
       # primeira rodada depois de um esquema novo do historico rele todos os zips (perto de 40 min; timeout 240).
       - name: Ensaio do logger Sungrow (sem rede)
+        id: r_sungrow
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow.js
       # a energia do dia sai da lib-contador-dia, a mesma do gen-inv-scada e do gen-perdas
       - name: Ensaio · a energia do dia pela subida do contador de vida (sem rede)
+        id: r_contador
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-contador-dia.js perdas
       # a soma por eletrocentro da potencia e do setpoint de despacho (SCADA, 30 min): carimbo sem leitura nulo, acumulo, contrato da fonte e leitura do blob, com plantios
       - name: Ensaio · potencia e setpoint por eletrocentro (sem rede)
+        id: r_ts_setpoint
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-ts-setpoint.js
       # a disponibilidade dos inversores (lib-sungrow-disp, sg_disp_dia.json): estado pela Tabela 2 pelo NOME da coluna,
       # heranca do ultimo estado valido atravessando a meia-noite, falta de leitura fora da conta, irradiancia da estacao,
@@ -40,27 +46,41 @@ jobs:
       # forjado fora do historico, recarga sem historico, estacao ausente aborta), com plantios. Sem rede. A primeira rodada
       # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 240 min)
       - name: Ensaio · disponibilidade dos inversores pelo logger (sem rede)
+        id: r_disp
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow-disp.js
       # as strings e a curva de 5 min do logger (lib-sungrow-str, sg-logger-str): escala, pico, razao sem a limitacao e sem o piso,
       # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios
       - name: Ensaio · strings e curva de 5 min do logger (sem rede)
+        id: r_str
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow-str.js
       # strings-logger (19/10/2026): a curva de 30 min por inversor e a razao de cada string (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>)
       # pelo logger, a MEDIA das seis leituras de 5 min (lib-pvstr-logger). Mundo forjado com a conta refeita no ensaio, o gerador de
       # ponta a ponta (semente da copia do supervisorio, abortos sem gravar), o nome da copia no gen-perdas, com plantios. Sem rede
       - name: Ensaio · strings de 30 min pelo logger (lib, sem rede)
+        id: r_pvstr
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-pvstr-logger.js --lib
       # fonte-inv-logger (19/10/2026): perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger (lib-inv-logger), e a posicao
       # vaga no mesmo logger (o export do SCADA parou em 14/10). Mundo forjado com a conta a mao, o gen-sungrow de ponta a ponta sem
       # SCADA e plantios (SCADA de volta como fonte, sem leitura contada como parado, parado do supervisorio contado). Sem rede
       - name: Ensaio · dado de inversor das telas pelo logger (lib, sem rede)
+        id: r_inv_logger
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-inv-logger.js --lib
       # pa-sungrow (20/10/2026): os zips do logger pelo cofre (backup-dados-scada, gravado pela maquina-ponte) com o nome do sungrow-raw
       # (lib-sungrow-cofre): versao ~ mais nova, recusados, comparacao lote a lote, e o gerador de ponta a ponta com o Azure forjado (as
       # duas fontes dao produtos identicos), com plantios. Sem rede
       - name: Ensaio · zips do logger pelo cofre (sem rede)
+        id: r_cofre
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow-cofre.js
+      # Cada gerador depende so dos ensaios de regra das libs DELE (lote5-workflows): o do setpoint e o das strings de 30 min nao barram
+      # o sg_*; a cascata (produto do sg_saude) barra so o gen-inv-logger, que le o sg_saude.
       - name: Gerar sg_*.json
+        id: gen_sg
+        if: ${{ !cancelled() && steps.r_sungrow.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_cofre.outcome == 'success' && steps.r_inv_logger.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW: sungrow-raw
@@ -73,12 +93,15 @@ jobs:
       # a cascata da usina no dia (PROMOVER sg-perdas): n_cc, ecc e eca do sg_saude.json sao exatamente a soma refeita dos inversores
       # com o dia inteiro (sg_saude_<usina>.json); tres plantios em memoria reprovam. E o que a pagina Confiabilidade e perdas le
       - name: Ensaio · a cascata da usina no dia (produto)
+        id: cascata
+        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' }}
         run: node scripts/ensaio-sungrow-cascata.js
       # fonte-inv-logger (19/10/2026): os blobs de inversor que o portal, o Grafana e o assistente leem (perdas_diario, perdas_inv,
       # strings_alarme, inv_scada), refeitos do que o gen-sungrow acabou de gravar. Na primeira rodada semeia a copia do supervisorio
       # (perdas_diario_scada, perdas_inv_scada) que o gen-perdas passa a gravar e o Comparativo le
       - name: Gerar perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger
         id: inv_logger
+        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.cascata.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-inv-logger.js
@@ -96,11 +119,13 @@ jobs:
       # que o gen-perdas passa a gravar e o gen-ts-setpoint le logo abaixo; nome antigo ja do logger sem a copia aborta sem gravar
       - name: Gerar pvstr_hora e pvstr_str pelo logger
         id: pvstr_logger
+        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
         run: node scripts/gen-pvstr-logger.js
       # o produto: marca, contrato, a conta refeita no ensaio contra o registro de 5 min e a segunda rota (a energia do sg_saude), com
-      # plantios em memoria. Custo declarado: roda DEPOIS de gravar (job vermelho e melhor que dado ruim calado)
+      # plantios em memoria. Custo declarado: roda DEPOIS de gravar (job vermelho e melhor que dado ruim calado). A segunda rota usa o
+      # sg_saude: com a cascata vermelha acima ela julga contra um produto ja reprovado, e o vermelho dela pode ser o mesmo defeito
       - name: Ensaio · strings de 30 min pelo logger (produto)
         if: ${{ !cancelled() && steps.pvstr_logger.outcome == 'success' }}
         env:
@@ -109,6 +134,7 @@ jobs:
       # o setpoint de despacho e por inversor e so existe no export do SCADA; a fonte (pvstr_hora_<usina>_scada, a copia do supervisorio
       # que o gen-perdas grava desde strings-logger) guarda 7 dias, entao um dia sem rodar nao perde nada
       - name: Gerar sp_ts_<usina>_<ts>.json
+        if: ${{ !cancelled() && steps.r_ts_setpoint.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT: dados

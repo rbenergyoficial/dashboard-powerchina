@@ -31,28 +31,38 @@ jobs:
       # casos FORJADOS (nao o arquivo do dia), entao vale em qualquer estado do mundo — a licao do
       # ensaio que reprovava porque o conserto tinha funcionado.
       - name: Ensaio · o selo "ao vivo ate" aponta para o instante mais recente
+        id: r_aovivo
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-aovivo.js
 
       # A folga do par MWh x GWh no rateio e DERIVADA da cadeia de arredondamento. Afrouxar
       # tolerancia e o jeito mais facil de apagar um alarme: este ensaio cobra que ela continue
       # pegando os quatro defeitos plantados enquanto para de reprovar arredondamento.
       - name: Ensaio · a tolerancia do rateio cobre o arredondamento e ainda pega defeito
+        id: r_tol_rateio
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-tol-rateio.js
 
       # A disponibilidade declarada ao operador e media na janela FIXA 04:00–17:30, em todo mes: o operador mudou tres vezes
       # o que publica no campo, e a media sobre o que veio comparava janelas diferentes mes a mes. A REGRA, em meses
       # forjados com os tres formatos de publicacao, os defeitos plantados na lib e a fiacao no gerador, antes de gerar.
       - name: Ensaio · a disponibilidade declarada na janela fixa (regra)
+        id: r_disp_decl
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-disp-declarada.js
 
       # A conta dos campos da manchete que se movem no dia mora numa lib que o executivo e o remendo
       # de 5 min chamam. Este ensaio cobra que eles andem JUNTOS (energia) e que a projecao, que
       # parte dos dias fechados, fique PARADA — e que o mes fechado nao seja tocado.
       - name: Ensaio · o remendo move a manchete inteira, e coerente
+        id: r_manchete_rem
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-manchete-remendo.js
 
       # ... e que, de noite, com a ancora que ja contem o dia, o remendo nao conte o dia duas vezes (a regra, antes de gerar)
       - name: Ensaio · o remendo nao conta o dia duas vezes (regra)
+        id: r_manchete_noite
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-manchete-noite.js --lib
 
       # A leitura de irradiancia TRAVADA sai da meia hora e da hora da estacao (23/09/2026: a estacao do M5 repetiu 0,26 W/m2
@@ -82,6 +92,8 @@ jobs:
       # O historico da projecao (meta, gerado e o que a projecao diria com 5..25 dias fechados, por mes fechado) e o
       # registro do que a manchete publicou: a REGRA, em casos forjados, antes de gerar.
       - name: Ensaio · o historico da projecao (regra)
+        id: r_hist_proj
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-historico-projecao.js --lib
 
       # O PR por usina e por contrato (energia dos circuitos, irradiacao da estacao da usina, placa CC dela): a REGRA,
@@ -98,6 +110,8 @@ jobs:
       # meia hora T sao os rotulos T+5 a T+30, as seis), o pico de 5 min por usina e contrato (soma simultanea), e a irradiancia do executivo
       # e a do DATALOGGER (dia completo, contratos ponderados pela potencia). A REGRA em dias forjados, com plantios na lib e no arquivador.
       - name: Ensaio · as fontes diretas da Visao Executiva (regra)
+        id: r_fontes_exec
+        if: ${{ !cancelled() }}
         run: node scripts/ensaio-fontes-exec.js --lib
 
       - name: Ensaio · a guarda da referencia do conjunto (regra)
@@ -105,7 +119,11 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-ref-conjunto.js
 
+      # Cada gerador depende so dos ensaios de regra das libs DELE (lote5-workflows). O benchmark usa a lib-ref-conjunto e a lib-rotulos;
+      # o executivo, todas as de cima menos as quatro da irradiancia e a do PR. Os ensaios de produto ficam presos ao gerador que julgam.
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
+        id: gen_bench
+        if: ${{ !cancelled() && steps.refconj_regra.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -115,6 +133,7 @@ jobs:
 
       - name: Gerar executivo.json
         id: gen_exec
+        if: ${{ !cancelled() && steps.r_aovivo.outcome == 'success' && steps.r_tol_rateio.outcome == 'success' && steps.r_disp_decl.outcome == 'success' && steps.r_manchete_rem.outcome == 'success' && steps.r_manchete_noite.outcome == 'success' && steps.r_hist_proj.outcome == 'success' && steps.r_fontes_exec.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
@@ -136,7 +155,7 @@ jobs:
       # (partida) o ensaio DECLARA que a guarda esta so no sinal; depois disso, janela curta ou dia aceito so pelo sinal
       # reprova. A logica e julgada em casos plantados no ensaios.yml.
       - name: Ensaio · a janela da guarda da liquidada (produto)
-        if: always()
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-liquidada-produto.js
 
       # Segunda rota sobre o PRODUTO publicado: os dois geradores ja abortam sem gravar quando a soma
@@ -144,6 +163,8 @@ jobs:
       # confere o que o painel de fato le, ja arredondado — e o ensaio prova que reprova, plantando
       # defeitos em copias sadias dos proprios blobs.
       - name: Ensaio · a serie por dia fecha com a por mes
+        # julga os dois blobs (executivo e benchmark): roda se qualquer um dos dois foi refeito nesta rodada
+        if: ${{ !cancelled() && (steps.gen_exec.outcome == 'success' || steps.gen_bench.outcome == 'success') }}
         run: node scripts/ensaio-fechamento-dia.js
 
       # A relacao usina -> contrato passou a ser publicada para os paineis pararem de carrega-la como
@@ -152,6 +173,7 @@ jobs:
       # cobra que a soma das partes de cada contrato bata com o contrato PUBLICADO, em todo mes
       # fechado. Roda DEPOIS de gerar, como os outros que julgam o produto.
       - name: Ensaio · a hierarquia publicada fecha com a energia
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-hierarquia.js
 
       # O corte diario passou a ser publicado tambem ABERTO POR USINA, a pedido. As duas escritas saem
@@ -159,55 +181,65 @@ jobs:
       # alguem mexe num lado so. Divergir aqui poria o painel por usina e o por contrato dizendo numeros
       # diferentes sobre o MESMO dia. Roda DEPOIS de gerar, como os outros que julgam o produto.
       - name: Ensaio · o corte por usina fecha com o corte por contrato
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-corte-ufv.js
 
       # O corte por MOTIVO aberto por usina e por contrato (o deficit da usina nas meias horas limitadas, pelo motivo do
       # conjunto): contratos = soma das usinas, motivo so se o conjunto o registrou, nada antes de mar/26, ordem de grandeza
       # contra o conjunto.
       - name: Ensaio · o motivo do corte por usina e por contrato
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-motivo-ufv.js
 
       # A referencia do operador contra a verificada, crua, dia a dia. O campo existe para MOSTRAR um defeito da
       # fonte, entao tem de provar que e cru: cada usina contra o arquivo mensal do operador (o gerador ja fecha o
       # conjunto contra o arquivo do conjunto), e os agregados contra as suas partes.
       - name: Ensaio · a referencia do operador por usina e a crua
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-ref-dia.js
 
       # Corte, potencial, entregue, resto e razoes do mes tambem em MWh, da energia crua (o GWh de 2 casas so tem
       # 10 MWh de resolucao, e o portal escreve MWh com 2 casas). O gerador ja confere antes de gravar; este e a
       # segunda rota, sobre o PRODUTO publicado, e prova reprovar em quatro defeitos plantados.
       - name: Ensaio · o par GWh x MWh do executivo fecha
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-par-mwh.js
 
       # A manchete do mes (meta, projecao, falta, ritmos) tambem em MWh com centesimos, das energias em MWh da serie:
       # origem, identidades, o remendo de 5 min movendo os campos em MWh, e dois plantios que reprovam.
       - name: Ensaio · a manchete em MWh
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-manchete-mwh.js
 
       # A energia do mes na manchete e a soma dos dias da serie (o remendo de 5 min contou o dia 28/09 duas vezes depois do
       # por do sol). Aqui, o produto da rodada completa; no way2-recent, o de cada remendo.
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-manchete-noite.js --produto
 
       # A serie mensal e a manchete dizem a MESMA coisa sobre o mes estar aberto: em 30/09/2026, ultimo dia do mes, a serie
       # deu set/26 por fechado de manha (o fator do rateio vira 1) enquanto a manchete dizia 1 dia restante.
       - name: Ensaio · a serie mensal e a manchete concordam sobre o mes aberto
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-mes-aberto.js
 
       # O atingimento do mes aberto sai do MWh, e o do conjunto e o do Complexo (em 01/10/2026, pelo GWh de 2 casas, o M9
       # publicava 77,78 % contra 77,20 % exatos). Sem mes aberto, so os plantios forjados.
       - name: Ensaio · o atingimento do mes aberto sai do MWh
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-atingido-mwh.js
 
       # ... e o PRODUTO: cada linha publicada contra uma segunda conta feita da serie diaria, nenhum mes liquidado de fora,
       # o comissionamento e o gerado contra a serie mensal, o resumo refeito; cada plantio reprova pelo que plantou.
       - name: Ensaio · o historico da projecao (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-historico-projecao.js --produto
 
       # ... e o PRODUTO da disponibilidade declarada: cada mes publicado refeito do arquivo cru do conjunto, com a janela
       # 04:00–17:30 escrita no proprio ensaio (sem a lib). Pega o gerador que chama a lib e publica outra coisa. Se o arquivo
       # do conjunto foi regravado depois do executivo montado, diz que nao julgou (duas vintages) em vez de reprovar.
       - name: Ensaio · a disponibilidade declarada na janela fixa (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         run: node scripts/ensaio-disp-declarada.js --produto
 
       # O patamar do conjunto com uma parcela entra no corte pela soma das usinas, e a lista publicada no executivo vale
@@ -215,6 +247,7 @@ jobs:
       # e o corte mensal do executivo bate com o nosso corte do benchmark quando os dois aplicaram a mesma lista. O benchmark
       # roda ANTES do executivo e le a lista da rodada anterior: listas diferentes, ele diz que nao julgou.
       - name: Ensaio · a troca do conjunto chega ao benchmark (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' && steps.gen_bench.outcome == 'success' }}
         run: node scripts/ensaio-ref-conjunto.js --produto
 
       # o NOME da grandeza nas tres linguas (lib-irr-rotulo, que o gen-irradiancia chama antes de gravar): a REGRA, em casos forjados.
@@ -281,6 +314,7 @@ jobs:
       # publicada — os dias sem irradiacao nova simplesmente nao fecham. Depende so dos ensaios de regra das
       # libs dele (lib-pr, lib-ref-conjunto): o arquivo acumula, e regra quebrada ficaria nos dias publicados.
       - name: Gerar pr.json (Performance Ratio no 230 kV)
+        id: gen_pr
         if: ${{ !cancelled() && steps.pr_regra.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
@@ -288,13 +322,13 @@ jobs:
         run: node scripts/gen-pr.js
 
       - name: Ensaio · o PR confere com o executivo e com o medidor
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gen_pr.outcome == 'success' }}
         run: node scripts/ensaio-pr.js
 
       # ... e o PRODUTO pr_ufv.json: contratos e meses refeitos, o corte da usina igual ao do executivo, e a soma das nove
       # usinas contra o 230 kV nos dias com as mesmas horas validas (entre 1,000 e 1,010).
       - name: Ensaio · o PR por usina e por contrato (produto)
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.gen_pr.outcome == 'success' }}
         run: node scripts/ensaio-pr-ufv.js --produto
 
       # O que a manchete de fato publicou para o mes aberto, por entidade e dias fechados, num arquivo que so cresce. No FIM
