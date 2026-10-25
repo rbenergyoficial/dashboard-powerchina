@@ -10,6 +10,7 @@ name: Óleo isolante -> oleo.json
 # data/oleo_laudos.json e da push. Quatro vezes ao ano nao justifica automatizar a copia.
 on:
   push:
+    branches: [main]   # a credencial federada so vale para o main: push de outra branch (ou de tag) nao dispara
     paths:
       - 'data/oleo_laudos.json'
       - 'scripts/gen-oleo.js'
@@ -20,17 +21,32 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 3, piloto, 25/10/2026). O gerador grava pela lib-conteiner: o job troca o proprio
+    #    token de identidade do GitHub por um token do storage no Entra, valido ~1 h, emitido so para o `main` deste repositorio,
+    #    com o papel so de dado no conteiner `dados`. As duas variaveis sao identificadores, nao credenciais (as mesmas do
+    #    relogio-deploy). `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     timeout-minutes: 10
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      - name: So publica a partir do main
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::oleo.yml so publica a partir do main (ref atual: ${{ github.ref }}): a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       - name: Publicar oleo.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
           OUT_BLOB: oleo.json
         run: node scripts/gen-oleo.js

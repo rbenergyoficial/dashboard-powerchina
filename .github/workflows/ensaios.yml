@@ -25,6 +25,7 @@ on:
       - '.github/workflows/way2-agg.yml'
       - '.github/workflows/way2-recent.yml'
       - '.github/workflows/trafo-medidor.yml'   # trafo-alvo-ensaio (24/10/2026): a fiacao da copia do supervisorio
+      - '.github/workflows/oleo.yml'   # plano OIDC, etapa 3 (25/10/2026): a fiacao sem a chave (ensaio-lib-conteiner, MIGRADOS)
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
   workflow_dispatch: {}

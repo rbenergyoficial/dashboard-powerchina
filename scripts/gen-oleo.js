@@ -16,7 +16,8 @@
  * campos vazios com cara de medicao. Confere contagem, campos obrigatorios e tipos antes de gravar,
  * e recusa se algo faltar.
  *
- * Env: DADOS_STORAGE [obrigatorio] · OUT_CONTAINER · OUT_BLOB · LOCAL_OUT (grava em arquivo).
+ * Env: a credencial de gravar, pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job: AZURE_CLIENT_ID + AZURE_TENANT_ID +
+ *      id-token) · OUT_CONTAINER · OUT_BLOB · LOCAL_OUT (grava em arquivo).
  */
 const fs = require('fs');
 const path = require('path');
@@ -271,10 +272,10 @@ function agrega(laudos, camps) {
 async function grava(obj) {
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { fs.writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner, plano OIDC etapa 3). Sem createIfNotExists: o `dados` existe, e criar conteiner
+  // nao e papel do gerador (com o OIDC o papel e so de dado, conteiner a conteiner); se ele sumir, o upload estoura com
+  // ContainerNotFound, que e o modo certo de falhar.
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);
   await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json),
     { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=900' } });
   return json.length;

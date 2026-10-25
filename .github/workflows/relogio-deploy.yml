@@ -20,8 +20,11 @@ name: Relogio · publicar no Azure
 # As quatro variaveis abaixo sao IDENTIFICADORES, nao credenciais: sozinhas nao dao acesso a nada,
 # porque o acesso depende da credencial federada acima. Por isso vao em `vars`, e nao em `secrets`.
 #
-# O papel do principal e **Website Contributor no Function App do relogio, e so nele** — ele nao
-# alcanca o resto do `rg-dashboard` nem a conta de armazenamento com os dados.
+# O principal tem **Website Contributor no Function App do relogio, e so nele** — ele nao alcanca o
+# resto do `rg-dashboard`. Desde 25/10/2026 (plano para tirar a chave da conta dos workflows) o MESMO
+# principal tem tambem `Storage Blob Data Contributor`, so de dado e conteiner a conteiner, nos seis
+# conteineres que os geradores gravam: qualquer job do main com `id-token: write` e estas variaveis
+# no env grava neles. Nada da conta alem disso.
 #
 #   (no proprio Azure) GH_TOKEN   PAT com `actions: write` neste repo, em Configuracoes
 #                                 do aplicativo — NUNCA no repo.

@@ -19,7 +19,11 @@
  *   7. as leituras de sempre: com a DADOS_SAS e sem o OIDC, modo 'sas'; sem nada, 'publico'; o OIDC com a DADOS_SAS, 'sdk' (a ordem
  *      que a lib-le-dados declara);
  *   8. o transporte de verdade da troca: o erro do Entra chega com o status e o corpo (o AADSTS); servidor mudo estoura por tempo;
- *      resposta 200 que não é JSON rejeita, sem derrubar o processo; e o Entra sem `expires_in` é recusado.
+ *      resposta 200 que não é JSON rejeita, sem derrubar o processo; e o Entra sem `expires_in` é recusado;
+ *   9. os geradores que já migraram (MIGRADOS), de verdade, num processo à parte: gravam pelo OIDC, e o storage recebe o token.
+ * A FIAÇÃO dos workflows migrados (no pai, sobre o texto): sem `secrets.DADOS_STORAGE`, com `id-token: write` e `contents: read`, com
+ * AZURE_CLIENT_ID e AZURE_TENANT_ID das variáveis do repo, todo `node scripts/` do workflow na lista, e cada gerador pela lib-conteiner
+ * (nenhum `fromConnectionString`). A fiação plantada (a chave de volta, sem o id-token, o gerador pela cadeia de conexão) reprova.
  * PLANTIOS (cada um TEM de reprovar a suíte, com a mensagem do caso certo e sem erro de sintaxe): a lib-le-dados que só conhece a
  * chave; o OIDC que vence a chave; o token pedido de novo a cada chamada; o token que nunca se renova; o transporte que esquece o
  * status; o transporte sem tempo esgotado.
@@ -32,7 +36,9 @@ const { spawnSync } = require('child_process');
 
 const LIBS = ['lib-conteiner.js', 'lib-le-dados.js'];
 const MODULOS = path.join(__dirname, '..', 'node_modules');
-const CASOS = 24;   // a suíte inteira; menos que isto é suíte que parou no meio, mesmo com código 0
+const CASOS = 25;   // a suíte inteira; menos que isto é suíte que parou no meio, mesmo com código 0
+/* os workflows que já gravam sem a chave, e os geradores de cada um com o env do ensaio (plano OIDC: etapa 3, piloto, 25/10/2026) */
+const MIGRADOS = { 'oleo.yml': { 'gen-oleo.js': { OUT_CONTAINER: 'dados', OUT_BLOB: 'oleo-ensaio.json' } } };
 const TMPS = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-conteiner-')); TMPS.push(d); return d; };
 const OIDC_FORA = { AZURE_CLIENT_ID: null, AZURE_TENANT_ID: null, ACTIONS_ID_TOKEN_REQUEST_URL: null, ACTIONS_ID_TOKEN_REQUEST_TOKEN: null };
@@ -75,6 +81,23 @@ try {
   process.stdout.write(R.out.split('\n').filter(Boolean).map((l) => '    ' + l).join('\n') + '\n');
   ok(R.cod === 0 && R.out.indexOf('suíte: ' + CASOS + ' casos ok') >= 0, 'a suíte chega ao fim com os ' + CASOS + ' casos, com a lib-conteiner e a lib-le-dados de verdade');
 
+  console.log('a fiação dos workflows que já gravam sem a chave');
+  const WF = (w) => fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', w), 'utf8').replace(/\r\n/g, '\n');
+  const GEN = (g) => fs.readFileSync(path.join(__dirname, g), 'utf8').replace(/\r\n/g, '\n');
+  for (const w of Object.keys(MIGRADOS)) {
+    const prob = fiacao(WF(w), Object.keys(MIGRADOS[w]), GEN);
+    ok(prob.length === 0, w + ': sem a chave, com o OIDC, e os geradores pela lib-conteiner' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
+  }
+  const w0 = Object.keys(MIGRADOS)[0], g0 = Object.keys(MIGRADOS[w0])[0];
+  for (const [nome, wf, gen] of [
+    ['a chave de volta no job', WF(w0).replace('    env:\n', '    env:\n      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}\n'), null],
+    ['sem o id-token', WF(w0).replace('      id-token: write\n', ''), null],
+    ['o gerador pela cadeia de conexão', null, GEN(g0).replace("require('./lib-conteiner').conteiner(OUT_CONTAINER)",
+      "require('@azure/storage-blob').BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER)")]]) {
+    const prob = fiacao(wf || WF(w0), Object.keys(MIGRADOS[w0]), (g) => (g === g0 && gen ? gen : GEN(g)));
+    ok(prob.length > 0, 'fiação plantada "' + nome + '" reprova (' + (prob[0] || 'nada acusado') + ')');
+  }
+
   console.log('plantios (cada um reprova com a mensagem do caso certo)');
   const planta = (nome, arq, de, para, esperado) => {
     const d = pasta({ arq, de, para });
@@ -104,6 +127,23 @@ try {
 }
 console.log(falhas ? 'REPROVADO: ' + falhas + ' falha(s)' : 'APROVADO');
 process.exit(falhas ? 1 : 0);
+
+/* o que falta para um workflow gravar sem a chave; lista vazia = fiação certa */
+function fiacao(wf, gens, texto) {
+  const p = [];
+  if (/secrets\.DADOS_STORAGE/.test(wf)) p.push('ainda cita secrets.DADOS_STORAGE');
+  if (!/\n\s+id-token: write\n/.test(wf)) p.push('sem id-token: write');
+  if (!/\n\s+contents: read\n/.test(wf)) p.push('sem contents: read (o permissions explícito zera o resto)');
+  if (!/\n\s+AZURE_CLIENT_ID: \$\{\{ vars\.AZURE_CLIENT_ID \}\}\n/.test(wf)) p.push('sem AZURE_CLIENT_ID das variáveis do repo');
+  if (!/\n\s+AZURE_TENANT_ID: \$\{\{ vars\.AZURE_TENANT_ID \}\}\n/.test(wf)) p.push('sem AZURE_TENANT_ID das variáveis do repo');
+  for (const m of wf.matchAll(/node scripts\/([\w.-]+\.js)/g)) if (gens.indexOf(m[1]) < 0) p.push('roda ' + m[1] + ', fora da lista de migrados');
+  for (const g of gens) {
+    const s = texto(g);
+    if (/fromConnectionString/.test(s)) p.push(g + ' abre pela cadeia de conexão');
+    if (!/require\('\.\/lib-conteiner'\)\.conteiner\(/.test(s)) p.push(g + ' não abre pela lib-conteiner');
+  }
+  return p;
+}
 
 /* ---- a suíte, no processo filho ---------------------------------------------------------------------------------------------- */
 async function suite(dir, cert) {
@@ -242,6 +282,22 @@ async function suite(dir, cert) {
     limpa(); Object.assign(process.env, OIDC); LC = novo(); LC._usaTransporte(transporte); validade = 0;
     erro = ''; try { await LC.conteiner('dados').credential.getToken(); } catch (e) { erro = e.message; }
     caso(/o Entra não devolveu o token de acesso/.test(erro), '8: o Entra sem expires_in é recusado (' + erro + ')');
+
+    // 9. os geradores migrados, de verdade, num processo à parte (o servidor tem de seguir respondendo: execFile, não spawnSync)
+    const pre = path.join(dir, 'pre-oidc.js');
+    fs.writeFileSync(pre, 'require(' + JSON.stringify(path.join(__dirname, 'lib-conteiner.js')) + ')._usaTransporte(async (o) => '
+      + "o.hostname === 'login.microsoftonline.com' ? { access_token: 'AT-GERADOR', expires_in: 3600 } : { value: 'assercao-gerador' });\n");
+    const { execFile } = require('child_process');
+    for (const w of Object.keys(MIGRADOS)) for (const [g, envG] of Object.entries(MIGRADOS[w])) {
+      const env = Object.assign({}, process.env, OIDC, envG, { DADOS_CONTA_URL: LOCAL + '/contaensaio' });
+      delete env.DADOS_STORAGE; delete env.DADOS_SAS; delete env.LOCAL_OUT;
+      const saida = await new Promise((ok) => execFile(process.execPath, ['-r', pre, path.join(__dirname, g)], { env, timeout: 20000 },
+        (e, so, se) => ok((so || '') + (se || '') + (e ? '\nERRO ' + e.message : ''))));
+      const put = recebidos.find((x) => x.metodo === 'PUT' && x.rota === '/contaensaio/' + envG.OUT_CONTAINER + '/' + envG.OUT_BLOB);
+      const falhou = /\nERRO /.test(saida);
+      caso(put && put.auth === 'Bearer AT-GERADOR' && !falhou, '9: ' + g + ' (' + w + ') grava pelo OIDC ('
+        + (put ? put.rota + ' · ' + put.auth : 'nenhum PUT') + (falhou ? ' · ' + saida.split('\n').filter(Boolean).slice(-2).join(' | ').slice(0, 200) : '') + ')');
+    }
   } finally { srv.close(); srv.closeAllConnections && srv.closeAllConnections(); }
 
   console.log('suíte: ' + n + ' casos ok');
