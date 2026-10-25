@@ -83,7 +83,7 @@ if (MODO === 'selo') {
   function roda(gen, mundo) {
     const fb = path.join(raiz, 'b' + (++seq) + '.json'), out = path.join(raiz, 'o' + seq + '.json');
     fs.writeFileSync(fb, JSON.stringify(mundo));
-    try { execFileSync('node', ['-r', PRE, gen], { env: Object.assign({}, process.env, { SELO_BLOBS: fb, LOCAL_OUT: out, DADOS_STORAGE: '' }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+    try { execFileSync('node', ['-r', PRE, gen], { env: Object.assign({}, process.env, { SELO_BLOBS: fb, LOCAL_OUT: out, DADOS_STORAGE: '', DADOS_SAS: '' }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch (e) { return { erro: String(e.stderr || e.message).slice(-300) }; }
     return JSON.parse(fs.readFileSync(out, 'utf8'));
   }
@@ -285,7 +285,7 @@ if (MODO === 'lib') {
     fs.mkdirSync(IN, { recursive: true }); fs.mkdirSync(OUT, { recursive: true });
     if (prepara) prepara(IN);
     let log = '', okr = true;
-    try { log = execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_HIST_DIR: hist, LOCAL_IN_DIR: IN, LOCAL_OUT_DIR: OUT, HOJE, FORCAR: '', DADOS_STORAGE: '' }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
+    try { log = execFileSync('node', [gen], { env: Object.assign({}, process.env, { LOCAL_HIST_DIR: hist, LOCAL_IN_DIR: IN, LOCAL_OUT_DIR: OUT, HOJE, FORCAR: '', DADOS_STORAGE: '', DADOS_SAS: '' }), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); }
     catch (e) { okr = false; log = String(e.stdout || '') + String(e.stderr || ''); }
     return { ok: okr, log, out: lerSaida(OUT), outDir: OUT, gravados: fs.readdirSync(OUT) };
   }

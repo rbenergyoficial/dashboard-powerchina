@@ -1,18 +1,16 @@
-name: Ensaio · Way2 Eletrico (compara o gerador com o fluxo, sem publicar)
+name: Ensaio · Way2 Eletrico (gera em arquivo, sem publicar)
 
-# Este ensaio NAO grava nada. `comparar` busca da API da Way2 pelo gerador e compara com o
-# way2_eletrico.json publicado, que o proprio gerador grava no way2-recent.yml de 5 em 5 min: diz se a
-# coleta de agora cobre o que ja esta no ar, nao prova a regra do gerador. `local` grava em arquivo e
-# sobe como artefato, para inspecao.
+# Este ensaio NAO grava nada em producao: roda o gerador da coleta de 5 min da Way2 (gen-way2-eletrico) e grava a saida
+# em arquivo, que sobe como artefato para inspecao. Sem credencial do storage: o modo local nao le nem grava o conteiner.
 
 on:
   workflow_dispatch:
     inputs:
       modo:
-        description: 'comparar (nao grava) | local (grava em arquivo e sobe como artefato)'
+        description: 'local (grava em arquivo e sobe como artefato)'
         type: choice
-        options: [comparar, local]
-        default: comparar
+        options: [local]
+        default: local
 
 concurrency:
   group: ensaio-way2-eletrico
@@ -22,8 +20,6 @@ jobs:
   ensaio:
     runs-on: ubuntu-latest
     timeout-minutes: 10  # teto: 3x a maior duracao medida, com piso de 10 min (0,5 min, ultimas execucoes ate 23/10/2026); run presa sem teto tira o workflow do relogio
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
 
@@ -33,13 +29,6 @@ jobs:
       # Mesma instalacao dos demais workflows do repo: nao ha package.json aqui, entao
       # a dependencia e nomeada e fixada na versao. Copiado do must.yml, nao inventado.
       - run: npm i @azure/storage-blob@12
-
-      - name: Comparar gerador x fluxo
-        if: ${{ inputs.modo == 'comparar' }}
-        env:
-          WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
-          COMPARAR: '1'
-        run: node scripts/gen-way2-eletrico.js
 
       - name: Gerar em arquivo (sem tocar em producao)
         if: ${{ inputs.modo == 'local' }}

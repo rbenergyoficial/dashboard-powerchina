@@ -125,7 +125,7 @@ function roda(cen, env) {
   fs.writeFileSync(arqCen, JSON.stringify(cen)); fs.writeFileSync(log, '');
   const r = cp.spawnSync(process.execPath, ['-r', __filename, GEN], { encoding: 'utf8', timeout: 120000,
     env: Object.assign({}, process.env, { ENSAIO_GMI_CENARIO: arqCen, ENSAIO_GMI_LOG: log, WAY2_TOKEN: 'ensaio', LOCAL_OUT: d + path.sep,
-      DIAS: '2', FORCAR: '', DADOS_STORAGE: '' }, env || {}) });
+      DIAS: '2', FORCAR: '', DADOS_STORAGE: '', DADOS_SAS: '' }, env || {}) });
   const ler = (n) => { const f = path.join(d, n); return fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : null; };
   const out = { exit: r.status, stdout: r.stdout || '', stderr: r.stderr || '', pedidos: fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean),
     m5: ler('must_5min.json'), m15: ler('must_15min.json'), m30: ler('must_30min.json'), m60: ler('must_60min.json') };
