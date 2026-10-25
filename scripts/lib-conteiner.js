@@ -49,6 +49,25 @@ const pedeJsonHttps = function (opts, corpo) {
 };
 let pedeJson = pedeJsonHttps;   // o ensaio troca pelo simulado (_usaTransporte) e julga este à parte (_pedeJsonHttps)
 
+// 🔁 NOVA TENTATIVA SÓ PARA O QUE PASSA SOZINHO. Com a chave não havia troca de token; com o OIDC, um 429 ou 503 isolado do Entra (ou
+//    do GitHub), uma conexão caída ou um tempo esgotado na hora de gravar derrubaria uma carga de 85 min (a histórica do must). O SDK
+//    não repete esses erros (a política dele só conhece os códigos de rede do próprio transporte). Erro 4xx que não é 429 é
+//    configuração (o AADSTS da credencial federada, o cliente errado) e estoura na primeira, sem esperar.
+const ESPERAS_MS = [2000, 5000, 10000];   // antes da 2ª, da 3ª e da 4ª tentativa
+let espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
+function passageiro(e) {
+  const m = /^HTTP (\d{3}) /.exec(String(e && e.message));
+  return m ? (+m[1] === 429 || +m[1] >= 500) : true;   // sem status: rede, tempo esgotado, resposta truncada
+}
+async function comRepeticao(f) {
+  for (let i = 0; ; i++) {
+    try { return await f(); } catch (e) {
+      if (i >= ESPERAS_MS.length || !passageiro(e)) throw e;
+      await espera(ESPERAS_MS[i]);
+    }
+  }
+}
+
 function credencial() {
   if (process.env.DADOS_STORAGE) return 'chave';
   if (faltaOidc().length === 0) return 'oidc';
@@ -63,8 +82,8 @@ function faltaOidc() {
 async function idTokenGitHub() {
   const u = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
   u.searchParams.set('audience', 'api://AzureADTokenExchange');
-  const r = await pedeJson({ hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
-    headers: { Authorization: 'Bearer ' + process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }, timeout: 30000 });
+  const r = await comRepeticao(() => pedeJson({ hostname: u.hostname, path: u.pathname + u.search, method: 'GET',
+    headers: { Authorization: 'Bearer ' + process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }, timeout: 30000 }));
   if (!r || !r.value) throw new Error('lib-conteiner: o GitHub não devolveu o token de identidade');
   return r.value;
 }
@@ -82,9 +101,9 @@ function credencialOidc() {
         client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
         client_assertion: await idTokenGitHub(),
       }).toString();
-      const r = await pedeJson({ hostname: 'login.microsoftonline.com',
+      const r = await comRepeticao(() => pedeJson({ hostname: 'login.microsoftonline.com',
         path: '/' + process.env.AZURE_TENANT_ID.trim() + '/oauth2/v2.0/token', method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(corpo) }, timeout: 30000 }, corpo);
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(corpo) }, timeout: 30000 }, corpo));
       if (!r || !r.access_token || !(r.expires_in > 0)) throw new Error('lib-conteiner: o Entra não devolveu o token de acesso');
       atual = { token: r.access_token, expiresOnTimestamp: Date.now() + r.expires_in * 1000 };
       return atual;
@@ -106,4 +125,5 @@ function conteiner(nome) {
     + faltaOidc().join(', ') + ')');
 }
 
-module.exports = { conteiner, credencial, _usaTransporte: (f) => { pedeJson = f; }, _pedeJsonHttps: pedeJsonHttps, _zera: () => { OIDC = null; } };
+module.exports = { conteiner, credencial, _usaTransporte: (f) => { pedeJson = f; }, _usaEspera: (f) => { espera = f; }, _pedeJsonHttps: pedeJsonHttps,
+  _zera: () => { OIDC = null; } };

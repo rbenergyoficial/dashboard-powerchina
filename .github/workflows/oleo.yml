@@ -16,7 +16,8 @@ on:
       - 'scripts/gen-oleo.js'
   workflow_dispatch: {}
 concurrency:
-  group: gen-oleo
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-oleo-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   gen:
@@ -35,10 +36,12 @@ jobs:
     steps:
       # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
       # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
-      - name: So publica a partir do main
+      # Vale para todo modo do workflow (ensaio e sonda inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
         run: |
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "::error::oleo.yml so publica a partir do main (ref atual: ${{ github.ref }}): a credencial federada vale so para o main"
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
             exit 1
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0

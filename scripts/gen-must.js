@@ -24,7 +24,8 @@
  * nasce raso e enche com o tempo. Serve depois como diagnostico, quando a API mudar de
  * comportamento sem avisar.
  *
- * Env: WAY2_TOKEN [obrigatorio] · DADOS_STORAGE [obrigatorio fora da sonda] · SONDA=1 ·
+ * Env: WAY2_TOKEN [obrigatorio] · a credencial de gravar, pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job:
+ *      AZURE_CLIENT_ID + AZURE_TENANT_ID + id-token) [obrigatoria fora da sonda] · SONDA=1 ·
  *      DIAS (quantos dias para tras processar, default 3) · FORCAR=1 (reprocessa dia ja presente) ·
  *      LOCAL_OUT (grava em arquivo em vez do blob).
  */
@@ -291,8 +292,6 @@ async function leBlob(url) {
 async function grava(obj) {
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
 // 🔴 O BLOB VAI COMPRIMIDO. Medido em 23/08/2026: o Azure Blob NAO comprime sozinho — ele serve
 // exatamente os bytes gravados, e o `must_15min.json` saia com 1.281 KB na rede mesmo com o
 // cliente pedindo gzip. O download levava de 3,6 a 8,8 segundos, e era o maior custo de cada
@@ -300,8 +299,9 @@ async function grava(obj) {
 //
 // Gravando JA comprimido, com o header `Content-Encoding: gzip`, o mesmo arquivo vai a 209 KB —
 // 84% menos. Navegador e datasource descomprimem sozinhos; nenhum consumidor precisa saber.
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner, plano OIDC etapa 4). Sem createIfNotExists: o `dados` existe, e criar conteiner
+  // nao cabe no papel so de dado; se ele sumir, o upload estoura com ContainerNotFound.
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);
   const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
   await cont.getBlockBlobClient(OUT_BLOB).upload(gz, gz.length,
     { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip',

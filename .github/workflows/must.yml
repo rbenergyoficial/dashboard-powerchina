@@ -32,7 +32,8 @@ on:
 # ESPERAR em vez de derrubar. Dois runs nao correm juntos, entao nao ha risco de duas gravacoes
 # concorrentes no mesmo blob.
 concurrency:
-  group: gen-must
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-must-${{ github.ref }}
   # ⚠️ A expressao e avaliada pelo run que CHEGA, e decide se ELE cancela os anteriores.
   # Com `== 'schedule'` o cron chegava com true e continuava matando o dispatch — que foi
   # exatamente o erro cometido na primeira tentativa de consertar isto. O correto e o
@@ -41,19 +42,37 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-    # 45 min por causa da CARGA HISTORICA: sao ~360 chamadas de 5 min com pausa de 0,6 s entre
-    # elas. A rodada diaria gasta segundos; o teto existe para a primeira, que reconstroi a serie.
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026): le pela lib-le-dados e grava pela lib-conteiner com o token do
+    #    proprio job, trocado no Entra: valido ~1 h e renovado sozinho, emitido so para o `main` deste repositorio, com papel so
+    #    de dado, conteiner a conteiner. As duas variaveis sao identificadores, nao credenciais (as do relogio-deploy).
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+    # 90 min por causa da CARGA HISTORICA: sao ~360 chamadas de 5 min com pausa de 0,6 s entre
+    # elas. A rodada diaria gasta segundos; o teto existe para a que reconstroi a serie. Sem a chave, o token do
+    # storage dura ~1 h: a lib-conteiner o renova a 5 min do fim, e a gravacao do fim da carga pede um novo.
     timeout-minutes: 90
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e sonda inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
       - name: Gerar must_diario.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           OUT_CONTAINER: dados
           OUT_BLOB: must_diario.json

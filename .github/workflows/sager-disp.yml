@@ -5,15 +5,34 @@ on:
     - cron: '47 13 * * *' # 10:47 BRT — segunda leitura: quando o computador dorme as 04:00 a rodada so acontece ao acordar (07:09 em 13/10, 09:37 em 10/10)
   workflow_dispatch:
 concurrency:
-  group: gen-sager-disp
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-sager-disp-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026): le pela lib-le-dados e grava pela lib-conteiner com o token do
+    #    proprio job, trocado no Entra: valido ~1 h e renovado sozinho, emitido so para o `main` deste repositorio, com papel so
+    #    de dado, conteiner a conteiner. As duas variaveis sao identificadores, nao credenciais (as do relogio-deploy).
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     timeout-minutes: 15
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e sonda inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -23,7 +42,6 @@ jobs:
         run: node scripts/ensaio-sager-disp.js
       - name: Gerar sager_disp_30min.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           RAW: backup-dados-scada
           PREFIXO: SAGER_ONS/Historico/
           OUT: dados

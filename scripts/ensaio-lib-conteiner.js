@@ -22,8 +22,8 @@
  *      resposta 200 que não é JSON rejeita, sem derrubar o processo; e o Entra sem `expires_in` é recusado;
  *   9. os geradores que já migraram (MIGRADOS), de verdade, num processo à parte: gravam pelo OIDC, e o storage recebe o token.
  * A FIAÇÃO dos workflows migrados (no pai, sobre o texto): sem `secrets.DADOS_STORAGE`, com `id-token: write` e `contents: read`, com
- * AZURE_CLIENT_ID e AZURE_TENANT_ID das variáveis do repo, todo `node scripts/` do workflow na lista, e cada gerador pela lib-conteiner
- * (nenhum `fromConnectionString`). A fiação plantada (a chave de volta, sem o id-token, o gerador pela cadeia de conexão) reprova.
+ * AZURE_CLIENT_ID e AZURE_TENANT_ID das variáveis do repo, nenhum `node scripts/` do workflow (nem as libs dele) dependendo da chave,
+ * e cada gravador pela lib-conteiner. A fiação plantada (a chave de volta, sem o id-token, o gerador pela cadeia de conexão) reprova.
  * PLANTIOS (cada um TEM de reprovar a suíte, com a mensagem do caso certo e sem erro de sintaxe): a lib-le-dados que só conhece a
  * chave; o OIDC que vence a chave; o token pedido de novo a cada chamada; o token que nunca se renova; o transporte que esquece o
  * status; o transporte sem tempo esgotado.
@@ -36,9 +36,17 @@ const { spawnSync } = require('child_process');
 
 const LIBS = ['lib-conteiner.js', 'lib-le-dados.js'];
 const MODULOS = path.join(__dirname, '..', 'node_modules');
-const CASOS = 25;   // a suíte inteira; menos que isto é suíte que parou no meio, mesmo com código 0
-/* os workflows que já gravam sem a chave, e os geradores de cada um com o env do ensaio (plano OIDC: etapa 3, piloto, 25/10/2026) */
-const MIGRADOS = { 'oleo.yml': { 'gen-oleo.js': { OUT_CONTAINER: 'dados', OUT_BLOB: 'oleo-ensaio.json' } } };
+const CASOS = 28;   // a suíte inteira; menos que isto é suíte que parou no meio, mesmo com código 0
+/* os workflows que já gravam sem a chave e, de cada um, os gravadores (abrem o storage pela lib-conteiner) com o env do ensaio de
+   ponta a ponta (caso 9). null = só a fiação: o gerador depende de rede de fora (a API da Way2, o ONS) ou do arquivo do SAGER. */
+const MIGRADOS = {
+  'oleo.yml': { 'gen-oleo.js': { OUT_CONTAINER: 'dados', OUT_BLOB: 'oleo-ensaio.json' } },   // etapa 3, piloto
+  'must.yml': { 'gen-must.js': null },                                                         // etapa 4, os diários simples
+  'irradiancia-ons.yml': { 'gen-irradiancia-ons.js': null },
+  'sager-disp.yml': { 'gen-sager-disp.js': null },
+};
+/* a chave em qualquer das formas de lê-la: a cadeia de conexão, a credencial de chave, a variável por ponto, por colchete ou desestruturada */
+const CHAVE_RE = /fromConnectionString|StorageSharedKeyCredential|process\.env(?:\.|\[\s*['"])DADOS_STORAGE|\{[^}]*\bDADOS_STORAGE\b[^}]*\}\s*=\s*process\.env/;
 const TMPS = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-conteiner-')); TMPS.push(d); return d; };
 const OIDC_FORA = { AZURE_CLIENT_ID: null, AZURE_TENANT_ID: null, ACTIONS_ID_TOKEN_REQUEST_URL: null, ACTIONS_ID_TOKEN_REQUEST_TOKEN: null };
@@ -88,14 +96,29 @@ try {
     const prob = fiacao(WF(w), Object.keys(MIGRADOS[w]), GEN);
     ok(prob.length === 0, w + ': sem a chave, com o OIDC, e os geradores pela lib-conteiner' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
   }
-  const w0 = Object.keys(MIGRADOS)[0], g0 = Object.keys(MIGRADOS[w0])[0];
-  for (const [nome, wf, gen] of [
-    ['a chave de volta no job', WF(w0).replace('    env:\n', '    env:\n      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}\n'), null],
-    ['sem o id-token', WF(w0).replace('      id-token: write\n', ''), null],
-    ['o gerador pela cadeia de conexão', null, GEN(g0).replace("require('./lib-conteiner').conteiner(OUT_CONTAINER)",
-      "require('@azure/storage-blob').BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER)")]]) {
-    const prob = fiacao(wf || WF(w0), Object.keys(MIGRADOS[w0]), (g) => (g === g0 && gen ? gen : GEN(g)));
-    ok(prob.length > 0, 'fiação plantada "' + nome + '" reprova (' + (prob[0] || 'nada acusado') + ')');
+  /* fiação plantada: [nome, workflow, troca no texto do workflow (de, para) ou null, arquivos trocados {arq: [de, para]}, o que tem de acusar] */
+  const PLANTADAS = [
+    ['a chave de volta no job', 'oleo.yml', ['      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n',
+      '      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}\n'], {}, 'ainda cita secrets.DADOS_STORAGE'],
+    ['sem o id-token', 'oleo.yml', ['      id-token: write\n', ''], {}, 'sem id-token: write'],
+    ['sem o passo que falha fora do main', 'must.yml', ['            exit 1\n', ''], {}, 'sem o passo que falha fora do main'],
+    ['o gerador pela cadeia de conexão', 'oleo.yml', null, { 'gen-oleo.js': ["require('./lib-conteiner').conteiner(OUT_CONTAINER)",
+      "require('@azure/storage-blob').BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER)"] },
+      'gen-oleo.js ainda depende da chave'],
+    ['o gerador que não abre pela lib-conteiner', 'oleo.yml', null, { 'gen-oleo.js': ["require('./lib-conteiner').conteiner(OUT_CONTAINER)", 'null'] },
+      'gen-oleo.js não abre pela lib-conteiner'],
+    ['a lib de um gerador lendo a chave', 'sager-disp.yml', null, { 'lib-sager-disp.js': ["'use strict';", "'use strict';\nconst k = process.env['DADOS_STORAGE'];"] },
+      'lib-sager-disp.js (alcançado por gen-sager-disp.js) ainda depende da chave'],
+    ['um ensaio do workflow lendo a chave', 'sager-disp.yml', null, { 'ensaio-sager-disp.js': ["'use strict';", "'use strict';\nconst { DADOS_STORAGE } = process.env;"] },
+      'ensaio-sager-disp.js ainda depende da chave'],
+  ];
+  for (const [nome, w, trWf, trArq, esperado] of PLANTADAS) {
+    let wf = WF(w), casou = !trWf || wf.split(trWf[0]).length === 2;
+    if (trWf) wf = wf.split(trWf[0]).join(trWf[1]);
+    const texto = (g) => { const s = GEN(g); if (!trArq[g]) return s; if (s.split(trArq[g][0]).length < 2) casou = false; return s.replace(trArq[g][0], trArq[g][1]); };
+    const prob = fiacao(wf, Object.keys(MIGRADOS[w]), texto);
+    ok(casou && prob.some((x) => x.indexOf(esperado) >= 0), 'fiação plantada "' + nome + '" reprova em "' + esperado + '"'
+      + (casou ? '' : ' (TRECHO NÃO CASOU)') + (prob.length ? '' : ' (nada acusado)'));
   }
 
   console.log('plantios (cada um reprova com a mensagem do caso certo)');
@@ -120,6 +143,10 @@ try {
     '8: o erro do Entra chega com o status e o corpo');
   planta('o transporte sem tempo esgotado', 'lib-conteiner.js', "    r.on('timeout', () => r.destroy(new Error('tempo esgotado em ' + opts.hostname)));\n", '',
     '8: servidor mudo estoura por tempo');
+  planta('a troca sem nova tentativa', 'lib-conteiner.js', '      if (i >= ESPERAS_MS.length || !passageiro(e)) throw e;', '      throw e;',
+    '8: o 503 isolado do Entra passa na segunda tentativa');
+  planta('nova tentativa até no erro de configuração', 'lib-conteiner.js', '  return m ? (+m[1] === 429 || +m[1] >= 500) : true;', '  return true;',
+    '8: o AADSTS (400) estoura na primeira');
 } catch (e) {
   console.log('  REPROVADO · ' + e.message); falhas++;
 } finally {
@@ -136,12 +163,22 @@ function fiacao(wf, gens, texto) {
   if (!/\n\s+contents: read\n/.test(wf)) p.push('sem contents: read (o permissions explícito zera o resto)');
   if (!/\n\s+AZURE_CLIENT_ID: \$\{\{ vars\.AZURE_CLIENT_ID \}\}\n/.test(wf)) p.push('sem AZURE_CLIENT_ID das variáveis do repo');
   if (!/\n\s+AZURE_TENANT_ID: \$\{\{ vars\.AZURE_TENANT_ID \}\}\n/.test(wf)) p.push('sem AZURE_TENANT_ID das variáveis do repo');
-  for (const m of wf.matchAll(/node scripts\/([\w.-]+\.js)/g)) if (gens.indexOf(m[1]) < 0) p.push('roda ' + m[1] + ', fora da lista de migrados');
-  for (const g of gens) {
-    const s = texto(g);
-    if (/fromConnectionString/.test(s)) p.push(g + ' abre pela cadeia de conexão');
-    if (!/require\('\.\/lib-conteiner'\)\.conteiner\(/.test(s)) p.push(g + ' não abre pela lib-conteiner');
+  // o primeiro passo falha fora do main (a credencial federada só vale para o main), pela variável de ambiente, nunca interpolada
+  if (!/\n\s+if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then\n[^\n]*\n\s+exit 1\n/.test(wf)) p.push('sem o passo que falha fora do main');
+  // todo script que o workflow roda, e tudo o que ele carrega de scripts/ (fechamento dos require locais, em qualquer profundidade),
+  // sem a chave: sem ela no job, quem a exigir quebra. A lib-conteiner é a porta e fica de fora.
+  for (const m of new Set([...wf.matchAll(/node scripts\/([\w.-]+\.js)/g)].map((x) => x[1]))) {
+    const vistos = new Set(), fila = [m];
+    while (fila.length) {
+      const f = fila.shift();
+      if (vistos.has(f) || f === 'lib-conteiner.js') continue;
+      vistos.add(f);
+      let t; try { t = texto(f); } catch (e) { continue; }   // módulo local que não é .js de scripts/ (um .json, por exemplo)
+      if (CHAVE_RE.test(t)) p.push(f + (f === m ? '' : ' (alcançado por ' + m + ')') + ' ainda depende da chave');
+      for (const x of t.matchAll(/require\(\s*['"]\.\/([\w.-]+?)(?:\.js)?['"]\s*\)/g)) fila.push(x[1] + '.js');
+    }
   }
+  for (const g of gens) if (!/require\('\.\/lib-conteiner'\)\.conteiner\(/.test(texto(g))) p.push(g + ' não abre pela lib-conteiner');
   return p;
 }
 
@@ -283,12 +320,36 @@ async function suite(dir, cert) {
     erro = ''; try { await LC.conteiner('dados').credential.getToken(); } catch (e) { erro = e.message; }
     caso(/o Entra não devolveu o token de acesso/.test(erro), '8: o Entra sem expires_in é recusado (' + erro + ')');
 
+    // 8. nova tentativa: o erro que passa sozinho (429, 5xx, rede) é repetido com espera crescente; o de configuração (AADSTS, 400) não
+    const tenta = async (falhasEntra, status) => {
+      limpa(); Object.assign(process.env, OIDC); const L = novo(); const esperas = []; let chamadas = 0, token = null, err = '';
+      L._usaEspera(async (ms) => { esperas.push(ms); });
+      L._usaTransporte(async (o) => {
+        if (o.hostname === 'gh.exemplo.invalid') return { value: 'assercao-r' };
+        chamadas++;
+        if (chamadas <= falhasEntra) throw new Error('HTTP ' + status + ' · {"error":"' + (status === 400 ? 'invalid_client","error_description":"AADSTS70021' : 'temporarily_unavailable') + '"}');
+        return { access_token: 'AT-R', expires_in: 3600 };
+      });
+      try { token = (await L.conteiner('dados').credential.getToken()).token; } catch (e) { err = e.message; }
+      return { token, err, chamadas, esperas: esperas.join(',') };
+    };
+    let x = await tenta(1, 503);
+    caso(x.token === 'AT-R' && x.chamadas === 2 && x.esperas === '2000', '8: o 503 isolado do Entra passa na segunda tentativa ('
+      + x.chamadas + ' pedidos, esperas ' + (x.esperas || '-') + (x.err ? ', ' + x.err : '') + ')');
+    x = await tenta(1, 400);
+    caso(!x.token && /^HTTP 400 · .*AADSTS70021/.test(x.err) && x.chamadas === 1 && x.esperas === '', '8: o AADSTS (400) estoura na primeira, sem esperar ('
+      + x.chamadas + ' pedido(s), esperas ' + (x.esperas || '-') + ')');
+    x = await tenta(9, 503);
+    caso(!x.token && /^HTTP 503/.test(x.err) && x.chamadas === 4 && x.esperas === '2000,5000,10000', '8: o 503 que não passa estoura na quarta tentativa ('
+      + x.chamadas + ' pedidos, esperas ' + (x.esperas || '-') + ')');
+
     // 9. os geradores migrados, de verdade, num processo à parte (o servidor tem de seguir respondendo: execFile, não spawnSync)
     const pre = path.join(dir, 'pre-oidc.js');
     fs.writeFileSync(pre, 'require(' + JSON.stringify(path.join(__dirname, 'lib-conteiner.js')) + ')._usaTransporte(async (o) => '
       + "o.hostname === 'login.microsoftonline.com' ? { access_token: 'AT-GERADOR', expires_in: 3600 } : { value: 'assercao-gerador' });\n");
     const { execFile } = require('child_process');
     for (const w of Object.keys(MIGRADOS)) for (const [g, envG] of Object.entries(MIGRADOS[w])) {
+      if (!envG) continue;   // só a fiação (rede de fora)
       const env = Object.assign({}, process.env, OIDC, envG, { DADOS_CONTA_URL: LOCAL + '/contaensaio' });
       delete env.DADOS_STORAGE; delete env.DADOS_SAS; delete env.LOCAL_OUT;
       const saida = await new Promise((ok) => execFile(process.execPath, ['-r', pre, path.join(__dirname, g)], { env, timeout: 20000 },

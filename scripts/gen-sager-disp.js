@@ -11,7 +11,7 @@
  * comentario, comentario que discorda da celula) e: disponibilidade acima de 102 % da capacidade instalada (ANEEL); dia com numero de
  * patamares diferente de 48; nenhuma versao do arquivo no container.
  *
- * Env: DADOS_STORAGE · RAW=backup-dados-scada · PREFIXO=SAGER_ONS/Historico/ · OUT=dados
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW=backup-dados-scada · PREFIXO=SAGER_ONS/Historico/ · OUT=dados
  *      LOCAL_FILE=<xlsx> le um arquivo local em vez do container · LOCAL_OUT_DIR=<pasta> grava ali
  */
 const fs = require('fs');
@@ -27,9 +27,8 @@ const NOME = 'sager_disp_30min.json';
 // capacidade instalada (despachos ANEEL de operacao comercial); M6 = 49,109 MW, o valor que o ONS aceita para a usina
 const CAP = { M1: 49.11, M2: 24.555, M3: 49.11, M4: 49.11, M5: 49.11, M6: 49.109, M7: 14.733, M8: 49.11, M9: 9.822 };
 
-let _svc = null;
-const svc = () => { if (!_svc) { const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido'); _svc = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE); } return _svc; };
+// a chave ou o OIDC do job (lib-conteiner, plano OIDC etapa 4): o bruto do SAGER e a saida, cada um no seu conteiner
+const conteiner = (nome) => require('./lib-conteiner').conteiner(nome);
 
 /* a versao mais nova: o nome sem sufixo e a primeira; as seguintes tem ~AAAAMMDD-HHMMSS */
 function maisNova(nomes) {
@@ -41,7 +40,7 @@ function maisNova(nomes) {
 
 async function le() {
   if (process.env.LOCAL_FILE) return { nome: path.basename(process.env.LOCAL_FILE), buf: fs.readFileSync(process.env.LOCAL_FILE), versoes: 1 };
-  const c = svc().getContainerClient(RAW), nomes = [];
+  const c = conteiner(RAW), nomes = [];
   for await (const b of c.listBlobsFlat({ prefix: PREFIXO + BASE })) nomes.push(b.name);
   const n = maisNova(nomes);
   if (!n) throw new Error('nenhuma versao de ' + BASE + ' em ' + RAW + '/' + PREFIXO);
@@ -51,7 +50,7 @@ async function le() {
 async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const c = svc().getContainerClient(OUT);
+  const c = conteiner(OUT);
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

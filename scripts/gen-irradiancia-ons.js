@@ -2,7 +2,7 @@
  * gen-irradiancia-ons.js — extrai o Conj. Mauriti (CEFMT1-9) do arquivo DETAIL do ONS e publica
  * `ons_irradiancia_AAAA_MM.json`. Regenera o mes corrente e o anterior (o ONS corrige D-1/D-2).
  *
- * Credencial: a connection string da storage vem do ENV DADOS_STORAGE (secret do Actions).
+ * Credencial: a de gravar vem pela lib-conteiner: DADOS_STORAGE (secret do Actions), ou o OIDC do job.
  * NUNCA colocar credencial no codigo ou no repositorio.
  *
  * == POR QUE PARQUET E NAO CSV (23/08/2026) ==================================================
@@ -37,7 +37,8 @@
  * descomprimem sozinhos e nenhum consumidor precisa saber.
  *
  * == ENV =====================================================================================
- *   DADOS_STORAGE  connection string do Azure (secret)   obrigatorio fora do LOCAL_OUT
+ *   DADOS_STORAGE  connection string do Azure (secret), ou o OIDC do job (AZURE_CLIENT_ID + AZURE_TENANT_ID +
+ *                  id-token), pela lib-conteiner         um dos dois, fora do LOCAL_OUT
  *   FONTE          'csv' volta ao caminho antigo (o ensaio usa para comparar)
  *   MESES          lista separada por virgula (ex.: 2026_07,2026_08); o padrao e corrente+anterior
  *   LOCAL_OUT      diretorio local; grava em arquivo em vez do blob e nao exige credencial
@@ -193,10 +194,8 @@ if (require.main !== module) return;
   const local = process.env.LOCAL_OUT;
   let container = null;
   if (!local) {
-    const conn = process.env.DADOS_STORAGE;
-    if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+    // a chave ou o OIDC do job (lib-conteiner, plano OIDC etapa 4); sem nenhum dos dois, estoura nomeando o que falta
+    container = require('./lib-conteiner').conteiner(CONTAINER);
   }
   const nomeDe = (mo) => 'ons_irradiancia_' + mo + '.json';
   const jaExiste = async (mo) => {
