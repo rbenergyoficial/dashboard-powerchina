@@ -14,15 +14,31 @@ on:
         required: false
         default: ''
 concurrency:
-  group: gen-perdas
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-perdas-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os passos que so leem o publicado
+    #    levam a SAS de leitura; os sem rede ficam sem credencial nenhuma, de proposito.
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 45
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e carga inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -31,6 +47,8 @@ jobs:
       # lib-disponibilidade.js e o ensaio a prova contra o blob publico ANTES de gerar. Ensaio
       # vermelho = a janela do dia ou o contador mudaram de natureza: nao publicar por cima.
       - name: Ensaio da disponibilidade por usina
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-disponibilidade.js
       # O nome do export ja mudou duas vezes sem aviso (`_ATT` em 24/09, `_ATT-02` em 29/09: o M5 de 28/09 saiu com 990
       # de 1.155 inversores) e nas duas o dia sumiu em silencio. Le o CARIMBO do fonte do gerador e o julga contra os
@@ -41,6 +59,8 @@ jobs:
       # disponibilidade no diario passam a te-la, que os que JA tinham saem byte a byte iguais, e
       # que alimentar a funcao com a janela inteira do perdas_inv nao move nenhum valor publicado.
       - name: Ensaio da disponibilidade retroativa
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-disp-retroativa.js
       # O contador do conjunto (`e_conta`) soma a energia do dia de cada inversor; com o maior valor do dia, 26/09 saiu
       # igual a 25/09 em todas as usinas. A regra mora em lib-contador-dia.js, a mesma do gen-inv-scada; o trecho e executado.
@@ -56,7 +76,8 @@ jobs:
           restore-keys: scada-raw-gen-perdas-
       - name: Gerar perdas_*.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW_CONTAINER: scada-raw
           OUT_CONTAINER: dados
           DIAS: ${{ github.event.inputs.dias || '30' }}
@@ -84,6 +105,8 @@ jobs:
       # (nao conferir) e a que produziu o defeito que este lote corrige.
       - name: Ensaio da unidade do setpoint
         if: ${{ !github.event.inputs.ensaio }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-setpoint-unidade.js
 
       # 🔴 DEPOIS de gerar, como o ensaio do setpoint e pelo mesmo motivo: ele julga o PRODUTO —
@@ -93,6 +116,8 @@ jobs:
       #    melhor que dado ruim em silencio.
       - name: Ensaio da curva de 30 min por inversor
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-pvstr-hora.js M3
 
       # 🔴 DEPOIS de gerar tambem, porque julga uma MIGRACAO: o zero da isolacao virou ausencia
@@ -100,6 +125,8 @@ jobs:
       #    a rodada que conserta.
       - name: Ensaio do zero da isolacao
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-isol-zero.js M3
 
       # DEPOIS de gerar: julga o PRODUTO. O `ef_imp` e quanto da eficiencia do dia vem de instantes
@@ -107,6 +134,8 @@ jobs:
       # com instante impossivel) e o fechamento dia x curva de 30 min, inversor a inversor.
       - name: Ensaio do ef_imp (instantes impossiveis)
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-ef-imp.js M3
 
       # DEPOIS de gerar: julga o PRODUTO. A disponibilidade pela janela do contrato recomposta do
@@ -115,6 +144,8 @@ jobs:
       # usina a 85 %). Este ensaio existia desde 17/09 e nao estava ligado em workflow nenhum.
       - name: Ensaio da disponibilidade pela janela do contrato
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-disp-contrato.js
 
       # DEPOIS de gerar: julga o PRODUTO. A energia CC e CA da usina no dia tem de FECHAR com a soma dos
@@ -122,6 +153,8 @@ jobs:
       # quando faltava UM inversor (M9 em 18/09: 19 de 48 instantes, 4,0 MWh contra 12,16 do contador).
       - name: Ensaio do fechamento usina x inversores
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-energia-conjunto.js
 
       # DEPOIS de gerar: julga a REGRA (compilada do gerador) e o PRODUTO. Quando o servidor do
@@ -130,6 +163,8 @@ jobs:
       # publicado como o complexo inteiro a 0 MW.
       - name: Ensaio do carimbo sem registro
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-sem-registro.js
 
       # DEPOIS de gerar: o M9 TS1 INV13..22 mede em REGISTRO CRU (lib-inversor-cru.js). Julga a regra do
@@ -137,6 +172,8 @@ jobs:
       # no mesmo dia (lido pela metade, passava de 140 %). Um dia forjado a 141 % tem de reprovar.
       - name: Ensaio dos inversores em registro cru
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-inversor-cru.js
       # DEPOIS de gerar: a leitura que o supervisorio REPETE (CA, CC e temperatura iguais, com potencia, em 4+ meias
       # horas seguidas) vira ausencia (PROMOVER leitura-congelada). M1/TS5/INV14 repetiu 22,15 kW de 25/09 16:30 a
@@ -144,6 +181,8 @@ jobs:
       # potencia, madrugada em zero e parada de dia ficam) e o produto (nenhum patamar nos pvstr_hora).
       - name: Ensaio da leitura congelada
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-leitura-congelada.js
       # DEPOIS de gerar: a RETA que o export desenha ao sair do repouso (o zero da noite ou um patamar congelado) vira ausencia
       # (PROMOVER rampa-amanhecer). M6/TS2/INV19 marcou 0,79 · 1,67 · 2,55 · 3,43 kW de 04:00 a 05:30 de 25/09, antes do
@@ -156,6 +195,7 @@ jobs:
         env:
           # num dispatch de ensaio (nada publicado) o produto esta em /tmp/perdas, nao no blob
           LOCAL_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-rampa-amanhecer.js
       # DEPOIS de gerar: as strings REAIS de cada inversor, a mais fraca e a lista de alarmes (PROMOVER strings-lote1,
       # lib-strings.js). A dispersao descartava so o zero exato: o MPPT 12 vazio do M2/TS2/INV10 (0,27 A) virava o
@@ -165,4 +205,5 @@ jobs:
         if: always()
         env:
           LOCAL_DIR: ${{ github.event.inputs.ensaio && '/tmp/perdas' || '' }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-strings.js

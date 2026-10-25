@@ -2,8 +2,7 @@
 // e grava no blob dados/. EneatRec é publicado em ~tempo real e em 15 min — a
 // EneatLiqGeracao (liquidada) só fica pronta 1-2 dias depois, deixando "ontem" vazio.
 // Mesmo nome de blob do fluxo Power Automate: way2_eneat_intradia_QuinzeMinutos_<AAAA-MM-DD>.json
-// Secrets (env): DADOS_STORAGE (connection string Azure), WAY2_TOKEN (Pim-Auth da API Way2).
-const { BlobServiceClient } = require('@azure/storage-blob');
+// Credenciais (env): a de gravar pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job), WAY2_TOKEN (Pim-Auth da API Way2).
 const https = require('https');
 
 const CONTAINER = 'dados';
@@ -64,10 +63,14 @@ async function gerarDiario(container, token) {
 }
 
 (async () => {
-  const conn = process.env.DADOS_STORAGE, token = process.env.WAY2_TOKEN;
-  if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
+  const token = process.env.WAY2_TOKEN;
   if (!token) { console.error('ERRO: secret WAY2_TOKEN ausente.'); process.exit(1); }
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
+  // 🔴 A CREDENCIAL SE PROVA UMA VEZ, AQUI, FORA DO TRY DE CADA DIA. Com o OIDC o token so e pedido no primeiro pedido ao storage;
+  //    se ele fosse o upload do primeiro dia, uma recusa (AADSTS do Entra, 403 do papel) viraria "dia falhou", que a tolerancia
+  //    abaixo engole como falha passageira da Way2, e um dispatch de poucos dias terminaria verde sem gravar nada. Ler as
+  //    propriedades do conteiner pede o token e passa pelo papel: credencial recusada derruba o job ja, com a causa.
+  await container.getProperties();
 
   async function processar(day) {
     try {

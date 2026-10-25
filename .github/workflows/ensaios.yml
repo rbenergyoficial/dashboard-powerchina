@@ -38,6 +38,10 @@ on:
       - '.github/workflows/render-paineis.yml'
       - '.github/workflows/ppc.yml'
       - '.github/workflows/comparativo.yml'
+      - '.github/workflows/must-intra.yml'   # plano OIDC, etapa 4, grupo 4: a mesma fiacao
+      - '.github/workflows/eneat-intradia-way2.yml'
+      - '.github/workflows/inv-scada.yml'
+      - '.github/workflows/perdas.yml'
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
   workflow_dispatch: {}

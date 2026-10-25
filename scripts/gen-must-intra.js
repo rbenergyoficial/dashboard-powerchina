@@ -37,7 +37,7 @@
  * ACUMULATIVO, como o diario: le o que existe, mistura os dias novos, PODA o que saiu da janela e
  * regrava. Uma rodada que volte vazia nao pode apagar o passado.
  *
- * Env: WAY2_TOKEN [obrigatorio] · DADOS_STORAGE [obrigatorio fora de LOCAL_OUT] ·
+ * Env: WAY2_TOKEN [obrigatorio] · a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) [obrigatoria fora de LOCAL_OUT] ·
  *      DIAS (quantos dias para tras processar, default 2; o dia de HOJE entra sempre) · FORCAR=1 (reprocessa dia ja presente) ·
  *      SO (processa so uma resolucao: 5, 15, 30 ou 60) · LOCAL_OUT (prefixo de arquivo local).
  */
@@ -330,8 +330,6 @@ async function grava(nome, obj) {
   if (process.env.LOCAL_OUT) {
     require('fs').writeFileSync(process.env.LOCAL_OUT + nome, json); return json.length;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
 // 🔴 O BLOB VAI COMPRIMIDO. Medido em 23/08/2026: o Azure Blob NAO comprime sozinho — ele serve
 // exatamente os bytes gravados, e o `must_15min.json` saia com 1.281 KB na rede mesmo com o
 // cliente pedindo gzip. O download levava de 3,6 a 8,8 segundos, e era o maior custo de cada
@@ -339,8 +337,8 @@ async function grava(nome, obj) {
 //
 // Gravando JA comprimido, com o header `Content-Encoding: gzip`, o mesmo arquivo vai a 209 KB —
 // 84% menos. Navegador e datasource descomprimem sozinhos; nenhum consumidor precisa saber.
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);
   const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
   await cont.getBlockBlobClient(nome).upload(gz, gz.length,
     { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip',

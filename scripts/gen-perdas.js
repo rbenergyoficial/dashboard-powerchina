@@ -68,7 +68,7 @@
  *    mesmo que a pagina de Comparativo mostra — divergencia entre duas paginas sobre o mesmo
  *    medidor seria pior que nao ter a comparacao.
  *
- * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DIAS=30
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DIAS=30
  *      LOCAL_DIR / LOCAL_OUT_DIR para ensaio.
  */
 const zlib = require('zlib');
@@ -451,9 +451,7 @@ async function listaArquivos() {
     return fs.readdirSync(process.env.LOCAL_DIR).filter((n) => CARIMBO.test(n))
       .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+  const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const out = []; let total = 0;
   for await (const b of c.listBlobsFlat()) {
     total++;
@@ -692,9 +690,7 @@ async function grava(nomeLogico, obj) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, nome), gz);
     return gz.length;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await c.createIfNotExists();
+  const c = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

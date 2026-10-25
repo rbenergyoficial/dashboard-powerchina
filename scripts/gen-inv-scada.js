@@ -35,7 +35,7 @@
  *   TS com menos de MIN_PARES inversores reportando cai para a mediana da USINA — mediana de tres
  *   nao separa defeito de acaso.
  *
- * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · OUT_BLOB=inv_scada_supervisorio.json
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · OUT_BLOB=inv_scada_supervisorio.json
  *      DIAS=60 (janela) · LOCAL_DIR / LOCAL_OUT para ensaio.
  */
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'scada-raw';
@@ -115,10 +115,7 @@ async function listaArquivos() {
     return fs.readdirSync(process.env.LOCAL_DIR).filter((n) => CARIMBO.test(n))
       .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(RAW_CONTAINER);
+  const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const out = []; let total = 0;
   for await (const b of c.listBlobsFlat()) {
     total++;
@@ -199,9 +196,7 @@ async function escreve(obj, nome) {
   if (process.env.LOCAL_OUT_DIR) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, alvo), gz); return gz.length; }
   if (process.env.LOCAL_OUT && alvo === OUT_BLOB) { require('fs').writeFileSync(process.env.LOCAL_OUT, gz); return gz.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   await cont.getBlockBlobClient(alvo).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;
@@ -338,8 +333,7 @@ function comparaComPares(reg) {
   // ⏱️ MODO INVENTARIO: LISTAR=1 imprime todo nome de blob e sai. Existe para responder
   // "o que ha no container?" sem precisar de listagem anonima, que o Azure nao permite aqui.
   if (process.env.LISTAR) {
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+    const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);
     const nomes = [];
     // 🔴 O `\d` aqui ja esteve SEM a barra (`/^d+_/`), que casa a letra "d" e nao um digito: o
     // prefixo do item nunca era removido e a lista saia com `77884_IIRR_...`. Nao quebrou nada

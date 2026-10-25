@@ -56,7 +56,7 @@
  * IDADE DO BLOB (secundaria) — so denuncia pipeline parado, e leva limiar folgado (180/240),
  *   acima do pior caso NORMAL medido de 128 min, porque o cron do GitHub deriva ate 101 min.
  *
- * Env: DADOS_STORAGE (obrig. fora de LOCAL_OUT), WAY2_TOKEN (o sinal primario depende dele),
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job; obrig. fora de LOCAL_OUT), WAY2_TOKEN (o sinal primario depende dele),
  *      PA_ALERT_WEBHOOK (vazio = so loga), LIMIAR_MIN (45), LIMIAR_EMAIL_MIN (90),
  *      LIMIAR_BLOB_MIN (180), LIMIAR_BLOB_EMAIL_MIN (240), LEMBRETE_H (2), LEMBRETE_TETO_H (12),
  *      LOCAL_OUT (ensaio: nao grava estado, nao dispara), FONTE_URL (ensaio: recorte gravado).
@@ -216,8 +216,9 @@ if (process.env.PREVIEW) {
 
 (async () => {
   const ensaio = !!process.env.LOCAL_OUT;
-  const conn = process.env.DADOS_STORAGE, token = (process.env.WAY2_TOKEN || '').trim();
-  if (!conn && !ensaio) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
+  const token = (process.env.WAY2_TOKEN || '').trim();
+  const LC = require('./lib-conteiner');   // a chave ou o OIDC do job
+  if (!LC.credencial() && !ensaio) { console.error('ERRO: sem credencial do storage (nem DADOS_STORAGE, nem o OIDC do job).'); process.exit(1); }
 
   // ══ 1 · SINAL PRIMARIO — idade na FONTE, que nao depende do nosso cron ═══════════════════════
   // Janela curta de proposito: bastam as ultimas horas para saber se o medidor esta medindo, e
@@ -298,8 +299,7 @@ if (process.env.PREVIEW) {
   // ══ 3 · estado anterior ══════════════════════════════════════════════════════════════════════
   let cont = null, st = { estado: 'ok' };
   if (!ensaio) {
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+    cont = LC.conteiner(CONTAINER);
     const sbc = cont.getBlockBlobClient('must_watchdog.json');
     if (await sbc.exists()) { try { st = JSON.parse((await sbc.downloadToBuffer()).toString('utf8').replace(/^﻿/, '')); } catch (e) {} }
   }

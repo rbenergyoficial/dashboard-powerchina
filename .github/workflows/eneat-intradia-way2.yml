@@ -11,7 +11,8 @@ on:
         required: false
 
 concurrency:   # grava way2_eneat_*: duas rodadas (relogio + agendador do GitHub) nao gravam juntas
-  group: gen-eneat-intradia
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-eneat-intradia-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -21,9 +22,24 @@ jobs:
   gerar-eneat:
     runs-on: ubuntu-latest
     timeout-minutes: 10  # teto: 3x a maior duracao medida, com piso de 10 min (2,5 min, ultimas execucoes ate 23/10/2026); run presa sem teto tira o workflow do relogio
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os passos que so leem o publicado
+    #    levam a SAS de leitura; os sem rede ficam sem credencial nenhuma, de proposito.
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e carga inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
@@ -32,7 +48,8 @@ jobs:
         run: npm install @azure/storage-blob@12
       - name: Gerar energia intradiária EneatRec (últimos N dias)
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           DIAS: ${{ github.event.inputs.dias || '5' }}
         run: node scripts/gen-eneat-intradia.js

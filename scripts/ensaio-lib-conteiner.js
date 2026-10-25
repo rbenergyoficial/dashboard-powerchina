@@ -56,6 +56,10 @@ const MIGRADOS = {
   'render-paineis.yml': { 'gen-render-paineis.js': null },
   'ppc.yml': { 'gen-ppc.js': null },
   'comparativo.yml': { 'gen-comparativo.js': null },
+  'must-intra.yml': { 'gen-must-intra.js': null, 'gen-must-watchdog.js': null },                   // etapa 4, os frequentes do supervisório e do MUST
+  'eneat-intradia-way2.yml': { 'gen-eneat-intradia.js': null },
+  'inv-scada.yml': { 'gen-inv-scada.js': null },
+  'perdas.yml': { 'gen-perdas.js': null },
 };
 /* os passos que só LEEM o storage de verdade (o publicado), de cada workflow migrado: pelo OIDC ou pela SAS só de leitura (DADOS_LEITURA).
    O ensaio sem rede não entra aqui: ele não pode ter credencial nenhuma. */
@@ -65,6 +69,11 @@ const LEITORES = {
   'ons-consolidado.yml': ['ensaio-portao-gemeo.js --produto', 'ensaio-gemeo-mwh.js', 'ensaio-ppc.js'],
   'estacao-logger.yml': ['ensaio-agente-dia.js'],
   'ppc.yml': ['ensaio-ppc-duracao.js --produto'],
+  'must-intra.yml': ['alerta-must.js'],
+  'inv-scada.yml': ['ensaio-inv-scada-dia.js'],
+  'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
+    'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',
+    'ensaio-inversor-cru.js', 'ensaio-leitura-congelada.js', 'ensaio-rampa-amanhecer.js', 'ensaio-strings.js'],
 };
 /* a chave em qualquer das formas de lê-la: a CHAMADA da cadeia de conexão (o `fromConnectionString:` de um SDK simulado não conta), a
    chamada por colchete, a credencial de chave, a variável por ponto, por colchete ou desestruturada. Fica de fora, declarado: a variável lida
