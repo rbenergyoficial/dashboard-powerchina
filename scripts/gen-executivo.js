@@ -3390,7 +3390,10 @@ async function writeOut(obj, nome, opts) {
   // ATENCAO: e energia BRUTA no circuito — nao desconta perda de transformacao. Em 15/07 o M3 da
   // 181,0 MWh aqui contra 179,4 MWh da liquidada do Way2 (0,9%). Quem consumir tem de dizer isso.
   try {
-    const H = await getJSON(BASE + 'way2_1h.json');
+    // so a Demat e lida aqui: o agregador publica o way2_1h_demat.json (~1/8 do way2_1h.json); sem ele (antes da primeira rodada
+    // do agregador), o completo
+    let H; try { H = await getJSON(BASE + 'way2_1h_demat.json'); } catch (e) { if (!/404/.test(String(e && e.message))) throw e; H = null; }
+    if (!H) H = await getJSON(BASE + 'way2_1h.json');
     const CIRC = { M1: [6198, 6199, 6200], M2: [6201, 6202], M3: [6203, 6204, 6205],
       M4: [6206, 6207, 6208], M5: [6209, 6210, 6211], M6: [6212, 6213, 6214],
       M7: [6215], M8: [6216, 6217, 6218], M9: [6219] };

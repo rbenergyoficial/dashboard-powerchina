@@ -31,6 +31,7 @@ const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com creden
 
 const CONTAINER = 'dados';
 const BLOB_BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
+const BLOB_DEMAT = 'way2_1h_demat.json';   // o agregado de 1 h so com a potencia (Demat), para o executivo
 const RESOLUCOES = [
   { blob: 'way2_15min.json', bucketMin: 15, janelaDias: 10, intervalo: 'QuinzeMinutos' },
   { blob: 'way2_30min.json', bucketMin: 30, janelaDias: 30, intervalo: 'TrintaMinutos' },
@@ -196,6 +197,12 @@ async function main() {
     // max-age 10min: o blob muda de hora em hora, então servir cacheado por ≤10min é fresco o bastante
     // E deixa os 13 painéis do Monitor compartilharem 1 download (no-cache faria cada um re-baixar).
     await bc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=600' } });
+    // 💰 o executivo so usa a potencia (Demat) do agregado de 1 h, uma das 8 grandezas: le um blob so com ela, e nao os ~19,5 MB
+    if (r.blob === 'way2_1h.json') {
+      const enxuto = JSON.stringify(Object.assign({}, obj, { dados: obj.dados.filter((s) => s.nomeGrandeza === 'Demat') }));
+      await container.getBlockBlobClient(BLOB_DEMAT).upload(enxuto, Buffer.byteLength(enxuto), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=600' } });
+      console.log(`[${BLOB_DEMAT}] OK · ${(enxuto.length / 1e6).toFixed(2)}MB (so a Demat do ${r.blob})`);
+    }
     const nVals = obj.dados.reduce((a, s) => a + s.valores.length, 0);
     console.log(`[${r.blob}] OK · ${obj.dados.length} séries · ${nVals} pts · ${obj.inicio}..${obj.fim} · ${(body.length / 1e6).toFixed(2)}MB`);
   }
