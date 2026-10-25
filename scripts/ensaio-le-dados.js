@@ -36,6 +36,7 @@ const caso = async (nome, f) => { await f(); n++; console.log('ok · ' + nome); 
   const base = 'http://127.0.0.1:' + srv.address().port + '/dados/';
   process.env.DADOS_BASE_PUB = base;
   delete process.env.DADOS_STORAGE; delete process.env.DADOS_SAS;
+  delete process.env.AZURE_CLIENT_ID; delete process.env.AZURE_TENANT_ID;   // o OIDC do job daria modo 'sdk' a todos os casos (lib-conteiner)
   const LD = require('./lib-le-dados');
   const log = console.log, avisos = [];
   console.log = (...a) => { if (/::warning::/.test(String(a[0]))) avisos.push(a[0]); else log(...a); };

@@ -24,7 +24,8 @@
  *    NUNCA vira blob (o executivo leria um mês zerado). Falhou a guarda -> exit 1 e o blob
  *    anterior fica.
  *
- * Env: WAY2_TOKEN · DADOS_STORAGE (modo padrão) · SOMBRA=1 · BLOB_BASE (leitura pública)
+ * Env: WAY2_TOKEN · a credencial de gravar pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job), no modo padrão · SOMBRA=1 ·
+ *      BLOB_BASE (leitura pública)
  */
 const https = require('https');   // so a API da Way2
 const zlib = require('zlib');
@@ -164,9 +165,7 @@ async function main({ api = apiComRetry, le = lePublico, grava, agora = Date.now
 }
 
 async function gravaBlob(nome, texto) {
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE ausente');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados').getBlockBlobClient(nome);
+  const c = require('./lib-conteiner').conteiner('dados').getBlockBlobClient(nome);   // a chave ou o OIDC do job (lib-conteiner)
   /* o mesmo Content-Type do fluxo (o painel do Grafana le o way2_must.json pelo Infinity; nada a provar se nao muda) */
   await c.upload(texto, Buffer.byteLength(texto), { blobHTTPHeaders: { blobContentType: 'application/octet-stream' } });
 }

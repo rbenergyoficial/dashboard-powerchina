@@ -181,9 +181,7 @@ async function way2() {
   const resumo = (l) => l.map((b) => b.l + ' ' + b.v + (b.u ? ' ' + b.u : '') + ' ' + b.c).join(' · ');
   console.log('trafo: ' + resumo(bt)); console.log('t230 : ' + resumo(bt2)); console.log('oleo : ' + resumo(bo)); console.log('ons  : ' + resumo(bn)); console.log('inv  : ' + resumo(bi)); console.log('solar: ' + resumo(bs)); console.log('hist : ' + resumo(bh));
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes'); return; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(process.env.OUT_CONTAINER || 'dados');
+  const cont = require('./lib-conteiner').conteiner(process.env.OUT_CONTAINER || 'dados');   // a chave ou o OIDC do job (lib-conteiner)
   await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=120' } });
   console.log(OUT_BLOB + ' OK · ' + json.length + ' bytes');
 })().catch((e) => { console.error('ERRO: ' + e.message); process.exit(1); });

@@ -44,9 +44,23 @@ const MIGRADOS = {
   'must.yml': { 'gen-must.js': null },                                                         // etapa 4, os diários simples
   'irradiancia-ons.yml': { 'gen-irradiancia-ons.js': null },
   'sager-disp.yml': { 'gen-sager-disp.js': null },
+  'way2-mes.yml': { 'gen-way2-mes.js': null },                                                 // etapa 4, os de 10 e 15 min e de hora em hora
+  'way2-agg.yml': { 'gen-way2-agg.js': null, 'gen-fontes-saude.js': null },
+  'trafo-medidor.yml': { 'gen-trafo-way2.js': null },
+  'vigia.yml': { 'gen-relogio-watchdog.js': null },
 };
-/* a chave em qualquer das formas de lê-la: a cadeia de conexão, a credencial de chave, a variável por ponto, por colchete ou desestruturada */
-const CHAVE_RE = /fromConnectionString|StorageSharedKeyCredential|process\.env(?:\.|\[\s*['"])DADOS_STORAGE|\{[^}]*\bDADOS_STORAGE\b[^}]*\}\s*=\s*process\.env/;
+/* os passos que só LEEM o storage de verdade (o publicado), de cada workflow migrado: pelo OIDC ou pela SAS só de leitura (DADOS_LEITURA).
+   O ensaio sem rede não entra aqui: ele não pode ter credencial nenhuma. */
+const LEITORES = {
+  'trafo-medidor.yml': ['ensaio-trafo-way2.js --produto'],
+  'vigia.yml': ['ensaio-selo-frescor.js'],
+};
+/* a chave em qualquer das formas de lê-la: a CHAMADA da cadeia de conexão (o `fromConnectionString:` de um SDK simulado não conta), a
+   chamada por colchete, a credencial de chave, a variável por ponto, por colchete ou desestruturada. Fica de fora, declarado: a variável lida
+   por um apelido de process.env (`const E = process.env; E.DADOS_STORAGE`) */
+const CHAVE_RE = /\.fromConnectionString\(|\[\s*['"]fromConnectionString['"]\s*\]\s*\(|StorageSharedKeyCredential|process\.env(?:\.|\[\s*['"])DADOS_STORAGE|\{[^}]*\bDADOS_STORAGE\b[^}]*\}\s*=\s*process\.env/;
+/* `node scripts/x.js`, também com opções do node antes (`node --max-old-space-size=4096 scripts/x.js`) */
+const NODE_RE = /node(?:\s+--[\w-]+(?:=\S+)?)*\s+scripts\/([\w.-]+\.js)/g;
 const TMPS = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-conteiner-')); TMPS.push(d); return d; };
 const OIDC_FORA = { AZURE_CLIENT_ID: null, AZURE_TENANT_ID: null, ACTIONS_ID_TOKEN_REQUEST_URL: null, ACTIONS_ID_TOKEN_REQUEST_TOKEN: null };
@@ -93,10 +107,11 @@ try {
   const WF = (w) => fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', w), 'utf8').replace(/\r\n/g, '\n');
   const GEN = (g) => fs.readFileSync(path.join(__dirname, g), 'utf8').replace(/\r\n/g, '\n');
   for (const w of Object.keys(MIGRADOS)) {
-    const prob = fiacao(WF(w), Object.keys(MIGRADOS[w]), GEN);
+    const prob = fiacao(WF(w), Object.keys(MIGRADOS[w]), GEN, LEITORES[w]);
     ok(prob.length === 0, w + ': sem a chave, com o OIDC, e os geradores pela lib-conteiner' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
   }
-  /* fiação plantada: [nome, workflow, troca no texto do workflow (de, para) ou null, arquivos trocados {arq: [de, para]}, o que tem de acusar] */
+  /* fiação plantada: [nome, workflow, trocas no texto do workflow ([de, para], ou uma lista delas) ou null, arquivos trocados {arq: [de, para]},
+     o que tem de acusar] */
   const PLANTADAS = [
     ['a chave de volta no job', 'oleo.yml', ['      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n',
       '      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}\n'], {}, 'ainda cita secrets.DADOS_STORAGE'],
@@ -111,12 +126,26 @@ try {
       'lib-sager-disp.js (alcançado por gen-sager-disp.js) ainda depende da chave'],
     ['um ensaio do workflow lendo a chave', 'sager-disp.yml', null, { 'ensaio-sager-disp.js': ["'use strict';", "'use strict';\nconst { DADOS_STORAGE } = process.env;"] },
       'ensaio-sager-disp.js ainda depende da chave'],
+    ['o gerador chamado com opções do node, pela cadeia de conexão', 'way2-agg.yml', null, { 'gen-way2-agg.js': ["require('./lib-conteiner').conteiner(CONTAINER)",
+      "require('@azure/storage-blob').BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(CONTAINER)"] },
+      'gen-way2-agg.js ainda depende da chave'],
+    ['o passo de um gravador sem o OIDC', 'way2-agg.yml', ['        env:\n          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}\n        run: node scripts/gen-fontes-saude.js',
+      '        run: node scripts/gen-fontes-saude.js'], {}, 'gen-fontes-saude.js sem o OIDC'],
+    ['o leitor sem credencial', 'vigia.yml', ['          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}', '          OUTRA: x'], {}, 'ensaio-selo-frescor.js (leitor) sem credencial'],
+    ['o id-token só no topo, com permissions no job', 'way2-mes.yml', [['permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  id-token: write\n'],
+      ['      id-token: write\n', '']], {}, 'sem id-token: write no permissions que vale'],
+    ['o gravador num segundo passo sem o OIDC', 'vigia.yml', [['        run: node scripts/ensaio-selo-frescor.js\n',
+      '        run: node scripts/ensaio-selo-frescor.js\n      - name: de novo\n        run: node scripts/gen-relogio-watchdog.js\n']], {}, 'gen-relogio-watchdog.js sem o OIDC'],
+    ['uma linha de node que a fiação não lê', 'way2-mes.yml', ['run: node scripts/gen-way2-mes.js', 'run: node -r ./pre.js scripts/gen-way2-mes.js'], {},
+      'linha de node que a fiação não reconhece'],
+    ['a cadeia de conexão chamada por colchete', 'oleo.yml', null, { 'gen-oleo.js': ["require('./lib-conteiner').conteiner(OUT_CONTAINER)",
+      "require('@azure/storage-blob').BlobServiceClient['fromConnectionString'](x).getContainerClient(OUT_CONTAINER)"] }, 'gen-oleo.js ainda depende da chave'],
   ];
   for (const [nome, w, trWf, trArq, esperado] of PLANTADAS) {
-    let wf = WF(w), casou = !trWf || wf.split(trWf[0]).length === 2;
-    if (trWf) wf = wf.split(trWf[0]).join(trWf[1]);
+    let wf = WF(w), casou = true;
+    for (const [de, para] of (!trWf ? [] : typeof trWf[0] === 'string' ? [trWf] : trWf)) { if (wf.split(de).length !== 2) casou = false; wf = wf.split(de).join(para); }
     const texto = (g) => { const s = GEN(g); if (!trArq[g]) return s; if (s.split(trArq[g][0]).length < 2) casou = false; return s.replace(trArq[g][0], trArq[g][1]); };
-    const prob = fiacao(wf, Object.keys(MIGRADOS[w]), texto);
+    const prob = fiacao(wf, Object.keys(MIGRADOS[w]), texto, LEITORES[w]);
     ok(casou && prob.some((x) => x.indexOf(esperado) >= 0), 'fiação plantada "' + nome + '" reprova em "' + esperado + '"'
       + (casou ? '' : ' (TRECHO NÃO CASOU)') + (prob.length ? '' : ' (nada acusado)'));
   }
@@ -155,19 +184,40 @@ try {
 console.log(falhas ? 'REPROVADO: ' + falhas + ' falha(s)' : 'APROVADO');
 process.exit(falhas ? 1 : 0);
 
-/* o que falta para um workflow gravar sem a chave; lista vazia = fiação certa */
-function fiacao(wf, gens, texto) {
+/* o que falta para um workflow gravar sem a chave; lista vazia = fiação certa. `leitores`: os passos que só LEEM o storage de verdade */
+function fiacao(wf, gens, texto, leitores) {
   const p = [];
-  if (/secrets\.DADOS_STORAGE/.test(wf)) p.push('ainda cita secrets.DADOS_STORAGE');
-  if (!/\n\s+id-token: write\n/.test(wf)) p.push('sem id-token: write');
-  if (!/\n\s+contents: read\n/.test(wf)) p.push('sem contents: read (o permissions explícito zera o resto)');
-  if (!/\n\s+AZURE_CLIENT_ID: \$\{\{ vars\.AZURE_CLIENT_ID \}\}\n/.test(wf)) p.push('sem AZURE_CLIENT_ID das variáveis do repo');
-  if (!/\n\s+AZURE_TENANT_ID: \$\{\{ vars\.AZURE_TENANT_ID \}\}\n/.test(wf)) p.push('sem AZURE_TENANT_ID das variáveis do repo');
+  const w = wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n') + '\n';   // comentário de YAML não conta
+  if (/secrets\.DADOS_STORAGE/.test(w)) p.push('ainda cita secrets.DADOS_STORAGE');
+  const iJobs = w.indexOf('\njobs:'), iSteps = w.indexOf('\n    steps:');
+  const topo = iJobs > 0 ? w.slice(0, iJobs) + '\n' : '', cabJob = iSteps > 0 ? w.slice(Math.max(0, iJobs), iSteps) + '\n' : w;
+  // o `permissions` do JOB sobrepõe o do topo inteiro: vale o do job, se houver; senão, o do topo
+  const perm = /\n    permissions:\n/.test(cabJob) ? cabJob : topo;
+  if (!/\n\s+id-token: write\n/.test(perm)) p.push('sem id-token: write no permissions que vale (o do job, se houver; senão o do topo)');
+  if (!/\n\s+contents: read\n/.test(perm)) p.push('sem contents: read no permissions que vale (o permissions explícito zera o resto)');
+  // o OIDC: as duas variáveis do repo no env do job (antes de `steps:`) ou no env de CADA passo que roda o gravador
+  const AZ = (s) => /\n\s+AZURE_CLIENT_ID: \$\{\{ vars\.AZURE_CLIENT_ID \}\}\n/.test(s) && /\n\s+AZURE_TENANT_ID: \$\{\{ vars\.AZURE_TENANT_ID \}\}\n/.test(s);
+  const SAS = (s) => /\n\s+DADOS_SAS: \$\{\{ secrets\.DADOS_LEITURA \}\}/.test(s);   // a SAS só de leitura
+  const passos = (iSteps > 0 ? w.slice(iSteps) : '').split(/\n      - /).map((s) => s + '\n');
+  for (const g of gens) {
+    const ps = passos.filter((s) => s.indexOf('scripts/' + g) >= 0);
+    if (!ps.length) p.push(g + ' não roda em nenhum passo do workflow');
+    ps.forEach((s, i) => { if (!AZ(cabJob) && !AZ(s)) p.push(g + ' sem o OIDC (AZURE_CLIENT_ID e AZURE_TENANT_ID das variáveis do repo) no job nem no passo' + (ps.length > 1 ? ' (o ' + (i + 1) + 'º)' : '')); });
+  }
+  // os leitores: o storage de verdade, pelo OIDC ou pela SAS de leitura (sem nenhum, a lib-le-dados cai no público, e o `dados` é privado)
+  for (const l of leitores || []) {
+    const ps = passos.filter((s) => s.indexOf('scripts/' + l) >= 0);
+    if (!ps.length) p.push(l + ' (leitor) não roda em nenhum passo do workflow');
+    ps.forEach((s) => { if (!AZ(cabJob) && !AZ(s) && !SAS(s)) p.push(l + ' (leitor) sem credencial de leitura: nem o OIDC, nem a DADOS_SAS de leitura'); });
+  }
   // o primeiro passo falha fora do main (a credencial federada só vale para o main), pela variável de ambiente, nunca interpolada
-  if (!/\n\s+if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then\n[^\n]*\n\s+exit 1\n/.test(wf)) p.push('sem o passo que falha fora do main');
+  if (!/\n\s+if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then\n[^\n]*\n\s+exit 1\n/.test(w)) p.push('sem o passo que falha fora do main');
+  // toda linha que chama `node ... scripts/` tem de ser reconhecida: o que a fiação não lê, ela não julga
+  const UM = new RegExp(NODE_RE.source);
+  for (const l of w.split('\n')) if (/\bnode\b.*scripts\//.test(l) && !UM.test(l)) p.push('linha de node que a fiação não reconhece: ' + l.trim().slice(0, 80));
   // todo script que o workflow roda, e tudo o que ele carrega de scripts/ (fechamento dos require locais, em qualquer profundidade),
   // sem a chave: sem ela no job, quem a exigir quebra. A lib-conteiner é a porta e fica de fora.
-  for (const m of new Set([...wf.matchAll(/node scripts\/([\w.-]+\.js)/g)].map((x) => x[1]))) {
+  for (const m of new Set([...w.matchAll(NODE_RE)].map((x) => x[1]))) {
     const vistos = new Set(), fila = [m];
     while (fila.length) {
       const f = fila.shift();
@@ -178,7 +228,11 @@ function fiacao(wf, gens, texto) {
       for (const x of t.matchAll(/require\(\s*['"]\.\/([\w.-]+?)(?:\.js)?['"]\s*\)/g)) fila.push(x[1] + '.js');
     }
   }
-  for (const g of gens) if (!/require\('\.\/lib-conteiner'\)\.conteiner\(/.test(texto(g))) p.push(g + ' não abre pela lib-conteiner');
+  // gravador: carrega a lib-conteiner e abre por ela (direto, ou guardada numa variável: `const LC = require(...)`, `LC.conteiner(`)
+  for (const g of gens) {
+    const s = texto(g);
+    if (!/require\(\s*['"]\.\/lib-conteiner(?:\.js)?['"]\s*\)/.test(s) || !/\.conteiner\(/.test(s)) p.push(g + ' não abre pela lib-conteiner');
+  }
   return p;
 }
 

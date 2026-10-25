@@ -12,15 +12,31 @@ on:
     - cron: '8 * * * *'  # de hora em hora, no minuto 8: depois da rodada das :05 do way2-recent (maior duracao medida
                          # 1,7 min), que grava o hist/way2_<hoje> que este le, e antes da das :10
 concurrency:
-  group: way2-agg
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: way2-agg-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). Os passos que leem ou gravam o storage de verdade levam o OIDC do
+    #    proprio job: AZURE_CLIENT_ID e AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy).
+    #    Os ensaios sem rede ficam sem elas de proposito: ensaio que apaga a credencial no filho para simular "sem credencial" nao
+    #    pode herdar o OIDC e trocar um token de verdade. `permissions` explicito zera o resto: `contents: read` e o checkout.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 30
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e sonda inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -40,7 +56,8 @@ jobs:
           restore-keys: hist-publico-way2-agg-
       - name: Gerar agregados
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
           FORCAR: ${{ github.event.inputs.forcar }}
           RESOLUCOES: ${{ github.event.inputs.resolucoes }}
@@ -58,7 +75,8 @@ jobs:
       - name: Selos de frescor por fonte
         if: ${{ always() && steps.ensaio_selo.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: node scripts/gen-fontes-saude.js
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.

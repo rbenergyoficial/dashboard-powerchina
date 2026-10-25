@@ -152,7 +152,7 @@ console.log('6. o gerador inteiro: precedencia do banco sobre a planilha');
   fs.writeFileSync(path.join(dbd, '2026-10', 'MRT_2026-10-14.zip'), zipDia('2026-10-14'));
   fs.writeFileSync(path.join(dbd, '2026-10', 'MRT_2026-10-15.zip'), zipDia('2026-10-15', { vazio: buraco('M5', true) }));
   execFileSync(process.execPath, [path.join(__dirname, 'gen-scada.js')], { stdio: 'pipe',
-    env: { ...process.env, LOCAL_DIR: vazio, LOCAL_DB_DIR: dbd, LOCAL_OUT: path.join(out, 'scada_comparativo.json'), DADOS_STORAGE: '', DADOS_SAS: '' } });
+    env: { ...process.env, LOCAL_DIR: vazio, LOCAL_DB_DIR: dbd, LOCAL_OUT: path.join(out, 'scada_comparativo.json'), DADOS_STORAGE: '', DADOS_SAS: '', AZURE_CLIENT_ID: '', AZURE_TENANT_ID: '' } });
   const B = JSON.parse(fs.readFileSync(path.join(out, 'scada_comparativo.json'), 'utf8'));
   const C5 = JSON.parse(fs.readFileSync(path.join(out, 'scada_5min.json'), 'utf8'));
   const dia14 = Array.from({ length: 288 }, (_, i) => somaPk('M1', i) * 5 / 60).reduce((a, b) => a + b, 0);
@@ -172,7 +172,7 @@ console.log('6. o gerador inteiro: precedencia do banco sobre a planilha');
   // plantio: o gerador sem o banco (SEM_DB=1) deixa a planilha, e o ensaio tem de ver isso
   fs.writeFileSync(path.join(out, 'scada_comparativo.json'), JSON.stringify(base));
   execFileSync(process.execPath, [path.join(__dirname, 'gen-scada.js')], { stdio: 'pipe',
-    env: { ...process.env, LOCAL_DIR: vazio, LOCAL_DB_DIR: dbd, SEM_DB: '1', LOCAL_OUT: path.join(out, 'scada_comparativo.json'), DADOS_STORAGE: '', DADOS_SAS: '' } });
+    env: { ...process.env, LOCAL_DIR: vazio, LOCAL_DB_DIR: dbd, SEM_DB: '1', LOCAL_OUT: path.join(out, 'scada_comparativo.json'), DADOS_STORAGE: '', DADOS_SAS: '', AZURE_CLIENT_ID: '', AZURE_TENANT_ID: '' } });
   const S = JSON.parse(fs.readFileSync(path.join(out, 'scada_comparativo.json'), 'utf8'));
   ok(S.diario.M1['2026-10-14'] === 999, 'plantio: sem o banco, 14/10 fica com a planilha (o caso acima reprovaria)');
   fs.rmSync(tmp, { recursive: true, force: true }); }

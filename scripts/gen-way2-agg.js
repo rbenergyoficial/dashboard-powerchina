@@ -23,10 +23,9 @@
  *   vem estampado como next-day T00:00:00 e cai naturalmente no bucket 00:00 do dia seguinte; por
  *   isso lemos sempre 1 dia extra na borda esquerda (p/ o bucket 00:00 do dia mais antigo somar certo).
  *
- * Env: DADOS_STORAGE (obrigatório, RW no container dados). FORCAR (1|true|sim = full rebuild).
+ * Env: a credencial de gravar no container dados, pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job). FORCAR (1|true|sim = full rebuild).
  *   REFRESH_DIAS (default 3, mínimo 2). RESOLUCOES (csv de nomes de blob p/ limitar; default os 3).
  */
-const { BlobServiceClient } = require('@azure/storage-blob');
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 
 const CONTAINER = 'dados';
@@ -138,9 +137,7 @@ function maxDiaBlob(existente) {
 }
 
 async function main() {
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job; sem nenhum dos dois, estoura nomeando o que falta
 
   const alvo = (process.env.RESOLUCOES || '').trim();
   let resolucoes = RESOLUCOES;

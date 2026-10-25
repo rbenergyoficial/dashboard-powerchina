@@ -186,7 +186,9 @@ async function suite(lib, gen) {
   const i0 = gsrc.indexOf(assinatura), i1 = gsrc.indexOf('\n}\n', i0);
   assert.ok(i0 > 0 && i1 > i0, '3: o gravador foi achado em ' + path.basename(gen));
   const corpo = gsrc.slice(i0, i1 + 2) + '\nreturn ' + (ehTrafo ? 'grava' : 'escreve') + ';';
-  const falsoRequire = (m) => (m === '@azure/storage-blob' ? { BlobServiceClient: { fromConnectionString: () => ({ getContainerClient: () => cont }) } } : m === './lib-le-dados.js' ? LD : require(m));
+  // o contêiner simulado entra pelas duas portas: a do SDK (o gen-sungrow) e a da lib-conteiner (o gen-trafo-way2, sem a chave desde a etapa 4)
+  const falsoRequire = (m) => (m === '@azure/storage-blob' ? { BlobServiceClient: { fromConnectionString: () => ({ getContainerClient: () => cont }) } }
+    : m === './lib-conteiner' ? { conteiner: () => cont } : m === './lib-le-dados.js' ? LD : require(m));
   const grava = ehTrafo
     ? new Function('zlib', 'fs', 'path', 'require', 'OUT_CONTAINER', 'process', corpo)(zlib, fs, path, falsoRequire, 'dados', { env: { DADOS_STORAGE: 'conn' } })
     : new Function('zlib', 'fs', 'path', 'svc', 'OUT', 'LD', 'process', corpo)(zlib, fs, path, () => ({ getContainerClient: () => cont }), 'dados', LD, { env: {} });

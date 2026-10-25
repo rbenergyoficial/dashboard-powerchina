@@ -281,12 +281,17 @@ function montaVigia(gerSrc) {
   const d = path.join(TMP, 'v' + (nVig++)); fs.mkdirSync(path.join(d, 'scripts'), { recursive: true }); fs.mkdirSync(path.join(d, 'relogio'), { recursive: true });
   fs.writeFileSync(path.join(d, 'scripts', 'gen-relogio-watchdog.js'), gerSrc);
   fs.writeFileSync(path.join(d, 'scripts', 'lib-vigia.js'), LIB_SRC);
+  // o gerador abre o storage pela lib-conteiner (require relativo, plano OIDC etapa 4): vai junto, e o SDK que ela pede e o forjado do stub
+  fs.copyFileSync(path.join(__dirname, 'lib-conteiner.js'), path.join(d, 'scripts', 'lib-conteiner.js'));
   fs.copyFileSync(path.join(__dirname, '..', 'relogio', 'agenda.json'), path.join(d, 'relogio', 'agenda.json'));
   return path.join(d, 'scripts', 'gen-relogio-watchdog.js');
 }
 function seco(gerPath, cen) {
   const env = Object.assign({}, process.env, { SECO_CENARIO: JSON.stringify(cen), GH_TOKEN: 'forjado', DADOS_STORAGE: 'forjado' });
-  ['GITHUB_TOKEN', 'PA_ALERT_WEBHOOK', 'AZ_MAIL_TENANT_ID', 'AZ_MAIL_CLIENT_ID', 'MAIL_DE', 'MAIL_PARA', 'ACTIONS_ID_TOKEN_REQUEST_URL'].forEach((k) => delete env[k]);
+  ['GITHUB_TOKEN', 'PA_ALERT_WEBHOOK', 'AZ_MAIL_TENANT_ID', 'AZ_MAIL_CLIENT_ID', 'MAIL_DE', 'MAIL_PARA', 'ACTIONS_ID_TOKEN_REQUEST_URL',
+    'AZURE_CLIENT_ID', 'AZURE_TENANT_ID'].forEach((k) => delete env[k]);
+  // sem credencial nenhuma (o passo perdeu o OIDC): no Actions ('actions') ou na maquina ('local'); o resto dos cenarios, com a chave forjada
+  if (cen.semCredencial) { delete env.DADOS_STORAGE; if (cen.semCredencial === 'actions') env.GITHUB_ACTIONS = 'true'; else delete env.GITHUB_ACTIONS; }
   const r = cp.spawnSync(process.execPath, ['-r', path.join(TMP, 'stub.js'), gerPath], { env, encoding: 'utf8', timeout: 60000 });
   const m = /\nSECO (.*)\n/.exec(r.stdout || '');
   return m ? JSON.parse(m[1]) : { code: r.status, alertas: null, estado: null, erro: (r.stderr || '').slice(-300) };
@@ -336,6 +341,11 @@ const CENARIOS = [
     (o) => o.code === 0 && sem(o) && lin(o, EX).ok === 1 && lin(o, EX).idade_min === 10],
   ['conteiner', 'o storage inteiro fora (403): o aviso sai mesmo assim', { padrao: OK, estado: {}, storageErro: 'HTTP 403 AuthorizationFailure', wf: { [EX]: QUEBRADO } },
     (o) => o.code === 0 && CEGO(o) && o.saude === null],
+  ['sem-credencial', 'no Actions sem credencial do storage (o passo perdeu o OIDC): o aviso sai, nada se le nem se grava',
+    { padrao: OK, estado: {}, semCredencial: 'actions', wf: {} },
+    (o) => o.code === 0 && aviso(o) && !o.gravouEstado && o.saude === null],
+  ['sem-credencial-local', 'na maquina sem credencial: roda sem estado e sem aviso, como sempre', { padrao: OK, estado: {}, semCredencial: 'local', wf: {} },
+    (o) => o.code === 0 && sem(o) && !o.gravouEstado && o.saude === null],
   ['grava-falha', 'o estado se le e nao se grava: os alarmes da rodada saem e o aviso tambem', { padrao: OK, estado: {}, gravaEstadoErro: 'HTTP 503',
     wf: { [EX]: QUEBRADO } },
     (o) => o.code === 0 && reais(o).length === 2 && reais(o).some((a) => a.chave === 'resultado:' + EX && !a.fecha)
@@ -394,6 +404,7 @@ const CONTRA = [
   ['a lista das execucoes jogada fora', troca('lista: r.workflow_runs || []', 'lista: []'), ['21:30', 'voltou']],
   ['o estado ilegivel tratado como vazio', troca('catch (e) { estadoLegivel = false; estado = {};', 'catch (e) { estado = {};'), ['ilegivel']],
   ['o estado sem validacao', troca('if (!VIG.estadoValido(lido)) throw', 'if (false) throw'), ['estado-null', 'estado-lista']],
+  ['sem credencial calado no Actions', troca("  } else if (process.env.GITHUB_ACTIONS === 'true') {", "  } else if (false) {"), ['sem-credencial']],
   ['o estado nulo gravado por cima', troca('if (cont && R.estado) {', 'if (cont) {'), ['ilegivel', 'estado-null']],
   ['o aviso de estado desligado', troca("if (R.avisoEstado === 'abre' || falhasStorage.length) {", 'if (false) {'), ['ilegivel', 'conteiner', 'grava-falha']],
   ['o aviso de estado sem dedup', troca('soSeNova: true,', 'soSeNova: false,'), ['ilegivel']],

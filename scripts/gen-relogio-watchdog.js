@@ -33,7 +33,8 @@
 // as ~6 h entre as 22:13 e as 04:13 do dia seguinte. O alerta e o maior intervalo vezes a
 // tolerancia, mais uma margem fixa para a duracao do proprio job.
 //
-// Env: GH_TOKEN ou GITHUB_TOKEN (actions: read) · GH_REPO · DADOS_STORAGE (estado e saude)
+// Env: GH_TOKEN ou GITHUB_TOKEN (actions: read) · GH_REPO · a credencial do storage pela lib-conteiner (DADOS_STORAGE, ou o OIDC
+//      do job), para o estado e a saude
 //      PA_ALERT_WEBHOOK (opcional) · TOLERANCIA (padrao 2.5) · MARGEM_MIN (padrao 20)
 'use strict';
 const https = require('https');
@@ -126,12 +127,15 @@ function gh(caminho) {
   //    e pedido (PROMOVER vigia-desmente-2 — na primeira versao o vigia parava aqui e ficava mudo se o blob nao se lesse).
   // 🔴 E O STORAGE INTEIRO PODE FALHAR (credencial trocada, 403): toda E/S do blob fica em try, e cada falha vai para o
   //    mesmo aviso. O dedup dele e a issue aberta (`soSeNova`), que nao depende do storage.
-  const conn = process.env.DADOS_STORAGE;
+  // A CREDENCIAL: a chave ou o OIDC do job, pela lib-conteiner. Sem nenhuma, fora do Actions (na maquina), roda sem estado, como
+  //    sempre. NO ACTIONS, sem credencial e defeito de configuracao (o passo perdeu AZURE_CLIENT_ID/AZURE_TENANT_ID, ou o repo as
+  //    variaveis): o vigia nao le o estado, nao julga o frescor nem grava a saude, e isso nao pode passar verde e calado. Vai para o
+  //    mesmo aviso das falhas do storage.
+  const LC = require('./lib-conteiner');
   let cont = null, estado = {}, estadoLegivel = true;
   const falhasStorage = [];
-  if (conn) {
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  if (LC.credencial()) {
+    cont = LC.conteiner(CONTAINER);
     try {
       const bc = cont.getBlockBlobClient(ESTADO);
       if (await bc.exists()) {
@@ -140,6 +144,8 @@ function gh(caminho) {
         estado = lido;
       }
     } catch (e) { estadoLegivel = false; estado = {}; falhasStorage.push('ler ' + ESTADO + ': ' + e.message); console.error('ESTADO ILEGIVEL: ' + e.message); }
+  } else if (process.env.GITHUB_ACTIONS === 'true') {
+    falhasStorage.push('sem credencial do storage no passo (nem DADOS_STORAGE, nem o OIDC do job: AZURE_CLIENT_ID, AZURE_TENANT_ID e id-token)');
   }
 
   // ── a leitura: as respostas do GitHub vao CRUAS para a lib ──────────────────────────────────
@@ -339,7 +345,7 @@ function gh(caminho) {
         + '<br><br>Enquanto durar, o vigia pode nao saber quais alarmes estao abertos: lido nada, nenhum alarme de workflow '
         + 'abre nem fecha e a saude sai marcada como sem estado; nao gravado, os avisos da rodada podem se repetir. Se o '
         + 'arquivo ' + ESTADO + ' estiver corrompido, apaga-lo faz o vigia recomecar do zero (os alarmes ainda abertos voltam '
-        + 'a ser avisados); se for a credencial do storage, o segredo DADOS_STORAGE do repositorio.',
+        + 'a ser avisados); se for a credencial do storage, o OIDC do job (as variaveis AZURE_CLIENT_ID e AZURE_TENANT_ID do repositorio e o papel do aplicativo no conteiner).',
     });
     // chegou = a issue foi aberta, comentada ou JA ESTA aberta (numero de verdade), ou o webhook respondeu 2xx, ou o e-mail saiu
     const chegou = !!r && (/^(abriu|comentou) #\d|^ja aberta #[1-9]/.test(r.issue || '') || /^HTTP 2/.test(r.webhook || '')

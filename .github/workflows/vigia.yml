@@ -28,15 +28,27 @@ permissions:
   # e o de e-mail troca a identidade do proprio job por um token do Graph, sem segredo
   id-token: write
 concurrency:   # grava o estado dos alarmes: rodada cancelada no meio reenviaria o aviso na seguinte
-  group: vigia
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: vigia-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   vigia:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). O `id-token: write` ja esta no `permissions` do topo (o canal
+    #    de e-mail). Os passos que leem ou gravam o storage de verdade levam AZURE_CLIENT_ID e AZURE_TENANT_ID no env DO PASSO;
+    #    o ensaio sem rede fica sem elas de proposito (ensaio que simula "sem credencial" nao pode herdar o OIDC).
     timeout-minutes: 8
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e sonda inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
@@ -63,7 +75,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}
@@ -76,4 +89,6 @@ jobs:
       #     vigia de cadencia vermelho e exatamente quando o selo mais importa.
       - name: Ensaio do selo de frescor
         if: ${{ !cancelled() }}
+        env:   # le os blobs publicados do `dados`, que e privado
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-selo-frescor.js

@@ -106,6 +106,7 @@ function roda(registro, rotulo) {
   delete env.SECO;
   delete env.DADOS_STORAGE;   // sem credencial no ambiente: nem por engano o ensaio publica
   delete env.DADOS_SAS;       // nem a de leitura da maquina: a rodada local fica igual a do GitHub (ppc-fase2)
+  delete env.AZURE_CLIENT_ID; delete env.AZURE_TENANT_ID;   // nem o OIDC do job, num workflow que grava sem a chave (lib-conteiner)
   let ok = true, saida;
   try { saida = execFileSync(process.execPath, [AUDITOR], { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }); }
   catch (e) { ok = false; saida = String(e.stdout || '') + String(e.stderr || ''); }
