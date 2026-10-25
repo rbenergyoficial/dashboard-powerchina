@@ -12,15 +12,31 @@ on:
         required: false
         default: ''
 concurrency:
-  group: gen-ppc
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-ppc-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os ensaios que so leem o publicado
+    #    levam a SAS de leitura; os sem rede ficam sem credencial nenhuma, de proposito. `permissions` explicito zera o resto:
+    #    `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 10
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e carga inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -48,7 +64,8 @@ jobs:
       - name: Gerar ppc_restricao.json
         id: gen
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-ppc
           RAW_CONTAINER: ppc-raw
           OUT_CONTAINER: dados
@@ -63,6 +80,7 @@ jobs:
         if: ${{ !cancelled() && steps.gen.outcome == 'success' }}
         env:   # no modo ensaio, o arquivo que o gerador montou em vez do publicado
           LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc' || '' }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-ppc-duracao.js --produto
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: sem planilha
       #    nova, a execucao nao regrava o cache.

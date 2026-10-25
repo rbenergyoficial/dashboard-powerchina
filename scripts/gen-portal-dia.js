@@ -29,7 +29,7 @@
  *   MODO=precisa   escreve precisa=true|false em $GITHUB_OUTPUT: ontem ja tem os arquivos com os 24 medidores ate 24:00?
  *   MODO=fecha     ontem: fecha o furo (LOCAL_ELET) e grava os dois arquivos
  *   MODO=carga     DE..ATE (AAAA-MM-DD): grava os dois arquivos de cada dia, do historico; FORCAR=1 regrava os existentes
- * Env: DADOS_STORAGE (obrigatorio fora de LOCAL_DIR), LOCAL_DIR (le e grava numa pasta, para ensaio).
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job; obrigatoria fora de LOCAL_DIR), LOCAL_DIR (le e grava numa pasta, para ensaio).
  */
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
@@ -49,9 +49,7 @@ function armazem() {
       grava: async (n, buf) => fs.writeFileSync(cam(n), buf),
       lista: async (pre) => fs.readdirSync(raiz).filter(f => f.startsWith(pre.replace(/\//g, '__'))).map(f => f.replace(/__/g, '/')) };
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados');
+  const c = require('./lib-conteiner').conteiner('dados');   // a chave ou o OIDC do job (lib-conteiner)
   return {
     le: async (n) => { const b = c.getBlockBlobClient(n); if (!(await b.exists())) return null; return parse(await b.downloadToBuffer()); },
     grava: async (n, buf, gz) => c.getBlockBlobClient(n).upload(buf, buf.length, { blobHTTPHeaders: Object.assign(

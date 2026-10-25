@@ -48,12 +48,23 @@ const MIGRADOS = {
   'way2-agg.yml': { 'gen-way2-agg.js': null, 'gen-fontes-saude.js': null },
   'trafo-medidor.yml': { 'gen-trafo-way2.js': null },
   'vigia.yml': { 'gen-relogio-watchdog.js': null },
+  'ons-consolidado.yml': { 'gen-ons-consolidado.js': null, 'gen-corte-gemeo.js': null, 'audita-ppc-ons.js': null },   // etapa 4, os diários com mais scripts
+  'portal-dia.yml': { 'gen-portal-dia.js': null },
+  'inversores.yml': { 'gen-inversores.js': null },
+  'estacao-logger.yml': { 'gen-estacao-logger.js': null, 'gen-agente-dia.js': null },
+  'trafo.yml': { 'gen-trafo.js': null },
+  'render-paineis.yml': { 'gen-render-paineis.js': null },
+  'ppc.yml': { 'gen-ppc.js': null },
+  'comparativo.yml': { 'gen-comparativo.js': null },
 };
 /* os passos que só LEEM o storage de verdade (o publicado), de cada workflow migrado: pelo OIDC ou pela SAS só de leitura (DADOS_LEITURA).
    O ensaio sem rede não entra aqui: ele não pode ter credencial nenhuma. */
 const LEITORES = {
   'trafo-medidor.yml': ['ensaio-trafo-way2.js --produto'],
   'vigia.yml': ['ensaio-selo-frescor.js'],
+  'ons-consolidado.yml': ['ensaio-portao-gemeo.js --produto', 'ensaio-gemeo-mwh.js', 'ensaio-ppc.js'],
+  'estacao-logger.yml': ['ensaio-agente-dia.js'],
+  'ppc.yml': ['ensaio-ppc-duracao.js --produto'],
 };
 /* a chave em qualquer das formas de lê-la: a CHAMADA da cadeia de conexão (o `fromConnectionString:` de um SDK simulado não conta), a
    chamada por colchete, a credencial de chave, a variável por ponto, por colchete ou desestruturada. Fica de fora, declarado: a variável lida
@@ -138,6 +149,14 @@ try {
       '        run: node scripts/ensaio-selo-frescor.js\n      - name: de novo\n        run: node scripts/gen-relogio-watchdog.js\n']], {}, 'gen-relogio-watchdog.js sem o OIDC'],
     ['uma linha de node que a fiação não lê', 'way2-mes.yml', ['run: node scripts/gen-way2-mes.js', 'run: node -r ./pre.js scripts/gen-way2-mes.js'], {},
       'linha de node que a fiação não reconhece'],
+    ['o leitor sem credencial, com um passo vizinho do mesmo script sem rede', 'estacao-logger.yml', ['          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}', '          OUTRA: x'], {},
+      'ensaio-agente-dia.js (leitor) sem credencial'],
+    ['o OIDC no env do job, com um ensaio sem rede no mesmo job', 'way2-mes.yml', ['      id-token: write\n',
+      '      id-token: write\n    env:\n      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}\n'], {},
+      'o OIDC no env do job, com script que não grava (ensaio-way2-mes.js)'],
+    ['um ensaio sem rede com credencial', 'estacao-logger.yml', ['        run: node scripts/ensaio-estacao-logger.js\n',
+      '        env:\n          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n        run: node scripts/ensaio-estacao-logger.js\n'], {},
+      'ensaio-estacao-logger.js: passo sem rede com credencial'],
     ['a cadeia de conexão chamada por colchete', 'oleo.yml', null, { 'gen-oleo.js': ["require('./lib-conteiner').conteiner(OUT_CONTAINER)",
       "require('@azure/storage-blob').BlobServiceClient['fromConnectionString'](x).getContainerClient(OUT_CONTAINER)"] }, 'gen-oleo.js ainda depende da chave'],
   ];
@@ -206,9 +225,24 @@ function fiacao(wf, gens, texto, leitores) {
   }
   // os leitores: o storage de verdade, pelo OIDC ou pela SAS de leitura (sem nenhum, a lib-le-dados cai no público, e o `dados` é privado)
   for (const l of leitores || []) {
-    const ps = passos.filter((s) => s.indexOf('scripts/' + l) >= 0);
+    // a linha inteira: `ensaio-agente-dia.js` (o produto, que lê) não é `ensaio-agente-dia.js --lib` (sem rede)
+    const linha = new RegExp('scripts/' + l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[ \\t]*(\\n|#)');
+    const ps = passos.filter((s) => linha.test(s));
     if (!ps.length) p.push(l + ' (leitor) não roda em nenhum passo do workflow');
     ps.forEach((s) => { if (!AZ(cabJob) && !AZ(s) && !SAS(s)) p.push(l + ' (leitor) sem credencial de leitura: nem o OIDC, nem a DADOS_SAS de leitura'); });
+  }
+  // a credencial fica só onde precisa: o OIDC no env do JOB só quando todo script do workflow é gravador (senão o ensaio sem rede herda
+  // uma credencial real de gravação, e o que apaga a chave no filho para simular "sem credencial" troca um token de verdade); e passo que
+  // não roda gravador nem leitor declarado não leva credencial nenhuma
+  const ehLeitor = (s) => (leitores || []).some((l) => new RegExp('scripts/' + l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[ \\t]*(\\n|#)').test(s));
+  const scriptsDe = (s) => [...s.matchAll(NODE_RE)].map((x) => x[1]);
+  if (AZ(cabJob)) {
+    const outros = [...new Set(scriptsDe(w))].filter((m) => gens.indexOf(m) < 0);
+    if (outros.length) p.push('o OIDC no env do job, com script que não grava (' + outros.join(', ') + '): as variáveis vão no passo do gravador');
+  }
+  for (const s of passos) {
+    const sc = scriptsDe(s);
+    if (sc.length && !sc.some((m) => gens.indexOf(m) >= 0) && !ehLeitor(s) && (AZ(s) || SAS(s))) p.push(sc.join(', ') + ': passo sem rede com credencial');
   }
   // o primeiro passo falha fora do main (a credencial federada só vale para o main), pela variável de ambiente, nunca interpolada
   if (!/\n\s+if \[ "\$GITHUB_REF" != "refs\/heads\/main" \]; then\n[^\n]*\n\s+exit 1\n/.test(w)) p.push('sem o passo que falha fora do main');

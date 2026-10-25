@@ -19,7 +19,7 @@
  * O PORTAO. Toda rodada revalida o modelo contra os meses em que a apuracao do ONS presta e ABORTA
  * se o erro passar do limite. Modelo que nao se mede vira numero colado com passos extras.
  *
- * Env: DADOS_STORAGE (RW no container dados) · LOCAL_OUT p/ teste · OUT_BLOB · SEM_PORTAO=1 para
+ * Env: a credencial de gravar no container dados, pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · LOCAL_OUT p/ teste · OUT_BLOB · SEM_PORTAO=1 para
  * inspecionar uma rodada reprovada sem gravar.
  */
 const rot = require('./lib-rotulos.js');
@@ -85,10 +85,8 @@ async function grava(obj) {
   rot.localizaTudo(obj, ['lbl']);
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);
   await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json),
     { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=900' } });
   return json.length;

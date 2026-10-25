@@ -119,7 +119,7 @@
  *   ⚠️ A GUARDA do banco e de ESCALA (tensao e corrente contra o export nos instantes comuns), nao de identidade: a carga se
  *   divide quase meio a meio e nenhuma das duas grandezas separa o 04T1 do 04T2. A identidade e documental (o nome da tabela).
  *
- * Env: DADOS_STORAGE · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DB_CONTAINER=backup-dados-scada
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=scada-raw · OUT_CONTAINER=dados · DB_CONTAINER=backup-dados-scada
  *      LOCAL_DIR / LOCAL_OUT_DIR / LOCAL_DB_DIR (a pasta `saida` com AAAA-MM/MRT_*.zip) para ensaio sem segredo; SEM_DB=1 sem o banco.
  */
 const zlib = require('zlib');
@@ -215,9 +215,7 @@ async function listaArquivos() {
       .map((n) => ({ nome: n, ler: async () => fs.readFileSync(path.join(process.env.LOCAL_DIR, n)) }));
     return csvs;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+  const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const out = []; let total = 0;
   out.ied = [];
   CACHE_RAW = require('./lib-cache-blob').abre(RAW_CONTAINER);
@@ -316,8 +314,7 @@ async function listaZipsDb() {
     return [...DB.escolhe(nomes)].filter(([d]) => d < hoje)
       .map(([dia, nome]) => ({ dia, nome, ler: async () => fs.readFileSync(path.join(raiz, nome.slice(DB.PREFIXO.length))) }));
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DB_CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(DB_CONTAINER);
   const itens = new Map();
   for await (const b of cont.listBlobsFlat({ prefix: DB.PREFIXO })) itens.set(b.name, b);
   const esc = [...DB.escolhe([...itens.keys()])].filter(([d]) => d < hoje);
@@ -449,9 +446,7 @@ async function grava(nome, obj) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, nome), gz);
     return gz.length;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await c.createIfNotExists();
+  const c = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

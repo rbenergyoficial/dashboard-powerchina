@@ -25,7 +25,7 @@
  *               subestimado nele (pedido do humano, 16/10/2026: "pode seguir com o corte desde set/25").
  * A placa (inversores por usina) vem do inversores.json; a potência de cada usina é a outorga (a mesma do lib-sungrow-disp).
  *
- *   node scripts/gen-agente-dia.js            grava o blob (DADOS_STORAGE)
+ *   node scripts/gen-agente-dia.js            grava o blob (a credencial pela lib-conteiner: a chave ou o OIDC do job)
  *   LOCAL_OUT_DIR=<pasta> node ...            grava em arquivo
  */
 'use strict';
@@ -244,8 +244,7 @@ function guarda(R) {
 async function grava(R) {
   const corpo = Buffer.from(JSON.stringify(R));
   if (LOCAL_OUT_DIR) { require('fs').writeFileSync(require('path').join(LOCAL_OUT_DIR, OUT_BLOB), corpo); return; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados');
+  const c = require('./lib-conteiner').conteiner('dados');   // a chave ou o OIDC do job (lib-conteiner)
   await c.getBlockBlobClient(OUT_BLOB).upload(corpo, corpo.length, { blobHTTPHeaders: { blobContentType: 'application/json; charset=utf-8', blobCacheControl: 'public, max-age=300' } });
 }
 

@@ -25,7 +25,7 @@
  *    Comparativo. Guarda: a irradiancia no plano dele e a do `estacao_logger_30min.json` (duas leituras do mesmo arquivo) sao a
  *    mesma meia hora a meia hora; divergiu, nada e gravado.
  *
- * Env: DADOS_STORAGE · RAW=backup-dados-scada · PREFIXO=Estacao_Meteorologica_Logger/ · OUT=dados
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW=backup-dados-scada · PREFIXO=Estacao_Meteorologica_Logger/ · OUT=dados
  *      LOCAL_DIR=<pasta> le os arquivos de uma pasta local em vez do container · LOCAL_OUT_DIR=<pasta> grava ali
  *      CACHE_BLOB_DIR (lib-cache-blob): so o arquivo novo vem pela rede
  */
@@ -43,9 +43,8 @@ const OUT = process.env.OUT || 'dados';
 const NOME = 'estacao_logger_30min.json';
 const TETO = 1800;
 
-let _svc = null;
-const svc = () => { if (!_svc) { const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido'); _svc = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE); } return _svc; };
+// a chave ou o OIDC do job (lib-conteiner): o arquivo do datalogger no backup-dados-scada e a saida em dados
+const conteiner = (nome) => require('./lib-conteiner').conteiner(nome);
 
 async function arquivos() {
   const out = [];
@@ -55,7 +54,7 @@ async function arquivos() {
     return { lista: out, fim: () => {} };
   }
   const cache = require('./lib-cache-blob').abre(RAW);
-  const c = svc().getContainerClient(RAW);
+  const c = conteiner(RAW);
   for await (const b of c.listBlobsFlat({ prefix: PREFIXO })) out.push({ nome: b.name, ler: () => cache.baixa(c, b) });
   return { lista: out, fim: () => { cache.poda(); cache.resumo(); } };
 }
@@ -63,7 +62,7 @@ async function arquivos() {
 async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const c = svc().getContainerClient(OUT);
+  const c = conteiner(OUT);
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

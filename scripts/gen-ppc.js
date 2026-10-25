@@ -76,9 +76,8 @@ async function listaArquivos() {
       .map((f) => ({ nome: f, quando: fs.statSync(path.join(LOCAL_DIR, f)).mtime.toISOString(),
         leia: async () => fs.readFileSync(path.join(LOCAL_DIR, f)) }));
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('sem DADOS_STORAGE e sem LOCAL_DIR: nao ha de onde ler');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW_CONTAINER);
+  // a chave ou o OIDC do job (lib-conteiner); sem nenhum dos dois e sem LOCAL_DIR, ela estoura nomeando o que falta
+  const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);
   const out = [];
   /* o container so passa a existir quando o coletor roda pela primeira vez. Distinguir "ainda nao
      existe" de "existe e esta vazio" e de "a rede falhou" e o que separa uma mensagem util de um
@@ -104,9 +103,7 @@ async function grava(nome, obj) {
     require('fs').writeFileSync(require('path').join(LOCAL_OUT_DIR, nome), gz);
     return gz.length;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await c.createIfNotExists();
+  const c = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

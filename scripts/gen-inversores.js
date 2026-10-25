@@ -3,7 +3,7 @@
  * Lê 2 planilhas do container inversores-raw: P1 (Inverter Failure Control / substituições) e
  * P2 (Registro_Falhas_Inversores / eventos do iSolarCloud). Identifica P1/P2 pelo CONTEÚDO (cabeçalhos),
  * não pelo nome. Limpa/normaliza, aplica taxonomia e PRÉ-CALCULA todas as análises (pct/cor/rótulo prontos).
- * Env: DADOS_STORAGE (conn string) · RAW_CONTAINER=inversores-raw · OUT_CONTAINER=dados · OUT_BLOB=inversores.json.
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=inversores-raw · OUT_CONTAINER=dados · OUT_BLOB=inversores.json.
  * Modo teste local: LOCAL_DIR (pasta com os 2 xlsx) / LOCAL_OUT (arquivo de saída).
  */
 const XLSX = require('xlsx');
@@ -19,11 +19,12 @@ const HOJE = new Date(Date.now() - 3 * 3600 * 1000); HOJE.setUTCHours(0, 0, 0, 0
 
 // ---------- blob I/O (espelha gen-scada.js) ----------
 function streamToBuffer(readable) { return new Promise((resolve, reject) => { const chunks = []; readable.on('data', d => chunks.push(d instanceof Buffer ? d : Buffer.from(d))); readable.on('end', () => resolve(Buffer.concat(chunks))); readable.on('error', reject); }); }
-async function getBlobClient() { const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido'); return BlobServiceClient.fromConnectionString(conn); }
+// a chave ou o OIDC do job (lib-conteiner): o bruto em inversores-raw e a saida em dados, cada um no seu conteiner
+const conteiner = (nome) => require('./lib-conteiner').conteiner(nome);
 async function loadRawBuffers() {
   if (process.env.LOCAL_DIR) { const fs = require('fs'), path = require('path'); const dir = process.env.LOCAL_DIR;
     return fs.readdirSync(dir).filter(n => /\.xls[xm]$/i.test(n)).map(n => ({ name: n, mod: fs.statSync(path.join(dir, n)).mtime, buf: fs.readFileSync(path.join(dir, n)) })); }
-  const svc = await getBlobClient(); const cont = svc.getContainerClient(RAW_CONTAINER); const out = [];
+  const cont = conteiner(RAW_CONTAINER); const out = [];
   // a planilha de falhas virou .xlsm (macro) em 20/08/2026; filtrar so .xlsx a deixaria de fora
   for await (const b of cont.listBlobsFlat()) { if (!/\.xls[xm]$/i.test(b.name)) continue;
     out.push({ name: b.name, mod: (b.properties || {}).lastModified, buf: await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody) }); }
@@ -31,7 +32,7 @@ async function loadRawBuffers() {
 }
 async function writeOut(obj) { const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const svc = await getBlobClient(); const cont = svc.getContainerClient(OUT_CONTAINER); await cont.createIfNotExists();
+  const cont = conteiner(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' } });
   await escrevePortal(cont, obj);
   return json.length;

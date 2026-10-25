@@ -31,6 +31,13 @@ on:
       - '.github/workflows/sager-disp.yml'
       - '.github/workflows/way2-mes.yml'          # plano OIDC, etapa 4, grupo 2: a mesma fiacao
       - '.github/workflows/vigia.yml'
+      - '.github/workflows/ons-consolidado.yml'   # plano OIDC, etapa 4, grupo 3: a mesma fiacao
+      - '.github/workflows/portal-dia.yml'
+      - '.github/workflows/inversores.yml'
+      - '.github/workflows/estacao-logger.yml'
+      - '.github/workflows/render-paineis.yml'
+      - '.github/workflows/ppc.yml'
+      - '.github/workflows/comparativo.yml'
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
   workflow_dispatch: {}

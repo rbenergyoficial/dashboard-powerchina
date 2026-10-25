@@ -58,9 +58,8 @@ const puxa = (url) => LD.pede(url).then((x) => {
 async function grava(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (LOCAL_OUT_DIR) { require('fs').writeFileSync(require('path').join(LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(OUT_CONTAINER);
-  await c.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const c = require('./lib-conteiner').conteiner(OUT_CONTAINER);
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

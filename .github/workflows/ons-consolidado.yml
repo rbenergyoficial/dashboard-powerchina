@@ -4,15 +4,31 @@ on:
         - cron: '17 18 * * *'   # ~15h Brasilia, depois do ONS publicar · min 17 foge do :00
   workflow_dispatch: {}
 concurrency:
-  group: gen-ons-consolidado
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-ons-consolidado-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os ensaios que so leem o publicado
+    #    levam a SAS de leitura; os sem rede ficam sem credencial nenhuma, de proposito. `permissions` explicito zera o resto:
+    #    `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 10
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow (ensaio e carga inclusive): fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -29,7 +45,8 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           PULA_MES_CORRENTE: ${{ steps.ensaio_mes.outcome != 'success' && '1' || '' }}
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
         run: node scripts/gen-ons-consolidado.js
 
@@ -51,7 +68,8 @@ jobs:
         id: gen_gemeo
         if: ${{ !cancelled() && steps.consolidado.outcome == 'success' && steps.gemeo_regra.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           OUT_BLOB: corte_gemeo.json
         run: node scripts/gen-corte-gemeo.js
@@ -60,12 +78,16 @@ jobs:
       # do `corte_gemeo.json` publicado refeitos dos meses fechados, no centesimo.
       - name: Ensaio · o portao do gemeo julga so meses fechados (produto)
         if: ${{ !cancelled() && steps.gen_gemeo.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-portao-gemeo.js --produto
 
       # DEPOIS do gemeo, sobre o que subiu: o `corte_mwh` (MWh com centesimos) fecha com o GWh e nao tem a
       # resolucao do GWh x 1000. O campo nasceu em 25/09/2026 sem ensaio nenhum.
       - name: Ensaio · o corte do gemeo em MWh fecha com o GWh e tem resolucao propria
         if: ${{ !cancelled() && steps.gen_gemeo.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-gemeo-mwh.js
 
       # A auditoria do registro da mesa entra DEPOIS do consolidado, pelo mesmo motivo do corte por
@@ -82,6 +104,8 @@ jobs:
       - name: Ensaio da auditoria do PPC
         id: ensaio_ppc
         if: ${{ !cancelled() && steps.consolidado.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-ppc.js
       # Vermelho aqui significa uma destas tres, e nenhuma delas se conserta no pipeline:
       #   · o operador nacional limitou e a mesa nao registrou (corte sem registro);
@@ -92,6 +116,7 @@ jobs:
       - name: Auditar o registro do PPC contra o ONS
         if: ${{ !cancelled() && steps.consolidado.outcome == 'success' && steps.ensaio_ppc.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
         run: node scripts/audita-ppc-ons.js

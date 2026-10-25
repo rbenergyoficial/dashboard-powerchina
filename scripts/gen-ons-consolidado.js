@@ -6,7 +6,7 @@
  *   - dados/ons_restricao_all.json    (1 linha por ts; campos ts,ger,lim,disp,gref,razao,orig,dsc)
  *   - dados/ons_irradiancia_all.json  (1 linha por ts+u; enxugado: ts,u,irr,ge,gv)
  *
- * Uso no GitHub Actions: env DADOS_STORAGE (connection string) grava no blob.
+ * Uso no GitHub Actions: grava no blob pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job).
  * Teste local: env LOCAL_OUT_DIR=<pasta> grava os arquivos localmente em vez do blob.
  */
 const rot = require('./lib-rotulos.js');
@@ -49,10 +49,7 @@ async function upload(name, json) {
     require('fs').writeFileSync(require('path').join(process.env.LOCAL_OUT_DIR, name), json);
     return;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE não definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const bc = cont.getBlockBlobClient(name);
   await bc.upload(json, Buffer.byteLength(json), { blobHTTPHeaders: { blobContentType: 'application/json' } });
 }

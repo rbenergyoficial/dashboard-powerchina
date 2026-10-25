@@ -34,14 +34,12 @@ jobs:
     runs-on: ubuntu-latest
     # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 25/10/2026): le pela lib-le-dados e grava pela lib-conteiner com o token do
     #    proprio job, trocado no Entra: valido ~1 h e renovado sozinho, emitido so para o `main` deste repositorio, com papel so
-    #    de dado, conteiner a conteiner. As duas variaveis sao identificadores, nao credenciais (as do relogio-deploy).
+    #    de dado, conteiner a conteiner. As duas variaveis sao identificadores, nao credenciais (as do relogio-deploy), e vao
+    #    no env DO PASSO que grava: o ensaio deste job nao toca o storage e fica sem credencial nenhuma.
     #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
     permissions:
       contents: read
       id-token: write
-    env:
-      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
     timeout-minutes: 30
     steps:
       # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
@@ -71,4 +69,6 @@ jobs:
         if: ${{ inputs.ensaio != 'sim' }}
         env:
           MESES: ${{ inputs.meses || '' }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: node scripts/gen-irradiancia-ons.js

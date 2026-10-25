@@ -85,7 +85,7 @@
  * qualquer parque selecionado faltar naquela fonte, a soma daquela fonte vira nulo.
  *
  * == ENV =====================================================================================
- *   DADOS_STORAGE  connection string do Azure (Secret)      obrigatorio fora do LOCAL_OUT
+ *   DADOS_STORAGE  connection string do Azure (Secret), ou o OIDC do job, pela lib-conteiner   um dos dois, fora do LOCAL_OUT
  *   WAY2_TOKEN     Pim-Auth da API Way2 (Secret)            obrigatorio
  *   DIAS           quantos dias reprocessar (default 3)
  *   FORCAR         1 = regrava mesmo sem mudanca
@@ -181,11 +181,8 @@ async function grava(nome, obj) {
     require('fs').writeFileSync(process.env.LOCAL_OUT + nome, json);
     return json.length;
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);
   const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
   await cont.getBlockBlobClient(nome).upload(gz, gz.length, {
     blobHTTPHeaders: {

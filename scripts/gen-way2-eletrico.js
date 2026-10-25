@@ -133,10 +133,7 @@ function cobertura(resp) {
 
 async function grava(json) {
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const buf = Buffer.from(json, 'utf8');
   await container.getBlockBlobClient(OUT_BLOB).upload(buf, buf.length, {
     blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' }

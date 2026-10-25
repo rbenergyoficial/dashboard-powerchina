@@ -334,10 +334,7 @@ function confereImagem(buf) {
     return;
   }
 
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   for (const p of feitos) {
     await cont.getBlockBlobClient(PREFIXO + p.arq).upload(p.buf, p.buf.length, {
       blobHTTPHeaders: { blobContentType: 'image/png', blobCacheControl: 'public, max-age=1800' },
