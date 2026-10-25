@@ -107,7 +107,7 @@ try {
   };
   planta('a cópia sem perguntar ao storage', 'lib', "  const d = dirP(), c = d ? leP(d, nome) : null;\n",
     "  const d = dirP(), c = d ? leP(d, nome) : null;\n  if (c) { EP.copia++; return { status: 200, etag: c.etag, buf: c.buf, bytes: c.buf.length }; }\n", '1: a segunda vai com If-None-Match');
-  planta('o lembra que não grava', 'lib', 'if (PROP && PROP.test(nome) && gravaP(dirP(), nome, etag, buf)) EP.lembrados++;', 'if (false) EP.lembrados++;',
+  planta('o lembra que não grava', 'lib', 'if (PROP && PROP.test(nome) && gravaP(dirP(), nome, etag, buf, um)) EP.lembrados++;', 'if (false) EP.lembrados++;',
     '3: o gravador lembrou a etag do upload');
   planta('o lembra que ignora o padrão', 'lib', 'if (PROP && PROP.test(nome) && gravaP(', 'if (PROP && gravaP(', '4: lembra de nome fora do padrão não grava');
   planta('a lib ligada só pelo padrão', 'lib', "process.env.LE_DADOS_PROPRIOS && process.env.CACHE_BLOB_DIR ?", 'process.env.LE_DADOS_PROPRIOS ?', 'FALHOU',
@@ -169,6 +169,8 @@ async function suite(lib, gen) {
   x = await pede('sg_a.json');
   assert.strictEqual(PED[PED.length - 1][1], '"e1"', '1: a segunda vai com If-None-Match'); assert.strictEqual(x.status, 200, '1: quem chama recebe 200');
   assert.strictEqual(x.buf.toString(), '{"a":1}', '1: os bytes da cópia'); assert.strictEqual(LD._est.copia, 1, '1: contada como cópia');
+  // lote11-custo: o 304 do SDK não traz a data de gravação, e os ensaios que julgam a safra do arquivo leem por ela
+  assert.ok(x.ultimaMod && Date.parse(x.ultimaMod) === Date.parse('2026-10-24T12:00:00Z'), '1: a cópia devolve a data de gravação do blob');
   console.log('1. primeira pela rede, segunda pela cópia (304) com os mesmos bytes');
   // 2
   poe('sg_a.json', '{"a":2}', '"e2"');

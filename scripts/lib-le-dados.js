@@ -51,20 +51,25 @@ function leP(d, nome) {
   try {
     const m = JSON.parse(fs.readFileSync(path.join(d, arqP(nome) + '.meta'), 'utf8'));
     const b = fs.readFileSync(path.join(d, arqP(nome)));
-    if (!m.etag || m.bytes !== b.length) return null;
-    USADOS.add(nome); return { etag: m.etag, buf: b };
+    // marca sem o campo ultimaMod = formato de antes da data: vale uma vez pela rede, e a copia nova ja leva a data
+    if (!m.etag || m.bytes !== b.length || !('ultimaMod' in m)) return null;
+    USADOS.add(nome); return { etag: m.etag, buf: b, ultimaMod: m.ultimaMod || null };
   } catch (e) { return null; }
 }
-function gravaP(d, nome, etag, buf) {
+function gravaP(d, nome, etag, buf, ultimaMod) {
   if (!d || !etag || !Buffer.isBuffer(buf)) return false;
   try {
     const f = path.join(d, arqP(nome));
     fs.writeFileSync(f + '.tmp', buf); fs.renameSync(f + '.tmp', f);   // dado primeiro, marca por último
-    fs.writeFileSync(f + '.meta', JSON.stringify({ etag, bytes: buf.length, nome }));
+    // a data de gravacao vai junto: o 304 do SDK nao a traz, e quem le pela copia (a safra do arquivo nos ensaios) precisa dela
+    fs.writeFileSync(f + '.meta', JSON.stringify({ etag, bytes: buf.length, nome, ultimaMod: ultimaMod || null }));
     USADOS.add(nome); return true;
   } catch (e) { return false; }   // sem cópia: a próxima leitura vem pela rede
 }
-function lembra(nome, etag, buf) { if (PROP && PROP.test(nome) && gravaP(dirP(), nome, etag, buf)) EP.lembrados++; }
+function lembra(nome, etag, buf, ultimaMod) {
+  const um = ultimaMod ? new Date(ultimaMod).toUTCString() : null;   // o lastModified que o upload devolveu
+  if (PROP && PROP.test(nome) && gravaP(dirP(), nome, etag, buf, um)) EP.lembrados++;
+}
 /* a poda (só o ESCRITOR chama, no fim, depois de gravar tudo): sai do disco a cópia de nome que esta rodada não leu nem lembrou — o nome que
    deixou de ser gravado não viaja para sempre no cache do workflow */
 function podaProprios() {
@@ -171,9 +176,9 @@ function pede(url, headers, metodo) {
 async function pedeProprio(url, nome, headers) {
   const d = dirP(), c = d ? leP(d, nome) : null;
   const x = await pedeDados(url, nome, c ? Object.assign({}, headers || {}, { 'If-None-Match': c.etag }) : headers, 'GET');
-  if (x.status === 304 && c) { EP.copia++; EP.bytesCopia += c.buf.length; return { status: 200, etag: c.etag, ultimaMod: x.ultimaMod || null, buf: c.buf, bytes: c.buf.length }; }
+  if (x.status === 304 && c) { EP.copia++; EP.bytesCopia += c.buf.length; return { status: 200, etag: c.etag, ultimaMod: x.ultimaMod || c.ultimaMod || null, buf: c.buf, bytes: c.buf.length }; }
   if (x.status === 304) throw new Error('HTTP 304 sem copia dados/' + nome);   // não acontece: o 304 só vem com a etag da cópia
-  if (x.status === 200) { EP.rede++; EP.bytesRede += x.buf.length; gravaP(d, nome, x.etag, x.buf); }
+  if (x.status === 200) { EP.rede++; EP.bytesRede += x.buf.length; gravaP(d, nome, x.etag, x.buf, x.ultimaMod); }
   if (x.status === 404 && d) { try { fs.unlinkSync(path.join(d, arqP(nome) + '.meta')); } catch (e) { } }
   return x;
 }

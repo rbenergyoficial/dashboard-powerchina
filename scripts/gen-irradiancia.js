@@ -352,7 +352,7 @@ async function writeOut(obj, nome, comprime) {
   const cab = { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' };
   if (comprime) cab.blobContentEncoding = 'gzip';
   const up = await cont.getBlockBlobClient(nome || OUT_BLOB).upload(corpo, corpo.length, { blobHTTPHeaders: cab });
-  LD.lembra(nome || OUT_BLOB, up.etag, corpo);   // os passos seguintes do job releem pela copia (304), nao pela rede
+  LD.lembra(nome || OUT_BLOB, up.etag, corpo, up.lastModified);   // os passos seguintes do job releem pela copia (304), nao pela rede
   return corpo.length;
 }
 
