@@ -8,7 +8,8 @@
  * endereço, e ela decide como ler.
  *
  * Ordem, para endereço do contêiner `dados`:
- *   1. DADOS_STORAGE (a connection string do GitHub) -> SDK, com If-None-Match quando pedido (o 304 da leitura condicional do custo-a);
+ *   1. DADOS_STORAGE (a connection string do GitHub), ou o OIDC do job (AZURE_CLIENT_ID + AZURE_TENANT_ID + id-token, pela
+ *      lib-conteiner) -> SDK, com If-None-Match quando pedido (o 304 da leitura condicional do custo-a);
  *   2. DADOS_SAS (SAS só de leitura, para rodar na máquina; nunca escrito em arquivo) -> https com o SAS na query;
  *   3. nenhum dos dois -> o endereço público, como antes, com UM aviso no log por processo (::warning::). Depois da virada a conta
  *      responde 409 PublicAccessNotPermitted e a leitura ESTOURA — nunca vira "não existe".
@@ -98,14 +99,13 @@ function nomeDe(url) {
   return n ? decodeURIComponent(n) : null;
 }
 function modo() {
-  if (process.env.DADOS_STORAGE) return 'sdk';
+  if (require('./lib-conteiner').credencial()) return 'sdk';   // a chave ou o OIDC: quem decide qual é a lib-conteiner
   if (process.env.DADOS_SAS) return 'sas';
   return 'publico';
 }
 function conteiner() {
   if (CONT) return CONT;
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  CONT = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(CONTEINER);
+  CONT = require('./lib-conteiner').conteiner(CONTEINER);
   return CONT;
 }
 function avisaPublico(url) {

@@ -101,6 +101,8 @@ try {
     if (src.split(de).length !== 2) { ok(false, 'plantio "' + nome + '": trecho não casou'); return; }
     const d = tmp(), p = path.join(d, path.basename(orig));
     fs.writeFileSync(p, src.split(de).join(para));
+    // a lib-le-dados abre o contêiner pela lib-conteiner (require relativo): a plantada leva a irmã junto, senão quebra em vez de reprovar
+    if (arq === 'lib') fs.copyFileSync(path.join(__dirname, 'lib-conteiner.js'), path.join(d, 'lib-conteiner.js'));
     const x = roda(arq === 'lib' ? p : LIB, arq === 'lib' ? GEN : p, env || LIGADA());
     const limpo = !/SyntaxError|Cannot find module/.test(x.out);
     ok(x.cod !== 0 && limpo && x.out.indexOf(esperado) >= 0, 'plantio "' + nome + '" reprova em "' + esperado + '"' + (limpo ? '' : ' (QUEBROU: ' + x.out.split('\n').find((l) => /Error/.test(l)) + ')'));
