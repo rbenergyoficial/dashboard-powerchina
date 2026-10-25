@@ -136,6 +136,17 @@ function item(blobs, nome, comMd5 = true) {
     ok(/require\('\.\/lib-cache-blob'\)\.abre\(RAW_CONTAINER\)/.test(src) && /\.baixa\((c|cont), (b|e\.item)\)/.test(src), g + ' abre a copia e baixa por ela');
     ok(/\.poda\(\)/.test(src) && /\.resumo\(\)/.test(src), g + ' poda e resume');
   }
+  /* custo-executivo (24/10/2026): o gen-irradiancia le os CSV do scada-raw (IIRR e IRR_GERAL) pela copia; o executivo.yml guarda o scada-raw/ */
+  { const src = fs.readFileSync(path.join(__dirname, 'gen-irradiancia.js'), 'utf8');
+    const fc = src.slice(src.indexOf('async function fontesDoContainer'), src.indexOf('async function fonteUnica'));
+    ok(/CACHE_RAW = require\('\.\/lib-cache-blob'\)\.abre\(cont, process\.env\.CACHE_SCADA_DIR\)/.test(fc) && /await CACHE_RAW\.baixa\(c, item\)/.test(fc) && fc.length > 0 && !/\.download\(\)/.test(fc),
+      'gen-irradiancia.js baixa os CSV do scada-raw pela copia (e nenhum download direto na leitura deles)');
+    ok(/CACHE_RAW\.poda\(\); CACHE_RAW\.resumo\(\)/.test(src), 'gen-irradiancia.js poda e resume a copia do scada-raw');
+    const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'executivo.yml'), 'utf8').replace(/\r\n/g, '\n');
+    ok(/\n      CACHE_SCADA_DIR: \$\{\{ github\.workspace \}\}\/\.cache-scada\n/.test(wf) && /path: \.cache-scada\n\s+key: scada-raw-executivo-\$\{\{ github\.run_id \}\}/.test(wf)
+      && /steps\.gen_irr\.outcome == 'success' && hashFiles\('\.cache-scada\/scada-raw\/\*\.meta'\)[\s\S]*?key: scada-raw-executivo-\$\{\{ hashFiles\('\.cache-scada\/scada-raw\/\*\.meta'\) \}\}/.test(wf),
+      'executivo.yml: o scada-raw em entrada de cache propria, restaurada e guardada so com a irradiancia verde');
+  }
   /* custo-sungrow (24/10/2026): o gen-sungrow le os exports do SCADA (scada-raw) pela copia; o workflow restaura e guarda o diretorio */
   { const src = fs.readFileSync(path.join(__dirname, 'gen-sungrow.js'), 'utf8');
     const ex = src.slice(src.indexOf('async function exportsScada'), src.indexOf('async function vidaDoExport'));

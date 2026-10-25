@@ -38,6 +38,10 @@
  */
 const fs = require('fs'), https = require('https'), readline = require('readline'), zlib = require('zlib');
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial; o https fica so para o IIRR_URL (export do SCADA)
+// 💰 custo-executivo (24/10/2026): os CSV do scada-raw (o despejo IIRR de 24 MB e os IRR_GERAL diarios) nao mudam depois de gravados, e o
+//    export parou em 15/10; eram relidos inteiros a cada rodada do executivo. Pela copia em disco da execucao anterior (lib-cache-blob:
+//    etag, tamanho e MD5 da listagem); so o arquivo novo vem pela rede.
+let CACHE_RAW = null;
 const { travadas } = require('./lib-irr-travada.js');   // PROMOVER irr-travada
 const { rotulaQualidade, confereCobertura } = require('./lib-irr-rotulo.js');   // PROMOVER irr-rotulo
 const { chaveOns, indiceDatalogger, confereM7, semReferencia } = require('./lib-irr-ons-tag.js');   // PROMOVER irr-ons-m7
@@ -228,6 +232,7 @@ async function fontesDoContainer(cont) {
     const conn = process.env.DADOS_STORAGE;
     if (!conn) throw new Error('IIRR_CONTAINER exige DADOS_STORAGE');
     const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(cont);
+    CACHE_RAW = require('./lib-cache-blob').abre(cont, process.env.CACHE_SCADA_DIR);   // sem a variavel, o CACHE_BLOB_DIR
     // 🔴 O NOME CHEGA PREFIXADO. A ponte do Power Automate grava <id-do-item>_<nome-original>:
     // medido no container, "68656_M04.xlsx". Expressao ancorada em ^IIRR nunca casa — foi o que
     // deu "0 candidatos" na primeira tentativa.
@@ -259,7 +264,7 @@ async function fontesDoContainer(cont) {
     const diarios = [];
     for await (const b of c.listBlobsFlat()) {
       const k = carimboD(b.name);
-      if (k) diarios.push({ nome: b.name, k });
+      if (k) diarios.push({ nome: b.name, k, item: b });
     }
     diarios.sort((a, b) => (a.k < b.k ? -1 : 1));
     console.log('  diarios: ' + diarios.length + ' arquivo(s) IRR_GERAL'
@@ -276,24 +281,24 @@ async function fontesDoContainer(cont) {
     const aux = [];
     for await (const b of c.listBlobsFlat()) {
       const k = carimboA(b.name);
-      if (k) aux.push({ nome: b.name, k });
+      if (k) aux.push({ nome: b.name, k, item: b });
     }
     aux.sort((a, b) => (a.k < b.k ? -1 : 1));
     console.log('  auxiliar: ' + aux.length + ' arquivo(s) IRR (grupo GER_IRR, OUTRO sensor)'
       + (aux.length ? ' · ' + aux[0].k.slice(0, 8) + ' a ' + aux[aux.length - 1].k.slice(0, 8) : ''));
 
-    const abre = (nome) => async () => {
-      const dl = await c.getBlobClient(nome).download();
-      return readline.createInterface({ input: dl.readableStreamBody, crlfDelay: Infinity });
+    const abre = (item) => async () => {
+      const buf = await CACHE_RAW.baixa(c, item);
+      return readline.createInterface({ input: require('stream').Readable.from([buf]), crlfDelay: Infinity });
     };
     // o historico primeiro: ele define a base, e o diario que repetir um instante ja lido e
     // descartado pelo dedup do laco — sao a mesma medicao, entao a ordem nao muda numero nenhum
     // ⚠️ A ORDEM E A REGRA DE PRECEDENCIA. O dedup por instante descarta o que ja foi lido, entao
     //    pondo o sensor auxiliar por ULTIMO ele so preenche instante que o sensor principal nunca
     //    teve. Inverter a ordem trocaria o instrumento em dias que estao medidos.
-    return [{ nome: melhor.name, tipo: 'ws', abre: abre(melhor.name) }]
-      .concat(diarios.map((d) => ({ nome: d.nome, tipo: 'ws', abre: abre(d.nome) })))
-      .concat(aux.map((d) => ({ nome: d.nome, tipo: 'aux', abre: abre(d.nome) })));
+    return [{ nome: melhor.name, tipo: 'ws', abre: abre(melhor) }]
+      .concat(diarios.map((d) => ({ nome: d.nome, tipo: 'ws', abre: abre(d.item) })))
+      .concat(aux.map((d) => ({ nome: d.nome, tipo: 'aux', abre: abre(d.item) })));
   }
 }
 
@@ -346,7 +351,8 @@ async function writeOut(obj, nome, comprime) {
   const corpo = comprime ? zlib.gzipSync(Buffer.from(json)) : Buffer.from(json);
   const cab = { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' };
   if (comprime) cab.blobContentEncoding = 'gzip';
-  await cont.getBlockBlobClient(nome || OUT_BLOB).upload(corpo, corpo.length, { blobHTTPHeaders: cab });
+  const up = await cont.getBlockBlobClient(nome || OUT_BLOB).upload(corpo, corpo.length, { blobHTTPHeaders: cab });
+  LD.lembra(nome || OUT_BLOB, up.etag, corpo);   // os passos seguintes do job releem pela copia (304), nao pela rede
   return corpo.length;
 }
 
@@ -769,6 +775,7 @@ async function fonteEstacao() {
     }
   }
   }   // fim do laco por FONTE
+  if (CACHE_RAW) { CACHE_RAW.poda(); CACHE_RAW.resumo(); }   // o que esta rodada nao leu sai do disco
 
   console.log('  SCADA (so o Comparativo): ' + FONTES.length + ' arquivo(s) · ' + nScada + ' amostras da irradiancia no plano'
     + (nScada ? ' · ' + scadaIni + ' a ' + scadaFim : '') + (repetidos ? ' · ' + repetidos + ' instante(s) repetido(s) descartado(s)' : ''));

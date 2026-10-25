@@ -168,7 +168,25 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
   if (julga('gen-way2-eletrico.js')) ok(/fs\.writeFileSync\(path\.join\(d, 'way2_eletrico\.json'\), buf\)/.test(L('gen-way2-eletrico.js')), 'gen-way2-eletrico: grava a copia local com os bytes que subiram');
   if (julga('gen-way2-recent.js')) ok(/`way2_\$\{day\}\.json`\), buf\)/.test(L('gen-way2-recent.js')), 'gen-way2-recent: a copia do dia leva o nome e os bytes do hist que subiu');
   if (julga('gen-trafo-way2.js')) ok(/if \(\/\^trafo_scada_\/\.test\(nome\)\) return desembrulha\(await require\('\.\/lib-le-blob\.js'\)\.bytes\(BASE \+ nome/.test(L('gen-trafo-way2.js')), 'gen-trafo-way2: a copia do supervisorio pela lib (trafo-alvo-ensaio)');
-  for (const [wf, passos] of [['way2-recent.yml', 2], ['way2-agg.yml', 1], ['executivo.yml', 3], ['trafo-medidor.yml', 2]].filter(([w]) => julga(w))) {   /* + trafo-medidor (trafo-alvo-ensaio): o gerador e o --produto */   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
+  /* custo-executivo: o historico do medidor nunca entra num LE_DADOS_PROPRIOS (a lib-le-blob ja o copia, com poda, e o dia aberto nao vai ao
+     disco); sem isso a entrada de cache cresceria sem fim */
+  { const dir = path.join(__dirname, '..', '.github', 'workflows'), casam = [];
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.yml'))) {
+      for (const m of fs.readFileSync(path.join(dir, f), 'utf8').matchAll(/LE_DADOS_PROPRIOS: '([^']+)'/g)) {
+        const re = new RegExp(m[1]); if (['hist/way2_2026-10-24.json', 'hist/way2_2026-09-01.json'].some((n) => re.test(n))) casam.push(f);
+      } }
+    ok(!casam.length, 'nenhum LE_DADOS_PROPRIOS casa o historico do medidor' + (casam.length ? ' · casa em ' + casam.join(', ') : '')); }
+  /* custo-executivo (24/10/2026): no executivo a copia vale para o JOB inteiro (env do job, com LE_DADOS_PROPRIOS): restaura antes do
+     primeiro `node`, guarda depois do ultimo, e nenhum passo repete o CACHE_BLOB_DIR */
+  if (julga('executivo.yml')) {
+    const w = W('executivo.yml'), iR = w.indexOf('Restaurar a copia do historico do medidor'), iG = w.indexOf('Guardar a copia do historico do medidor');
+    const iJ = w.indexOf('\n    env:'), iS = w.indexOf('\n    steps:'), iC = w.indexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob');
+    const nodes = [...w.matchAll(/run: node scripts\//g)].map((m) => m.index);
+    ok(iJ > 0 && iC > iJ && iC < iS && /\n      LE_DADOS_PROPRIOS: '/.test(w.slice(iJ, iS)) && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === 1
+      && iR > iS && iR < nodes[0] && iG > nodes[nodes.length - 1], 'executivo.yml: a copia no env do job (com LE_DADOS_PROPRIOS), restaurada antes do primeiro node e guardada depois do ultimo');
+  }
+  /* way2-recent: 3 passos (snapshot, dia em curso e, desde o custo-executivo, o resumo do assistente com LE_DADOS_PROPRIOS) */
+  for (const [wf, passos] of [['way2-recent.yml', 3], ['way2-agg.yml', 1], ['trafo-medidor.yml', 2]].filter(([w]) => julga(w))) {   /* + trafo-medidor (trafo-alvo-ensaio): o gerador e o --produto */   /* fonte-perfil-way2 (20/10): o --produto do ensaio-fontes-exec reconta o medidor pela copia */
     const w = W(wf), iR = w.indexOf('Restaurar a copia do historico do medidor'), iG = w.indexOf('Guardar a copia do historico do medidor');
     const iC = w.indexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob');
     ok(iR > 0 && iC > iR && iG > w.lastIndexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob') && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === passos, wf + ': restaura ANTES do primeiro gerador, guarda DEPOIS do ultimo, ' + passos + ' passo(s) com CACHE_BLOB_DIR');

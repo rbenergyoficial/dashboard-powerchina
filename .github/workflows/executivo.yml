@@ -11,6 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
       DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+      # 💰 A copia em disco do job, em TODO passo (restaurada no inicio, guardada no fim): o historico do medidor (publico/, pela
+      #    lib-le-blob) e os blobs que varios passos releem na mesma rodada (proprios/, LE_DADOS_PROPRIOS): a releitura vai com
+      #    If-None-Match e o 304 do storage confirma a copia. O historico do medidor NAO entra na regex: a lib-le-blob ja o copia, com poda,
+      #    e o dia aberto nao vai ao disco. Os CSV do scada-raw (imutaveis) ficam numa entrada de cache propria (.cache-scada).
+      CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+      CACHE_SCADA_DIR: ${{ github.workspace }}/.cache-scada
+      LE_DADOS_PROPRIOS: '^(irr_ufv|irr_60min|irr_30min|irr_plano_30min|ons_restricao_all|ons_irradiancia_all|estacao_tudo_30min|estacao_logger_30min|way2_daily|executivo|benchmark_ne|corte_gemeo)\.json$'
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
@@ -20,6 +27,12 @@ jobs:
       # 💰 custo-a (17/10/2026): a copia do historico do medidor (hist/way2_<dia>) da execucao anterior. O gerador pede cada dia com
       #    If-None-Match (`lib-le-blob.js`) e o storage responde 304 sem corpo quando o dia nao mudou: antes o mesmo arquivo de ~4 MB
       #    saia do storage a cada execucao, e a saida de dados e a fatura do Azure. Sem copia (primeira vez, cache expirado), baixa tudo.
+      - name: Restaurar a copia dos CSV do scada-raw (gen-irradiancia)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-scada
+          key: scada-raw-executivo-${{ github.run_id }}
+          restore-keys: scada-raw-executivo-
       - name: Restaurar a copia do historico do medidor
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -138,7 +151,6 @@ jobs:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
           OUT_CONTAINER: dados
           OUT_BLOB: executivo.json
-          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-executivo.js
 
       # ... e o PRODUTO: o medidor do perfil recontado de D-2 e D-3, a verificada do operador intacta no termo do corte, a irradiancia
@@ -147,7 +159,6 @@ jobs:
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/ensaio-fontes-exec.js --produto
 
       # A guarda da energia liquidada sobre o PRODUTO: a janela que o gerador acabou de gravar (guarda_liquida.json)
@@ -318,7 +329,6 @@ jobs:
         if: ${{ !cancelled() && steps.pr_regra.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
-          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-pr.js
 
       - name: Ensaio · o PR confere com o executivo e com o medidor
@@ -353,4 +363,14 @@ jobs:
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-blob
-          key: hist-publico-executivo-${{ hashFiles('.cache-blob/publico/*.meta') }}
+          # a chave muda com o historico e com os blobs que mudam poucas vezes por dia (ons, estacao, way2_daily); os que mudam toda
+          # rodada (irr_*, executivo) ficam fora dela, senao seria uma entrada nova de cache por rodada
+          key: hist-publico-executivo-${{ hashFiles('.cache-blob/publico/*.meta', '.cache-blob/proprios/ons_*.meta', '.cache-blob/proprios/estacao_*.meta', '.cache-blob/proprios/way2_daily.json.meta') }}
+      # os CSV do scada-raw nao mudam: a entrada so e regravada quando chega arquivo novo, e so com a irradiancia verde
+      - name: Guardar a copia dos CSV do scada-raw (gen-irradiancia)
+        if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' && hashFiles('.cache-scada/scada-raw/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-scada
+          key: scada-raw-executivo-${{ hashFiles('.cache-scada/scada-raw/*.meta') }}

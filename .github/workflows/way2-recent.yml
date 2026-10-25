@@ -126,6 +126,11 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          # 💰 os blobs que mudam poucas vezes por dia (o oleo, as perdas, o inventario e a disponibilidade dos inversores, os ativos)
+          #    pela copia em disco, confirmada pelo 304 do storage, em vez de inteiros de 5 em 5 min. Os que mudam de hora em hora ou
+          #    mais ficam fora; a chave do cache leva estes, entao a copia nova e guardada quando um deles muda.
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^(oleo|perdas_diario|inv_scada|sg_disp_dia|portal_ativos)\.json$'
         run: node scripts/gen-agente-om.js
       # Sobre o que subiu: atingido = energia / meta com folga do arredondamento, meta rateada abaixo da do mes, capacidades
       # fechando 343,77 MW, 12 entidades, mes em curso fora dos fechados; cinco defeitos plantados reprovam cada um.
@@ -156,9 +161,9 @@ jobs:
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor
-        if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta') != '' }}
+        if: ${{ !cancelled() && hashFiles('.cache-blob/publico/*.meta', '.cache-blob/proprios/*.meta') != '' }}
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: .cache-blob
-          key: hist-publico-way2-recent-${{ hashFiles('.cache-blob/publico/*.meta') }}
+          key: hist-publico-way2-recent-${{ hashFiles('.cache-blob/publico/*.meta', '.cache-blob/proprios/*.meta') }}
