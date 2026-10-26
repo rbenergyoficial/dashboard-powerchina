@@ -69,6 +69,8 @@ const MIGRADOS = {
   'sungrow.yml': { 'gen-sungrow.js': null, 'gen-inv-logger.js': null, 'gen-pvstr-logger.js': null, 'gen-agente-dia.js': null },   // etapa 4
   'way2-recent.yml': { 'gen-way2-eletrico.js': null, 'gen-way2-recent.js': null, 'gen-dia-corrente.js': null, 'gen-agente-om.js': null,   // etapa 4
     'gen-way2-watchdog.js': null },
+  'malha-estado.yml': { 'gen-malha-estado.js': null },   // etapa 4: no portal-admin, o papel so no arquivo da malha
+  'apagar-blob.yml': { 'apagar-blob.js': null },         // etapa 4: o papel no `dados` ja inclui apagar
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
 const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];

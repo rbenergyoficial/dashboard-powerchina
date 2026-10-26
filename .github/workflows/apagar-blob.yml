@@ -1,8 +1,9 @@
 name: Apagar blob (uso pontual, com confirmacao)
 
 # Roda SO por dispatch manual e SO se a palavra de confirmacao vier certa.
-# Existe porque a connection string do storage e secret do Actions: apagar um blob de
-# fora do CI exigiria a credencial em maquina, e credencial nao sai daqui.
+# Existe porque apagar um blob de fora do CI exigiria credencial do storage em maquina, e credencial nao sai daqui.
+# 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026): apaga pelo OIDC do proprio job (o papel no conteiner `dados`
+#    ja inclui apagar); AZURE_CLIENT_ID e AZURE_TENANT_ID no env do passo, identificadores, nao credenciais.
 #
 # Uso: Actions -> este workflow -> Run workflow -> blob=way2_monitor.json, confirmar=APAGAR
 
@@ -17,8 +18,12 @@ on:
         required: true
         default: 'nao'
 
-concurrency:   # dois disparos do mesmo blob: o segundo espera, em vez de copiar junto e cair no delete
-  group: apagar-blob-${{ inputs.blob }}
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:   # dois disparos do mesmo blob: o segundo espera, em vez de copiar junto e cair no delete (por branch, como os outros)
+  group: apagar-blob-${{ github.ref }}-${{ inputs.blob }}
   cancel-in-progress: false
 
 jobs:
@@ -26,6 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - name: Conferir a palavra de confirmacao
         if: ${{ inputs.confirmar != 'APAGAR' }}
         run: |
@@ -36,43 +50,13 @@ jobs:
         with:
           node-version: '20'
       - run: npm i @azure/storage-blob@12
-      # Rede de seguranca: uma COPIA em backup/<nome>.<carimbo ISO UTC>, conferida byte a byte, e so entao o
-      # apagamento. Snapshot nao serve: o Azure nao apaga blob que tem snapshot sem apagar o snapshot junto.
-      # Os snapshots que ja existem (tentativas antigas deste workflow) tambem vao para backup/, como
-      # backup/<nome>.snapshot-<carimbo>, antes do delete que os leva. Blob que nao existe FALHA: nome
-      # digitado errado nao pode sair verde.
+      # A regra (copia em backup/ conferida byte a byte, snapshots junto, blob inexistente falha) mora no scripts/apagar-blob.js e
+      # se julga antes, sem rede, no ensaio-apagar-blob.js (aqui e no ensaios.yml).
+      - name: Ensaio · copia conferida antes de apagar (sem rede)
+        run: node scripts/ensaio-apagar-blob.js
       - name: Apagar o blob (com copia em backup/ antes)
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           BLOB: ${{ inputs.blob }}
-        run: |
-          node -e '
-          const { BlobServiceClient } = require("@azure/storage-blob");
-          (async () => {
-            const nome = process.env.BLOB;
-            const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient("dados");
-            const bc = cont.getBlockBlobClient(nome);
-            if (!(await bc.exists())) { console.error("blob nao existe: " + nome + ". Nada foi apagado."); process.exit(1); }
-            const p = await bc.getProperties();
-            console.log("apagando", nome, p.contentLength, "bytes, modificado em", p.lastModified);
-            const copia = async (origem, destino) => {
-              const buf = await origem.downloadToBuffer();
-              const cp = cont.getBlockBlobClient(destino);
-              await cp.uploadData(buf, { blobHTTPHeaders: { blobContentType: p.contentType, blobContentEncoding: p.contentEncoding } });
-              const volta = await cp.downloadToBuffer();
-              if (!volta.equals(buf)) throw new Error("a copia em " + destino + " nao confere com a origem. Nada foi apagado.");
-              console.log("copia conferida:", destino, volta.length, "bytes");
-            };
-            const destino = "backup/" + nome + "." + new Date().toISOString().replace(/[:.]/g, "-");
-            await copia(bc, destino);
-            let snaps = 0;
-            for await (const it of cont.listBlobsFlat({ prefix: nome, includeSnapshots: true })) {
-              if (it.name !== nome || !it.snapshot) continue;
-              await copia(bc.withSnapshot(it.snapshot), "backup/" + nome + ".snapshot-" + it.snapshot.replace(/[:.]/g, "-"));
-              snaps += 1;
-            }
-            console.log("snapshots copiados:", snaps);
-            await bc.delete({ deleteSnapshots: "include" });
-            console.log("apagado. para voltar: copiar " + destino + " para " + nome + ".");
-          })().catch(e => { console.error(e.message); process.exit(1); });
-          '
+        run: node scripts/apagar-blob.js

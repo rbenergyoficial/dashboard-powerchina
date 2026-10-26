@@ -51,6 +51,7 @@ const { execFile } = require('child_process');
 
 const GEN = path.join(__dirname, 'gen-malha-estado.js');
 const LIB = path.join(__dirname, 'lib-le-dados.js');
+const LIB_C = path.join(__dirname, 'lib-conteiner.js');   // o mutante mora no temporario: as libs pelo caminho inteiro
 const AGENDA_REAL = path.join(__dirname, '..', 'relogio', 'agenda.json');
 const G = require(GEN);
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-malha-'));
@@ -321,7 +322,7 @@ const servidor = http.createServer((q, r) => {
 });
 
 let nRodada = 0;
-const LIMPA = ['DADOS_STORAGE', 'DADOS_SAS', 'DADOS_BASE_PUB', 'GITHUB_TOKEN', 'GITHUB_REPOSITORY', 'GITHUB_API_URL', 'LOCAL_OUT', 'LOCAL_PONTE_DIR', 'AGENDA_JSON', 'MALHA_AGORA', 'NODE_OPTIONS'];
+const LIMPA = ['DADOS_STORAGE', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'DADOS_SAS', 'DADOS_BASE_PUB', 'GITHUB_TOKEN', 'GITHUB_REPOSITORY', 'GITHUB_API_URL', 'LOCAL_OUT', 'LOCAL_PONTE_DIR', 'AGENDA_JSON', 'MALHA_AGORA', 'NODE_OPTIONS'];
 /* cen: { script, agenda, sdk (mundo do SDK falso; liga DADOS_STORAGE), ponteDir, gh (mapa; liga o token), http, blob (grava no blob, sem LOCAL_OUT) } */
 function roda(cen) {
   const id = ++nRodada;
@@ -483,7 +484,7 @@ function chkEstoura(oque) {
 function mutante(nome, trocas) {
   const orig = fs.readFileSync(GEN, 'utf8').replace(/\r\n/g, '\n');
   let src = orig;
-  for (const [de, para] of trocas.concat([["require('./lib-le-dados')", 'require(' + JSON.stringify(LIB) + ')']])) {
+  for (const [de, para] of trocas.concat([["require('./lib-le-dados')", 'require(' + JSON.stringify(LIB) + ')'], ["require('./lib-conteiner')", 'require(' + JSON.stringify(LIB_C) + ')']])) {
     const n = src.split(de).length - 1;
     if (n !== 1) throw new Error('plantio ' + nome + ': ancora achada ' + n + ' vezes (a linha do gerador mudou: atualizar a ancora do plantio, isto NAO e deteccao): ' + de.slice(0, 70));
     src = src.replace(de, () => para);

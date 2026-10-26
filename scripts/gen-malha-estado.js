@@ -36,11 +36,11 @@
  *    da ponte NUNCA entram. A guarda `confere()` roda antes de gravar e aborta SEM GRAVAR: chave fora do contrato, valor de
  *    texto fora da lista (codigos, ids, datas), prazo ausente, ok sem registro.
  *
- * Env: DADOS_STORAGE (connection string da conta: le o cofre e o frescor pelo SDK, grava o resultado)
+ * Env: a credencial do storage pela lib-conteiner (a chave ou o OIDC do job: le o cofre e o frescor pelo SDK, grava o resultado)
  *      GITHUB_TOKEN, GITHUB_REPOSITORY, GITHUB_API_URL (o Actions define os dois ultimos; sem token, `proc` e `portal` saem "sem")
  *      LOCAL_OUT (arquivo: grava ali, em JSON legivel, em vez do blob)
  *      LOCAL_PONTE_DIR (pasta com arquivos de estado da ponte, AAAA-MM-DD[_HHMMSS].json: substitui a leitura do cofre)
- *      Sem DADOS_STORAGE e sem LOCAL_PONTE_DIR as etapas da ponte saem "sem" (nunca ok); o frescor le o publico, com aviso.
+ *      Sem credencial do storage e sem LOCAL_PONTE_DIR as etapas da ponte saem "sem" (nunca ok); o frescor le o publico, com aviso.
  *      So para o ensaio: AGENDA_JSON (outra agenda), MALHA_AGORA (instante ISO no lugar do relogio).
  */
 const fs = require('fs');
@@ -49,6 +49,7 @@ const zlib = require('zlib');
 const https = require('https');
 const http = require('http');
 const LD = require('./lib-le-dados');
+const LC = require('./lib-conteiner');   // a chave ou o OIDC do job
 
 const COFRE = 'backup-dados-scada';          // SO LEITURA (retencao imutavel)
 const DESTINO = 'portal-admin';              // conteiner privado do portal admin; ja existe, nao se cria
@@ -323,11 +324,10 @@ function fimDoConteudo(C, buf) {
 /* A saida anterior, para nao baixar de novo o que nao foi regravado (trafego de saida). So vale a do MESMO dia de Brasilia: a
  * primeira execucao do dia le tudo (assim uma regra de conteudo nova vale em ate um dia). So o 404 do proprio arquivo e ausencia. */
 async function leAnterior(agoraMs) {
-  if (!process.env.DADOS_STORAGE) return null;
-  const { BlobServiceClient } = require('@azure/storage-blob');
+  if (!LC.credencial()) return null;
   let buf;
   try {
-    const r = await BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DESTINO).getBlobClient(OUT_BLOB).download();
+    const r = await LC.conteiner(DESTINO).getBlobClient(OUT_BLOB).download();
     const p = [];
     for await (const c of r.readableStreamBody) p.push(c);
     buf = Buffer.concat(p);
@@ -385,8 +385,7 @@ async function leFrescor(agenda, agoraMs, anterior) {
 
 /* ───────────── estado da ponte ───────────── */
 function fonteCofre() {
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(COFRE);
+  const cont = LC.conteiner(COFRE);
   return {
     async lista(dia) {
       const out = [];
@@ -814,8 +813,8 @@ async function main() {
 
   let fonte = null, modoPonte = 'nenhuma';
   if (process.env.LOCAL_PONTE_DIR) { fonte = fontePasta(process.env.LOCAL_PONTE_DIR); modoPonte = 'pasta local'; }
-  else if (process.env.DADOS_STORAGE) { fonte = fonteCofre(); modoPonte = 'cofre'; }
-  else console.log('::warning::gen-malha-estado: sem DADOS_STORAGE e sem LOCAL_PONTE_DIR — as etapas da ponte saem "sem"');
+  else if (LC.credencial()) { fonte = fonteCofre(); modoPonte = 'cofre'; }
+  else console.log('::warning::gen-malha-estado: sem credencial do storage e sem LOCAL_PONTE_DIR — as etapas da ponte saem "sem"');
 
   const anterior = await leAnterior(agoraMs);
   const [por, frescor, execs] = await Promise.all([estadosPorDia(fonte, diaBRT(agoraMs)), leFrescor(agenda, agoraMs, anterior), leExecucoes(agenda)]);
@@ -839,10 +838,8 @@ async function main() {
     console.log('local: ' + process.env.LOCAL_OUT + ' · ' + json.length + ' bytes');
     return;
   }
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const { BlobServiceClient } = require('@azure/storage-blob');
   const gz = zlib.gzipSync(Buffer.from(json, 'utf8'));
-  await BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DESTINO).getBlockBlobClient(OUT_BLOB)
+  await LC.conteiner(DESTINO).getBlockBlobClient(OUT_BLOB)   // so este arquivo: o papel no conteiner do portal e condicionado ao nome
     .upload(gz, gz.length, { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'no-store' } });
   console.log('malha_estado OK · ' + json.length + ' bytes · ' + gz.length + ' gzip');
 }

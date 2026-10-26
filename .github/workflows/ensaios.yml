@@ -53,6 +53,8 @@ on:
       - '.github/workflows/scada.yml'
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
+      - '.github/workflows/malha-estado.yml'   # plano OIDC, etapa 4, os dois ultimos: a mesma fiacao
+      - '.github/workflows/apagar-blob.yml'
   workflow_dispatch: {}
 
 permissions:
@@ -117,6 +119,10 @@ jobs:
         run: |
           npm i --no-save xlsx@0.18.5
           node scripts/ensaio-scada-db.js
+
+      - name: Ensaio · o apagar-blob copia e confere antes de apagar
+        if: always()
+        run: node scripts/ensaio-apagar-blob.js
 
       - name: Ensaio · os quatro eventos do vigia da Way2 deduplicam e fecham
         if: always()
