@@ -136,6 +136,12 @@ const num = s => (s === '' || s == null) ? null : Number(s);
       irr: i ? i.s / i.p : null, restrito: (lim != null && lim > 0) ? 1 : 0 });
   }
   for (const t of T) t.f = t.irr == null ? null : Math.floor(t.irr / FAIXA);
+  // 🔔 a meia hora restrita sem irradiancia ou sem geracao fica fora do corte (o laco do mes abaixo a pula): contada, publicada e
+  //    avisada, para o mes nao sair menor em silencio (lib-portao-gemeo.js, semEntrada)
+  const ENT = PG.semEntrada(T);
+  ENT.por_mes.filter((o) => o.sem_irr + o.sem_ger > 0).forEach((o) => console.error('::warning::gemeo: ' + o.mes + ' INCOMPLETO · '
+    + o.sem_irr + ' meia(s) hora(s) restrita(s) sem irradiancia e ' + o.sem_ger + ' sem geracao, de ' + o.restritos
+    + ', ficaram fora do corte (o corte do mes sai menor)'));
 
   const LIVRE = {};
   for (const t of T) {
@@ -232,7 +238,11 @@ const num = s => (s === '' || s == null) ? null : Number(s);
     parametros: { faixa_w_m2: FAIXA, quantil: QUANT, min_amostra: MIN_AMOSTRA,
       dias_excluidos: [...EXCLUI_DIA],
       janelas_dias: JANELAS, irr_min_w_m2: IRR_MIN, pool_inicio: POOL_INI },
-    validacao, serie,
+    validacao,
+    // as meias horas restritas que o gemeo nao pode contar, por mes; `meses_incompletos` lista os meses com alguma
+    entrada: { restritas: ENT.por_mes.reduce((a, o) => a + o.restritos, 0), sem_irradiancia: ENT.por_mes.reduce((a, o) => a + o.sem_irr, 0),
+      sem_geracao: ENT.por_mes.reduce((a, o) => a + o.sem_ger, 0), meses_incompletos: ENT.incompletos, por_mes: ENT.por_mes },
+    serie,
   };
   const t = await grava(out);
   console.log('\n' + OUT_BLOB + ' OK · ' + Math.round(t / 1024) + ' KB · ' + serie.length + ' meses');

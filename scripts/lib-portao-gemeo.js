@@ -36,4 +36,26 @@ function valida(serie, verdade, mesAberto, maxMae, maxVies) {
   return { validacao, impossivel, reprova };
 }
 
-module.exports = { valida, mesEmCurso };
+/*
+ * 🔔 A MEIA HORA RESTRITA QUE O GEMEO NAO CONSEGUE CONTAR (decisao do humano, 26/10/2026, "pode fazer a guarda do gemeo"). O corte
+ *    do gemeo so existe onde ha irradiancia (o potencial vem da faixa de sol) e geracao verificada (o que se subtrai). A meia hora
+ *    COM limitacao e sem uma das duas era pulada em silencio: o corte do mes saia menor e parecia normal. Medido em 26/10/2026:
+ *    0 de 6.267 meias horas restritas sem irradiancia (os dois arquivos do operador saem da mesma consolidacao). A guarda conta
+ *    essas meias horas por mes; o mes com alguma sai em `entrada.meses_incompletos` e a rodada avisa. Nenhum numero muda.
+ * linhas: [{ mes, restrito (0/1), irr (null = sem irradiancia), ger (null = sem geracao) }]
+ * devolve { por_mes: [{ mes, restritos, sem_irr, sem_ger }] (so meses com restricao, em ordem), incompletos: ['AAAA-MM', ...] }
+ */
+function semEntrada(linhas) {
+  const M = {};
+  for (const t of linhas || []) {
+    if (!t.restrito) continue;
+    const o = M[t.mes] || (M[t.mes] = { mes: t.mes, restritos: 0, sem_irr: 0, sem_ger: 0 });
+    o.restritos++;
+    if (t.irr == null) o.sem_irr++;
+    else if (t.ger == null) o.sem_ger++;   // sem irradiancia ja conta acima: cada meia hora perdida conta uma vez so
+  }
+  const por_mes = Object.keys(M).sort().map((m) => M[m]);
+  return { por_mes, incompletos: por_mes.filter((o) => o.sem_irr + o.sem_ger > 0).map((o) => o.mes) };
+}
+
+module.exports = { valida, mesEmCurso, semEntrada };

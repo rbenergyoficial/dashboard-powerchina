@@ -51,6 +51,24 @@ if (PRODUTO) {
     if (F.length < 4) f.push('so ' + F.length + ' mes(es) fechado(s): o portao nao podia ter gravado');
     if (!(mae <= V.limite_mae_pct && Math.abs(vies) <= V.limite_vies_pct)) f.push('o blob foi gravado com o portao fora dos limites (MAE ' + mae + ', vies ' + vies + ')');
     console.log('   ' + G.gerado_em + ' · mes em curso ' + aberto + ' · ' + F.length + ' meses fechados · MAE ' + mae + ' % · vies ' + vies + ' % · pior ' + pior + ' %');
+    // a guarda da entrada (26/10/2026): o bloco existe e fecha; e, mes a mes, o laco do corte contou exatamente as restritas menos as
+    // que a guarda diz que ficaram fora (a segunda rota: `intervalos` vem do laco, `por_mes` da guarda). Mes incompleto AVISA, nao reprova.
+    const E = G.entrada;
+    if (!E || !Array.isArray(E.por_mes) || !Array.isArray(E.meses_incompletos)) f.push('o corte_gemeo.json publicado nao tem o bloco `entrada`');
+    else {
+      const soma = (k) => E.por_mes.reduce((a, o) => a + o[k], 0);
+      if (E.restritas !== soma('restritos') || E.sem_irradiancia !== soma('sem_irr') || E.sem_geracao !== soma('sem_ger')) f.push('entrada: os totais nao fecham com por_mes');
+      const inc = E.por_mes.filter((o) => o.sem_irr + o.sem_ger > 0).map((o) => o.mes);
+      if (JSON.stringify(inc) !== JSON.stringify(E.meses_incompletos)) f.push('entrada: meses_incompletos ' + JSON.stringify(E.meses_incompletos) + ', por_mes diz ' + JSON.stringify(inc));
+      const S = {}; (G.serie || []).forEach((s) => { S[s.mes] = s; });
+      E.por_mes.forEach((o) => { const esp = o.restritos - o.sem_irr - o.sem_ger, s = S[o.mes];
+        if ((s ? s.intervalos : 0) !== esp) f.push(o.mes + ': o corte contou ' + (s ? s.intervalos : 0) + ' meias horas restritas, a guarda diz ' + esp); });
+      (G.serie || []).forEach((s) => { if (!E.por_mes.some((o) => o.mes === s.mes)) f.push(s.mes + ': mes na serie sem linha na guarda'); });
+      E.por_mes.filter((o) => o.sem_irr + o.sem_ger > 0).forEach((o) => console.error('::warning::corte_gemeo: ' + o.mes + ' INCOMPLETO · '
+        + o.sem_irr + ' sem irradiancia e ' + o.sem_ger + ' sem geracao, de ' + o.restritos + ' meias horas restritas'));
+      console.log('   entrada: ' + E.restritas + ' meias horas restritas · ' + E.sem_irradiancia + ' sem irradiancia · ' + E.sem_geracao
+        + ' sem geracao · incompletos ' + (E.meses_incompletos.join(', ') || 'nenhum'));
+    }
     fim(' --produto');
   })().catch((e) => { console.error('ensaio-portao-gemeo --produto: ' + e.message); process.exit(1); });
   return;
@@ -64,6 +82,17 @@ function compila(s) { const m = { exports: {} }; new Function('module', 'exports
 const ONS = { '2026-03': 14.62, '2026-04': 15.29, '2026-05': 15.62, '2026-06': 8.72, '2026-07': 14.79, '2026-08': 17.32, '2026-09': 21.45, '2026-10': 8.42 };
 const MOD = { '2026-03': 15.17, '2026-04': 13.57, '2026-05': 14.31, '2026-06': 8.72, '2026-07': 14.17, '2026-08': 18.97, '2026-09': 18.34, '2026-10': 4.88 };
 const serie = (meses, mod) => meses.map((m) => ({ mes: m, corte_gwh: (mod || MOD)[m] }));
+// a entrada da guarda: set/26 com uma restrita sem irradiancia e uma sem geracao; out/26 com uma sem as duas; jun/26 so sem geracao;
+// ago/26 completo; jul/26 so com livres (inclusive livre sem irradiancia, que nao e da guarda)
+const ENT = [
+  { mes: '2026-07', restrito: 0, irr: null, ger: 10 }, { mes: '2026-07', restrito: 0, irr: 500, ger: 200 },
+  { mes: '2026-08', restrito: 1, irr: 800, ger: 150 }, { mes: '2026-08', restrito: 1, irr: 0, ger: 0 },
+  { mes: '2026-09', restrito: 1, irr: 700, ger: 120 }, { mes: '2026-09', restrito: 1, irr: null, ger: 90 },
+  { mes: '2026-09', restrito: 1, irr: 650, ger: null }, { mes: '2026-09', restrito: 1, irr: 600, ger: 100 },
+  { mes: '2026-09', restrito: 0, irr: null, ger: null },
+  { mes: '2026-10', restrito: 1, irr: null, ger: null }, { mes: '2026-10', restrito: 1, irr: 300, ger: 40 },
+  { mes: '2026-06', restrito: 1, irr: 500, ger: null }, { mes: '2026-06', restrito: 1, irr: 520, ger: 210 },
+];
 const TODOS = Object.keys(ONS);
 const CASOS = {
   '15:40 real: o mes aberto a -42 % fica fora e o portao passa': (L) => { const r = L.valida(serie(TODOS), ONS, '2026-10', 12, 8);
@@ -84,6 +113,19 @@ const CASOS = {
     return r.validacao.mes_em_curso_fora === null && r.validacao.pares.every((p) => p.aberto === 0) && r.validacao.meses === 7; },
   'o mes em curso e o de Brasilia (UTC-3) na virada': (L) => L.mesEmCurso(Date.parse('2026-11-01T02:59:00Z')) === '2026-10'
     && L.mesEmCurso(Date.parse('2026-11-01T03:00:00Z')) === '2026-11',
+  // a guarda da entrada (26/10/2026): a meia hora restrita sem irradiancia ou sem geracao e contada, uma vez so, e marca o mes
+  'entrada: restrita sem irradiancia e sem geracao contam, a livre nao': (L) => { const r = L.semEntrada(ENT);
+    const s = r.por_mes.find((o) => o.mes === '2026-09');
+    return s.restritos === 4 && s.sem_irr === 1 && s.sem_ger === 1 && JSON.stringify(r.incompletos) === '["2026-06","2026-09","2026-10"]'; },
+  'entrada: mes so com geracao faltando tambem e incompleto': (L) => { const r = L.semEntrada(ENT); const s = r.por_mes.find((o) => o.mes === '2026-06');
+    return s.sem_irr === 0 && s.sem_ger === 1 && r.incompletos.includes('2026-06'); },
+  'entrada: sem irradiancia E sem geracao conta uma vez so (em sem_irr)': (L) => { const s = L.semEntrada(ENT).por_mes.find((o) => o.mes === '2026-10');
+    return s.restritos === 2 && s.sem_irr === 1 && s.sem_ger === 0; },
+  'entrada: mes completo fica fora de incompletos, mas aparece em por_mes': (L) => { const r = L.semEntrada(ENT);
+    return r.por_mes.some((o) => o.mes === '2026-08' && o.sem_irr === 0 && o.sem_ger === 0) && !r.incompletos.includes('2026-08'); },
+  'entrada: mes so com meias horas livres nao aparece': (L) => !L.semEntrada(ENT).por_mes.some((o) => o.mes === '2026-07'),
+  'entrada: irradiancia ZERO e valor, nao falta (a noite com restricao conta como completa)': (L) =>
+    L.semEntrada([{ mes: '2026-11', restrito: 1, irr: 0, ger: 0 }]).incompletos.length === 0,
 };
 const julga = (L) => Object.entries(CASOS).map(([n, fn]) => { let ok; try { ok = fn(L) === true; } catch (e) { ok = false; } return [n, ok]; });
 const R = julga(compila(src));
@@ -98,6 +140,15 @@ const PLANTIOS = [
   ['o aberto conta para o minimo de quatro', 'const impossivel = F.length < 4', 'const impossivel = pares.length < 4', ['tres fechados e o aberto: impossivel, o aberto nao completa a conta']],
   ['o aberto sai dos pares', "aberto: s.mes === mesAberto ? 1 : 0 }));", "aberto: s.mes === mesAberto ? 1 : 0 })).filter((p) => !p.aberto);",
     ['o mes aberto continua nos pares, marcado (o portal mostra o apurado dele)']],
+  ['a guarda conta a livre tambem', '    if (!t.restrito) continue;\n', '', ['entrada: restrita sem irradiancia e sem geracao contam, a livre nao',
+    'entrada: mes so com meias horas livres nao aparece']],
+  ['sem geracao nao conta', '    else if (t.ger == null) o.sem_ger++;', '', ['entrada: restrita sem irradiancia e sem geracao contam, a livre nao']],
+  ['a meia hora sem as duas conta duas vezes', '    else if (t.ger == null) o.sem_ger++;', '    if (t.ger == null) o.sem_ger++;',
+    ['entrada: sem irradiancia E sem geracao conta uma vez so (em sem_irr)']],
+  ['irradiancia zero como falta', '    if (t.irr == null) o.sem_irr++;', '    if (!t.irr) o.sem_irr++;',
+    ['entrada: irradiancia ZERO e valor, nao falta (a noite com restricao conta como completa)']],
+  ['o mes incompleto nao e marcado', 'incompletos: por_mes.filter((o) => o.sem_irr + o.sem_ger > 0)', 'incompletos: por_mes.filter((o) => o.sem_irr > 0)',
+    ['entrada: mes so com geracao faltando tambem e incompleto']],
 ];
 for (const [nome, de, para, devem] of PLANTIOS) {
   const n = src.split(de).length - 1;
@@ -116,6 +167,10 @@ const fia = (g) => [
   [/const MES_ABERTO = process\.env\.MES_EM_CURSO \|\| PG\.mesEmCurso\(Date\.now\(\)\);/.test(g), 'o mes em curso nao sai de PG.mesEmCurso'],
   [!/pares\.reduce\(/.test(g), 'a conta antiga sobre todos os pares segue no gerador'],
   [/if \(impossivel\) throw new Error\(impossivel\);/.test(g), 'a validacao impossivel nao derruba sempre'],
+  [/const ENT = PG\.semEntrada\(T\);/.test(g), 'a guarda da entrada nao conta sobre as linhas do conjunto (PG.semEntrada(T))'],
+  [/::warning::gemeo: /.test(g), 'o mes incompleto nao vira aviso na rodada'],
+  [/meses_incompletos: ENT\.incompletos, por_mes: ENT\.por_mes/.test(g), 'o bloco `entrada` nao publica os meses incompletos'],
+  [/if \(!t\.restrito \|\| t\.irr == null \|\| t\.ger == null\) continue;/.test(g), 'o laco do corte mudou: a guarda conta o que ele pula, rever as duas'],
 ].filter(([ok]) => !ok).map(([, m]) => m);
 fia(ger).forEach((m) => f.push('fiacao: ' + m));
 console.log('   fiacao no gerador: ' + (fia(ger).length ? fia(ger).length + ' problema(s)' : 'ok'));
