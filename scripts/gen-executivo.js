@@ -360,6 +360,11 @@ async function writeOut(obj, nome, opts) {
 
 (async () => {
   const restr = await getJSON(BASE + 'ons_restricao_all.json');
+  // 🔴 A JANELA COMUM (PROMOVER janela-restricao, 26/10/2026): o detalhe por usina so vale ate o ULTIMO instante do arquivo do
+  //    conjunto. O que passa dele (o por usina chegou antes do conjunto) fica fora de tudo o que se apura com o detalhe e sai em
+  //    `dias_sem_conjunto`; volta sozinho na rodada em que o conjunto chega. Em 26/10 16:46Z o dia 25 entrou inteiro como livre. Na lib.
+  const JC = require('./lib-janela-conjunto.js');
+  const TS_CONJ = JC.janelaComum(restr.consolidado), CORTE = JC.cortador(TS_CONJ);
   const daily = await getJSON(BASE + 'way2_daily.json');
   // 🔴 A IRRADIANCIA DO EXECUTIVO E A DO DATALOGGER DAS ESTACOES (lote fonte-perfil-way2, 19/10/2026; regra do humano: irradiancia do
   //    datalogger, integralizada). Ate aqui `irr_media` e o `irr` da serie diaria eram a irradiancia que o OPERADOR publica por usina, sob
@@ -390,7 +395,7 @@ async function writeOut(obj, nome, opts) {
     for (const mes of mesesRef) {
       // so o 404 e ausencia (o mes ainda sem detalhe publicado): qualquer outra falha de leitura ESTOURA aqui — engolida, o
       // mes sairia sem a troca e, se o laco do CRU relesse com sucesso, a guarda de baixo fecharia o dia calada (revisor-ensaio)
-      try { CRU_LIDO[mes] = (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
+      try { CRU_LIDO[mes] = CORTE.corta((await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado); }
       catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('detalhe do ONS de ' + mes + ' ilegivel: ' + e.message); }
     }
     const { refHora: rh, refDia: rd } = RC.refPorUsina(CRU_LIDO, { desde: REF_DESDE, usinas: PPA.concat(ML) });
@@ -667,7 +672,7 @@ async function writeOut(obj, nome, opts) {
   // gerador para aqui, onde o problema esta, em vez de tropecar la na frente.
   const falhas = [];
   for (const mes of meses) {
-    try { CRU[mes] = CRU_LIDO[mes] || (await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado; }
+    try { CRU[mes] = CRU_LIDO[mes] || CORTE.corta((await getJSON(BASE + 'ons_irradiancia_' + mes.replace('-', '_') + '.json')).consolidado); }
     catch (e) { falhas.push(mes + ': ' + String(e.message).slice(0, 60)); }
   }
   if (falhas.length) {
@@ -1414,6 +1419,17 @@ async function writeOut(obj, nome, opts) {
     console.log('ref_hora: %d dias, %d usina-dias · fecha com o ref_dia_ufv', refHoraOut.dias.length, refHoraOut.serie.length);
   }
 
+  // a janela comum (PROMOVER janela-restricao): os dias so do arquivo por usina, com o `desde` carregado da publicacao anterior (lida
+  // so quando ha o que reter; so o 404 e ausencia)
+  let diasSemConj = [];
+  if (CORTE.fora.size) {
+    let desdeAntes = {};
+    try { desdeAntes = JC.desdeAnterior(await getJSON(BASE + OUT_BLOB)); }
+    catch (e) { if (!/^404 /.test(String(e.message))) throw new Error('dias_sem_conjunto: a publicacao anterior ilegivel para carregar o desde: ' + e.message); }
+    diasSemConj = JC.diasSemConjunto(CORTE.fora, desdeAntes, new Date().toISOString(), TS_CONJ);
+    console.log('⚠️ janela comum: ' + diasSemConj.length + ' dia(s) so no arquivo por usina, FORA da apuracao ate o conjunto chegar (o conjunto vai ate '
+      + TS_CONJ + '): ' + diasSemConj.map((x) => x.dia + ' desde ' + x.desde).join(' · '));
+  } else console.log('janela comum: o detalhe por usina nao passa do conjunto (ate ' + TS_CONJ + ')');
   const out = { atualizado: new Date().toISOString(), cap_mw: CAP_MW, mes_atual: mesAtual,
     // META: PENDENTE — virá da planilha do SharePoint (P50/P90/PPA).
     // 🔴 `pr_alvo_pct: 90` e `disp_alvo_pct: 97` SAÍRAM em 17/09/2026: eram números cravados aqui, sem
@@ -1500,6 +1516,11 @@ async function writeOut(obj, nome, opts) {
     // os dias que nao fecharam com o arquivo do conjunto nesta rodada, fora do ref_dia_ufv e do ref_hora, com o `desde`
     // (PROMOVER ref-retem-dia). Sempre emitido: [] quando todos fecham.
     ref_dias_retidos: refRetidos,
+    // os dias que so o arquivo por usina tem, fora da apuracao ate o conjunto chegar (PROMOVER janela-restricao). Sempre emitido:
+    // [] quando o detalhe nao passa do conjunto.
+    dias_sem_conjunto: diasSemConj,
+    // o ultimo instante do arquivo do conjunto que esta rodada leu (a janela comum): nenhuma serie por dia do detalhe passa dele
+    conjunto_ate: TS_CONJ || null,
     // A CURVA COM O CORTE PINTADO: entregue + cortado empilhados, dia a dia. Mesma fonte/formula da
     // cascata (nivel do complexo, ons_restricao_all) -> os dois nunca divergem. 90 dias.
     // ---- MÊS CORRENTE dia a dia, por UFV e do complexo ----

@@ -87,7 +87,8 @@ const LEITORES = {
     'ensaio-historico-projecao.js --registro', 'ensaio-irr-datalogger.js --produto', 'ensaio-irr-ons-tag.js --produto',
     'ensaio-irr-rotulo.js --produto', 'ensaio-irr-travada.js --produto', 'ensaio-liquidada-produto.js', 'ensaio-manchete-mwh.js',
     'ensaio-manchete-noite.js --produto', 'ensaio-manchete-remendo.js', 'ensaio-mes-aberto.js', 'ensaio-motivo-ufv.js', 'ensaio-par-mwh.js',
-    'ensaio-pr-ufv.js --produto', 'ensaio-pr.js', 'ensaio-ref-conjunto.js --produto', 'ensaio-ref-dia.js', 'ensaio-tol-rateio.js'],
+    'ensaio-pr-ufv.js --produto', 'ensaio-pr.js', 'ensaio-ref-conjunto.js --produto', 'ensaio-ref-dia.js', 'ensaio-tol-rateio.js',
+    'ensaio-janela-conjunto.js --produto', 'alerta-sem-restricao.js'],   // janela-restricao
   'way2-hist.yml': ['ensaio-med-ufv.js --produto', 'ensaio-w2-bruta-usina.js --produto', 'ensaio-fontes-exec.js --diario', 'ensaio-agente-dia.js'],
   'sungrow.yml': ['ensaio-sungrow-cascata.js', 'ensaio-inv-logger.js --produto', 'ensaio-pvstr-logger.js --produto', 'ensaio-agente-dia.js'],
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',

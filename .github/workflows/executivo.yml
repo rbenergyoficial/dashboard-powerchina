@@ -17,6 +17,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # a issue do aviso do dia sem restricao (PROMOVER janela-restricao): o registro e o dedup do aviso, um por dia
+      issues: write
     env:
       # 💰 A copia em disco do job, em TODO passo (restaurada no inicio, guardada no fim): o historico do medidor (publico/, pela
       #    lib-le-blob) e os blobs que varios passos releem na mesma rodada (proprios/, LE_DADOS_PROPRIOS): a releitura vai com
@@ -37,6 +39,8 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          persist-credentials: false   # nada aqui faz push; o token nao fica no .git/config dos passos (janela-restricao, RW-005)
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
@@ -154,6 +158,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-ref-conjunto.js
 
+      # a JANELA COMUM entre os dois arquivos do operador e o dia completo sem limitacao (PROMOVER janela-restricao): a regra da lib, os
+      # plantios, a fiacao no gerador, no aviso e aqui, e o aviso executado com o dado e o alerta forjados. Sem rede.
+      - name: Ensaio · a janela comum do conjunto (regra)
+        id: jc_regra
+        if: ${{ !cancelled() }}
+        run: node scripts/ensaio-janela-conjunto.js
+
       # Cada gerador depende so dos ensaios de regra das libs DELE (lote5-workflows). O benchmark usa a lib-ref-conjunto e a lib-rotulos;
       # o executivo, todas as de cima menos as quatro da irradiancia e a do PR. Os ensaios de produto ficam presos ao gerador que julgam.
       - name: Gerar benchmark_ne.json (corte do NE, solar e eolico)
@@ -169,13 +180,21 @@ jobs:
 
       - name: Gerar executivo.json
         id: gen_exec
-        if: ${{ !cancelled() && steps.r_aovivo.outcome == 'success' && steps.r_tol_rateio.outcome == 'success' && steps.r_disp_decl.outcome == 'success' && steps.r_manchete_rem.outcome == 'success' && steps.r_manchete_noite.outcome == 'success' && steps.r_hist_proj.outcome == 'success' && steps.r_fontes_exec.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.r_aovivo.outcome == 'success' && steps.r_tol_rateio.outcome == 'success' && steps.r_disp_decl.outcome == 'success' && steps.r_manchete_rem.outcome == 'success' && steps.r_manchete_noite.outcome == 'success' && steps.r_hist_proj.outcome == 'success' && steps.r_fontes_exec.outcome == 'success' && steps.refconj_regra.outcome == 'success' && steps.jc_regra.outcome == 'success' }}
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           OUT_BLOB: executivo.json
         run: node scripts/gen-executivo.js
+
+      # ... e o PRODUTO da janela comum: os dias sem conjunto passam do conjunto e nao estao no ref_dia_ufv nem no corte por usina, e a
+      # segunda rota (o detalhe contado aqui) da a mesma lista; arquivo do operador regravado depois do executivo: dito, nao julgado.
+      - name: Ensaio · a janela comum do conjunto (produto)
+        if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
+        run: node scripts/ensaio-janela-conjunto.js --produto
 
       # ... e o PRODUTO: o medidor do perfil recontado de D-2 e D-3, a verificada do operador intacta no termo do corte, a irradiancia
       # do executivo refeita do datalogger; plantios em copias do produto. Arquivo de fonte regravado depois do executivo: dito, nao julgado.
@@ -422,6 +441,27 @@ jobs:
         env:
           DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-historico-projecao.js --registro
+
+      # 🔔 O DIA COMPLETO SEM NENHUMA LIMITACAO (PROMOVER janela-restricao): o aviso pela lib-alerta (e-mail e a issue, que e o registro e o
+      #    dedup, um por dia), dos ultimos 3 dias e do dia do lote em diante. O ensaio do aviso e o gate SO dele (o do gerador e o da
+      #    janela: o aviso nao pode congelar o executivo). E-mail que nao sai pinta o passo de vermelho, uma vez; o passo e o ultimo antes
+      #    dos caches, que tem `!cancelled()`, e nao barra nada.
+      - name: Ensaio · o dia sem restricao e o aviso (regra)
+        id: jc_aviso
+        if: ${{ !cancelled() }}
+        run: node scripts/ensaio-janela-conjunto.js --aviso
+      - name: Aviso · dia completo sem restricao do operador
+        if: ${{ !cancelled() && steps.jc_aviso.outcome == 'success' }}
+        timeout-minutes: 2
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o arquivo do conjunto
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/alerta-sem-restricao.js
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor
