@@ -25,14 +25,14 @@
  *   versoes — bruta (tudo) e limpa (so o que passa na faixa) — para a diferenca entre as duas ser
  *   ela mesma um indicador.
  *
- * Env: DADOS_STORAGE (RW no container dados).
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job), de gravar no container dados.
  *   ESTACAO_TUDO_ARQ = o `estacao_tudo_30min.json` de um arquivo local (ensaio e antes x depois); sem ele, o blob publicado.
  *   O SCADA (so o campo `scada_w`), um dos tres abaixo; nenhum = a rodada sai sem `scada_w`.
  *   IIRR_LOCAL     = caminho de um CSV local (carga historica e testes)
  *   IIRR_CONTAINER = container do blob com os CSV crus (ex.: scada-raw). O gerador LISTA e pega o
  *     export MAIS RECENTE. E o modo definitivo: o nome do export e datado, entao URL fixa apodrece
  *     no proximo export — e foi exatamente a falta de endereco estavel que manteve este gerador
- *     preso na semente. Precisa de DADOS_STORAGE, que o workflow ja tem.
+ *     preso na semente. Precisa da credencial do storage (a chave ou o OIDC do job).
  *   IIRR_URL       = um CSV especifico por URL (util para apontar um export antigo a mao)
  *   (O modo semente, que republicava data/irr_seed.json do SCADA, saiu no lote fonte-pr-logger: ele punha o SCADA de volta na tela.)
  */
@@ -228,10 +228,7 @@ async function fonteLinhas() {
  * um dia so; escolher "o maior" traria o despejo congelado. */
 async function fontesDoContainer(cont) {
   {
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    const conn = process.env.DADOS_STORAGE;
-    if (!conn) throw new Error('IIRR_CONTAINER exige DADOS_STORAGE');
-    const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(cont);
+    const c = require('./lib-conteiner').conteiner(cont);   // IIRR_CONTAINER: a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
     CACHE_RAW = require('./lib-cache-blob').abre(cont, process.env.CACHE_SCADA_DIR);   // sem a variavel, o CACHE_BLOB_DIR
     // 🔴 O NOME CHEGA PREFIXADO. A ponte do Power Automate grava <id-do-item>_<nome-original>:
     // medido no container, "68656_M04.xlsx". Expressao ancorada em ^IIRR nunca casa — foi o que
@@ -343,11 +340,7 @@ async function writeOut(obj, nome, comprime) {
     fs.writeFileSync(alvo, corpo);
     return Buffer.byteLength(corpo);
   }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);   // a chave ou o OIDC do job; sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   const corpo = comprime ? zlib.gzipSync(Buffer.from(json)) : Buffer.from(json);
   const cab = { blobContentType: 'application/json', blobCacheControl: 'public, max-age=300' };
   if (comprime) cab.blobContentEncoding = 'gzip';

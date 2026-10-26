@@ -4,13 +4,20 @@ on:
           - cron: '13 4,9-22 * * *' # 01h BRT (fecha o dia anterior) + 06h-19h BRT · min 13 foge do congestionamento do :00
   workflow_dispatch: {}
 concurrency:
-  group: gen-executivo
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-executivo-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os passos que so leem o publicado
+    #    levam a SAS de leitura (a copia em disco com If-None-Match funciona por ela); os sem rede ficam sem credencial nenhuma.
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
+    env:
       # 💰 A copia em disco do job, em TODO passo (restaurada no inicio, guardada no fim): o historico do medidor (publico/, pela
       #    lib-le-blob) e os blobs que varios passos releem na mesma rodada (proprios/, LE_DADOS_PROPRIOS): a releitura vai com
       #    If-None-Match e o 304 do storage confirma a copia. O historico do medidor NAO entra na regex: a lib-le-blob ja o copia, com poda,
@@ -20,6 +27,15 @@ jobs:
       LE_DADOS_PROPRIOS: '^(irr_ufv|irr_60min|irr_30min|irr_plano_30min|ons_restricao_all|ons_irradiancia_all|estacao_tudo_30min|estacao_logger_30min|way2_daily|executivo|benchmark_ne|corte_gemeo)\.json$'
     timeout-minutes: 15
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -46,6 +62,8 @@ jobs:
       - name: Ensaio · o selo "ao vivo ate" aponta para o instante mais recente
         id: r_aovivo
         if: ${{ !cancelled() }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-aovivo.js
 
       # A folga do par MWh x GWh no rateio e DERIVADA da cadeia de arredondamento. Afrouxar
@@ -54,6 +72,8 @@ jobs:
       - name: Ensaio · a tolerancia do rateio cobre o arredondamento e ainda pega defeito
         id: r_tol_rateio
         if: ${{ !cancelled() }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-tol-rateio.js
 
       # A disponibilidade declarada ao operador e media na janela FIXA 04:00–17:30, em todo mes: o operador mudou tres vezes
@@ -70,6 +90,8 @@ jobs:
       - name: Ensaio · o remendo move a manchete inteira, e coerente
         id: r_manchete_rem
         if: ${{ !cancelled() }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-manchete-remendo.js
 
       # ... e que, de noite, com a ancora que ja contem o dia, o remendo nao conte o dia duas vezes (a regra, antes de gerar)
@@ -138,7 +160,8 @@ jobs:
         id: gen_bench
         if: ${{ !cancelled() && steps.refconj_regra.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           # jan/26 em diante — referencia de todas as analises do painel executivo. Le ~390 MB dos
           # dados abertos do ONS em streaming e grava so o resumo mensal (alguns KB).
@@ -148,7 +171,8 @@ jobs:
         id: gen_exec
         if: ${{ !cancelled() && steps.r_aovivo.outcome == 'success' && steps.r_tol_rateio.outcome == 'success' && steps.r_disp_decl.outcome == 'success' && steps.r_manchete_rem.outcome == 'success' && steps.r_manchete_noite.outcome == 'success' && steps.r_hist_proj.outcome == 'success' && steps.r_fontes_exec.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           OUT_BLOB: executivo.json
         run: node scripts/gen-executivo.js
@@ -158,7 +182,7 @@ jobs:
       - name: Ensaio · as fontes diretas da Visao Executiva (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-fontes-exec.js --produto
 
       # A guarda da energia liquidada sobre o PRODUTO: a janela que o gerador acabou de gravar (guarda_liquida.json)
@@ -167,6 +191,8 @@ jobs:
       # reprova. A logica e julgada em casos plantados no ensaios.yml.
       - name: Ensaio · a janela da guarda da liquidada (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-liquidada-produto.js
 
       # Segunda rota sobre o PRODUTO publicado: os dois geradores ja abortam sem gravar quando a soma
@@ -176,6 +202,8 @@ jobs:
       - name: Ensaio · a serie por dia fecha com a por mes
         # julga os dois blobs (executivo e benchmark): roda se qualquer um dos dois foi refeito nesta rodada
         if: ${{ !cancelled() && (steps.gen_exec.outcome == 'success' || steps.gen_bench.outcome == 'success') }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-fechamento-dia.js
 
       # A relacao usina -> contrato passou a ser publicada para os paineis pararem de carrega-la como
@@ -185,6 +213,8 @@ jobs:
       # fechado. Roda DEPOIS de gerar, como os outros que julgam o produto.
       - name: Ensaio · a hierarquia publicada fecha com a energia
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-hierarquia.js
 
       # O corte diario passou a ser publicado tambem ABERTO POR USINA, a pedido. As duas escritas saem
@@ -193,6 +223,8 @@ jobs:
       # diferentes sobre o MESMO dia. Roda DEPOIS de gerar, como os outros que julgam o produto.
       - name: Ensaio · o corte por usina fecha com o corte por contrato
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-corte-ufv.js
 
       # O corte por MOTIVO aberto por usina e por contrato (o deficit da usina nas meias horas limitadas, pelo motivo do
@@ -200,6 +232,8 @@ jobs:
       # contra o conjunto.
       - name: Ensaio · o motivo do corte por usina e por contrato
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-motivo-ufv.js
 
       # A referencia do operador contra a verificada, crua, dia a dia. O campo existe para MOSTRAR um defeito da
@@ -207,6 +241,8 @@ jobs:
       # conjunto contra o arquivo do conjunto), e os agregados contra as suas partes.
       - name: Ensaio · a referencia do operador por usina e a crua
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-ref-dia.js
 
       # Corte, potencial, entregue, resto e razoes do mes tambem em MWh, da energia crua (o GWh de 2 casas so tem
@@ -214,36 +250,48 @@ jobs:
       # segunda rota, sobre o PRODUTO publicado, e prova reprovar em quatro defeitos plantados.
       - name: Ensaio · o par GWh x MWh do executivo fecha
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-par-mwh.js
 
       # A manchete do mes (meta, projecao, falta, ritmos) tambem em MWh com centesimos, das energias em MWh da serie:
       # origem, identidades, o remendo de 5 min movendo os campos em MWh, e dois plantios que reprovam.
       - name: Ensaio · a manchete em MWh
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-manchete-mwh.js
 
       # A energia do mes na manchete e a soma dos dias da serie (o remendo de 5 min contou o dia 28/09 duas vezes depois do
       # por do sol). Aqui, o produto da rodada completa; no way2-recent, o de cada remendo.
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-manchete-noite.js --produto
 
       # A serie mensal e a manchete dizem a MESMA coisa sobre o mes estar aberto: em 30/09/2026, ultimo dia do mes, a serie
       # deu set/26 por fechado de manha (o fator do rateio vira 1) enquanto a manchete dizia 1 dia restante.
       - name: Ensaio · a serie mensal e a manchete concordam sobre o mes aberto
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-mes-aberto.js
 
       # O atingimento do mes aberto sai do MWh, e o do conjunto e o do Complexo (em 01/10/2026, pelo GWh de 2 casas, o M9
       # publicava 77,78 % contra 77,20 % exatos). Sem mes aberto, so os plantios forjados.
       - name: Ensaio · o atingimento do mes aberto sai do MWh
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-atingido-mwh.js
 
       # ... e o PRODUTO: cada linha publicada contra uma segunda conta feita da serie diaria, nenhum mes liquidado de fora,
       # o comissionamento e o gerado contra a serie mensal, o resumo refeito; cada plantio reprova pelo que plantou.
       - name: Ensaio · o historico da projecao (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-historico-projecao.js --produto
 
       # ... e o PRODUTO da disponibilidade declarada: cada mes publicado refeito do arquivo cru do conjunto, com a janela
@@ -251,6 +299,8 @@ jobs:
       # do conjunto foi regravado depois do executivo montado, diz que nao julgou (duas vintages) em vez de reprovar.
       - name: Ensaio · a disponibilidade declarada na janela fixa (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-disp-declarada.js --produto
 
       # O patamar do conjunto com uma parcela entra no corte pela soma das usinas, e a lista publicada no executivo vale
@@ -259,6 +309,8 @@ jobs:
       # roda ANTES do executivo e le a lista da rodada anterior: listas diferentes, ele diz que nao julgou.
       - name: Ensaio · a troca do conjunto chega ao benchmark (produto)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' && steps.gen_bench.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-ref-conjunto.js --produto
 
       # o NOME da grandeza nas tres linguas (lib-irr-rotulo, que o gen-irradiancia chama antes de gravar): a REGRA, em casos forjados.
@@ -274,7 +326,8 @@ jobs:
         id: gen_irr
         if: ${{ !cancelled() && steps.irr_regra_trav.outcome == 'success' && steps.irr_regra_log.outcome == 'success' && steps.irr_regra_ons.outcome == 'success' && steps.irr_regra_rot.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           # A ponte do Power Automate ("SCADA SharePoint para Blob") ja grava os exports do SCADA
           # aqui. IIRR_CONTAINER faz o gerador LISTAR o container e usar o export MAIS RECENTE —
@@ -298,19 +351,23 @@ jobs:
       - name: Ensaio · a solarimetria do datalogger, integralizada (produto)
         if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-irr-datalogger.js --produto
 
       # e o PRODUTO: nenhum trecho travado na serie de 30 min publicada; o M5 travado reinserido reprova. Depois de gerar
       # e antes do PR, que le esta irradiancia (e refaz os dias com leitura retirada).
       - name: Ensaio · a leitura travada sai da serie (produto)
         if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-irr-travada.js --produto
 
       # ... e o M7 do ONS no produto: a conferencia publicada no irr_ufv.json e REFEITA da fonte crua e tem de bater mes a mes (o fio do
       # gerador: chave, slot, referencia), e o irr_plano_30min tem ons_w_M7 em toda leitura do M7 nos meses conferidos e nenhum nos retirados
       - name: Ensaio · o M7 da irradiancia do ONS (produto)
         if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-irr-ons-tag.js --produto
 
       # ... e o NOME da grandeza nas tres linguas (PROMOVER irr-rotulo): a regra em casos forjados e, no irr_ufv.json recem
@@ -318,6 +375,8 @@ jobs:
       # irma so com essa paridade. Cada plantio reprova pelo que plantou.
       - name: Ensaio · o nome da grandeza nas tres linguas (produto)
         if: ${{ !cancelled() && steps.gen_irr.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-irr-rotulo.js --produto
 
       # PR do conjunto no 230 kV, com o corte dentro e corrigido pelo corte. DEPOIS da irradiancia (le o
@@ -328,17 +387,22 @@ jobs:
         id: gen_pr
         if: ${{ !cancelled() && steps.pr_regra.outcome == 'success' && steps.refconj_regra.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: node scripts/gen-pr.js
 
       - name: Ensaio · o PR confere com o executivo e com o medidor
         if: ${{ !cancelled() && steps.gen_pr.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-pr.js
 
       # ... e o PRODUTO pr_ufv.json: contratos e meses refeitos, o corte da usina igual ao do executivo, e a soma das nove
       # usinas contra o 230 kV nos dias com as mesmas horas validas (entre 1,000 e 1,010).
       - name: Ensaio · o PR por usina e por contrato (produto)
         if: ${{ !cancelled() && steps.gen_pr.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-pr-ufv.js --produto
 
       # O que a manchete de fato publicou para o mes aberto, por entidade e dias fechados, num arquivo que so cresce. No FIM
@@ -347,13 +411,16 @@ jobs:
       - name: Gravar projecao_registro.json (o que a projecao disse, dia a dia)
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
         run: node scripts/gen-registro-projecao.js
 
       # ... e o registro publicado: chaves unicas, versoes coerentes, toda linha de mes aberto da manchete presente nele.
       - name: Ensaio · o registro da projecao
         if: ${{ !cancelled() && steps.gen_exec.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-historico-projecao.js --registro
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.

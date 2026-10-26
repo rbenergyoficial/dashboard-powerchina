@@ -64,6 +64,8 @@ const MIGRADOS = {
   'benchmark-2025.yml': { 'gen-benchmark-ons.js': null },
   'way2-hist.yml': { 'backup-blob.js': null, 'gen-way2-hist.js': null, 'gen-agente-dia.js': null },   // etapa 4, os grandes diários
   'scada.yml': { 'gen-scada.js': null, 'gen-scada-db-vigia.js': null, 'gen-scada-intake-watchdog.js': null },
+  'executivo.yml': { 'gen-benchmark-ons.js': null, 'gen-executivo.js': null, 'gen-irradiancia.js': null, 'gen-pr.js': null,   // etapa 4
+    'gen-registro-projecao.js': null },
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
 const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];
@@ -79,6 +81,12 @@ const LEITORES = {
   'ppc.yml': ['ensaio-ppc-duracao.js --produto'],
   'must-intra.yml': ['alerta-must.js'],
   'inv-scada.yml': ['ensaio-inv-scada-dia.js'],
+  'executivo.yml': ['ensaio-aovivo.js', 'ensaio-atingido-mwh.js', 'ensaio-corte-ufv.js', 'ensaio-disp-declarada.js --produto',
+    'ensaio-fechamento-dia.js', 'ensaio-fontes-exec.js --produto', 'ensaio-hierarquia.js', 'ensaio-historico-projecao.js --produto',
+    'ensaio-historico-projecao.js --registro', 'ensaio-irr-datalogger.js --produto', 'ensaio-irr-ons-tag.js --produto',
+    'ensaio-irr-rotulo.js --produto', 'ensaio-irr-travada.js --produto', 'ensaio-liquidada-produto.js', 'ensaio-manchete-mwh.js',
+    'ensaio-manchete-noite.js --produto', 'ensaio-manchete-remendo.js', 'ensaio-mes-aberto.js', 'ensaio-motivo-ufv.js', 'ensaio-par-mwh.js',
+    'ensaio-pr-ufv.js --produto', 'ensaio-pr.js', 'ensaio-ref-conjunto.js --produto', 'ensaio-ref-dia.js', 'ensaio-tol-rateio.js'],
   'way2-hist.yml': ['ensaio-med-ufv.js --produto', 'ensaio-w2-bruta-usina.js --produto', 'ensaio-fontes-exec.js --diario', 'ensaio-agente-dia.js'],
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
     'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',

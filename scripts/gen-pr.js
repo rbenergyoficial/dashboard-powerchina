@@ -23,7 +23,7 @@
  * pode ser mais fresco que a irradiacao. Acumulativo: dia ja publicado e completo nao e refeito, salvo
  * os ultimos REFAZ_DIAS (o operador e as estacoes corrigem dias recentes).
  *
- *   node scripts/gen-pr.js                  grava o blob (DADOS_STORAGE)
+ *   node scripts/gen-pr.js                  grava o blob (a credencial pela lib-conteiner: a chave ou o OIDC do job)
  *   LOCAL_OUT_DIR=<pasta> node ...          grava em arquivo
  */
 'use strict';
@@ -74,8 +74,7 @@ async function leAnterior(nome = 'pr.json') {
 async function grava(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (LOCAL_OUT_DIR) { require('fs').writeFileSync(require('path').join(LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados');
+  const c = require('./lib-conteiner').conteiner('dados');   // a chave ou o OIDC do job (lib-conteiner)
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

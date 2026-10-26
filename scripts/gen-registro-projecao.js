@@ -10,7 +10,7 @@
  * nao se sobreporem. Mes aberto com dias fechados e nenhuma entrada saindo e erro: a manchete mudou de forma e o
  * registro pararia de crescer calado.
  *
- * Env: DADOS_STORAGE · OUT_CONTAINER=dados. Local: LOCAL_DIR=<pasta> le executivo.json e projecao_registro.json de la
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · OUT_CONTAINER=dados. Local: LOCAL_DIR=<pasta> le executivo.json e projecao_registro.json de la
  * e grava la.
  */
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
@@ -29,10 +29,7 @@ async function leitor() {
       grava: async (nome, obj) => { const b = gz(obj); fs.writeFileSync(path.join(d, nome), b); return b.length; },
     };
   }
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const cli = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const cli = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
   return {
     le: async (nome) => {
       try {

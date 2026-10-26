@@ -21,7 +21,7 @@
  * ESTRATÉGIA COMERCIAL (informada pelo usuário 2026-07-17): M1/M7/M9 estão FORA do PPA. Quando o ONS pede
  * limitação, a empresa limita esses 3 a ~1 MW p/ blindar a entrega do PPA (M2,3,4,5,6,8). Quando a meta do PPA
  * do mês já foi atingida, para de limitar o ML. Por isso o corte é MUITO maior no ML — é ESCOLHA, não azar.
- * Env: DADOS_STORAGE · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · OUT_CONTAINER=dados · OUT_BLOB=executivo.json · LOCAL_OUT p/ teste.
  */
 const rot = require('./lib-rotulos.js');
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial (o https do Open-Meteo passa por ela, direto)
@@ -337,9 +337,8 @@ async function writeOut(obj, nome, opts) {
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
     const f = nome ? process.env.LOCAL_OUT.replace(/\.json$/, '') + '.' + nome : process.env.LOCAL_OUT;
     require('fs').writeFileSync(f, json); return json.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob'); const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cli = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER); await cli.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const cli = require('./lib-conteiner').conteiner(OUT_CONTAINER);
   // ⚠️ `gzip: true` grava comprimido com o cabecalho certo — o Azure NAO comprime sozinho, e um
   //    blob que o portal baixa por abertura paga o peso cru na rede. Navegador e Infinity
   //    descomprimem sem saber. So entra onde for pedido, para nao mudar o que ja esta no ar.
