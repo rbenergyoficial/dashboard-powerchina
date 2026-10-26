@@ -8,9 +8,8 @@
  * arquivo. Elimina a dependência externa em tempo de render.
  *
  * O blob já vem com ícone (Tabler), cor e descrição prontos, pra o card só renderizar.
- * Sem token (Open-Meteo é grátis, sem chave). Só usa DADOS_STORAGE para gravar.
+ * Sem token (Open-Meteo é grátis, sem chave). Só usa a credencial do storage para gravar (a chave ou o OIDC do job, pela lib-conteiner).
  */
-const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
 const rot = require('./lib-rotulos.js');
 
@@ -47,8 +46,7 @@ function wmo(code, isDay) {
   return { txt: 'Indefinido', icon: 'cloud', cor: '#8B93A1' };
 }
 
-async function gerarClima(conn) {
-  if (!conn) throw new Error('DADOS_STORAGE ausente');
+async function gerarClima() {
 
   const j = await getJson(API);
   const c = j.current || {};
@@ -86,7 +84,7 @@ async function gerarClima(conn) {
   };
 
   const json = JSON.stringify(out);
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   await cont.getBlockBlobClient('clima.json').upload(json, Buffer.byteLength(json),
     { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=120' } });
 
@@ -99,5 +97,5 @@ module.exports = { gerarClima };
 
 // roda standalone (node scripts/gen-clima.js) OU é chamado pelo gen-way2-recent (a cada 5 min)
 if (require.main === module) {
-  gerarClima(process.env.DADOS_STORAGE).catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+  gerarClima().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
 }

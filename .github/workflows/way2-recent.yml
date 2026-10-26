@@ -11,17 +11,28 @@ permissions:
   issues: write
   # 🔴 E o canal de E-MAIL usa OIDC: o GitHub troca um token de identidade proprio por um token do
   #    Graph, sem segredo nenhum. Sem isto o job nao consegue pedi-lo, e o canal responde FALHOU.
+  # 🔐 O mesmo token de identidade grava no storage, SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026): AZURE_CLIENT_ID e
+  #    AZURE_TENANT_ID no env DO PASSO que grava (identificadores, nao credenciais; as do relogio-deploy). Os passos que so leem o
+  #    publicado levam a SAS de leitura; os sem rede ficam sem credencial nenhuma.
   id-token: write
 concurrency:
-  group: way2-recent
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela a rodada do main
+  group: way2-recent-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   recent:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
     timeout-minutes: 8
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
@@ -43,7 +54,8 @@ jobs:
       # funcionava. Esta e a UNICA entrada de dado do ao-vivo, e ela nao pode parar em silencio.
       - name: Coletar da Way2 (way2_eletrico.json)
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
         run: node scripts/gen-way2-eletrico.js
@@ -60,7 +72,8 @@ jobs:
         run: node scripts/ensaio-le-blob.js --so way2-recent   # a lib e a fiacao dos geradores DESTE job; a dos outros, no ensaios.yml
       - name: Snapshot hoje + way2_recent.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-way2-recent.js
@@ -82,7 +95,8 @@ jobs:
         run: node scripts/ensaio-dia-noite.js
       - name: Dia em curso no executivo.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
         run: node scripts/gen-dia-corrente.js
@@ -96,17 +110,26 @@ jobs:
       # em vez de o painel passar a mentir em silencio.
       - name: Ensaio do selo de medidores
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-selo-medidores.js --real
       # O PRODUTO que o remendo acabou de gravar: manchete = soma dos dias, e um dia contado duas vezes reprova. No fim e com
       # always(): vermelho aqui nao pode tirar do job a cobertura de perdas nem o ensaio do selo.
       - name: Ensaio · a manchete nao conta o dia duas vezes (produto)
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-manchete-noite.js --produto
       - name: Ensaio · circuitos do portal_vivo (produto)
         if: always()
         # 💰 custo-a: o way2_eletrico.json da MESMA rodada vem da copia local (os bytes que subiram); sem ela, do blob, como antes
-        run: if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-vivo-circuitos.js --produto; else node scripts/ensaio-portal-vivo-circuitos.js --produto; fi
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
+        run: |
+          if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then
+            LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-vivo-circuitos.js --produto
+          else
+            node scripts/ensaio-portal-vivo-circuitos.js --produto
+          fi
       # As oito grandezas do dia, medidor a medidor (portal_eletrico.json). Quem SEGURA o blob e o proprio gerador: ele confere o
       # arquivo montado contra a mesma fonte, pela referencia deste ensaio, e nao grava com achado (sem parar o passo, que segura o
       # remendo do executivo). Aqui, no fim e com always(): a REGRA em casos forjados (valores a mao, defeitos plantados com a
@@ -117,7 +140,14 @@ jobs:
         run: node scripts/ensaio-portal-eletrico.js --lib
       - name: Ensaio · grandezas eletricas do dia (produto)
         if: always()
-        run: if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-eletrico.js --produto; else node scripts/ensaio-portal-eletrico.js --produto; fi
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
+        run: |
+          if [ -f "$RUNNER_TEMP/eletrico/way2_eletrico.json" ]; then
+            LOCAL_ELET="$RUNNER_TEMP/eletrico/way2_eletrico.json" node scripts/ensaio-portal-eletrico.js --produto
+          else
+            node scripts/ensaio-portal-eletrico.js --produto
+          fi
       # O RESUMO DO ASSISTENTE DE VOZ do portal (agente_om.json, ~13 KB): o assistente le por HTTP a cada pergunta, e a
       # resposta entra inteira no contexto dele — o executivo (3,7 MB) e o portal_vivo (58 KB) nao cabem. So SELECIONA campos
       # que acabaram de ser gravados acima (portal_vivo e o executivo remendado), sem conta nenhuma. No fim e com !cancelled():
@@ -125,7 +155,8 @@ jobs:
       - name: Resumo do assistente de voz (agente_om.json)
         if: ${{ !cancelled() }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           # 💰 os blobs que mudam poucas vezes por dia (o oleo, as perdas, o inventario e a disponibilidade dos inversores, os ativos)
           #    pela copia em disco, confirmada pelo 304 do storage, em vez de inteiros de 5 em 5 min. Os que mudam de hora em hora ou
           #    mais ficam fora; a chave do cache leva estes, entao a copia nova e guardada quando um deles muda.
@@ -136,6 +167,8 @@ jobs:
       # fechando 343,77 MW, 12 entidades, mes em curso fora dos fechados; cinco defeitos plantados reprovam cada um.
       - name: Ensaio · o resumo do assistente diz o que a tela diz
         if: always()
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-agente-om.js
       # 🔴 O VIGIA DE CADENCIA SAIU DAQUI, e a saida E a correcao (13/09/2026).
       # Ele existe para perceber que um workflow DEIXOU DE RODAR — e morava dentro deste, que e
@@ -148,7 +181,8 @@ jobs:
       - name: Watchdog frescor Way2 (alerta)
         if: always()
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}

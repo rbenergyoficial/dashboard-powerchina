@@ -6,8 +6,7 @@
 //   2) way2_recent.json: mescla os últimos N_RECENT dias (5-min, todas as grandezas) num só
 //      blob, para os gráficos de série temporal mostrarem histórico CONTÍNUO que cruza a virada
 //      do dia (ex.: "últimos 2 dias" = ontem + hoje juntos).
-// Só usa a connection string (DADOS_STORAGE) — nenhum token Way2. Independente do fluxo PA.
-const { BlobServiceClient } = require('@azure/storage-blob');
+// Só usa a credencial do storage (a chave ou o OIDC do job, pela lib-conteiner) — nenhum token Way2. Independente do fluxo PA.
 const { gerarClima } = require('./gen-clima');
 const rot = require('./lib-rotulos.js');
 const SELO = require('./lib-selo.js');
@@ -217,15 +216,13 @@ function gerarSaude(dados, agoraMs) {
 }
 
 (async () => {
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const day = diaBRT();
 
   // clima.json — some do "No data": em vez de 5 painéis chamarem o Open-Meteo direto (IP
   // compartilhado do Grafana Cloud → 429), 1 chamada aqui grava no nosso blob. Não bloqueia
   // o resto se a API externa falhar (só loga).
-  gerarClima(conn).catch(e => console.error('clima.json FALHOU (segue sem bloquear):', e.message));
+  gerarClima().catch(e => console.error('clima.json FALHOU (segue sem bloquear):', e.message));
 
   // 1) snapshot de hoje
   //

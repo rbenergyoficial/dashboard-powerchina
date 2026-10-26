@@ -14,11 +14,10 @@
  * (horas). A gravacao vai com `If-Match` no ETag lido: se o blob mudou no meio, o Azure
  * recusa com 412, este job desiste e a proxima rodada (5 min) refaz sobre o estado novo.
  *
- * Env: DADOS_STORAGE · BASE (url publica) · LOCAL_OUT p/ ensaio sem gravar.
+ * Env: a credencial do storage pela lib-conteiner (a chave ou o OIDC do job) · BASE (url publica) · LOCAL_OUT p/ ensaio sem gravar.
  */
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
 const zlib = require('zlib');
-const { BlobServiceClient } = require('@azure/storage-blob');
 const { rollupDia, valores: valoresW2 } = require('./gen-way2-hist.js');
 const { horasDoDia } = require('./lib-horas.js');
 // a conta dos campos da manchete que se movem no dia — a MESMA que o executivo chama
@@ -149,8 +148,9 @@ async function fechaOntem(j, hoje, mes) {
 
   const val = valoresDia(linha);
 
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn && !process.env.LOCAL_OUT) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
+  if (!require('./lib-conteiner').credencial() && !process.env.LOCAL_OUT) {
+    console.error('ERRO: sem credencial do storage (a chave ou o OIDC do job).'); process.exit(1);
+  }
 
   if (process.env.LOCAL_OUT) {
     console.log('[ensaio] ' + hoje + ' ate ' + linha.ate + ' · ' + linha.slots + ' slots · guarda: ' + (guardaDia(r2(val.Complexo), null, linha.ate) || 'passa'));
@@ -166,7 +166,7 @@ async function fechaOntem(j, hoje, mes) {
     return;
   }
 
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const bc = cont.getBlockBlobClient(BLOB);
   const props = await bc.getProperties();
   const etag = props.etag;

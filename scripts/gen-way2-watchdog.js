@@ -11,7 +11,7 @@
  *
  * Estado em dados/way2_watchdog.json (dedup + marca início da queda p/ calcular a duração).
  *
- * Env: DADOS_STORAGE (obrig.), WAY2_TOKEN (p/ a confirmação direta), LIMIAR_MIN (default 30).
+ * Env: a credencial do storage (obrig.; a chave ou o OIDC do job, pela lib-conteiner), WAY2_TOKEN (p/ a confirmação direta), LIMIAR_MIN (default 30).
  *   Os destinos do alerta vêm do `lib-alerta` (PA_ALERT_WEBHOOK e/ou GITHUB_TOKEN + GH_REPO).
  *
  * 🔴 POR QUE ESTE VIGIA PASSOU A USAR O `lib-alerta` (02/09/2026)
@@ -28,7 +28,6 @@
  * (o `GITHUB_TOKEN` do Actions basta) e avisa por e-mail quem acompanha o repo. O webhook
  * continua ligado enquanto existir — o segundo destino soma, não substitui.
  */
-const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
 const { alerta } = require('./lib-alerta');
 
@@ -99,9 +98,8 @@ function apiGet(query, token, timeout = 45000) {
 }
 
 (async () => {
-  const conn = process.env.DADOS_STORAGE, token = process.env.WAY2_TOKEN;
-  if (!conn) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const token = process.env.WAY2_TOKEN;
+  const cont = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
 
   // 1) idade do dado que o painel mostra (way2_latest leve; fallback way2_eletrico)
   let dados = null;
