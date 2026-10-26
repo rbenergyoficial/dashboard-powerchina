@@ -38,7 +38,7 @@
  *    rodada vermelha depois de gravar. SOMBRA=1 nao gera nada: compara o cofre com o sungrow-raw lote a lote e fica vermelho
  *    se divergirem (CONFERE_BYTES=n baixa n pares do lote mais novo e compara byte a byte).
  *
- * Env: DADOS_STORAGE · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1 · FONTE=raw|cofre|uniao
+ * Env: a credencial pela lib-conteiner (a chave ou o OIDC do job) · RAW=sungrow-raw · SCADA_RAW=scada-raw · OUT=dados · REFAZER=1 · FONTE=raw|cofre|uniao
  *      · COFRE=backup-dados-scada · SOMBRA=1 · CONFERE_BYTES=n · VIVO_MIN=120 (lote mais novo que isso nao e julgado na sombra)
  *      ensaio: LOCAL_RAW_DIR (pasta com a mesma arvore M05/TS01/...) · LOCAL_SCADA_DIR · LOCAL_OUT_DIR · LOCAL_INV_SCADA
  *      · LOCAL_RAW_LISTA (recorte da pasta local, um caminho relativo por linha)
@@ -84,9 +84,8 @@ const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1 (nomenclatura das usinas)
 
 /* ------------------------------------------------------------------ armazenamento ------------------------------------- */
-let _svc = null;
-const svc = () => { if (!_svc) { const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido'); _svc = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE); } return _svc; };
+// os contêineres (sungrow-raw, cofre, scada-raw, dados) pela lib-conteiner: a chave ou o OIDC do job
+const svc = () => ({ getContainerClient: (nome) => require('./lib-conteiner').conteiner(nome) });
 
 async function listaRaw() {
   if (process.env.LOCAL_RAW_DIR) {

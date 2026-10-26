@@ -17,7 +17,7 @@
  *    mesmo inversor-dia em mais de 1 % dos pares.
  *
  * Roda no sungrow.yml, DEPOIS do gen-sungrow e ANTES do gen-ts-setpoint (que le a copia semeada aqui).
- * Env: DADOS_STORAGE · LOCAL_IN_DIR (le os blobs de uma pasta) · LOCAL_OUT_DIR (grava numa pasta)
+ * Env: a credencial pela lib-conteiner (a chave ou o OIDC do job) · LOCAL_IN_DIR (le os blobs de uma pasta) · LOCAL_OUT_DIR (grava numa pasta)
  */
 const fs = require('fs');
 const path = require('path');
@@ -52,9 +52,7 @@ async function existe(nome) {
 async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados');
+  const c = require('./lib-conteiner').conteiner('dados');   // a chave ou o OIDC do job (lib-conteiner)
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

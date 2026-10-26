@@ -66,6 +66,7 @@ const MIGRADOS = {
   'scada.yml': { 'gen-scada.js': null, 'gen-scada-db-vigia.js': null, 'gen-scada-intake-watchdog.js': null },
   'executivo.yml': { 'gen-benchmark-ons.js': null, 'gen-executivo.js': null, 'gen-irradiancia.js': null, 'gen-pr.js': null,   // etapa 4
     'gen-registro-projecao.js': null },
+  'sungrow.yml': { 'gen-sungrow.js': null, 'gen-inv-logger.js': null, 'gen-pvstr-logger.js': null, 'gen-agente-dia.js': null },   // etapa 4
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
 const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];
@@ -88,6 +89,7 @@ const LEITORES = {
     'ensaio-manchete-noite.js --produto', 'ensaio-manchete-remendo.js', 'ensaio-mes-aberto.js', 'ensaio-motivo-ufv.js', 'ensaio-par-mwh.js',
     'ensaio-pr-ufv.js --produto', 'ensaio-pr.js', 'ensaio-ref-conjunto.js --produto', 'ensaio-ref-dia.js', 'ensaio-tol-rateio.js'],
   'way2-hist.yml': ['ensaio-med-ufv.js --produto', 'ensaio-w2-bruta-usina.js --produto', 'ensaio-fontes-exec.js --diario', 'ensaio-agente-dia.js'],
+  'sungrow.yml': ['ensaio-sungrow-cascata.js', 'ensaio-inv-logger.js --produto', 'ensaio-pvstr-logger.js --produto', 'ensaio-agente-dia.js'],
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
     'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',
     'ensaio-inversor-cru.js', 'ensaio-leitura-congelada.js', 'ensaio-rampa-amanhecer.js', 'ensaio-strings.js'],

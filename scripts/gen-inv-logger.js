@@ -22,7 +22,7 @@
  *    do supervisorio (horas, lidos, gerando, jan_slots, setpoint) num inversor-dia; ranking vazio.
  *
  * Roda no sungrow.yml, DEPOIS do gen-sungrow (le o que ele acabou de gravar).
- * Env: DADOS_STORAGE · LOCAL_IN_DIR (le os blobs de uma pasta) · LOCAL_OUT_DIR (grava numa pasta) · JANELA_INV=60
+ * Env: a credencial pela lib-conteiner (a chave ou o OIDC do job) · LOCAL_IN_DIR (le os blobs de uma pasta) · LOCAL_OUT_DIR (grava numa pasta) · JANELA_INV=60
  */
 const fs = require('fs');
 const path = require('path');
@@ -57,9 +57,7 @@ async function exige(nome, ok) {
 async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient('dados');
+  const c = require('./lib-conteiner').conteiner('dados');   // a chave ou o OIDC do job (lib-conteiner)
   await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
   return gz.length;

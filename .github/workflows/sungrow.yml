@@ -9,15 +9,30 @@ on:
         required: false
         default: ''
 concurrency:
-  group: gen-sungrow
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-sungrow-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # toda leitura de `dados` pela lib-le-dados com credencial (o contêiner não é público)
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). Os passos que gravam, e a sombra (que le o sungrow-raw e o cofre),
+    #    levam o OIDC do proprio job: AZURE_CLIENT_ID e AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do
+    #    relogio-deploy). Os passos que so leem o publicado levam a SAS de leitura; os sem rede ficam sem credencial nenhuma.
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 120  # a recarga completa (refazer=1 ou esquema novo) mediu ~65 min; a rodada do dia, no maximo 13 min em 30
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -92,7 +107,8 @@ jobs:
         id: gen_sg
         if: ${{ !cancelled() && steps.r_sungrow.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_cofre.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_proprios.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW: sungrow-raw
           SCADA_RAW: scada-raw
           OUT: dados
@@ -118,6 +134,7 @@ jobs:
         id: cascata
         if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' }}
         env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-sungrow-cascata.js
@@ -128,7 +145,8 @@ jobs:
         id: inv_logger
         if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.cascata.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/gen-inv-logger.js
@@ -139,7 +157,7 @@ jobs:
       - name: Ensaio · dado de inversor das telas pelo logger (produto)
         if: ${{ !cancelled() && steps.inv_logger.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-inv-logger.js --produto
@@ -150,7 +168,8 @@ jobs:
         id: pvstr_logger
         if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/gen-pvstr-logger.js
@@ -160,7 +179,7 @@ jobs:
       - name: Ensaio · strings de 30 min pelo logger (produto)
         if: ${{ !cancelled() && steps.pvstr_logger.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-pvstr-logger.js --produto
@@ -176,12 +195,14 @@ jobs:
         id: agente_dia
         if: ${{ !cancelled() && steps.agente_lib.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes
         run: node scripts/gen-agente-dia.js
       - name: Ensaio · resumo do dia do assistente (produto)
         if: ${{ !cancelled() && steps.agente_dia.outcome == 'success' }}
         env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
         run: node scripts/ensaio-agente-dia.js
       # EM SOMBRA: o cofre como fonte dos zips, no lugar da copia de hoje para o sungrow-raw. SOMBRA=1 nao gera
@@ -192,7 +213,8 @@ jobs:
       - name: Sombra · o cofre contra o sungrow-raw (nao grava)
         if: ${{ !cancelled() }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW: sungrow-raw
           SOMBRA: '1'
           CONFERE_BYTES: '12'
