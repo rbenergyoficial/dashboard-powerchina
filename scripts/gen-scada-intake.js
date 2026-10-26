@@ -43,7 +43,7 @@
 //                                   credencial existir, so ele precisa ser provado.
 //
 // DESTINO
-//   (padrao)      DADOS_STORAGE + RAW_CONTAINER=scada-raw | inversores-raw
+//   (padrao)      a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) + RAW_CONTAINER=scada-raw | inversores-raw
 //   LOCAL_OUT=dir grava em pasta, sem tocar em producao (ensaio)
 //
 // 🔴 O CONSUMIDOR DOS INVERSORES DESCARTA RASCUNHO PELO NOME (`em revisao`, `copia`, `rascunho`),
@@ -158,10 +158,8 @@ async function abreDestino() {
       poe: async (nome, buf) => fs.writeFileSync(path.join(LOCAL_OUT, nome), buf),
     };
   }
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE ausente (ou use LOCAL_OUT para ensaio)');
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const c = BlobServiceClient.fromConnectionString(conn).getContainerClient(RAW_CONTAINER);
+  // a chave ou o OIDC do job (lib-conteiner); sem nenhum dos dois, ela estoura nomeando o que falta (ou use LOCAL_OUT para ensaio)
+  const c = require('./lib-conteiner').conteiner(RAW_CONTAINER);
   return {
     lista: async () => { const o = []; for await (const b of c.listBlobsFlat()) o.push(b.name); return o; },
     poe: async (nome, buf) => { await c.getBlockBlobClient(nome).upload(buf, buf.length); },

@@ -49,6 +49,8 @@ on:
       - '.github/workflows/ensaio-alerta.yml'
       - '.github/workflows/ensaio-comparativo.yml'
       - '.github/workflows/ensaio-must.yml'
+      - '.github/workflows/way2-hist.yml'   # plano OIDC, etapa 4, os grandes diarios
+      - '.github/workflows/scada.yml'
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
   workflow_dispatch: {}

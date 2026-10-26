@@ -16,7 +16,6 @@
  * Uso:  BLOBS="way2_daily.json,outro.json" node scripts/backup-blob.js
  *       (sem BLOBS, faz way2_daily.json)
  */
-const { BlobServiceClient } = require('@azure/storage-blob');
 
 const CONTAINER = 'dados';
 const PREFIXO = 'backup/';
@@ -31,11 +30,9 @@ async function baixar(container, nome) {
 }
 
 (async () => {
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) { console.error('ERRO: DADOS_STORAGE ausente.'); process.exit(1); }
   const nomes = (process.env.BLOBS || 'way2_daily.json').split(',').map(s => s.trim()).filter(Boolean);
   const carimbo = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);   // data BRT
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
 
   for (const nome of nomes) {
     const buf = await baixar(container, nome);

@@ -28,9 +28,8 @@
 //                tres vezes nesta casa.
 //   MODO=vigiar  (padrao) julga contra os limiares e alerta.
 //
-// Ambiente: DADOS_STORAGE, RAW_CONTAINER=scada-raw, e (para alertar) GITHUB_TOKEN / GH_REPO.'
+// Ambiente: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job), RAW_CONTAINER=scada-raw, e (para alertar) GITHUB_TOKEN / GH_REPO.'
 'use strict';
-const { BlobServiceClient } = require('@azure/storage-blob');
 const { alerta } = require('./lib-alerta');
 
 const RAW = process.env.RAW_CONTAINER || 'scada-raw';
@@ -203,9 +202,7 @@ function familiaDe(nome) {
 }
 
 async function lista() {
-  if (!process.env.DADOS_STORAGE) throw new Error('DADOS_STORAGE nao definido');
-  const c = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE)
-    .getContainerClient(RAW);
+  const c = require('./lib-conteiner').conteiner(RAW);   // a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
   const out = [];
   for await (const b of c.listBlobsFlat()) {
     out.push({ nome: b.name, ms: +new Date(b.properties.lastModified) });

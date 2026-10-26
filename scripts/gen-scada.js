@@ -17,7 +17,7 @@
  *    exata e o Comparativo nao aplica o trapezio.
  *
  * Env:
- *   DADOS_STORAGE  = connection string da storage (Secret) — obrigatorio no modo blob
+ *   DADOS_STORAGE  = connection string da storage (Secret), ou o OIDC do job, pela lib-conteiner — um dos dois no modo blob
  *   RAW_CONTAINER  = container das planilhas cruas (default: scada-raw)
  *   OUT_CONTAINER  = container de saida (default: dados)
  *   OUT_BLOB       = nome do blob de saida (default: scada_comparativo.json)
@@ -197,11 +197,9 @@ function parseParkBuffer(buf, park) {
 }
 
 // ---- IO helpers (blob) ----
+// a chave ou o OIDC do job (lib-conteiner): cada conteiner (o bruto, o banco, a saida) aberto por ela
 async function getBlobClient() {
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE;
-  if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  return BlobServiceClient.fromConnectionString(conn);
+  return { getContainerClient: (nome) => require('./lib-conteiner').conteiner(nome) };
 }
 async function streamToBuffer(readable) {
   const chunks = [];
@@ -457,8 +455,7 @@ async function writeOut(obj) {
     return;
   }
   const svc = await getBlobClient();
-  const cont = svc.getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  const cont = svc.getContainerClient(OUT_CONTAINER);   // sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   const a = await gravaUm(cont, OUT_BLOB, resto, 3600);
   const b = await gravaUm(cont, BLOB_5MIN, meta5, 3600);
   const rp = resumoPortal(resto);

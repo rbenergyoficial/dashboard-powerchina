@@ -62,6 +62,8 @@ const MIGRADOS = {
   'perdas.yml': { 'gen-perdas.js': null },
   'audita-scada-raw.yml': { 'audita-scada-raw.js': null },                                     // etapa 4, auditorias e ensaios avulsos
   'benchmark-2025.yml': { 'gen-benchmark-ons.js': null },
+  'way2-hist.yml': { 'backup-blob.js': null, 'gen-way2-hist.js': null, 'gen-agente-dia.js': null },   // etapa 4, os grandes diários
+  'scada.yml': { 'gen-scada.js': null, 'gen-scada-db-vigia.js': null, 'gen-scada-intake-watchdog.js': null },
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
 const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];
@@ -77,6 +79,7 @@ const LEITORES = {
   'ppc.yml': ['ensaio-ppc-duracao.js --produto'],
   'must-intra.yml': ['alerta-must.js'],
   'inv-scada.yml': ['ensaio-inv-scada-dia.js'],
+  'way2-hist.yml': ['ensaio-med-ufv.js --produto', 'ensaio-w2-bruta-usina.js --produto', 'ensaio-fontes-exec.js --diario', 'ensaio-agente-dia.js'],
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
     'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',
     'ensaio-inversor-cru.js', 'ensaio-leitura-congelada.js', 'ensaio-rampa-amanhecer.js', 'ensaio-strings.js'],

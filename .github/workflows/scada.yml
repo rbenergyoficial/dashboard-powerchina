@@ -12,7 +12,8 @@ on:
       # scada-db (22/10/2026): sairam `vigia_modo` e `vigia_container`, que so serviam ao vigia da intake do scada-raw (o export
       # de 30 min, que acabou em 15/10 e nao e mais fonte). O vigia agora e o do banco, que nao tem modo de medir: o prazo e regra.
 concurrency:
-  group: gen-scada
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-scada-${{ github.ref }}
   cancel-in-progress: true
 # ⚠️ `issues: write` e o que o canal de alerta por issue exige. Sem ela ele falha com 403 —
 #    e canal de alerta que falha calado e pior que canal nenhum.
@@ -27,10 +28,23 @@ permissions:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os dois vigias so leem, mas
+    #    conteineres privados (backup-dados-scada, inversores-raw) que a SAS de leitura nao cobre: por isso vao pelo OIDC.
+    #    O ensaio sem rede fica sem credencial nenhuma, de proposito.
+    #    O `id-token: write` ja esta no `permissions` do topo (o canal de e-mail), com `issues: write`.
     timeout-minutes: 15
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow: fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
@@ -51,7 +65,8 @@ jobs:
         run: node scripts/ensaio-scada-db.js
       - name: Gerar scada_comparativo.json
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW_CONTAINER: scada-raw
           OUT_CONTAINER: dados
           OUT_BLOB: scada_comparativo.json
@@ -74,7 +89,8 @@ jobs:
       - name: Vigia do banco do supervisorio
         if: always()
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
@@ -102,7 +118,8 @@ jobs:
       - name: Vigia da intake dos Inversores
         if: always() && (github.event.schedule == '30 11 * * *' || (github.event_name == 'workflow_dispatch' && steps.rodada.outputs.manha == '1'))
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW_CONTAINER: inversores-raw
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}

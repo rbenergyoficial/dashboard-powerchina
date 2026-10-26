@@ -23,16 +23,32 @@ on:
         default: '7'
 
 concurrency:
-  group: way2-hist
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: way2-hist-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   hist:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial; sem isto os passos de ensaio liam pelo endereço público
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e
+    #    AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). Os passos que so leem o publicado
+    #    levam a SAS de leitura; os sem rede ficam sem credencial nenhuma, de proposito.
+    #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 120
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # Vale para todo modo do workflow: fora do main nao ha credencial nenhuma.
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
@@ -52,13 +68,15 @@ jobs:
       # ontem nao protege a reescrita de hoje. Se ele falhar, o job para e o rollup nao e tocado.
       - name: Backup do rollup antes de reescrever
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           BLOBS: way2_daily.json
         run: node scripts/backup-blob.js
       - name: Arquivar histórico Way2 + rollup diário
         id: rollup
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
           # 3 e nao 1: o dia ja arquivado so refaz o rollup a partir do hist (sem API), entao os dois dias anteriores custam duas
           # leituras do storage. Isso recupera o dia de ate duas rodadas vermelhas seguidas (antes ele ficava fora do way2_daily de
@@ -71,19 +89,23 @@ jobs:
       # PROMOVER med-entidade: a cobertura da medicao por usina no blob recem-gravado, com o snapshot do dia mais
       # recente recontado por codigo proprio (segunda rota).
       - name: Ensaio · cobertura da medicao por usina (blob publicado)
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-med-ufv.js --produto
       # PROMOVER w2-bruta-usina: a bruta por usina no blob recem-gravado, todo dia desde o comeco do logger do fabricante, com o
       # snapshot do dia mais recente recontado por codigo proprio (segunda rota).
       - name: Ensaio · bruta por usina (blob publicado)
         # roda mesmo se o ensaio da cobertura (passo anterior) reprovar: cada um relata o seu defeito
         if: ${{ !cancelled() && steps.rollup.outcome == 'success' }}
+        env:
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-w2-bruta-usina.js --produto
       # lote fonte-perfil-way2: o pico de 5 min no blob recem-gravado (o dia mais recente recontado do arquivo de 5 min; enquanto o
       # historico nao foi recalculado, declara o modo transicao)
       - name: Ensaio · pico de 5 min por usina (blob publicado)
         if: ${{ !cancelled() && steps.rollup.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-fontes-exec.js --diario
       # PROMOVER assistente-portal: o resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;
       # roda mesmo se um ensaio anterior reprovou (le os blobs publicados), e o ensaio dele refaz cada numero por codigo proprio
@@ -95,11 +117,13 @@ jobs:
         id: agente_dia
         if: ${{ !cancelled() && steps.agente_lib.outcome == 'success' }}
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes
         run: node scripts/gen-agente-dia.js
       - name: Ensaio · resumo do dia do assistente (produto)
         if: ${{ !cancelled() && steps.agente_dia.outcome == 'success' }}
         env:
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
         run: node scripts/ensaio-agente-dia.js

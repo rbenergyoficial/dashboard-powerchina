@@ -17,7 +17,7 @@
 // ⚠️ COMPARA COM O RELOGIO, nunca com o proprio dado. Alerta UMA vez por evento (`soSeNova`: a issue aberta e a memoria) e
 //    fecha quando o dia volta. NAO derruba o job: o alerta e a saida dele.
 //
-// Ambiente: DADOS_STORAGE, DB_CONTAINER (padrao backup-dados-scada), SECO=1 (nao alerta), e para alertar GITHUB_TOKEN e o e-mail.
+// Ambiente: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job), DB_CONTAINER (padrao backup-dados-scada), SECO=1 (nao alerta), e para alertar GITHUB_TOKEN e o e-mail.
 'use strict';
 const DB = require('./lib-scada-db');
 
@@ -45,9 +45,8 @@ function julga(ultimo, agoraMs) {
 }
 
 async function vigiar() {
-  const { BlobServiceClient } = require('@azure/storage-blob');
   const { alerta } = require('./lib-alerta');
-  const cont = BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(DB_CONTAINER);
+  const cont = require('./lib-conteiner').conteiner(DB_CONTAINER);   // a chave ou o OIDC do job (lib-conteiner)
   const nomes = [];
   for await (const b of cont.listBlobsFlat({ prefix: DB.PREFIXO })) nomes.push(b.name);
   const escolhidos = DB.escolhe(nomes);   // dia -> o zip MRT mais novo daquele dia

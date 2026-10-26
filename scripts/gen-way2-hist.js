@@ -12,12 +12,11 @@
 //     Para cedo após PARAR_APOS_VAZIOS dias consecutivos sem dado (fim da retenção da Way2).
 //
 // Env (secrets/inputs):
-//   DADOS_STORAGE  connection string Azure (container `dados`)   [obrigatório]
+//   a credencial do storage, pela lib-conteiner: DADOS_STORAGE, ou o OIDC do job   [obrigatória]
 //   WAY2_TOKEN     Pim-Auth da API Way2                          [obrigatório]
 //   DIAS           quantos dias pra trás processar (default 1)
 //   FORCAR         '1'/'true' re-baixa dias já arquivados (default: pula os existentes)
 //   PARAR_APOS_VAZIOS  early-stop no backfill (default 7)
-const { BlobServiceClient } = require('@azure/storage-blob');
 const https = require('https');
 
 const CONTAINER = 'dados';
@@ -219,14 +218,13 @@ module.exports = { rollupDia, valores, SLOTS_COMPLETO };
 if (require.main !== module) return;
 
 (async () => {
-  const conn = process.env.DADOS_STORAGE, token = process.env.WAY2_TOKEN;
-  if (!conn) { console.error('ERRO: secret DADOS_STORAGE ausente.'); process.exit(1); }
+  const token = process.env.WAY2_TOKEN;
   if (!token) { console.error('ERRO: secret WAY2_TOKEN ausente.'); process.exit(1); }
   const DIAS = Math.max(1, parseInt(process.env.DIAS || '1', 10) || 1);
   const FORCAR = /^(1|true|sim)$/i.test(process.env.FORCAR || '');
   const PARAR = Math.max(1, parseInt(process.env.PARAR_APOS_VAZIOS || '7', 10) || 7);
 
-  const container = BlobServiceClient.fromConnectionString(conn).getContainerClient(CONTAINER);
+  const container = require('./lib-conteiner').conteiner(CONTAINER);   // a chave ou o OIDC do job; sem nenhum, estoura nomeando o que falta
 
   // rollup existente → mapa por dia (preserva o histórico já consolidado)
   const daily = (await baixarJson(container, DAILY_BLOB)) || { atualizado: null, dias: [] };
