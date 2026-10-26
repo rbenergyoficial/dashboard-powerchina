@@ -42,6 +42,13 @@ on:
       - '.github/workflows/eneat-intradia-way2.yml'
       - '.github/workflows/inv-scada.yml'
       - '.github/workflows/perdas.yml'
+      - '.github/workflows/audita-scada-raw.yml'   # plano OIDC, etapa 4, auditorias e ensaios avulsos
+      - '.github/workflows/benchmark-2025.yml'
+      - '.github/workflows/audita-must.yml'
+      - '.github/workflows/audita-way2-grandezas.yml'
+      - '.github/workflows/ensaio-alerta.yml'
+      - '.github/workflows/ensaio-comparativo.yml'
+      - '.github/workflows/ensaio-must.yml'
       - '.github/workflows/sungrow.yml'   # custo-sungrow (24/10/2026): a fiacao da copia dos exports do SCADA (ensaio-cache-blob, item 12)
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
   workflow_dispatch: {}

@@ -30,14 +30,15 @@ permissions:
 jobs:
   ensaio:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    env:   # 🔐 so LE o `dados` (nenhum script deste job grava): a SAS de leitura (DADOS_LEITURA, revogavel), nao a chave da conta
+      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
-      # com DADOS_STORAGE no job a lib-le-dados le `dados` pelo SDK: sem o pacote, o primeiro passo cai com "Cannot find module"
+      # a leitura do `dados` vai pela SAS de leitura (https, sem o SDK); o pacote fica porque os geradores carregam a lib-conteiner,
+      # que pede o SDK ao abrir um conteiner (com LOCAL_OUT eles nao chegam a abrir)
       - run: npm i @azure/storage-blob@12
 
       # As pecas que nao dependem do segredo — deslocamento, alinhamento, fechamento das tres,

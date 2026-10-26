@@ -19,13 +19,14 @@
  *   MODO=inv   ALVOS=M01_2026        quais INV existem no cabecalho, por TS, e quais vem vazios
  *   MODO=par  PAR_A=IRR_20260807  PAR_B=IIRR_20260808  PAR_COL='IRRADIAÇÃO INCLINADA'
  */
-const { BlobServiceClient } = require('@azure/storage-blob');
 const zlib = require('zlib');
 
 const RAW = process.env.RAW_CONTAINER || 'scada-raw';
 const MODO = (process.env.MODO || 'vocab').toLowerCase();
 
-const cli = () => BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(RAW);
+// o bruto do supervisorio pela lib-conteiner: a chave ou o OIDC do job (a SAS de leitura cobre so o `dados`)
+const LC = require('./lib-conteiner');
+const cli = () => LC.conteiner(RAW);
 
 async function acha(c, pedaco) {
   const p = pedaco.toLowerCase();
@@ -305,7 +306,7 @@ async function inventario(c, pedaco) {
 }
 
 (async () => {
-  if (!process.env.DADOS_STORAGE) throw new Error('sem DADOS_STORAGE');
+  if (!LC.credencial()) throw new Error('sem credencial do storage (nem DADOS_STORAGE, nem o OIDC do job)');
   const c = cli();
   if (MODO === 'inv') {
     for (const p of (process.env.ALVOS || '').split(',').map((x) => x.trim()).filter(Boolean)) {

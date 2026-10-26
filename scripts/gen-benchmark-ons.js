@@ -31,7 +31,7 @@
  * MEMORIA: le em STREAMING, linha a linha. Sao ~390 MB por rodada somando os dois arquivos de oito
  * meses; nada disso fica em memoria nem e versionado — so o resumo mensal, que da alguns KB.
  *
- * Env: DADOS_STORAGE (RW no container dados) · LOCAL_OUT p/ teste · MESES p/ limitar a janela.
+ * Env: a credencial de gravar no container dados, pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · LOCAL_OUT p/ teste · MESES p/ limitar a janela.
  */
 const rot = require('./lib-rotulos.js');
 // o patamar do NOSSO conjunto que o executivo trocou pela soma das usinas (PROMOVER ref-parcela-corte, 11/10/2026): a lista
@@ -225,10 +225,8 @@ async function grava(obj) {
   rot.localizaTudo(obj, ['lbl']);
   const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
-  const { BlobServiceClient } = require('@azure/storage-blob');
-  const conn = process.env.DADOS_STORAGE; if (!conn) throw new Error('DADOS_STORAGE nao definido');
-  const cont = BlobServiceClient.fromConnectionString(conn).getContainerClient(OUT_CONTAINER);
-  await cont.createIfNotExists();
+  // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
+  const cont = require('./lib-conteiner').conteiner(OUT_CONTAINER);
   await cont.getBlockBlobClient(OUT_BLOB).upload(json, Buffer.byteLength(json),
     { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=900' } });
   return json.length;

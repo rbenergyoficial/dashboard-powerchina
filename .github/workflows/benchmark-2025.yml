@@ -28,16 +28,30 @@ on:
         default: 'benchmark_ne_2025.json'
 
 concurrency:   # dois disparos nao gravam o mesmo blob juntos
-  group: gen-benchmark-2025
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-benchmark-2025-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   gen:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). O passo que abre o storage leva o OIDC do proprio job: AZURE_CLIENT_ID
+    #    e AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do relogio-deploy). `permissions` explicito zera
+    #    o resto: `contents: read` e o que o checkout precisa.
+    permissions:
+      contents: read
+      id-token: write
     timeout-minutes: 60
     steps:
+      # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
+      # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
+      # A ref vem da variavel de ambiente, nunca interpolada no script: nome de branch com `$(...)` viraria comando.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
       - name: Recusar escrita no blob de producao
         if: ${{ inputs.blob == 'benchmark_ne.json' }}
         run: |
@@ -49,7 +63,8 @@ jobs:
       - run: npm i @azure/storage-blob@12
       - name: Gerar benchmark com a janela pedida
         env:
-          DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           OUT_CONTAINER: dados
           OUT_BLOB: ${{ inputs.blob }}
           MESES: ${{ inputs.meses }}

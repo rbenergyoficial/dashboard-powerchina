@@ -21,16 +21,15 @@ on:
 jobs:
   ensaio:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    env:   # 🔐 so LE o `dados` (nenhum script deste job grava): a SAS de leitura (DADOS_LEITURA, revogavel), nao a chave da conta
+      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
-      # 🔴 a lib-le-dados le `dados` pelo SDK quando ha DADOS_STORAGE (fase 2). Sem o pacote o gerador caia
-      # na primeira leitura de blob ("Cannot find module '@azure/storage-blob'", 22/10/2026), latente desde
-      # a fase 2 porque este workflow so roda a mao. O must-intra.yml instala igual.
+      # a leitura do `dados` vai pela SAS de leitura (https, sem o SDK); o pacote fica porque os geradores carregam a
+      # lib-conteiner, que pede o SDK ao abrir um conteiner (com LOCAL_OUT eles nao chegam a abrir). O must-intra.yml instala igual.
       - run: npm i @azure/storage-blob@12
       - run: mkdir -p /tmp/ensaio
       - name: gen-must-intra em modo local

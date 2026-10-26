@@ -60,7 +60,13 @@ const MIGRADOS = {
   'eneat-intradia-way2.yml': { 'gen-eneat-intradia.js': null },
   'inv-scada.yml': { 'gen-inv-scada.js': null },
   'perdas.yml': { 'gen-perdas.js': null },
+  'audita-scada-raw.yml': { 'audita-scada-raw.js': null },                                     // etapa 4, auditorias e ensaios avulsos
+  'benchmark-2025.yml': { 'gen-benchmark-ons.js': null },
 };
+/* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
+const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];
+/* os que nem leem o storage (só falam com a API de fora): nenhuma credencial do storage, nem a de leitura */
+const SEM_STORAGE = ['audita-must.yml', 'audita-way2-grandezas.yml', 'ensaio-alerta.yml'];
 /* os passos que só LEEM o storage de verdade (o publicado), de cada workflow migrado: pelo OIDC ou pela SAS só de leitura (DADOS_LEITURA).
    O ensaio sem rede não entra aqui: ele não pode ter credencial nenhuma. */
 const LEITORES = {
@@ -129,6 +135,30 @@ try {
   for (const w of Object.keys(MIGRADOS)) {
     const prob = fiacao(WF(w), Object.keys(MIGRADOS[w]), GEN, LEITORES[w]);
     ok(prob.length === 0, w + ': sem a chave, com o OIDC, e os geradores pela lib-conteiner' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
+  }
+  for (const w of SO_LEITURA) {
+    const prob = fiacaoLeitura(WF(w), GEN);
+    ok(prob.length === 0, w + ': só leitura, pela SAS de leitura, sem a chave e sem OIDC' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
+  }
+  for (const w of SEM_STORAGE) {
+    const prob = fiacaoSemStorage(WF(w), GEN);
+    ok(prob.length === 0, w + ': não usa o storage e não tem credencial dele' + (prob.length ? ' (' + prob.join('; ') + ')' : ''));
+  }
+  {
+    const wf = WF('audita-must.yml'), lendo = (g) => (g === 'audita-way2-grandezas.js' ? "const LD = require('./lib-le-dados');\n" + GEN(g) : GEN(g));
+    let prob = fiacaoSemStorage(wf.replace('    timeout-minutes:', '    env:\n      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n    timeout-minutes:'), GEN);
+    ok(prob.some((x) => /credencial do storage num workflow/.test(x)), 'fiação plantada "a SAS num workflow que não usa o storage" reprova');
+    prob = fiacaoSemStorage(WF('audita-way2-grandezas.yml'), lendo);
+    ok(prob.some((x) => /carrega lib-le-dados\.js/.test(x)), 'fiação plantada "um script sem storage passando a ler o dados" reprova');
+  }
+  for (const [nome, de, para, esperado] of [
+    ['a chave de volta num workflow só de leitura', '      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n', '      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}\n', 'ainda cita secrets.DADOS_STORAGE'],
+    ['o OIDC num workflow só de leitura', '      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n', '      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n      AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n', 'OIDC num workflow só de leitura'],
+    ['o workflow só de leitura sem a SAS', '      DADOS_SAS: ${{ secrets.DADOS_LEITURA }}\n', '', 'sem a SAS de leitura'],
+    ['o gerador sem LOCAL_OUT num workflow de leitura', '          LOCAL_OUT: /tmp/ensaio/must_diario.json\n', '', 'carrega a lib-conteiner e roda sem LOCAL_OUT']]) {
+    const wf = WF('ensaio-must.yml'), casou = wf.split(de).length === 2;
+    const prob = fiacaoLeitura(wf.split(de).join(para), GEN);
+    ok(casou && prob.some((x) => x.indexOf(esperado) >= 0), 'fiação plantada "' + nome + '" reprova em "' + esperado + '"' + (casou ? '' : ' (TRECHO NÃO CASOU)'));
   }
   /* fiação plantada: [nome, workflow, trocas no texto do workflow ([de, para], ou uma lista delas) ou null, arquivos trocados {arq: [de, para]},
      o que tem de acusar] */
@@ -211,6 +241,54 @@ try {
 }
 console.log(falhas ? 'REPROVADO: ' + falhas + ' falha(s)' : 'APROVADO');
 process.exit(falhas ? 1 : 0);
+
+/* o fecho dos require locais de um script (os nomes de arquivo de scripts/ que ele carrega, ele incluído) */
+function fecho(m, texto) {
+  const vistos = new Set(), fila = [m];
+  while (fila.length) {
+    const f = fila.shift();
+    if (vistos.has(f)) continue;
+    let t; try { t = texto(f); } catch (e) { continue; }   // módulo local que não é .js de scripts/ (um .json, por exemplo)
+    vistos.add(f);
+    for (const x of t.matchAll(/require\(\s*['"]\.\/([\w.-]+?)(?:\.js)?['"]\s*\)/g)) fila.push(x[1] + '.js');
+  }
+  return vistos;
+}
+function semComentario(wf) { return wf.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n') + '\n'; }
+
+/* o que falta para um workflow que só LÊ o `dados` ficar sem a chave: a SAS de leitura, nenhum OIDC, nenhum script (nem o que ele
+   carrega) dependendo da chave, e LOCAL_OUT no env de todo passo cujo script carrega a lib-conteiner (o gerador em modo local
+   grava em disco; sem o LOCAL_OUT ele tentaria gravar no storage, sem credencial de gravação, e cairia só no disparo) */
+function fiacaoLeitura(wf, texto) {
+  const p = [];
+  const w = semComentario(wf);
+  if (/secrets\.DADOS_STORAGE/.test(w)) p.push('ainda cita secrets.DADOS_STORAGE');
+  if (/AZURE_CLIENT_ID|AZURE_TENANT_ID/.test(w)) p.push('OIDC num workflow só de leitura: nada aqui grava');
+  if (!/\n\s+DADOS_SAS: \$\{\{ secrets\.DADOS_LEITURA \}\}/.test(w)) p.push('sem a SAS de leitura (DADOS_LEITURA)');
+  const UM = new RegExp(NODE_RE.source);
+  for (const l of w.split('\n')) if (/\bnode\b.*scripts\//.test(l) && !UM.test(l)) p.push('linha de node que a fiação não reconhece: ' + l.trim().slice(0, 80));
+  const iSteps = w.indexOf('\n    steps:');
+  for (const s of (iSteps > 0 ? w.slice(iSteps) : '').split(/\n      - /).map((x) => x + '\n')) {
+    for (const m of new Set([...s.matchAll(NODE_RE)].map((x) => x[1]))) {
+      const F = fecho(m, texto);
+      for (const f of F) if (f !== 'lib-conteiner.js' && CHAVE_RE.test(texto(f))) p.push(f + (f === m ? '' : ' (alcançado por ' + m + ')') + ' ainda depende da chave');
+      // o gerador rodado como programa carrega a lib-conteiner direto; o ensaio que o carrega como módulo (para usar as peças) não grava
+      if (/require\(\s*['"]\.\/lib-conteiner(?:\.js)?['"]\s*\)/.test(texto(m)) && !/\n\s+LOCAL_OUT: \S/.test(s)) p.push(m + ' carrega a lib-conteiner e roda sem LOCAL_OUT: gravaria no storage');
+    }
+  }
+  return p;
+}
+
+/* o que falta para um workflow que nem lê o storage: nenhuma credencial do storage, e nenhum script carregando as libs do storage */
+function fiacaoSemStorage(wf, texto) {
+  const p = [];
+  const w = semComentario(wf);
+  if (/DADOS_STORAGE|DADOS_SAS|DADOS_LEITURA|AZURE_CLIENT_ID|AZURE_TENANT_ID/.test(w)) p.push('credencial do storage num workflow que não usa o storage');
+  for (const m of new Set([...w.matchAll(NODE_RE)].map((x) => x[1]))) {
+    for (const f of fecho(m, texto)) if (/^lib-(le-dados|conteiner|le-blob|cache-blob)\.js$/.test(f)) p.push(m + ' carrega ' + f + ': passou a usar o storage');
+  }
+  return p;
+}
 
 /* o que falta para um workflow gravar sem a chave; lista vazia = fiação certa. `leitores`: os passos que só LEEM o storage de verdade */
 function fiacao(wf, gens, texto, leitores) {

@@ -21,8 +21,8 @@ permissions:
 jobs:
   ensaiar:
     runs-on: ubuntu-latest
-    env:   # Fase 2 (PROMOVER fase2-virada): toda leitura de `dados` pela lib-le-dados com credencial, em todo passo do job
-      DADOS_STORAGE: ${{ secrets.DADOS_STORAGE }}
+    # 🔐 sem credencial do storage: nenhum script deste job le nem grava o storage (so falam com a API de fora). Nem a chave
+    #    da conta nem a SAS de leitura: credencial que o job nao usa nao fica exposta a ele.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
