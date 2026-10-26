@@ -172,9 +172,23 @@ function retemDias(refDiaUfv, ruins, desdeAntes, agoraIso) {
   const retidos = (ruins || []).map((x) => ({ dia: x.dia, ref_mwh: x.ref_mwh, gref_mwh: x.gref_mwh, desde: (desdeAntes || {})[x.dia] || agoraIso }));
   return { linhas: (refDiaUfv || []).filter((x) => !fora.has(x.dia)), retidos, fora };
 }
-/** os retidos ha mais de LIMITE_RETIDO_H horas no instante `agoraMs` */
+/* 🔴 O DESCOMPASSO PERMANENTE, DECLARADO (decisao do humano, 26/10/2026, PROMOVER janela-restricao). O dia 15/10/2026 ficou retido desde
+ *    21/10 19:13Z: o arquivo por usina soma a referencia em 2.805,01 MWh e o do conjunto em 2.555,17 MWh. Baixados de novo do operador
+ *    em 26/10 (gravados 15:07:05Z e 15:07:15Z), os dois seguem iguais: NAO houve republicacao. As duas referencias ficam abaixo da
+ *    verificada do dia (2.917,32 MWh, que fecha entre os dois arquivos), o defeito da funcao de produtividade (NT-MRT-2026-0088). O dia
+ *    nao teve limitacao: a retencao nao mexe no corte, so tira 15/10 do `ref_dia_ufv` e do `ref_hora`. O dia segue RETIDO (fora das
+ *    duas series) e a segunda rota do ensaio segue julgando que os dois arquivos discordam; so o vencimento deixa de reprovar.
+ *    A declaracao vale SO para os numeros declarados: se o operador republicar, os numeros mudam, a declaracao deixa de cobrir o dia e
+ *    o vencimento volta a valer (se os dois passarem a fechar, o dia sai da retencao sozinho). */
+const DESCOMPASSO_DECLARADO = {
+  '2026-10-15': { ref_mwh: 2805, gref_mwh: 2555.17, decisao: 'humano, 26/10/2026 (janela-restricao)',
+    evidencia: 'por usina 2805,01 x conjunto 2555,17 MWh; verificada 2917,32; arquivos do operador regravados 26/10 15:07Z sem mudanca' },
+};
+const declarado = (x) => { const d = x && DESCOMPASSO_DECLARADO[x.dia];
+  return !!d && Math.abs(Number(x.ref_mwh) - d.ref_mwh) <= FOLGA_DIA && Math.abs(Number(x.gref_mwh) - d.gref_mwh) <= FOLGA_DIA; };
+/** os retidos ha mais de LIMITE_RETIDO_H horas no instante `agoraMs` (o descompasso declarado, com os mesmos numeros, nao vence) */
 function retidosVencidos(retidos, agoraMs) {
-  return (retidos || []).filter((x) => !(Date.parse(x.desde) > 0) || (agoraMs - Date.parse(x.desde)) / 3600e3 > LIMITE_RETIDO_H);
+  return (retidos || []).filter((x) => !declarado(x) && (!(Date.parse(x.desde) > 0) || (agoraMs - Date.parse(x.desde)) / 3600e3 > LIMITE_RETIDO_H));
 }
 
 /** Os dias do Complexo (`[{ dia, ref_mwh }]`) que nao fecham com o `grefDia` do conjunto. Dia sem conjunto nao se julga. */
@@ -184,4 +198,4 @@ function diasQueNaoFecham(refComplexo, grefDia) {
 }
 
 module.exports = { grefConjuntoPorDia, diasQueNaoFecham, refPorUsina, corrigeConjunto, mapaDaLista, somaDaLista, aplicaLista,
-  retemDias, retidosVencidos, LIMITE_RETIDO_H, FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };
+  retemDias, retidosVencidos, declarado, DESCOMPASSO_DECLARADO, LIMITE_RETIDO_H, FOLGA_MW, FOLGA_DIA, MAX_POR_DIA, H };

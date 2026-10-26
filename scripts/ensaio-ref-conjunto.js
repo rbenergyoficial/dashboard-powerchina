@@ -181,6 +181,13 @@ function julgaRetencao(lib) {
   if (lib.retidosVencidos([{ dia: 'x', desde: antes }], t0 + (L - 0.5) * H).length) e.push('retidosVencidos: venceu antes do limite');
   if (lib.retidosVencidos([{ dia: 'x', desde: antes }], t0 + (L + 0.5) * H).length !== 1) e.push('retidosVencidos: nao venceu depois do limite');
   if (lib.retidosVencidos([{ dia: 'x', desde: 'lixo' }], t0).length !== 1) e.push('retidosVencidos: um desde ilegivel nao venceu (a retencao calaria)');
+  // o descompasso declarado (janela-restricao, 26/10/2026): 15/10 com os numeros declarados nao vence; com outro numero (o operador
+  // republicou) ou outro dia com os mesmos numeros, vence
+  const dec = { dia: '2026-10-15', ref_mwh: 2805, gref_mwh: 2555.17, desde: antes };
+  if (lib.retidosVencidos([dec], t0 + 1000 * H).length) e.push('retidosVencidos: o descompasso declarado de 15/10 venceu');
+  if (lib.retidosVencidos([Object.assign({}, dec, { ref_mwh: 2850 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 15/10 com outro numero (republicado) nao venceu');
+  if (lib.retidosVencidos([Object.assign({}, dec, { gref_mwh: 2700 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 15/10 com outro gref nao venceu');
+  if (lib.retidosVencidos([Object.assign({}, dec, { dia: '2026-10-16' })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: outro dia com os numeros declarados nao venceu');
   /* a SEGUNDA ROTA do dia retido (RE-042), com os dois arquivos do operador forjados: as nove usinas somam 100 MWh no dia e o
      conjunto 25 (a revisao velha). O legitimo passa; o defeito nosso, o gref de outro lugar, o dia que fecha, o dia ainda no
      ref_hora, a usina faltando no arquivo e o retido sem segunda rota reprovam. */
@@ -236,6 +243,8 @@ const PLANTIOS = [
   ['a retencao com o limite frouxo', 'const LIMITE_RETIDO_H = 27;', 'const LIMITE_RETIDO_H = 1e9;'],
   ['a retencao com o limite abaixo do pior caso', 'const LIMITE_RETIDO_H = 27;', 'const LIMITE_RETIDO_H = 24;'],
   ['o desde ilegivel nao vence', '!(Date.parse(x.desde) > 0) || ', ''],
+  ['a declaracao sem conferir os numeros', 'return !!d && Math.abs(Number(x.ref_mwh) - d.ref_mwh) <= FOLGA_DIA && Math.abs(Number(x.gref_mwh) - d.gref_mwh) <= FOLGA_DIA; };', 'return !!d; };'],
+  ['a declaracao que cala todo retido', 'return (retidos || []).filter((x) => !declarado(x) && (', 'return (retidos || []).filter((x) => false && ('],
   ['sem a condicao da parcela', '(g === 0 || parc.some((x) => Math.abs(g - x) <= FOLGA_MW))', 'true'],
   ['sem a condicao disp < ger', 'num(r.disp) < num(r.ger) && refHora[dd]', 'refHora[dd]'],
   ['sem o teto por dia', 'const MAX_POR_DIA = 2;', 'const MAX_POR_DIA = 1e9;'],
