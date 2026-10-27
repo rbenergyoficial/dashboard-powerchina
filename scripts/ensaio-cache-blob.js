@@ -159,7 +159,7 @@ function item(blobs, nome, comMd5 = true) {
     /* revisor-workflow 24/10 (RW-001, RW-002, RW-004): o restore nao herda o success() (os ensaios acima rodam com !cancelled() e o gerador
        nao depende de todos); o save so depois do gerador inteiro; a poda depois da busca funda (ela le export velho na mesma rodada) */
     ok(/- name: Copia da rodada anterior \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) \}\}/.test(wf), 'sungrow.yml: o restore da copia roda com !cancelled()');
-    ok(/- name: Guardar a copia da rodada \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outcome == 'success'/.test(wf), 'sungrow.yml: a copia so e guardada com o gerador verde');
+    ok(/- name: Guardar a copia da rodada \(exports do SCADA e sg_\*\)[^\n]*\r?\n\s+if: \$\{\{ !cancelled\(\) && steps\.gen_sg\.outputs\.gravou == '1'/.test(wf), 'sungrow.yml: a copia so e guardada quando o gerador gravou (o sinal gravou, nao o verde do passo)');
     ok(src.indexOf('CACHE_SC.poda()') > src.indexOf("busca funda: '") && src.indexOf("busca funda: '") > 0, 'gen-sungrow.js: a poda vem depois da busca funda'); }
 
   /* custo-trafo (24/10/2026): o trafo.yml guarda a copia do bruto em DUAS entradas (o banco e as planilhas do historiador), cada uma com
