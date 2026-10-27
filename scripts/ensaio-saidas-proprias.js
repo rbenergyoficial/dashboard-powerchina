@@ -76,7 +76,7 @@ try {
     const iS = passos.findIndex((p) => /path: \.cache-sungrow/.test(p.corpo) && /actions\/cache\/save@(?:v4|[0-9a-f]{40})/.test(p.corpo));
     ok(iE >= 0 && iE < iG && /id: r_proprios/.test(passos[iE].corpo) && /run: node scripts\/ensaio-saidas-proprias\.js --so sungrow\n/.test(passos[iE].corpo)
       && /steps\.r_proprios\.outcome == 'success'/.test(passos[iG].corpo), 'o ensaio da saída própria (--so sungrow) roda antes do gerar, e o gerar depende dele');
-    ok(iS > iG && /steps\.gen_sg\.outcome == 'success'/.test(passos[iS].corpo), 'a pasta é guardada depois do gerar, só com o gerar verde');
+    ok(iS > iG && /steps\.gen_sg\.outputs\.gravou == '1'/.test(passos[iS].corpo), 'a pasta é guardada depois do gerar, só quando o gerar gravou (o sinal gravou: o recusado do cofre pinta o passo depois de gravar)');
   }
 
   if (RODA.indexOf('trafo-medidor') >= 0) {

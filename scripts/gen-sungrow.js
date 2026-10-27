@@ -765,6 +765,8 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);
   pesos['sg_hist.json'] = await escreve('sg_hist.json', H);
   pesos['sg_lidos.json'] = await escreve('sg_lidos.json', { gerado_em: agora, zips: Object.fromEntries(lidos) });
+  // o sinal de GRAVOU, separado do vermelho do recusado do cofre: os passos que leem os sg_* dependem dele, nao do verde do passo
+  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'gravou=1\n');
   if (!process.env.LOCAL_OUT_DIR) LD.podaProprios();   // a copia do sg_* que esta rodada nao gravou nem leu sai do disco (e do cache)
   for (const [k, v] of Object.entries(pesos)) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');
   const cf = confRows.filter((c) => c.n >= 10);

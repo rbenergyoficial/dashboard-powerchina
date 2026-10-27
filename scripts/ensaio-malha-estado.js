@@ -372,7 +372,7 @@ const ETAPA_ESPERADA = {
   cofre: { st: 'ok', motivo: null, ultima: '2026-10-19T10:14:00Z', ref_dia: HOJE, prox: PROX_PONTE, n: { gravados: 558, mb: 430.7 } },
   pc: { st: 'des', motivo: null, ultima: null, ref_dia: null, prox: null, n: {} },
   onedrive: { st: 'ok', motivo: null, ultima: '2026-10-19T10:15:00Z', ref_dia: HOJE, prox: PROX_PONTE, n: { gravados: 562 } },
-  pa: { st: 'des', motivo: null, ultima: null, ref_dia: null, prox: null, n: { restam: 2 } },
+  pa: { st: 'des', motivo: null, ultima: null, ref_dia: null, prox: null, n: { restam: 1 } },
   way2: { st: 'ok', motivo: null, ultima: '2026-10-19T15:26:00Z', ref_dia: null, prox: '2026-10-19T15:35:00Z', n: { idade_min: 4 } },
   ons: { st: 'at', motivo: 'atrasado', ultima: '2026-10-18T09:30:00Z', ref_dia: null, prox: '2026-10-19T18:17:00Z', n: { idade_min: 1800 } },
   proc: { st: 'at', motivo: 'workflow_vermelho', ultima: '2026-10-19T15:20:00Z', ref_dia: null, prox: '2026-10-19T15:33:00Z', n: { ok: 2 * W - 1, total: 2 * W, vermelhos: 1, parados: 0 } },
@@ -421,7 +421,7 @@ function chkPrincipal(r) {
     const x = FRESCOR_ESPERADO[f.id];
     for (const k of Object.keys(x)) if (f[k] !== x[k]) e.push('frescor ' + f.id + '.' + k + ' = ' + f[k] + ' (esperado ' + x[k] + ')');
   }
-  if (!igual(o.pa, { restam: 2, fluxos: ['Sungrow OneDrive RB para Blob', 'SCADA SharePoint para Blob'], fim_licenca: '2026-11-09', atualizado: '2026-10-20' })) e.push('pa: ' + JSON.stringify(o.pa));
+  if (!igual(o.pa, { restam: 1, fluxos: ['SCADA SharePoint para Blob'], fim_licenca: '2026-11-09', atualizado: '2026-10-26' })) e.push('pa: ' + JSON.stringify(o.pa));
   if (o.acesso !== null || o.versao !== 1 || o.gerado !== AGORA) e.push('topo: versao/gerado/acesso');
   /* o cofre: so lido, os 15 dias e nenhum alem */
   const listas = r.regs.filter((x) => x.op === 'lista' && x.conteiner === 'backup-dados-scada').map((x) => x.prefixo).sort();

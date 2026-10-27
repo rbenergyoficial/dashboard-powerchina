@@ -236,8 +236,9 @@ function roda(gen, mundo, env) {
   fs.writeFileSync(path.join(dir, 'inv_scada_hist.json'), JSON.stringify({ serie: [] }));
   fs.writeFileSync(path.join(dir, 'azure.json'), JSON.stringify({ 'sungrow-raw': mundo.raw || [], 'backup-dados-scada': mundo.cofre || [] }));
   const LOG = path.join(dir, 'azure.log'); fs.writeFileSync(LOG, '');
+  const GO = path.join(dir, 'github_output'); fs.writeFileSync(GO, '');   // a saida do passo, como no Actions
   const e = Object.assign({}, process.env, { DADOS_STORAGE: 'forjado', FORJA_AZURE: path.join(dir, 'azure.json'), FORJA_LOG: LOG,
-    LOCAL_SCADA_DIR: SC, LOCAL_OUT_DIR: OUT, LOCAL_INV_SCADA: path.join(dir, 'inv_scada_hist.json') }, env || {});
+    LOCAL_SCADA_DIR: SC, LOCAL_OUT_DIR: OUT, LOCAL_INV_SCADA: path.join(dir, 'inv_scada_hist.json'), GITHUB_OUTPUT: GO }, env || {});
   for (const k of ['LOCAL_RAW_DIR', 'LOCAL_RAW_LISTA', 'REFAZER', 'SOMBRA', 'CONFERE_BYTES', 'VIVO_MIN', 'COFRE', 'RAW']) if (!(env && k in env)) delete e[k];
   if (!(env && 'FONTE' in env)) delete e.FONTE;
   if (!(env && 'LIB_COFRE' in env)) delete e.LIB_COFRE;
@@ -245,6 +246,7 @@ function roda(gen, mundo, env) {
   try { R.log = execFileSync('node', ['-r', PRE, gen], { env: e, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); R.codigo = 0; }
   catch (x) { R.log = String(x.stdout || '') + String(x.stderr || ''); R.codigo = x.status == null ? -1 : x.status; }
   R.azure = fs.readFileSync(LOG, 'utf8').split('\n').filter(Boolean);
+  R.gravou = /^gravou=1$/m.test(fs.readFileSync(GO, 'utf8'));
   return R;
 }
 const saida = (R) => Object.fromEntries(fs.readdirSync(R.OUT).sort().map((n) => [n, JSON.stringify(JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(R.OUT, n))).toString('utf8')), (k, v) => (k === 'gerado_em' ? undefined : v))]));
@@ -281,8 +283,10 @@ function casosGerador(gen, lib) {
   const kr = roda(gen, mRec, Object.assign({ FONTE: 'cofre' }, xl));
   R.okRecusado = kr.codigo === 1 && /::error::RECUSADO .*mesmo nome mapeado em 2026 e 2027/.test(kr.log) && /zip\(s\) recusado\(s\) pelo cofre/.test(kr.log)
     && igual(Object.keys(lidos(kr) || {}), [NOME]);
+  // e mesmo vermelho ele marca que GRAVOU: os passos de produto do workflow dependem disso, nao do verde do passo
+  R.okGravou = kr.gravou && k.gravou && r.gravou && u.gravou;
   R.txt = 'cofre codigo ' + k.codigo + ' · difs ' + JSON.stringify(dk) + ' · lidos ' + JSON.stringify(lk) + ' · baixados ' + JSON.stringify(k.azure.filter((x) => x.startsWith('baixa ')))
-    + ' · uniao ' + JSON.stringify(du) + ' · recusado codigo ' + kr.codigo;
+    + ' · uniao ' + JSON.stringify(du) + ' · recusado codigo ' + kr.codigo + ' gravou ' + kr.gravou;
   return R;
 }
 function casosSombra(gen, lib) {
@@ -309,6 +313,7 @@ ok(!G.erro && G.okLidos, 'okLidos: o manifesto guarda o nome do sungrow-raw com 
 ok(!G.erro && G.okBaixa, 'okBaixa: no modo cofre so a versao escolhida e baixada, e nada do sungrow-raw');
 ok(!G.erro && G.okUniao, 'okUniao: a uniao (sungrow-raw com a versao velha e o 12/10 so nele) da o mesmo que o sungrow-raw certo');
 ok(!G.erro && G.okRecusado, 'okRecusado: o mesmo nome em 2026 e 2027 nao e lido, o resto e gravado e a rodada sai vermelha');
+ok(!G.erro && G.okGravou, 'okGravou: a saida do passo diz gravou=1 nos quatro modos, inclusive no vermelho do recusado');
 const S = casosSombra(GEN);
 ok(S.okSombraVerde, 'okSombraVerde: SOMBRA=1 com os dois iguais fica verde, confere os bytes e nao grava produto · ' + S.txt);
 ok(S.okSombraDia, 'okSombraDia: o dia faltando no cofre deixa a sombra vermelha com o lote nomeado');
@@ -366,6 +371,8 @@ plantaGen('modo cofre lendo o sungrow-raw', [["if (FONTE === 'raw') return lista
   (g) => { const r = casosGerador(g); return r.erro ? 'estourou: ' + r.erro : r.okIdentico && r.okBaixa; });
 plantaGen('recusado sem pintar a rodada', [["if (recusadosCofre) { console.log('::error::' + recusadosCofre + ' zip(s) recusado(s) pelo cofre nao foram lidos (acima)'); process.exitCode = 1; }", '']],
   (g) => { const r = casosGerador(g); return r.erro ? 'estourou: ' + r.erro : r.okRecusado; });
+plantaGen('gravou calado', [["  if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'gravou=1\\n');\n", '']],
+  (g) => { const r = casosGerador(g); return r.erro ? 'estourou: ' + r.erro : r.okGravou; });
 plantaGen('sombra sem a conferencia byte a byte', [['if (x.equals(y)) bIg++;', 'if (true) bIg++;']],
   (g) => casosSombra(g).okSombraBytes);
 plantaGen('uniao sem o cofre', [['const U = C.uniao(await listaRawAzure(), deCofre);', 'const U = C.uniao(await listaRawAzure(), []);']],

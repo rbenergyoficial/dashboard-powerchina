@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       refazer:
-        description: 'reler todos os zips do sungrow-raw (1 = sim; a primeira carga leva perto de 1 h)'
+        description: 'reler todos os zips do logger (1 = sim; a primeira carga leva perto de 1 h)'
         required: false
         default: ''
 concurrency:
@@ -15,8 +15,7 @@ concurrency:
 jobs:
   gen:
     runs-on: ubuntu-latest
-    # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026). Os passos que gravam, e a sombra (que le o sungrow-raw e o cofre),
-    #    levam o OIDC do proprio job: AZURE_CLIENT_ID e AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do
+    # 🔐 SEM A CHAVE DA CONTA. Os passos que gravam levam o OIDC do proprio job: AZURE_CLIENT_ID e AZURE_TENANT_ID no env DO PASSO (identificadores, nao credenciais; as do
     #    relogio-deploy). Os passos que so leem o publicado levam a SAS de leitura; os sem rede ficam sem credencial nenhuma.
     #    `permissions` explicito zera o resto: `contents: read` e o que o checkout precisa.
     permissions:
@@ -110,6 +109,10 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           RAW: sungrow-raw
+          # os zips do logger pela uniao: o historico do sungrow-raw (que nao cresce mais) e o cofre da ponte; no nome que os dois tem,
+          # vale o cofre (a versao mais nova). Zip recusado pelo cofre nao e lido e deixa o passo vermelho DEPOIS de gravar o resto: os
+          # passos que leem os sg_* dependem do sinal `gravou` (saida deste passo), nao do verde dele
+          FONTE: uniao
           SCADA_RAW: scada-raw
           OUT: dados
           REFAZER: ${{ github.event.inputs.refazer }}
@@ -122,7 +125,7 @@ jobs:
       # hash das marcas: como as etags dos sg_* mudam a cada rodada, cada rodada verde grava uma entrada nova (~175 MB); as antigas ninguem
       # restaura e o GitHub as despeja primeiro. Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais
       - name: Guardar a copia da rodada (exports do SCADA e sg_*)
-        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && hashFiles('.cache-sungrow/**/*.meta') != '' }}
+        if: ${{ !cancelled() && steps.gen_sg.outputs.gravou == '1' && hashFiles('.cache-sungrow/**/*.meta') != '' }}
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -132,7 +135,7 @@ jobs:
       # com o dia inteiro (sg_saude_<usina>.json); tres plantios em memoria reprovam. E o que a pagina Confiabilidade e perdas le
       - name: Ensaio · a cascata da usina no dia (produto)
         id: cascata
-        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.gen_sg.outputs.gravou == '1' }}
         env:
           DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
@@ -143,7 +146,7 @@ jobs:
       # (perdas_diario_scada, perdas_inv_scada) que o gen-perdas passa a gravar e o Comparativo le
       - name: Gerar perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger
         id: inv_logger
-        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.cascata.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.gen_sg.outputs.gravou == '1' && steps.cascata.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -166,7 +169,7 @@ jobs:
       # que o gen-perdas passa a gravar; nome antigo ja do logger sem a copia aborta sem gravar
       - name: Gerar pvstr_hora e pvstr_str pelo logger
         id: pvstr_logger
-        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.gen_sg.outputs.gravou == '1' && steps.r_pvstr.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_sungrow.outcome == 'success' }}
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -205,17 +208,3 @@ jobs:
           DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # so le o publicado: a SAS de leitura (revogavel), nao o OIDC que grava
           FONTES_DIR: ${{ runner.temp }}/agente_dia_fontes   # as fontes que o gerador deste job leu e o produto que ele gravou
         run: node scripts/ensaio-agente-dia.js
-      # EM SOMBRA: o cofre como fonte dos zips, no lugar da copia de hoje para o sungrow-raw. SOMBRA=1 nao gera
-      # nada: compara o cofre (backup-dados-scada/Sungrow_Logger/Sungrow_dados/<ano>/..., com o nome mapeado) com o sungrow-raw, lote a
-      # lote, e confere byte a byte os 12 pares mais novos. Fica VERMELHO se um lote do sungrow-raw faltar no cofre, se um nome ou um
-      # tamanho divergir, ou se o cofre trouxer um zip fora da forma. Ultimo passo e sem pular nada acima. Para trocar de fonte: tirar
-      # este passo, por FONTE: uniao no "Gerar sg_*.json" e desligar a copia antiga no mesmo ato (um escritor so por blob)
-      - name: Sombra · o cofre contra o sungrow-raw (nao grava)
-        if: ${{ !cancelled() }}
-        env:
-          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          RAW: sungrow-raw
-          SOMBRA: '1'
-          CONFERE_BYTES: '12'
-        run: node scripts/gen-sungrow.js
