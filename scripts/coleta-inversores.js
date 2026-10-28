@@ -37,8 +37,8 @@
  *    ficaria com a versao velha sem ninguem ver.
  *
  * ⚠️ NADA DE SEGREDO NESTE ARQUIVO, e o repositorio e publico: a pasta vem de `--pasta=` ou de
- *    `INV_PASTA`; a conexao e pedida a sessao local da nuvem na hora (como no `coleta-ppc`) e
- *    morre com o processo. A saida do comando que a emite nunca e impressa.
+ *    `INV_PASTA`; o acesso e o token que a sessao local da nuvem emite na hora (`lib-sessao-az`,
+ *    desde 28/10/2026 sem a chave da conta) e morre com o processo. O token nunca e impresso.
  *
  * uso:  node scripts/coleta-inversores.js --pasta=<pasta>            SECO (padrao): so lista
  *       node scripts/coleta-inversores.js --pasta=<pasta> --enviar   envia o que mudou
@@ -174,24 +174,6 @@ async function roda({ pasta, cont, enviar, cache, diz }) {
     soNoConteiner: P.soNoConteiner, foraComAviso: P.foraComAviso };
 }
 
-/* a conexao, sem gravar nada em disco nem no ambiente persistente (mesma regra do coleta-ppc.js).
-   ⚠️ A saida do comando NAO entra em log nenhum, nem em caso de erro. */
-function conexao() {
-  if (process.env.DADOS_STORAGE) return process.env.DADOS_STORAGE;
-  const { execFileSync } = require('child_process');
-  try {
-    const args = ['storage', 'account', 'show-connection-string', '-n', CONTA, '--query', 'connectionString', '-o', 'tsv'];
-    const cs = (process.platform === 'win32'
-      ? execFileSync('cmd.exe', ['/c', 'az'].concat(args), { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      : execFileSync('az', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).trim();
-    if (!cs || cs.indexOf('AccountKey=') < 0) throw new Error('resposta sem conexao utilizavel');
-    return cs;
-  } catch (e) {
-    throw new Error('sem DADOS_STORAGE no ambiente e a sessao local da nuvem nao emitiu a conexao para a conta '
-      + CONTA + ' (' + String(e.message).replace(/\s+/g, ' ').slice(0, 120) + ').');
-  }
-}
-
 module.exports = { entra, avisa, tipoDe, zipInteiro, locais, planeja, envia, roda, CONTAINER };
 
 if (require.main === module) {
@@ -208,8 +190,7 @@ if (require.main === module) {
     if (!fs.existsSync(pasta)) throw new Error('a pasta nao existe ou nao esta sincronizada: ' + pasta);
     let cache = {};
     try { cache = JSON.parse(fs.readFileSync(ARQ_CACHE, 'utf8')); } catch (e) { cache = {}; }
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    const cont = BlobServiceClient.fromConnectionString(conexao()).getContainerClient(CONTAINER);
+    const cont = require('./lib-sessao-az').conteinerLocal(CONTAINER, CONTA);
     diz((enviar ? 'ENVIO' : 'SECO (nada sobe; --enviar para enviar)') + ' · ' + pasta + ' -> ' + CONTAINER);
     const r = await roda({ pasta, cont, enviar, cache, diz });
     try { fs.writeFileSync(ARQ_CACHE, JSON.stringify(cache, null, 1)); } catch (e) { /* o cache so poupa download */ }

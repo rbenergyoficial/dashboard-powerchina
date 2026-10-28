@@ -32,9 +32,10 @@
  * 🔴 E A CONEXAO NAO FICA GUARDADA EM LUGAR NENHUM. A primeira versao deste coletor pedia a
  *    conexao numa variavel de ambiente, o que significa a chave da conta em texto claro no
  *    registro do usuario, legivel por qualquer processo dele. Nao e preciso: a maquina ja tem
- *    sessao da propria nuvem, entao o coletor PEDE a conexao na hora e ela morre com o processo.
+ *    sessao da propria nuvem, entao o coletor PEDE o acesso na hora e ele morre com o processo.
  *      1 · `DADOS_STORAGE` do ambiente, se existir — e assim que o CI a recebe, mesmo codigo
- *      2 · senao, a sessao local da nuvem emite a conexao para a conta declarada em `PPC_CONTA`
+ *      2 · senao, o TOKEN que a sessao local da nuvem emite para o storage da conta `PPC_CONTA`
+ *          (`lib-sessao-az`; desde 28/10/2026 a chave da conta nao sai mais da nuvem para ca)
  *    Faltando as duas, o coletor PARA e diz qual. Segredo que ninguem guardou e segredo que
  *    ninguem vaza.
  *
@@ -54,33 +55,6 @@ const ESTADO = process.env.PPC_ESTADO
   || path.join(process.env.LOCALAPPDATA || process.env.TMPDIR || '.', 'coleta-ppc-estado.json');
 
 const CONTA = process.env.PPC_CONTA || 'rbenergydata';
-
-/* a conexao, sem gravar nada em disco nem no ambiente persistente.
-   ⚠️ A saida do comando NAO entra em log nenhum, nem em caso de erro: o que se imprime e SE deu
-   certo, nunca o que veio. */
-function conexao() {
-  if (process.env.DADOS_STORAGE) return process.env.DADOS_STORAGE;
-  const { execFileSync } = require('child_process');
-  try {
-    /* 🔴 No Windows o cliente da nuvem e um `.cmd`, e o Node se recusa a executar arquivo de lote
-       direto desde a correcao de seguranca do 18 — falha com ENOENT, e a mensagem sugere "nao
-       esta instalado" quando ele esta instalado e autenticado.
-       ⚠️ A saida NAO e `shell: true`: com ela o Node concatena os argumentos sem escapar e avisa
-       por isso. Chamar o interpretador de comandos COMO PROGRAMA mantem cada argumento separado,
-       que e o que se quer num comando que devolve chave. */
-    const args = ['storage', 'account', 'show-connection-string', '-n', CONTA, '--query', 'connectionString', '-o', 'tsv'];
-    const cs = (process.platform === 'win32'
-      ? execFileSync('cmd.exe', ['/c', 'az'].concat(args), { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      : execFileSync('az', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).trim();
-    if (!cs || cs.indexOf('AccountKey=') < 0) throw new Error('resposta sem conexao utilizavel');
-    return cs;
-  } catch (e) {
-    /* o motivo entra na mensagem porque sem ele "nao emitiu" cobre desde sessao expirada ate
-       binario ausente; a SAIDA do comando nunca entra, e e nela que a chave viaja */
-    throw new Error('sem DADOS_STORAGE no ambiente e a sessao local da nuvem nao emitiu a conexao para a conta '
-      + CONTA + ' (' + String(e.message).replace(/\s+/g, ' ').slice(0, 120) + '). Enviar nada seria pior que falhar.');
-  }
-}
 
 const carimbo = (d) => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0')
   + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + String(d.getSeconds()).padStart(2, '0');
@@ -112,9 +86,8 @@ const carimbo = (d) => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0
     console.log('  + ' + a.f + ' -> ' + nome + '  (' + Math.round(bytes.length / 1024) + ' KB)');
     if (SECO) { enviados += 1; continue; }
 
-    const { BlobServiceClient } = require('@azure/storage-blob');
-    const c = BlobServiceClient.fromConnectionString(conexao()).getContainerClient(CONTAINER);
-    await c.createIfNotExists();
+    /* sem createIfNotExists: o conteiner existe e o papel da sessao e so nele; se sumir, o envio falha alto */
+    const c = require('./lib-sessao-az').conteinerLocal(CONTAINER, CONTA);
     await c.getBlockBlobClient(nome).upload(bytes, bytes.length, { blobHTTPHeaders: {
       blobContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } });
 

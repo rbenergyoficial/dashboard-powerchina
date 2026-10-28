@@ -255,7 +255,9 @@ const PLANTIOS = [
       const src = FONTE.replace(de, para);
       if (src === FONTE) { falhas += 1; console.log('  🔴 plantio "' + nome + '": a troca nao mudou o fonte'); continue; }
       /* o plantado vai para um arquivo proprio (o filho o executa) e compila em processo */
-      const arq = path.join(temp(), 'coleta-inversores.js'); fs.writeFileSync(arq, src);
+      /* a lib vai junto: o plantado a pede por caminho relativo, e sem ela o filho cairia por "modulo nao achado" (falso pego) */
+      const dp = temp(); const arq = path.join(dp, 'coleta-inversores.js'); fs.writeFileSync(arq, src);
+      fs.copyFileSync(path.join(__dirname, 'lib-sessao-az.js'), path.join(dp, 'lib-sessao-az.js'));
       let M;
       try { M = compila(src, ARQ); } catch (e) { falhas += 1; console.log('  🔴 plantio "' + nome + '" NAO COMPILA (defeito do ensaio): ' + e.message.slice(0, 80)); continue; }
       const k = await casos(M, arq, false);

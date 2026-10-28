@@ -214,3 +214,9 @@ jobs:
         run: |
           npm i --no-save xlsx@0.18.5
           node scripts/ensaio-coleta-inversores.js
+
+      # As duas pontes da maquina (coleta-inversores, coleta-ppc) sem a chave da conta (lote coleta-sem-chave, 28/10/2026): o token da
+      # sessao local do az, renovado a 5 min do fim, nunca impresso, sem volta para a chave; az simulado, 17 casos e 7 plantios.
+      - name: Ensaio · as pontes da maquina gravam com o token da sessao, sem a chave (lib-sessao-az)
+        if: always()
+        run: node scripts/ensaio-lib-sessao-az.js
