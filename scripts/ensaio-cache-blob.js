@@ -178,6 +178,24 @@ function item(blobs, nome, comMd5 = true) {
       'trafo.yml: o banco e as planilhas em entradas separadas, restore antes e save depois, cada uma com a chave da propria pasta');
     ok(!ps.some((p) => /path: \.cache-banco\n/.test(p.corpo)), 'trafo.yml: nenhuma entrada com a pasta .cache-banco inteira (a chave mudaria todo dia com as planilhas dentro)'); }
 
+  /* alarmes-scada (29/10/2026): a tabela de alarmes do supervisorio, a mesma copia do cofre; o gerar com CACHE_BLOB_DIR, restore antes e
+     save depois, chave propria; no backfill o save nao roda (o historico inteiro numa entrada tiraria do cache as copias dos outros) */
+  { const wa = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'alarmes-scada.yml'), 'utf8').replace(/\r\n/g, '\n');
+    const src = fs.readFileSync(path.join(__dirname, 'gen-alarmes-scada.js'), 'utf8');
+    const ps = wa.split(/\n      - name: /).slice(1).map((p) => ({ nome: p.split('\n')[0].trim(), corpo: p }));
+    const iG = ps.findIndex((p) => /^Gerar alarmes_scada/.test(p.nome));
+    const r = ps.findIndex((p) => /actions\/cache\/restore@/.test(p.corpo) && p.corpo.indexOf('path: .cache-banco/backup-dados-scada\n') >= 0);
+    const s = ps.findIndex((p) => /actions\/cache\/save@/.test(p.corpo) && p.corpo.indexOf('path: .cache-banco/backup-dados-scada\n') >= 0);
+    ok(iG >= 0 && /CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-banco\n/.test(ps[iG].corpo), 'alarmes-scada.yml: o gerar com CACHE_BLOB_DIR .cache-banco');
+    ok(r >= 0 && s >= 0 && r < iG && s > iG && ps[r].corpo.indexOf('restore-keys: alarmes-scada-') >= 0
+      && ps[s].corpo.indexOf("key: alarmes-scada-${{ hashFiles('.cache-banco/backup-dados-scada/*.meta') }}") >= 0,
+      'alarmes-scada.yml: restore antes e save depois do gerar, com a chave propria');
+    ok(s >= 0 && ps[s].corpo.indexOf("github.event.inputs.backfill != '1'") >= 0, 'alarmes-scada.yml: o backfill nao guarda a copia');
+    const t = ps.findIndex((p) => /^Tamanho da copia da tabela de alarmes/.test(p.nome));
+    ok(t > iG && t < s && /du -sm \.cache-banco\/backup-dados-scada/.test(ps[t].corpo) && ps[s].corpo.indexOf('fromJSON(steps.tam.outputs.mb) <= 400') >= 0,
+      'alarmes-scada.yml: a rodada normal que refaz historico (copia acima de 400 MB) nao guarda a copia');
+    ok(/require\('\.\/lib-cache-blob'\)\.abre\(RAW\)/.test(src) && /cache\.poda\(\)/.test(src), 'gen-alarmes-scada.js: le pela lib-cache-blob e poda'); }
+
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));
   process.exit(falhas ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

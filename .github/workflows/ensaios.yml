@@ -221,7 +221,8 @@ jobs:
         if: always()
         run: node scripts/ensaio-lib-sessao-az.js
 
-      # Os alarmes dos medidores (lote alarmes-way2, 28/10/2026): a REGRA do circuito aberto / sem tensao sobre 4 dias REAIS do
+      # Os alarmes dos medidores (lote alarmes-way2, 28/10/2026) e, sem rede, quais meses o gerador dos alarmes do supervisorio refaz
+      # (lote alarmes-scada, 29/10/2026; a regra dele le o cofre e roda no alarmes-scada.yml). A REGRA do circuito aberto / sem tensao sobre 4 dias REAIS do
       # historico do medidor (21/09: o 04T2 desligado pelo SEP; 27/10: dois cubiculos abertos; 01/01/2026: corte a zero; 29/01/2026: a
       # reenergizacao com a rede aberta a jusante) e os forjados, com 13 plantios; e o GERADOR em quatro rodadas seguidas (a semente
       # do publicado, a virada do dia, o inicio que muda, a poda da janela), com 6 plantios. Dia fixo que sumiu do historico reprova.
@@ -230,3 +231,4 @@ jobs:
         run: |
           node scripts/ensaio-alarme-circuito.js
           node scripts/ensaio-gen-alarmes-way2.js
+          node scripts/ensaio-gen-alarmes-scada.js

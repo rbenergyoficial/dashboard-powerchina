@@ -1,4 +1,8 @@
 {
+ "alarmes-scada.yml": [
+  "0 17 11 * * *",
+  "0 41 15 * * *"
+ ],
  "comparativo.yml": [
   "0 40 13,23 * * *"
  ],

@@ -3,7 +3,7 @@
  * ensaio-alarme-circuito.js — a regra do circuito aberto / sem tensão (lib-alarme-circuito.js).
  *
  * Lê do contêiner `dados` (lib-le-dados: DADOS_SAS no job) o hist/way2_<dia>.json de 4 dias FIXOS e recorta as janelas aqui. Dia fixo
- * que sumiu (404) REPROVA: o ensaio não pula. O ESPERADO vem de fora da lib: o registro de campo (RO-MTD-2026-0045, 14T2 aberto pelo
+ * que sumiu (404) REPROVA: o ensaio não pula. O ESPERADO vem de fora da lib: o registro de campo (14T2 aberto pelo
  * SEP às 14:10:36 de 21/09/2026), a tabela de alarmes do supervisório (CUB10_2 ABERTO às 06:23:08 de 27/10/2026) e a lista de
  * circuitos de cada trafo, escrita aqui à mão.
  *   1. 21/09 13:30–15:30: o 04T2 sem tensão é PAI dos 11 circuitos dele (e só deles); instante estimado a ±60 s do campo; nenhum aberto;

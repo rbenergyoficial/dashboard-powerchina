@@ -1,0 +1,106 @@
+name: Alarmes do supervisorio -> alarmes_scada.json (tabela de alarmes do E3, D+1)
+on:
+  schedule:
+    # 08:17 BRT — o CSV de ontem da tabela de alarmes chega ao cofre pela ponte (liga 05:55; ciclo ate ~07:30). Lote alarmes-scada,
+    # 29/10/2026. Minuto quebrado de proposito: no :00 o agendador do GitHub atrasa 30 a 90 min.
+    - cron: '17 11 * * *'
+    # 12:41 BRT — de novo depois do desligamento de seguranca da ponte (12:30): no dia em que ela tenta de novo ate 12:00, o CSV de
+    # ontem chega depois da 1a rodada.
+    - cron: '41 15 * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'backfill: refaz TODOS os meses com arquivo, do mais antigo ao mais novo (1 = sim)'
+        required: false
+        default: ''
+      ensaio:
+        description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
+        required: false
+        default: ''
+concurrency:
+  # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
+  group: gen-alarmes-scada-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    # 🔐 SEM A CHAVE DA CONTA: o ensaio (le o cofre) e o gerador (le o cofre e a publicacao anterior, grava em `dados`) levam o OIDC do
+    #    proprio job no env DO PASSO (AZURE_CLIENT_ID e AZURE_TENANT_ID: identificadores, nao credenciais).
+    permissions:
+      contents: read
+      id-token: write
+    # o backfill le ~4 MB gzip por dia de historico (ate 2 anos); a rodada diaria le so o mes da janela
+    timeout-minutes: 90
+    steps:
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # A copia em disco do bruto entre execucoes (lib-cache-blob): so o CSV novo vem pela rede. Duas entradas: a do gerador e a dos dois
+      # dias fixos do ensaio (subpasta propria, que a poda do gerador nao alcanca). O prefixo da do ensaio NAO comeca com o da do gerador.
+      - name: Restaurar a copia da tabela de alarmes
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/backup-dados-scada
+          key: alarmes-scada-${{ github.run_id }}
+          restore-keys: alarmes-scada-
+      - name: Restaurar a copia dos dias fixos do ensaio
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/ensaio/backup-dados-scada
+          key: ensaio-alarmes-scada-${{ github.run_id }}
+          restore-keys: ensaio-alarmes-scada-
+      # Quais meses o gerador refaz (janela, mes incompleto, cadeia) e o atraso do arquivo de ontem, com CSV forjados e plantios. Sem rede.
+      - name: Ensaio · os meses que o gerador refaz e o atraso (sem rede)
+        run: node scripts/ensaio-gen-alarmes-scada.js
+      # A regra sobre dois dias reais fixos do cofre e dias forjados, com plantios. Dia fixo que sumiu do cofre reprova.
+      - name: Ensaio · alarmes do supervisorio (dias reais e forjados, com plantios)
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          RAW: backup-dados-scada
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-banco
+        run: node scripts/ensaio-alarmes-scada.js
+      - name: Gerar alarmes_scada.json e hist/alarmes_scada_AAAA_MM.json
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          RAW: backup-dados-scada
+          OUT: dados
+          BACKFILL: ${{ github.event.inputs.backfill == '1' && '1' || '' }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-banco
+          # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio == '1' && '/tmp/alarmes' || '' }}
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-alarmes-scada.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -laR "${LOCAL_OUT_DIR}"; fi
+      # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. No backfill NAO guarda: a copia seria o
+      #    historico inteiro (GB) numa entrada so, e tiraria do cache as copias dos outros workflows. A rodada normal tambem refaz meses
+      #    antigos (mes incompleto e a cadeia) enquanto o historico chega: guarda so ate 400 MB (a janela toca no maximo 2 meses, ~4 MB
+      #    gzip por dia, ~250 MB com a vespera); acima disso a rodada esta refazendo historico e a copia fica de fora.
+      - name: Tamanho da copia da tabela de alarmes
+        id: tam
+        if: ${{ !cancelled() }}
+        run: echo "mb=$(du -sm .cache-banco/backup-dados-scada 2>/dev/null | cut -f1 || echo 0)" >> "$GITHUB_OUTPUT"
+      - name: Guardar a copia da tabela de alarmes
+        if: ${{ !cancelled() && github.event.inputs.backfill != '1' && steps.tam.outputs.mb != '' && fromJSON(steps.tam.outputs.mb) <= 400 && hashFiles('.cache-banco/backup-dados-scada/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/backup-dados-scada
+          key: alarmes-scada-${{ hashFiles('.cache-banco/backup-dados-scada/*.meta') }}
+      - name: Guardar a copia dos dias fixos do ensaio
+        if: ${{ !cancelled() && hashFiles('.cache-banco/ensaio/backup-dados-scada/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-banco/ensaio/backup-dados-scada
+          key: ensaio-alarmes-scada-${{ hashFiles('.cache-banco/ensaio/backup-dados-scada/*.meta') }}

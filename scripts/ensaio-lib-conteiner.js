@@ -70,6 +70,7 @@ const MIGRADOS = {
   'way2-recent.yml': { 'gen-way2-eletrico.js': null, 'gen-way2-recent.js': null, 'gen-dia-corrente.js': null, 'gen-agente-om.js': null,   // etapa 4
     'gen-way2-watchdog.js': null, 'gen-alarmes-way2.js': null },   // + alarmes-way2 (29/10/2026)
   'malha-estado.yml': { 'gen-malha-estado.js': null },   // etapa 4: no portal-admin, o papel so no arquivo da malha
+  'alarmes-scada.yml': { 'gen-alarmes-scada.js': null },   // alarmes-scada (29/10/2026): a tabela de alarmes do supervisorio, D+1
   'apagar-blob.yml': { 'apagar-blob.js': null },         // etapa 4: o papel no `dados` ja inclui apagar
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
@@ -100,6 +101,7 @@ const LEITORES = {
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
     'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',
     'ensaio-inversor-cru.js', 'ensaio-leitura-congelada.js', 'ensaio-rampa-amanhecer.js', 'ensaio-strings.js'],
+  'alarmes-scada.yml': ['ensaio-alarmes-scada.js'],   // lê 27 e 28/10/2026 reais do cofre pelo OIDC
 };
 /* a chave em qualquer das formas de lê-la: a CHAMADA da cadeia de conexão (o `fromConnectionString:` de um SDK simulado não conta), a
    chamada por colchete, a credencial de chave, a variável por ponto, por colchete ou desestruturada. Fica de fora, declarado: a variável lida
