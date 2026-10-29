@@ -53,6 +53,7 @@ jobs:
       # aparece como `success` na API do GitHub, e o verde do workflow nao provava que a coleta
       # funcionava. Esta e a UNICA entrada de dado do ao-vivo, e ela nao pode parar em silencio.
       - name: Coletar da Way2 (way2_eletrico.json)
+        id: coleta
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -192,6 +193,22 @@ jobs:
           GH_REPO: ${{ github.repository }}
           LIMIAR_MIN: '30'
         run: node scripts/gen-way2-watchdog.js
+      # alarmes-way2 (28/10/2026): circuito ABERTO e barra/trafo SEM TENSAO deduzidos dos medidores de 5 min (alarmes_way2.json, tela
+      # "Alarmes e ocorrencias"). No FIM do job: vermelho aqui nao segura nenhum produto acima. Roda se a coleta desta rodada gravou a
+      # copia local (le so ela e o proprio alarmes_way2.json). A REGRA se julga antes nos forjados, sem rede; os dias reais e os
+      # plantios da regra rodam no ensaios.yml a cada push (os 4 dias custariam ~16 MB de saida a cada 5 min). O gerador nao grava se
+      # o ensaio reprovou: lib quebrada nao chega ao blob.
+      - name: Ensaio · alarmes dos medidores (regra, forjados)
+        id: ensaio_alarmes
+        if: ${{ !cancelled() && steps.coleta.outcome == 'success' }}
+        run: node scripts/ensaio-alarme-circuito.js --forjados && node scripts/ensaio-gen-alarmes-way2.js
+      - name: Alarmes dos medidores (alarmes_way2.json)
+        if: ${{ !cancelled() && steps.ensaio_alarmes.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
+        run: node scripts/gen-alarmes-way2.js
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor

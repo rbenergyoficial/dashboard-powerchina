@@ -220,3 +220,13 @@ jobs:
       - name: Ensaio · as pontes da maquina gravam com o token da sessao, sem a chave (lib-sessao-az)
         if: always()
         run: node scripts/ensaio-lib-sessao-az.js
+
+      # Os alarmes dos medidores (lote alarmes-way2, 28/10/2026): a REGRA do circuito aberto / sem tensao sobre 4 dias REAIS do
+      # historico do medidor (21/09: o 04T2 desligado pelo SEP; 27/10: dois cubiculos abertos; 01/01/2026: corte a zero; 29/01/2026: a
+      # reenergizacao com a rede aberta a jusante) e os forjados, com 13 plantios; e o GERADOR em quatro rodadas seguidas (a semente
+      # do publicado, a virada do dia, o inicio que muda, a poda da janela), com 6 plantios. Dia fixo que sumiu do historico reprova.
+      - name: Ensaio · alarmes dos medidores (regra nos dias reais e gerador)
+        if: always()
+        run: |
+          node scripts/ensaio-alarme-circuito.js
+          node scripts/ensaio-gen-alarmes-way2.js
