@@ -186,6 +186,24 @@ jobs:
           LE_DADOS_PROPRIOS: '^sg_'   # o sg_* que o gerar acabou de gravar vem pela copia (304)
           CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-sungrow
         run: node scripts/ensaio-pvstr-logger.js --produto
+      # Os alarmes do inversor pelo logger (lote alarmes-logger, 29/10/2026): o código de falha e a parada sem código de cada inversor a
+      # cada 5 min viram episódios, costurados na virada, com grupo por usina. O ensaio lê dois dias reais fixos do cofre e o mapa de
+      # posição publicado, e roda os forjados com plantios; barra só o gerador abaixo. O gerador lê só o zip novo (nome + tamanho) e usa o
+      # sg_ident.json que o gen-sungrow grava (por isso depois dele).
+      - name: Ensaio · alarmes do inversor pelo logger (dias reais e forjados, com plantios)
+        id: r_alm_logger
+        if: ${{ !cancelled() }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/ensaio-alarmes-logger.js
+      - name: Gerar alarmes_logger.json pelo logger
+        if: ${{ !cancelled() && steps.gen_sg.outcome == 'success' && steps.r_alm_logger.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          FONTE: cofre
+        run: node scripts/gen-alarmes-logger.js
       # O setpoint por eletrocentro (sp_ts_<usina>_<ts>.json) nao e gerado aqui: a fonte dele e o export do supervisorio, que nao chega
       # mais. O gerador e o ensaio ficam no repositorio para quando houver fonte nova.
       # O resumo diario do Assistente Inteligente (agente_dia.json) refeito com o dado novo deste workflow;

@@ -66,7 +66,7 @@ const MIGRADOS = {
   'scada.yml': { 'gen-scada.js': null, 'gen-scada-db-vigia.js': null, 'gen-scada-intake-watchdog.js': null },
   'executivo.yml': { 'gen-benchmark-ons.js': null, 'gen-executivo.js': null, 'gen-irradiancia.js': null, 'gen-pr.js': null,   // etapa 4
     'gen-registro-projecao.js': null },
-  'sungrow.yml': { 'gen-sungrow.js': null, 'gen-inv-logger.js': null, 'gen-pvstr-logger.js': null, 'gen-agente-dia.js': null },   // etapa 4
+  'sungrow.yml': { 'gen-sungrow.js': null, 'gen-inv-logger.js': null, 'gen-pvstr-logger.js': null, 'gen-agente-dia.js': null, 'gen-alarmes-logger.js': null },   // etapa 4
   'way2-recent.yml': { 'gen-way2-eletrico.js': null, 'gen-way2-recent.js': null, 'gen-dia-corrente.js': null, 'gen-agente-om.js': null,   // etapa 4
     'gen-way2-watchdog.js': null, 'gen-alarmes-way2.js': null },   // + alarmes-way2 (29/10/2026)
   'malha-estado.yml': { 'gen-malha-estado.js': null },   // etapa 4: no portal-admin, o papel so no arquivo da malha
@@ -95,7 +95,8 @@ const LEITORES = {
     'ensaio-pr-ufv.js --produto', 'ensaio-pr.js', 'ensaio-ref-conjunto.js --produto', 'ensaio-ref-dia.js', 'ensaio-tol-rateio.js',
     'ensaio-janela-conjunto.js --produto', 'alerta-sem-restricao.js'],   // janela-restricao
   'way2-hist.yml': ['ensaio-med-ufv.js --produto', 'ensaio-w2-bruta-usina.js --produto', 'ensaio-fontes-exec.js --diario', 'ensaio-agente-dia.js'],
-  'sungrow.yml': ['ensaio-sungrow-cascata.js', 'ensaio-inv-logger.js --produto', 'ensaio-pvstr-logger.js --produto', 'ensaio-agente-dia.js'],
+  'sungrow.yml': ['ensaio-sungrow-cascata.js', 'ensaio-inv-logger.js --produto', 'ensaio-pvstr-logger.js --produto', 'ensaio-agente-dia.js',
+    'ensaio-alarmes-logger.js'],   // + alarmes-logger (29/10/2026): lê dois dias reais do cofre pelo OIDC
   'way2-recent.yml': ['ensaio-selo-medidores.js --real', 'ensaio-manchete-noite.js --produto', 'ensaio-portal-vivo-circuitos.js --produto',
     'ensaio-portal-eletrico.js --produto', 'ensaio-agente-om.js'],
   'perdas.yml': ['ensaio-disponibilidade.js', 'ensaio-disp-retroativa.js', 'ensaio-setpoint-unidade.js', 'ensaio-pvstr-hora.js M3',
