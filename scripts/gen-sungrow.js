@@ -474,7 +474,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
      do humano de 11/10/2026). Refeita do historico INTEIRO a cada rodada: a heranca do ultimo estado valido atravessa a
      meia-noite e o dia que ganhou leitura (ou irradiancia) depois se completa sozinho. Conta so o inversor que ocupa a
      posicao no dia (posNoDia, a mesma regra do sg_inv_dia). A irradiancia e a do estacao_logger_30min.json (estacao-logger.yml,
-     05:23 BRT, antes deste): sem ela nao ha dia, e a ausencia aborta em vez de publicar vazio -------- */
+     06:47 BRT, antes deste): sem ela nao ha dia, e a ausencia aborta em vez de publicar vazio -------- */
   const estLog = await leAnterior('estacao_logger_30min.json');
   if (!estLog || !Array.isArray(estLog.serie) || !estLog.serie.length) throw new Error('estacao_logger_30min.json ausente ou vazio: a disponibilidade do dia precisa da irradiancia');
   const dCalc = D.calcula(DH, D.estacaoPorMeia(estLog), { regra: 'posicao', posNoDia, porInv: true });

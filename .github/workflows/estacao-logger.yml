@@ -1,8 +1,11 @@
 name: Estacoes solarimetricas (datalogger) -> estacao_logger_30min.json, estacao_dia.json e estacao_10min_M<usina>.json
 on:
   schedule:
-    - cron: '23 8 * * *' # 05:23 BRT — o arquivo do dia chega ao computador as 02:00 e sobe ao backup-dados-scada as 04:00
-    - cron: '33 15 * * *' # 12:33 BRT — segunda rodada: o backup do PC roda tambem as 12:00 (quando dorme as 04:00, ou o arquivo sincroniza depois)
+    # 06:47 BRT (lote estacao-pos-ponte, 30/10/2026): o arquivo do dia D sai da VM pela ponte das 05:55 e chega ao backup-dados-scada
+    # entre 06:16 e 06:24 BRT (medido de 22 a 30/10/2026). As 05:23 a rodada gerava o mesmo dado da vespera, e o sungrow.yml das 10:17
+    # (disponibilidade dos inversores, que precisa da irradiancia) deixava o dia D sem valor ate D+2
+    - cron: '47 9 * * *'
+    - cron: '33 15 * * *' # 12:33 BRT — segunda rodada: a ponte que atrasa (tenta de novo ate 12:00) ou o envio a mao
   workflow_dispatch:
 concurrency:
   # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
