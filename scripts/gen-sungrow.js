@@ -87,6 +87,32 @@ const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1
 // os contêineres (sungrow-raw, cofre, scada-raw, dados) pela lib-conteiner: a chave ou o OIDC do job
 const svc = () => ({ getContainerClient: (nome) => require('./lib-conteiner').conteiner(nome) });
 
+/* a PLANILHA DE SUBSTITUICOES (sg-troca-planilha, 30/10/2026): a mais recente do inversores-raw que tem a aba 'Inverter Failure Control'
+   com a coluna MARKUP (o instalado); a versao antiga, sem ela, fica para tras. Ausente ou ilegivel: nenhuma troca, e o log diz (so o
+   desempate de vaga ambigua depende dela). LOCAL_PLANILHA_INV: o arquivo local, para o ensaio; com LOCAL_RAW_DIR e sem ele, nenhuma
+   planilha (o ensaio sem rede nao abre o storage) */
+const PLANILHA_RAW = process.env.PLANILHA_RAW || 'inversores-raw';
+async function trocasPlanilha() {
+  const arqs = [];
+  if (process.env.LOCAL_PLANILHA_INV || process.env.LOCAL_RAW_DIR) {
+    const p = process.env.LOCAL_PLANILHA_INV;
+    if (p && fs.existsSync(p)) arqs.push({ nome: path.basename(p), mod: fs.statSync(p).mtime, ler: async () => fs.readFileSync(p) });
+  } else {
+    const c = svc().getContainerClient(PLANILHA_RAW);
+    for await (const b of c.listBlobsFlat()) if (/\.xls[xm]$/i.test(b.name) && !/^~\$/.test(b.name))
+      arqs.push({ nome: b.name, mod: (b.properties || {}).lastModified, ler: async () => c.getBlobClient(b.name).downloadToBuffer() });
+  }
+  arqs.sort((a, b) => new Date(b.mod) - new Date(a.mod));
+  const XLSX = require('xlsx');
+  for (const a of arqs) {
+    let ws;
+    try { ws = XLSX.read(await a.ler(), { type: 'buffer' }).Sheets['Inverter Failure Control']; } catch (e) { continue; }
+    if (!ws) continue;
+    try { return { trocas: D.trocasDaPlanilha(XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })), fonte: a.nome }; } catch (e) { continue; }
+  }
+  return { trocas: [], fonte: null };
+}
+
 async function listaRaw() {
   if (process.env.LOCAL_RAW_DIR) {
     const out = [];
@@ -401,13 +427,24 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
      leitura a partir do dia da atribuicao, ela cai e o caso volta a ser julgado -------- */
   const dupVaga = (novo, dono, d) => D.dupContador(H.inv[novo].dias, H.inv[dono].dias, d);
   for (const [sn, a] of Object.entries(ident)) {
-    if (a.metodo !== D.METODO_VAGA) continue;
+    if (a.metodo !== D.METODO_VAGA && a.metodo !== D.METODO_PLANILHA) continue;
     const dono = a.dono && H.inv[a.dono];
     if (!H.inv[sn] || !dono || Object.keys(dono.dias).some((d) => d >= a.d)) {
-      console.log('  ⚠️ posicao vaga revista: ' + sn + ' deixa ' + a.pos + ' (o dono ' + a.dono + ' voltou a ler, ou saiu do historico)');
+      console.log('  ⚠️ ' + a.metodo + ' revista: ' + sn + ' deixa ' + a.pos + ' (o dono ' + a.dono + ' voltou a ler, ou saiu do historico)');
       delete ident[sn];
     }
   }
+  /* o registro de substituicoes desempata ANTES da vaga (sg-troca-planilha): quem ele posiciona sai da disputa da vaga */
+  { const P = await trocasPlanilha();
+    if (!P.fonte) console.log('  ⚠️ planilha de substituicoes: nenhuma legivel com a coluna MARKUP no ' + PLANILHA_RAW + ' (sem desempate pelo registro)');
+    else {
+      const R = D.posicaoPelaPlanilha(H.inv, ident, P.trocas, dupVaga);
+      for (const [sn, a] of Object.entries(R.atribui)) { ident[sn] = a; delete busca[sn];
+        console.log('  planilha de substituicoes: ' + sn + ' -> ' + a.pos + ' a partir de ' + a.d + ' (retirado ' + a.dono + ')'); }
+      for (const x of R.recusados) console.log('  ⚠️ planilha de substituicoes recusada: ' + x.sn + ' · ' + x.motivo);
+      console.log('  planilha de substituicoes "' + P.fonte + '": ' + P.trocas.length + ' troca(s) com o instalado · nesta rodada '
+        + Object.keys(R.atribui).length + ' posicionado(s), ' + R.recusados.length + ' recusado(s)');
+    } }
   { const V = D.posicaoPelaVaga(H.inv, ident, dupVaga);
     for (const [sn, a] of Object.entries(V.atribui)) { ident[sn] = a; delete busca[sn];
       console.log('  posicao vaga no mesmo logger: ' + sn + ' -> ' + a.pos + ' a partir de ' + a.d + ' (dono anterior ' + a.dono + ')'); }

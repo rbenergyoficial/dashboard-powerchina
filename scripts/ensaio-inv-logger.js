@@ -204,6 +204,47 @@ function casosVaga(D) {
   return R;
 }
 
+/* 7c · a troca pela planilha de substituicoes (sg-troca-planilha, 30/10/2026): M9 pasta TS1, A (INV16) e C (INV18) param em 15/10, B (INV17)
+   segue lendo, N chega em 16/10. Duas vagas: a regra da vaga nao decide, a planilha diz que N entrou no lugar de C (INV18) */
+function casosPlanilha(D) {
+  const R = {};
+  const base = () => ({ A: { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-10', 6), 450000) }, B: { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-10', 9), 300000) },
+    C: { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-10', 6), 600000) }, N: { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-16', 3), 1277.5) } });
+  const id = () => ({ A: { pos: 'M9/TS1/INV16' }, B: { pos: 'M9/TS1/INV17' }, C: { pos: 'M9/TS1/INV18' } });
+  const troca = (o) => [Object.assign({ pos: 'M9/TS1/INV18', d: '2026-10-16', retirado: 'C', instalado: 'N' }, o || {})];
+  const dup = (H) => (n, o, d) => D.dupContador(H[n].dias, H[o].dias, d);
+  const P = (H, I, T) => D.posicaoPelaPlanilha(H, I, T, dup(H));
+  const nada = (V) => !Object.keys(V.atribui).length && V.recusados.length === 1 && V.recusados[0].sn === 'N';
+  { const H = base(), V = P(H, id(), troca());
+    R.okPlanilha = !!V.atribui.N && V.atribui.N.pos === 'M9/TS1/INV18' && V.atribui.N.d === '2026-10-16' && V.atribui.N.dono === 'C'
+      && V.atribui.N.metodo === D.METODO_PLANILHA && !V.recusados.length && D.posicaoPelaVaga(H, id(), dup(H)).ambiguos.length === 1; }
+  { const H = base(); R.okRetirado = nada(P(H, id(), troca({ retirado: 'A' }))); }                 // a planilha poe N na INV18 com A, que ocupa a INV16
+  { const H = base(); H.N.ufv = 'M1'; R.okUsinaP = nada(P(H, id(), troca())); }
+  { const H = base(); H.N.pasta = 'TS2'; R.okPastaP = nada(P(H, id(), troca())); }
+  { const H = base(); H.C.dias = serie(dd('2026-10-10', 9), 600000); R.okDonoLeP = nada(P(H, id(), troca())); }
+  { const H = base(); R.okAntes = nada(P(H, id(), troca({ d: '2026-10-17' }))); }                 // lido em 16/10, a planilha diz troca em 17/10
+  { const H = base(); R.okDuasPos = nada(P(H, id(), [...troca(), ...troca({ pos: 'M9/TS1/INV16', retirado: 'A' })])); }
+  { const H = base(); H.N2 = { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-16', 3), 900) };
+    const V = P(H, id(), [...troca(), ...troca({ instalado: 'N2' })]);
+    R.okDoisNaPos = !Object.keys(V.atribui).length && V.recusados.map((x) => x.sn).sort().join() === 'N,N2'; }
+  { const H = base(), I = id(); I.X = { pos: 'M9/TS1/INV18' }; H.X = { ufv: 'M9', pasta: 'TS1', dias: serie(dd('2026-10-16', 3), 5000) };
+    R.okOcupada = nada(P(H, I, troca())); }                                                         // outro numero de serie ja le na INV18
+  { const H = base(), I = id(); I.N = { pos: 'M9/TS1/INV16' }; const V = P(H, I, troca());
+    R.okJaTem = !Object.keys(V.atribui).length && !V.recusados.length; }
+  // a leitura da aba: titulo antes do cabecalho, colunas pelo nome, INV3/TS08/minuscula, data serial do Excel e texto, linha sem instalado fora
+  const xl = (d) => Date.parse(d + 'T00:00:00Z') / 864e5 + 25569;
+  const M = [['CONTROLE DE FALHAS DE INVERSORES'], [], ['ITEM', 'SPV', 'TS', 'INV', 'CÓDIGO DE FALHA / FAULT CODE', 'DATA / DATE', 'SN', 'DATA DA SUBSTITUIÇÃO / REPLACEMENT DATE', 'MARKUP'],
+    [205, 'M4', 'TS8', 'INV3', 64, xl('2026-10-27'), 'A2352739491', xl('2026-10-27'), 'a2621103121 '],
+    [204, 'M4', 'TS08', 'INV05', 64, xl('2026-10-27'), 'A23B1707251', '27/10/2026', 'A2471700986'],
+    [100, 'M2', 'TS1', 'INV11', 64, xl('2026-05-02'), 'A0000000001', xl('2026-05-02'), null]];
+  let T = null; try { T = D.trocasDaPlanilha(M); } catch (e) { T = null; }
+  R.okLeitura = !!T && JSON.stringify(T) === JSON.stringify([{ pos: 'M4/TS8/INV03', d: '2026-10-27', retirado: 'A2352739491', instalado: 'A2621103121' },
+    { pos: 'M4/TS8/INV05', d: '2026-10-27', retirado: 'A23B1707251', instalado: 'A2471700986' }]);
+  let estourou = false; try { D.trocasDaPlanilha(M.map((r) => r.filter((c) => c !== 'MARKUP'))); } catch (e) { estourou = true; }
+  R.okSemMarkup = estourou;
+  return R;
+}
+
 /* 7b · a copia do supervisorio (L.copiaScada) com o transporte forjado: existe; semeia; aborta com o antigo do logger; aborta com a copia
    contaminada; nada a semear. E o gen-perdas grava os tres nomes do supervisorio com o sufixo (PUBLICA, lida da fonte dele) */
 async function casosCopia(L) {
@@ -278,7 +319,7 @@ function cenarioVaga(gen, variante) {
     const RAW = path.join(raiz, 'raw'), OUT = path.join(raiz, 'out'), SC = path.join(raiz, 'sc'), pasta = path.join(RAW, 'M10', 'TS01', '01 A 05');
     for (const d of [pasta, OUT, SC]) fs.mkdirSync(d, { recursive: true });
     const zs = [arq(QV, T, 300000), arq(ZV, variante === 'dono_volta' ? T : T.slice(0, 2), 450000), arq(WV, T.slice(2), 1000)];
-    zs.push(arq(RV, variante === 'duas' ? T.slice(0, 2) : T, 600000));
+    zs.push(arq(RV, variante === 'duas' || variante === 'planilha' ? T.slice(0, 2) : T, 600000));
     fs.writeFileSync(path.join(pasta, 'lote.zip'), zip(zs));
     const g = (n, o) => fs.writeFileSync(path.join(OUT, n), zlib.gzipSync(JSON.stringify(o)));
     g('sg_ident.json', { esquema: 2, ident: { [ZV]: { pos: 'M1/TS1/INV01', d: T[0], metodo: 'ensaio' }, [QV]: { pos: 'M1/TS1/INV02', d: T[0], metodo: 'ensaio' },
@@ -287,7 +328,13 @@ function cenarioVaga(gen, variante) {
       return { t, ms: Date.parse(t), e1: k >= 14 && k <= 34 ? 600 : 0 }; })) });
     fs.writeFileSync(path.join(raiz, 'inv_scada_hist.json'), JSON.stringify({ serie: [] }));
     const env = Object.assign({}, process.env, { LOCAL_RAW_DIR: RAW, LOCAL_SCADA_DIR: SC, LOCAL_OUT_DIR: OUT, LOCAL_INV_SCADA: path.join(raiz, 'inv_scada_hist.json') });
-    delete env.LOCAL_RAW_LISTA; delete env.REFAZER;
+    delete env.LOCAL_RAW_LISTA; delete env.REFAZER; delete env.LOCAL_PLANILHA_INV;
+    if (variante === 'planilha') {   // sg-troca-planilha: duas vagas (INV01 e INV03 param em 14/10) e a planilha diz que W entrou no lugar de R (INV03)
+      const XLSX = require('xlsx'), wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['CONTROLE'], ['ITEM', 'SPV', 'TS', 'INV', 'SN', 'DATA DA SUBSTITUIÇÃO / REPLACEMENT DATE', 'MARKUP'],
+        [1, 'M1', 'TS1', 'INV3', RV, T[2], WV]]), 'Inverter Failure Control');
+      env.LOCAL_PLANILHA_INV = path.join(raiz, 'planilha.xlsx'); XLSX.writeFile(wb, env.LOCAL_PLANILHA_INV);
+    }
     const le = (n) => (fs.existsSync(path.join(OUT, n)) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUT, n))).toString('utf8')) : null);
     const roda = () => { try { return execFileSync('node', [gen], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); } catch (e) { R.erro = String(e.stderr || e.message).split('\n').filter(Boolean).slice(-2).join(' | '); return null; } };
     if (variante === 'revisao') {
@@ -303,16 +350,18 @@ function cenarioVaga(gen, variante) {
     }
     if (roda() == null) return R;
     const I = le('sg_ident.json'), PI = le('sg_disp_inv_dia.json') || { dias: [], inv: {} };
-    const p = PI.inv['M1/TS1/INV01'] || { d: [], m: [] };
+    const p = PI.inv[variante === 'planilha' ? 'M1/TS1/INV03' : 'M1/TS1/INV01'] || { d: [], m: [] };
     const m = T.map((d) => { const i = PI.dias.indexOf(d); return i >= 0 ? p.m[i] : null; });
     R.ident = I.ident[WV] || null; R.semPos = I.sem_posicao.map((x) => x.sn); R.m = m;
-    R.txt = 'W ' + JSON.stringify(R.ident) + ' · sem posicao ' + JSON.stringify(R.semPos) + ' · meias de sol de M1/TS1/INV01 ' + JSON.stringify(m);
+    R.txt = 'W ' + JSON.stringify(R.ident) + ' · sem posicao ' + JSON.stringify(R.semPos) + ' · meias de sol de ' + (variante === 'planilha' ? 'M1/TS1/INV03 ' : 'M1/TS1/INV01 ') + JSON.stringify(m);
     return R;
   } finally { fs.rmSync(raiz, { recursive: true, force: true }); }
 }
 const vagaOk = (R) => !R.erro && !!R.ident && R.ident.pos === 'M1/TS1/INV01' && R.ident.d === T[2] && R.ident.metodo === 'posicao vaga no mesmo logger'
   && !R.semPos.includes(WV) && R.m.every((x) => x === 21);
 const vagaDuasOk = (R) => !R.erro && !R.ident && R.semPos.includes(WV) && R.m[2] === 0 && R.m[3] === 0;
+const planilhaOk = (R) => !R.erro && !!R.ident && R.ident.pos === 'M1/TS1/INV03' && R.ident.d === T[2] && R.ident.metodo === 'planilha de substituicoes'
+  && !R.semPos.includes(WV) && R.m[2] === 21 && R.m[3] === 21;
 
 function planta(fonte, destino, nome, trocas, julga) {
   let s = fs.readFileSync(fonte, 'utf8').replace(/\r\n/g, '\n');
@@ -357,6 +406,10 @@ async function lib() {
   const V = casosVaga(require('./lib-sungrow-disp.js'));
   const CV = ['okVagaReal', 'okDuasVagas', 'okDoisNovos', 'okDonoLe', 'okDonoAtual', 'okPastaLida', 'okOutraPasta', 'okOutraUsina', 'okDupDono'];
   for (const k of CV) ok(V[k], k);
+  console.log('7c · a troca pela planilha de substituicoes (lib-sungrow-disp)');
+  const PL = casosPlanilha(require('./lib-sungrow-disp.js'));
+  const CP = ['okPlanilha', 'okRetirado', 'okUsinaP', 'okPastaP', 'okDonoLeP', 'okAntes', 'okDuasPos', 'okDoisNaPos', 'okOcupada', 'okJaTem', 'okLeitura', 'okSemMarkup'];
+  for (const k of CP) ok(PL[k], k);
   console.log('7b · a copia do supervisorio e o nome que o gen-perdas grava');
   ok((await casosCopia(L)).okCopia, 'okCopia: existe, semeia, aborta com o antigo do logger, aborta com a copia contaminada, nada a semear');
   const PP = publicaPerdas(); ok(PP.ok, 'okPublica: o gen-perdas grava o supervisorio com o sufixo _scada · ' + PP.txt);
@@ -365,6 +418,8 @@ async function lib() {
   ok(vagaOk(G1), 'o novo assume a vaga e entra na disponibilidade da posicao · ' + (G1.erro || G1.txt));
   ok(vagaDuasOk(G2), 'duas vagas no mesmo logger: o novo fica sem posicao · ' + (G2.erro || G2.txt));
   ok(!G3.erro && G3.okRevisao, 'o dono volta a ler: a atribuicao cai · ' + (G3.erro || G3.txt));
+  const G4 = cenarioVaga(GEN, 'planilha');
+  ok(planilhaOk(G4), 'duas vagas e a planilha de substituicoes: o novo vai para a posicao do retirado · ' + (G4.erro || G4.txt));
   console.log('9 · plantios');
   const libCasos = (k) => (f) => casosLib(require(f))[k];
   planta(LIB, LIBP, 'SCADA de volta como fonte dos parados (o nome do logger com o valor do supervisorio)',
@@ -407,6 +462,16 @@ async function lib() {
   // no gerador o plantio tem de reprovar PELO DEFEITO (o gerador rodou, sem erro), nunca por ter quebrado
   planta(GEN, GENP, 'gerador sem a vaga', [['for (const [sn, a] of Object.entries(V.atribui)) { ident[sn] = a;', 'for (const [sn, a] of Object.entries({})) { ident[sn] = a;']],
     (f) => { const R = cenarioVaga(f, 'base'); return R.erro ? 'estourou: ' + R.erro : !(!R.ident && R.semPos.includes(WV)); });
+  const plCasos = (k) => (f) => casosPlanilha(require(f))[k];
+  planta(LIBD, LIBDP, 'planilha sem conferir quem ocupa a posicao', [['if (!dono || !I[dono] || I[dono].pos !== t.pos || !inv[dono])', 'if (!dono || !I[dono] || !inv[dono])']], plCasos('okRetirado'));
+  planta(LIBD, LIBDP, 'planilha sem conferir a usina', [['if (o.ufv !== u) {', 'if (false) {']], plCasos('okUsinaP'));
+  planta(LIBD, LIBDP, 'planilha com o retirado ainda lendo', [['if (!own || !(fim < own)) {', 'if (!own) {']], plCasos('okDonoLeP'));
+  planta(LIBD, LIBDP, 'planilha antes da data da troca', [['if (own < t.d) {', 'if (false) {']], plCasos('okAntes'));
+  planta(LIBD, LIBDP, 'planilha sem conferir a posicao ocupada', [['const outro = Object.keys(I).find(', 'const outro = [].find(']], plCasos('okOcupada'));
+  planta(LIBD, LIBDP, 'planilha com dois instalados na mesma posicao', [['if (sns.length > 1) { for (const sn of sns) recusados', 'if (false) { for (const sn of sns) recusados']], plCasos('okDoisNaPos'));
+  planta(LIBD, LIBDP, 'planilha com o INV sem o zero', [["return m ? 'INV' + m[1].padStart(2, '0') : null;", "return m ? 'INV' + m[1] : null;"]], plCasos('okLeitura'));
+  planta(GEN, GENP, 'gerador sem a planilha', [['for (const [sn, a] of Object.entries(R.atribui)) { ident[sn] = a;', 'for (const [sn, a] of Object.entries({})) { ident[sn] = a;']],
+    (f) => planilhaOk(cenarioVaga(f, 'planilha')));
   planta(GEN, GENP, 'gerador sem a revisao da vaga', [["if (!H.inv[sn] || !dono || Object.keys(dono.dias).some((d) => d >= a.d)) {", 'if (false) {']],
     (f) => { const R = cenarioVaga(f, 'revisao'); return R.erro ? 'estourou: ' + R.erro : R.okRevisao; });
 }

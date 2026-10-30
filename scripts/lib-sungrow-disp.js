@@ -345,5 +345,78 @@ function posicaoPelaVaga(inv, ident, dup) {
   return { atribui, ambiguos };
 }
 
-module.exports = { posicaoPelaVaga, METODO_VAGA, produtoInv, janelasTroca, dupContador, substitutosTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
+/* A TROCA PELA PLANILHA DE SUBSTITUICOES (lote sg-troca-planilha, 30/10/2026). O desempate que o posicaoPelaVaga deixa para o registro:
+   M4/TS8 trocou o INV03 e o INV05 no mesmo dia (27/10/2026), duas vagas e dois novos, e os dois ficaram sem posicao (fora do
+   sg_inv_dia e do mapa). A aba 'Inverter Failure Control' traz, por troca, a posicao (SPV, TS, INV), o RETIRADO (SN), a data (DATA DA
+   SUBSTITUICAO) e o INSTALADO (MARKUP). Colunas pelo NOME; linha sem posicao, data ou instalado fica fora.
+   trocasDaPlanilha(linhas): a aba como matriz (sheet_to_json header:1, raw) -> [{ pos, d, retirado, instalado }] */
+const METODO_PLANILHA = 'planilha de substituicoes';
+const normaU = (s) => { const m = /^M\s*0*([1-9])$/i.exec(String(s == null ? '' : s).trim()); return m ? 'M' + m[1] : null; };
+const normaTs = (s) => { const m = /^TS\s*0*([1-9]\d?)$/i.exec(String(s == null ? '' : s).trim()); return m ? 'TS' + Number(m[1]) : null; };
+const normaInv = (s) => { const m = /^INV\s*0*([1-9]\d?)$/i.exec(String(s == null ? '' : s).trim()); return m ? 'INV' + m[1].padStart(2, '0') : null; };
+const normaSn = (s) => { const t = String(s == null ? '' : s).trim().toUpperCase(); return /^[A-Z0-9]{8,}$/.test(t) ? t : null; };
+function dataIso(v) {             // celula de data: numero de serie do Excel, 'AAAA-MM-DD' ou 'DD/MM/AAAA'
+  if (typeof v === 'number' && v > 40000 && v < 80000) return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10);
+  const s = String(v == null ? '' : v).trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s); if (m) return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  return null;
+}
+function trocasDaPlanilha(linhas) {
+  let h = -1, c = null;
+  for (let i = 0; i < Math.min((linhas || []).length, 20) && h < 0; i++) {
+    const r = (linhas[i] || []).map((x) => String(x == null ? '' : x).trim().toUpperCase());
+    const k = { u: r.indexOf('SPV'), ts: r.indexOf('TS'), inv: r.indexOf('INV'), sn: r.indexOf('SN'), mk: r.indexOf('MARKUP'),
+      d: r.findIndex((x) => x.startsWith('DATA DA SUBSTITUI')) };
+    if (Object.values(k).every((j) => j >= 0)) { h = i; c = k; }
+  }
+  if (h < 0) throw new Error('planilha de substituicoes: cabecalho com SPV, TS, INV, SN, DATA DA SUBSTITUICAO e MARKUP nao encontrado');
+  const out = [];
+  for (const r of linhas.slice(h + 1)) {
+    const u = normaU(r[c.u]), ts = normaTs(r[c.ts]), inv = normaInv(r[c.inv]), ins = normaSn(r[c.mk]), d = dataIso(r[c.d]);
+    if (u && ts && inv && ins && d) out.push({ pos: u + '/' + ts + '/' + inv, d, retirado: normaSn(r[c.sn]), instalado: ins });
+  }
+  return out;
+}
+/* posicaoPelaPlanilha(inv, ident, trocas, dup): o INSTALADO sem posicao assume a posicao da troca quando tudo confere com o logger:
+   o retirado e quem ocupa a posicao (ident), os dois na mesma usina e na mesma pasta do logger, o retirado sem leitura a partir do
+   primeiro dia proprio do instalado (o primeiro que nao e duplicado do retirado, a regra do janelasTroca), esse dia nao antes da data
+   da troca, e nenhum outro numero de serie da posicao lendo a partir dele. O mesmo instalado em duas posicoes, ou duas atribuicoes
+   para a mesma posicao: nada vale. O que nao confere volta em `recusados` com o motivo (o gerador escreve no log).
+   Devolve { atribui: { sn: { pos, d, metodo, dono } }, recusados: [{ sn, motivo }] } */
+function posicaoPelaPlanilha(inv, ident, trocas, dup) {
+  const eDup = typeof dup === 'function' ? dup : () => false;
+  const I = ident || {};
+  const dias = (sn) => Object.keys((inv[sn] && inv[sn].dias) || {}).sort();
+  const porSn = new Map();
+  for (const t of trocas || []) (porSn.get(t.instalado) || porSn.set(t.instalado, []).get(t.instalado)).push(t);
+  const cand = {}, recusados = [];
+  for (const [sn, ts] of porSn) {
+    if (I[sn] || !dias(sn).length) continue;                       // ja tem posicao, ou o logger nao o le
+    const ps = [...new Set(ts.map((t) => t.pos))].sort();
+    if (ps.length > 1) { recusados.push({ sn, motivo: 'instalado em mais de uma posicao na planilha: ' + ps.join('|') }); continue; }
+    const t = ts.slice().sort((a, b) => (a.d < b.d ? 1 : -1))[0];
+    const u = t.pos.split('/')[0], o = inv[sn], dono = t.retirado;
+    if (o.ufv !== u) { recusados.push({ sn, motivo: 'o logger o le em ' + o.ufv + ', a planilha o poe em ' + t.pos }); continue; }
+    if (!dono || !I[dono] || I[dono].pos !== t.pos || !inv[dono]) { recusados.push({ sn, motivo: 'o retirado ' + dono + ' nao e quem ocupa ' + t.pos }); continue; }
+    if (inv[dono].pasta !== o.pasta) { recusados.push({ sn, motivo: 'o retirado e o instalado em pastas diferentes do logger' }); continue; }
+    const own = dias(sn).find((d) => !eDup(sn, dono, d));
+    const fim = dias(dono).pop();
+    if (!own || !(fim < own)) { recusados.push({ sn, motivo: 'o retirado ' + dono + ' leu ate ' + fim + ', no primeiro dia do instalado ou depois' }); continue; }
+    if (own < t.d) { recusados.push({ sn, motivo: 'lido desde ' + own + ', antes da troca (' + t.d + ')' }); continue; }
+    const outro = Object.keys(I).find((s) => s !== dono && I[s].pos === t.pos && dias(s).some((d) => d >= own));
+    if (outro) { recusados.push({ sn, motivo: t.pos + ' ja e de ' + outro + ', com leitura a partir de ' + own }); continue; }
+    cand[sn] = { pos: t.pos, d: own, metodo: METODO_PLANILHA, dono };
+  }
+  const porPos = new Map();
+  for (const [sn, a] of Object.entries(cand)) (porPos.get(a.pos) || porPos.set(a.pos, []).get(a.pos)).push(sn);
+  const atribui = {};
+  for (const [pos, sns] of porPos) {
+    if (sns.length > 1) { for (const sn of sns) recusados.push({ sn, motivo: pos + ' para mais de um instalado: ' + sns.sort().join('|') }); continue; }
+    atribui[sns[0]] = cand[sns[0]];
+  }
+  return { atribui, recusados };
+}
+
+module.exports = { posicaoPelaPlanilha, trocasDaPlanilha, METODO_PLANILHA, posicaoPelaVaga, METODO_VAGA, produtoInv, janelasTroca, dupContador, substitutosTroca, ESQUEMA, COLUNAS, DISPONIVEL, INDISPONIVEL, FALHA, PN_PADRAO, LIMIAR_SOL, CAPU, USINAS, classe, rle, derle,
   diaDisp, histVazio, junta, estacaoPorMeia, calcula, produto, pct };

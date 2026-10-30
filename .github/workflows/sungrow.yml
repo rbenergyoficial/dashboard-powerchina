@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
-      - run: npm i @azure/storage-blob@12
+      - run: npm i xlsx@0.18.5 @azure/storage-blob@12   # xlsx: a planilha de substituicoes (sg-troca-planilha)
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
       # inteiro, busca funda e sua memoria, migracao de esquema, saude do inversor e o dicionario de codigos contra o
       # manual, o eletrocentro de 5 min e as horas fora da rede, com plantios. Sem rede: julga a regra antes de gerar. A
