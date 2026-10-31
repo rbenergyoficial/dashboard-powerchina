@@ -49,6 +49,16 @@ function julga(lib) {
   let sem = null;
   try { lib.leArquivo(A.replace(/Irr_Tilted_1_Avg/g, 'Irr_X')); } catch (e) { sem = e; }
   ok(sem, 'arquivo sem o campo tem de estourar');
+  // arquivo vazio no cofre: le a versao completa MAIS NOVA ao lado; vazio sem versao sai; o resto da lista nao muda
+  const X = 'E/2026/10 - OUTUBRO/M2/CRD_M02_Data_10m_2026-10-30.dat', Y = 'E/2026/10 - OUTUBRO/M3/CRD_M03_Data_10m_2026-10-30.dat';
+  const Z = 'E/2026/10 - OUTUBRO/M4/CRD_M04_Data_10m_2026-10-30.dat';
+  const tv = lib.trocaVazios ? lib.trocaVazios([{ nome: X, tam: 0, ler: 'VAZIO' }, { nome: X + '~20261030-010101', tam: 500, ler: 'V1' },
+    { nome: X + '~20261031-020003', tam: 128114, ler: 'V2' }, { nome: Y, tam: 0, ler: 'VAZIO' }, { nome: Z, tam: 100, ler: 'Z' }]) : { lista: [], avisos: [] };
+  const lx = tv.lista.find((a) => a.nome === X);
+  ok(lx && lx.ler === 'V2' && lx.tam === 128114, 'vazio com versoes: le a mais nova (~20261031-020003), veio ' + JSON.stringify(lx));
+  ok(!tv.lista.some((a) => a.nome === Y), 'vazio sem versao sai da lista');
+  ok(tv.lista.some((a) => a.nome === Z && a.ler === 'Z'), 'arquivo cheio fica como esta');
+  ok(tv.avisos.length === 2, 'um aviso por vazio, veio ' + tv.avisos.length);
   return f;
 }
 
@@ -60,12 +70,14 @@ const P = {
   'campo pela posicao 22': Object.assign({}, L, { leArquivo: (txt) => {
     const out = []; const re = /<r time="(\d{4}-\d\d-\d\dT\d\d:\d\d)[^"]*"[^>]*>([\s\S]*?)<\/r>/g; let m;
     while ((m = re.exec(txt))) { const v = /<v22>([^<]*)<\/v22>/.exec(m[2]) || /<v1>([^<]*)<\/v1>/.exec(m[2]); const x = Number(v && v[1]); if (Number.isFinite(x)) out.push([m[1], x]); } return out; } }),
+  'vazio sem troca': Object.assign({}, L, { trocaVazios: (lista) => ({ lista, avisos: [] }) }),
+  'vazio pela versao mais velha': Object.assign({}, L, { trocaVazios: (lista) => L.trocaVazios(lista.slice().reverse().map((a) => a.nome.endsWith('020003') ? { ...a, nome: a.nome.replace('20261031-020003', '20261029-000000') } : a)) }),
   'M10 como usina 10': Object.assign({}, L, { usinaDoArquivo: (n) => { const m = /CRD_M(\d+)_Data_10m_/.exec(n); return m && !/_duplicados/.test(n) ? +m[1] : null; } }),
 };
 
 const f = julga(L);
 let falhou = f.length > 0;
-console.log(f.length ? f.map((x) => '  FALHA: ' + x).join('\n') : '  a lib passa (' + 11 + ' conferencias)');
+console.log(f.length ? f.map((x) => '  FALHA: ' + x).join('\n') : '  a lib passa (' + 15 + ' conferencias)');
 for (const [nome, lib] of Object.entries(P)) {
   const fp = julga(lib);
   console.log('  plantio "' + nome + '": ' + (fp.length ? 'reprova (' + fp[0] + ')' : 'PASSOU — o ensaio nao mede este defeito'));

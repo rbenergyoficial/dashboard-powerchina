@@ -49,13 +49,13 @@ const conteiner = (nome) => require('./lib-conteiner').conteiner(nome);
 async function arquivos() {
   const out = [];
   if (process.env.LOCAL_DIR) {
-    const anda = (d) => { for (const n of fs.readdirSync(d)) { const p = path.join(d, n); if (fs.statSync(p).isDirectory()) anda(p); else out.push({ nome: path.relative(process.env.LOCAL_DIR, p).split(path.sep).join('/'), ler: async () => fs.readFileSync(p) }); } };
+    const anda = (d) => { for (const n of fs.readdirSync(d)) { const p = path.join(d, n); if (fs.statSync(p).isDirectory()) anda(p); else out.push({ nome: path.relative(process.env.LOCAL_DIR, p).split(path.sep).join('/'), tam: fs.statSync(p).size, ler: async () => fs.readFileSync(p) }); } };
     anda(process.env.LOCAL_DIR);
     return { lista: out, fim: () => {} };
   }
   const cache = require('./lib-cache-blob').abre(RAW);
   const c = conteiner(RAW);
-  for await (const b of c.listBlobsFlat({ prefix: PREFIXO })) out.push({ nome: b.name, ler: () => cache.baixa(c, b) });
+  for await (const b of c.listBlobsFlat({ prefix: PREFIXO })) out.push({ nome: b.name, tam: b.properties.contentLength, ler: () => cache.baixa(c, b) });
   return { lista: out, fim: () => { cache.poda(); cache.resumo(); } };
 }
 
@@ -69,7 +69,9 @@ async function escreve(nome, obj) {
 }
 
 async function main() {
-  const { lista, fim } = await arquivos();
+  const arq = await arquivos(), fim = arq.fim;
+  const { lista, avisos } = L.trocaVazios(arq.lista);   // arquivo vazio no cofre: a versao completa ao lado, ou fica fora
+  for (const a of avisos) console.log('AVISO: ' + a);
   // por nome: o nome por dia ("..._2026-10-08.dat") vem antes do antigo ("..._Day398.dat"); o primeiro visto de cada instante fica
   const sel = lista.map((a) => ({ ...a, u: L.usinaDoArquivo(a.nome) })).filter((a) => a.u).sort((a, b) => (a.nome < b.nome ? -1 : 1));
   const R = new Map(), conflito = { n: 0, total: 0, ex: [] };

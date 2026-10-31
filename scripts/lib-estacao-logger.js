@@ -68,4 +68,26 @@ function meiasHoras(reg) {
   return out;
 }
 
-module.exports = { CAMPO, usinaDoArquivo, leArquivo, meiasHoras, minutos, instante };
+// Arquivo VAZIO no cofre (0 bytes: uma copia que morreu no meio, com o disco da ponte cheio, 31/10/2026). A versao completa
+// sobe ao lado como <nome>~AAAAMMDD-HHMMSS e o cofre nunca regrava. So nesse caso le-se a versao mais nova no lugar do vazio; as
+// outras versoes (milhares, de recoletas antigas) seguem fora, como sempre. Vazio sem versao sai da lista, com aviso: lancar
+// derrubaria as nove estacoes. lista = [{ nome, tam, ler }]; devolve a lista nova e os avisos.
+function trocaVazios(lista) {
+  const vers = new Map();
+  for (const a of lista) {
+    const i = a.nome.indexOf('~');
+    if (i < 0) continue;
+    const base = a.nome.slice(0, i), v = vers.get(base);
+    if (a.tam > 0 && (!v || a.nome > v.nome)) vers.set(base, a);
+  }
+  const avisos = [], out = [];
+  for (const a of lista) {
+    if (a.tam !== 0 || a.nome.includes('~')) { out.push(a); continue; }
+    const v = vers.get(a.nome);
+    if (v) { out.push({ ...a, tam: v.tam, ler: v.ler }); avisos.push(a.nome + ' vazio no cofre: lido da versao ' + v.nome.slice(v.nome.indexOf('~'))); }
+    else avisos.push(a.nome + ' vazio no cofre e sem versao completa: fica fora');
+  }
+  return { lista: out, avisos };
+}
+
+module.exports = { CAMPO, usinaDoArquivo, leArquivo, meiasHoras, minutos, instante, trocaVazios };
