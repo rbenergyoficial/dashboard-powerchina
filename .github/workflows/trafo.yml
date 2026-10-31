@@ -5,6 +5,8 @@ on:
     # 30 min, que chegava ~03:30, acabou em 15/10).
     # Minuto quebrado de proposito: no :00 o agendador do GitHub atrasa 30 a 90 min.
     - cron: '38 10 * * *'
+    # 12:38 BRT — segunda rodada: a ponte tenta de novo ate as 12:00 quando a primeira manha falha.
+    - cron: '38 15 * * *'
   workflow_dispatch:
     inputs:
       ensaio:

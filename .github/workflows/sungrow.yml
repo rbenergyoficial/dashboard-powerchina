@@ -2,6 +2,7 @@ name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min)
 on:
   schedule:
     - cron: '17 13 * * *' # 10:17 BRT — o lote do logger chega de dia
+    - cron: '47 15 * * *' # 12:47 BRT — segunda rodada: a ponte tenta de novo ate as 12:00 quando a primeira manha falha
   workflow_dispatch:
     inputs:
       refazer:
