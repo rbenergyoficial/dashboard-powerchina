@@ -640,7 +640,7 @@ console.log('\n4 · plantios no gerador (cada um roda o cenario inteiro)');
 const src = fs.readFileSync(path.join(__dirname, 'gen-sungrow.js'), 'utf8');
 function planta(nome, de, para, chave) {
   if (src.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou'); return; }
-  const g = path.join(__dirname, '_plantio_sungrow.js');
+  const g = path.join(__dirname, '_plantio_sungrow_' + process.pid + '.js');   // nome por execucao: duas ao mesmo tempo nao se pisam
   fs.writeFileSync(g, src.split(de).join(para));
   let r2;
   try { r2 = cenario(g); } finally { fs.unlinkSync(g); }
@@ -650,10 +650,10 @@ function planta(nome, de, para, chave) {
 const srcLib = fs.readFileSync(path.join(__dirname, 'lib-sungrow.js'), 'utf8');
 function plantaLib(nome, de, para, chave) {
   if (srcLib.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou na lib'); return; }
-  const lib = path.join(__dirname, '_plantio_lib_sungrow.js'), g = path.join(__dirname, '_plantio_sungrow.js');
+  const libNome = '_plantio_lib_sungrow_' + process.pid + '.js', lib = path.join(__dirname, libNome), g = path.join(__dirname, '_plantio_sungrow_' + process.pid + '.js');
   const req = "require('./lib-sungrow.js')";
   if (src.split(req).length !== 2) { ok(false, 'plantio ' + nome + ': o gerador nao le a lib 1x'); return; }
-  fs.writeFileSync(lib, srcLib.split(de).join(para)); fs.writeFileSync(g, src.split(req).join("require('./_plantio_lib_sungrow.js')"));
+  fs.writeFileSync(lib, srcLib.split(de).join(para)); fs.writeFileSync(g, src.split(req).join("require('./" + libNome + "')"));
   let r2;
   try { r2 = cenario(g, lib); } finally { fs.unlinkSync(g); fs.unlinkSync(lib); }
   ok(!r2.erro && r2[chave] === false, 'plantio na lib "' + nome + '" reprova em ' + chave + (r2.erro ? ' (estourou: ' + r2.erro + ')' : ''));
@@ -738,7 +738,7 @@ planta('tipo do dia pela origem', "(FAM[f] || {}).tipo === 'alarme' ? 1 :", "(FA
 planta('codigo fora do manual vira falha', "(FAM[f] || {}).tipo === 'falha' ? 2 : 4), 0);", "(FAM[f] || {}).tipo === 'falha' ? 2 : 2), 0);", 'okSaudeTipo');
 planta('tipo do dia soma os bits em vez de OU', "reduce((b, f) => b | ((FAM[f]", "reduce((b, f) => b + ((FAM[f]", 'okSaudeTipo');
 planta('tipo do dia sobrescreve em vez de juntar', "reduce((b, f) => b | ((FAM[f]", "reduce((b, f) => 0 | ((FAM[f]", 'okSaudeTipo');
-planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).map', 'const tudo = new Map(([]).map', 'okPtAcumula');
+planta('PT100 por eletrocentro sem acumular', 'const tudo = new Map(((ant && ant.serie) || []).filter(', 'const tudo = new Map(([]).filter(', 'okPtAcumula');
 planta('sem busca funda', 'if (!faltam.length) continue;', 'continue;', 'okId');
 planta('busca sem teto', 'if (a.carimbo > teto) continue;', '', 'okBusca1');
 planta('busca que nao para no casamento', 'if (!faltam.length) break;', '', 'okBusca1');
@@ -746,6 +746,292 @@ planta('busca nunca repetida', 'busca[sn] !== ultimo(sn)', '!(sn in busca)', 'ok
 planta('busca sem memoria', ' && busca[sn] !== ultimo(sn)', '', 'okNaoRepete');
 // na transicao 3 -> 4 o que importa e RELER os zips (o arquivo por eletrocentro so se constroi lendo); migrar sem reler tem de reprovar
 planta('migra sem reler os zips', 'const lidosAnt = REFAZER || migra ? null :', 'const lidosAnt = REFAZER ? null :', 'okMigra');
+/* sg-ts-logger: na primeira carga (sem historico publicado) os reparos nascem feitos. Pendentes, o reparo vivo (que rele o M10 e nao
+   acha o logger do M1/TS7 no cenario) avisaria e releria os zips do M1 em TODA rodada: a segunda rodada deixa de ser identica */
+planta('reparo pendente na primeira carga', 'H.reparos = H.reparos || reparosAnt || nascemFeitos;', 'H.reparos = H.reparos || reparosAnt || [];', 'okIdem');
+
+/* ---------- 5 · dois loggers na mesma pasta (sg-ts-logger, 01/11/2026) ----------
+   O caso real: a pasta TS7 do M1 tem o logger do TS7 e o do TS8. A decisao do TS de cada logger vem do historico (forjado aqui, sem
+   inversores: nenhuma votacao fecha, como a rodada de 14/10/2026 que so decidiu 9 de 56). Julgado:
+     a releitura completa (esquema novo e REFAZER) leva a decisao e a marca do reparo, e o dia relido substitui o dia inteiro (o
+     instante a mais de outro logger sai);
+     dois loggers no mesmo TS com instantes em comum (pelo PT100 ou so pelo eletrocentro) abortam ANTES de gravar qualquer arquivo
+     que dependa do TS do logger;
+     o REPARO da pasta rele os zips UMA vez e substitui todo dia que a pasta trouxe, inclusive o dia que so o logger do outro TS tem,
+     e mesmo no arquivo sem leitura nova (o PT100 de um logger sem sensor); o dia que nenhum zip traz fica; no eletrocentro que tambem
+     recebe de um logger de OUTRA pasta, so o dia que o proprio arquivo releu; reparo cujo prefixo nao casa zip (sem distinguir caixa)
+     ou cuja pasta nao traz logger avisa e NAO e marcado (a rodada passa);
+     na rodada normal o lote da tarde FUNDE com a manha;
+     o logger TROCADO (o velho para ao meio-dia, o novo comeca), os dois no mesmo TS, passa.
+   O reparo do ensaio e uma constante PROPRIA (a viva do gerador e trocada na copia): a capacidade nao depende do reparo do dia */
+console.log('\n5 · dois loggers na mesma pasta');
+const ESQ = Number((src.match(/const ESQ_HIST = (\d+);/) || [])[1]);
+const ID_REP = 'ensaio-dois-loggers';
+const RE_REPAROS = /const REPAROS = \{[\s\S]*?\};/;
+// o reparo do ensaio rele o M1 inteiro e refaz o TS7 (o do caso real) e o TS6 (o logger sem PT100, RE-102)
+const comReparoDoEnsaio = (s) => s.replace(RE_REPAROS, "const REPAROS = { '" + ID_REP + "': { reler: ['M10/'], refazer: ['M1_TS7', 'M1_TS6'] } };");
+const srcDois = (src.match(new RegExp(RE_REPAROS.source, 'g')) || []).length === 1 ? comReparoDoEnsaio(src) : null;
+const raiz2 = fs.mkdtempSync(path.join(os.tmpdir(), 'sungrow2-'));
+process.on('exit', () => { if (!process.env.MANTEM) fs.rmSync(raiz2, { recursive: true, force: true }); else console.log(raiz2); });
+const RAW2 = path.join(raiz2, 'raw'), SC2 = path.join(raiz2, 'scada'), OUT2 = path.join(raiz2, 'out'), PASTA2 = path.join(RAW2, 'M10', 'TS07', 'PID 100');
+for (const d of [SC2, OUT2, PASTA2]) mk(d);
+/* L7 e o do TS7, L8 o do TS8 (os dois na pasta TS7); L9 substitui o L7 em 01/10 ao meio-dia; L6 so le o eletrocentro (sem PT100);
+   L5, sem PT100, e o do TS6, tambem na pasta TS7; L82 e um segundo logger do TS8 na pasta TS08 (outra pasta), com o 02/10, que so o
+   L7 tem na pasta TS7: o reparo da pasta TS7 nao pode apagar esse dia do TS8 (RE-101) */
+const L7 = 'B0000000071', L8 = 'B0000000081', L9 = 'B0000000091', L6 = 'B0000000061', L5 = 'B0000000051', L82 = 'B0000000082';
+const D2 = ['2026-09-28', '2026-09-29', '2026-09-30'], D27 = '2026-09-27', D01 = '2026-10-01', D02 = '2026-10-02', D20 = '2026-09-20';
+// series diferentes em todo instante; potencia em W com passo de 100 W (o kW publicado, uma casa, fica exato)
+const BASE = { [L7]: [40, 41, 100000], [L8]: [60, 62, 500000], [L9]: [80, 83, 900000], [L6]: [0, 0, 300000], [L5]: [0, 0, 200000], [L82]: [70, 72, 700000] };
+const SEM_PT = new Set([L6, L5]);
+const di2 = (d) => Math.round((Date.parse(d + 'T00:00:00Z') - Date.parse('2026-09-28T00:00:00Z')) / 864e5);
+const v2 = (sn, d, k) => { const [a, b, p] = BASE[sn], di = di2(d) + 10;
+  return SEM_PT.has(sn) ? [32767, 32767, p + k * 100] : [Math.round((a + k / 10 + di) * 10) / 10, Math.round((b + k / 10 + di) * 10) / 10, p + k * 100 + di * 50000]; };
+// o L7 para as 16:40 de 30/09 (indice 200): a tarde de 30/09 so o L8 tem; e o 27/09 so o L8 tem (zip proprio)
+const faixa2 = (sn, d) => (sn === L7 && d === '2026-09-30' ? [0, 200] : [0, 287]);
+const linhas2 = (sn, dias, f) => dias.flatMap((d) => HH.map((h, k) => [k, h]).filter(([k]) => { const [a, b] = (f || faixa2)(sn, d); return k >= a && k <= b; })
+  .map(([k, h]) => { const [a, b, p] = v2(sn, d, k); return [d + ' ' + h + ':00', 20, a, b, p, 7040, 1000, 2, 2, 704].join(', '); }));
+const csv2 = (sn, dias, f) => '﻿' + EST_COLS.join(',') + '\n' + linhas2(sn, dias, f).join('\n') + '\n';
+const PASTA8 = path.join(RAW2, 'M10', 'TS08', 'PID 100'), PASTA9 = path.join(RAW2, 'M10', 'TS09', 'PID 100');
+for (const d of [PASTA8, PASTA9]) mk(d);
+const zipEst = (arq, partes, dir) => fs.writeFileSync(path.join(dir || PASTA2, arq), zip(partes.map(([sn, dias, f]) => ({ nome: 'hiscsv/HIS_' + sn + '_' + dias[0].replace(/-/g, '') + '0000_'
+  + dias[dias.length - 1].replace(/-/g, '') + '2355.csv', dados: csv2(sn, dias, f), metodo: 8 }))));
+const esp2 = (sn, dias, f) => dias.flatMap((d) => HH.map((h, k) => [k, h]).filter(([k]) => { const [a, b] = (f || faixa2)(sn, d); return k >= a && k <= b; })
+  .map(([k, h]) => { const [a, b, p] = v2(sn, d, k); return d + ' ' + h + '|' + a + '|' + b + '|' + p / 1000; }));
+// o L7 tambem grava na pasta TS08 (o 03/10): o reparo tem de reler as duas pastas para o TS7 ficar inteiro (RE-202)
+const D03 = '2026-10-03';
+const E7 = () => esp2(L7, [...D2, D02, D03]).sort(), E8 = () => [...esp2(L8, [D27, ...D2]), ...esp2(L82, [D02])].sort();
+const soEtc = (L) => L.map((s) => { const c = s.split('|'); return c[0] + '|' + c[3]; });
+const E6 = () => soEtc(esp2(L5, ['2026-09-28']));
+zipEst('28.09 A 30.09.zip', [[L7, D2], [L8, D2]]);
+zipEst('27.09 so do TS8.zip', [[L8, [D27]]]);
+zipEst('02.10 so do TS7.zip', [[L7, [D02]]]);
+zipEst('28.09 TS6 sem PT100.zip', [[L5, ['2026-09-28']]]);
+zipEst('02.10.zip', [[L82, [D02]]], PASTA8);
+zipEst('03.10 do TS7.zip', [[L7, [D03]]], PASTA8);
+// a pasta TS09 so tem um zip sem CSV de logger: o reparo dela casa zip e nao traz logger nenhum
+fs.writeFileSync(path.join(PASTA9, 'sem logger.zip'), zip([{ nome: 'leia.txt', dados: 'sem csv', metodo: 0 }]));
+const TARDE2 = '30.09 tarde.zip', TROCA2 = '01.10 troca.zip', SOETC2 = '28.09 so eletrocentro.zip', NOVO8 = '20.09.zip';
+const le2 = (n) => JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUT2, n))).toString('utf8'));
+const grava2 = (n, o) => fs.writeFileSync(path.join(OUT2, n), zlib.gzipSync(JSON.stringify(o)));
+const ex2 = (n) => fs.existsSync(path.join(OUT2, n));
+const serie2 = (n) => (ex2(n) ? le2(n).serie : []).map((x) => x.t + '|' + x.pt1 + '|' + x.pt2 + '|' + x.p);
+const etc2 = (n) => (ex2(n) ? le2(n).serie : []).map((x) => x.t + '|' + x.p);
+const igual2 = (a, b) => a.length > 0 && a.length === b.length && a.every((x, i) => x === b[i]);
+const decisao = (ts) => ({ ts, por: 'potencia', dias: 2, de: 2, d: '2026-09-30' });
+const histForjado = (ts7, ts8) => ({ esquema: ESQ, inv: {}, pid: {}, est: {}, pid5: {},
+  tsLogger: { [L7]: decisao(ts7), [L8]: decisao(ts8), [L5]: decisao('TS6'), [L82]: decisao('TS8') }, reparos: [ID_REP] });
+const mudaHist = (f) => { const h = le2('sg_hist.json'); f(h); grava2('sg_hist.json', h); };
+const tiraZip = (arq, dir) => { const p = path.join(dir || PASTA2, arq); if (fs.existsSync(p)) fs.unlinkSync(p); };
+// o instante a mais que a releitura completa tem de tirar: 30/09 23:00 (o L7 para as 16:40), com os valores do L8
+const contamina = () => { for (const [n, campos] of [['sg_pt_M1_TS7.json', ['pt1', 'pt2', 'p']], ['sg_etc_M1_TS7.json', ['p', 'cap', 'rede', 'qtd']]]) {
+  const o = le2(n), [a, b, p] = v2(L8, '2026-09-30', 276), l = { t: '2026-09-30 23:00', ms: Date.parse('2026-09-30T23:00:00-03:00') };
+  const val = { pt1: a, pt2: b, p: p / 1000, cap: 704, rede: 2, qtd: 2 }; campos.forEach((c) => { l[c] = val[c]; });
+  o.serie = o.serie.filter((x) => x.t !== l.t).concat([l]).sort((x, y) => (x.t < y.t ? -1 : 1)); grava2(n, o); } };
+const tem23 = () => serie2('sg_pt_M1_TS7.json').some((x) => x.startsWith('2026-09-30 23:00|')) || etc2('sg_etc_M1_TS7.json').some((x) => x.startsWith('2026-09-30 23:00|'));
+function roda2(gen, env) {
+  const e = Object.assign({}, process.env, { LOCAL_RAW_DIR: RAW2, LOCAL_SCADA_DIR: SC2, LOCAL_OUT_DIR: OUT2, LOCAL_INV_SCADA: path.join(raiz2, 'inv_scada_hist.json') });
+  delete e.REFAZER; Object.assign(e, env || {});
+  // o log junta a saida e o erro: o aviso (::warning::) sai no erro, mesmo na rodada que passa
+  const p = require('child_process').spawnSync('node', [gen], { env: e, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024 });
+  return { ok: p.status === 0, log: String(p.stdout || '') + String(p.stderr || '') };
+}
+fs.writeFileSync(path.join(raiz2, 'inv_scada_hist.json'), JSON.stringify({ serie: [] }));
+// os passos, na ordem: um plantio tem de deixar os ANTERIORES ao seu alvo de pe
+const ORDEM2 = ['okDoisBase', 'okDoisMigra', 'okDoisRefazer', 'okDoisColisao', 'okDoisColisaoEtc', 'okDoisReparo', 'okDoisUmaVez', 'okDoisFunde', 'okDoisTroca',
+  'okDoisPrefixo', 'okDoisSemLogger', 'okDoisSemOLogger', 'okDoisCaixa', 'okDoisSemHist'];
+function cenarioDois(gen) {
+  const R = { txt: {} };
+  for (const n of fs.readdirSync(OUT2)) fs.unlinkSync(path.join(OUT2, n));
+  for (const a of [TARDE2, TROCA2, SOETC2]) tiraZip(a);
+  tiraZip(NOVO8, PASTA8);
+  grava2('estacao_logger_30min.json', ESTACAO);
+  // o eletrocentro sem PT100 (TS6, do L5): o PT100 sai VAZIO e o eletrocentro com o dia dele
+  const confere = () => igual2(serie2('sg_pt_M1_TS7.json'), E7()) && igual2(serie2('sg_pt_M1_TS8.json'), E8())
+    && igual2(etc2('sg_etc_M1_TS7.json'), soEtc(E7())) && igual2(etc2('sg_etc_M1_TS8.json'), soEtc(E8()))
+    && ex2('sg_pt_M1_TS6.json') && serie2('sg_pt_M1_TS6.json').length === 0 && igual2(etc2('sg_etc_M1_TS6.json'), E6());
+  // uma copia do gerador com outro REPAROS (os passos 9 a 11), no mesmo diretorio (os require ./lib-...) e com nome por execucao
+  const comReparos = (rep, f) => { const g = gen.replace(/\.js$/, '_rep.js'); fs.writeFileSync(g, fs.readFileSync(gen, 'utf8').replace(RE_REPAROS, 'const REPAROS = ' + rep + ';'));
+    try { return f(g); } finally { fs.unlinkSync(g); } };
+  const conta = () => 'TS7 ' + serie2('sg_pt_M1_TS7.json').length + ' (esp ' + E7().length + ') TS8 ' + serie2('sg_pt_M1_TS8.json').length + ' (esp ' + E8().length + ')';
+  const erroDe = (r) => (r.log.match(/dois loggers[^\n]*/) || [r.log.trim().split('\n').pop() || ''])[0].slice(0, 220);
+  try {
+    // 1 · a decisao no historico, o reparo do ensaio ja feito: cada logger no arquivo do seu TS
+    grava2('sg_hist.json', histForjado('TS7', 'TS8'));
+    let r = roda2(gen);
+    R.okDoisBase = r.ok && confere();
+    R.txt.base = r.ok ? conta() : 'ESTOUROU ' + erroDe(r);
+    // 2 · esquema velho, com o instante a mais no TS7: a releitura leva a decisao e a marca do reparo e tira o instante
+    contamina(); mudaHist((h) => { h.esquema = ESQ - 1; });
+    r = roda2(gen);
+    // (o reparo NAO se refaz: a marca veio junto; sem ela o reparo rodaria de novo e esconderia o ramo da releitura completa)
+    const reparoRefeito = (r) => (/reparo /.test(r.log) ? ' · reparo refeito' : '');
+    R.okDoisMigra = r.ok && new RegExp('esquema ' + (ESQ - 1) + ' -> ' + ESQ).test(r.log) && confere() && !tem23() && le2('sg_hist.json').reparos.includes(ID_REP) && !/reparo /.test(r.log);
+    R.txt.migra = r.ok ? conta() + ' · 30/09 23:00 ' + (tem23() ? 'FICOU' : 'saiu') + reparoRefeito(r) : 'ESTOUROU ' + erroDe(r);
+    // 3 · REFAZER: idem
+    contamina();
+    r = roda2(gen, { REFAZER: '1' });
+    R.okDoisRefazer = r.ok && /\(REFAZER\)/.test(r.log) && confere() && !tem23() && le2('sg_hist.json').reparos.includes(ID_REP) && !/reparo /.test(r.log);
+    R.txt.refazer = r.ok ? conta() + ' · 30/09 23:00 ' + (tem23() ? 'FICOU' : 'saiu') + reparoRefeito(r) : 'ESTOUROU ' + erroDe(r);
+    // 4 · os dois no TS7: aborta nomeando o eletrocentro, e NADA que depende do TS do logger muda (nem o historico)
+    const hBom = fs.readFileSync(path.join(OUT2, 'sg_hist.json'));
+    const fotos = () => Object.fromEntries(fs.readdirSync(OUT2).filter((n) => /^sg_(pt_|etc_|ts_dia|pid_dia|hist)/.test(n)).map((n) => [n, fs.readFileSync(path.join(OUT2, n)).toString('base64')]));
+    const mudou = (a, b) => [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((n) => a[n] !== b[n]);
+    mudaHist((h) => { h.tsLogger[L8] = decisao('TS7'); });
+    let f0 = fotos();
+    r = roda2(gen, { REFAZER: '1' });
+    let dif = mudou(f0, fotos());
+    R.okDoisColisao = !r.ok && /dois loggers no mesmo eletrocentro[^\n]*M1_TS7/.test(r.log) && Object.keys(f0).length >= 5 && dif.length === 0;
+    R.txt.colisao = (r.ok ? 'a rodada PASSOU' : erroDe(r)) + ' · mudaram: ' + (dif.join(', ') || 'nenhum');
+    fs.writeFileSync(path.join(OUT2, 'sg_hist.json'), hBom);
+    // 4b · um logger sem PT100 (so o eletrocentro lido) no mesmo TS do L7: a guarda pega pelo eletrocentro
+    zipEst(SOETC2, [[L6, ['2026-09-28']]]);
+    mudaHist((h) => { h.tsLogger[L6] = decisao('TS7'); });
+    f0 = fotos();
+    r = roda2(gen, { REFAZER: '1' });
+    dif = mudou(f0, fotos());
+    R.okDoisColisaoEtc = !r.ok && new RegExp('dois loggers no mesmo eletrocentro[^\\n]*M1_TS7: [^\\n]*' + L6).test(r.log) && dif.length === 0;
+    R.txt.colisaoEtc = (r.ok ? 'a rodada PASSOU' : erroDe(r)) + ' · mudaram: ' + (dif.join(', ') || 'nenhum');
+    tiraZip(SOETC2); fs.writeFileSync(path.join(OUT2, 'sg_hist.json'), hBom);
+    /* 5 · o defeito de 14/10 no ar (o TS7 com a serie do TS8, inclusive a tarde de 30/09, e um dia que nenhum zip traz) e o reparo
+         pendente, numa rodada NORMAL: o reparo rele o M1 e substitui, no TS7 e no TS6, todo dia que o logger DELES leu. O 27/09 (so o
+         logger do TS8 tem) nao entra no TS7 errado: dia sem leitura do logger do eletrocentro nao e trocado (o limite do reparo; no dado
+         real os 212 dias do TS7 tem leitura do logger dele). O TS8 e relido, mas NAO refeito: o instante legitimo dele que nenhum zip
+         relido traz (29/09 12:02) fica */
+    const errado = (n, de) => { const o = le2(n); o.serie = le2(de).serie.filter((x) => !x.t.startsWith(D27)).map((x) => Object.assign({}, x));
+      o.serie.unshift(Object.assign({}, o.serie[0], { t: '2026-09-20 12:00', ms: Date.parse('2026-09-20T12:00:00-03:00') })); grava2(n, o); };
+    errado('sg_pt_M1_TS7.json', 'sg_pt_M1_TS8.json'); errado('sg_etc_M1_TS7.json', 'sg_etc_M1_TS8.json');
+    // o PT100 do TS6 (logger sem sensor, na pasta reparada) com um instante que nao e dele: o reparo tira, mesmo sem PT100 novo (RE-102)
+    { const o = le2('sg_pt_M1_TS6.json'); o.serie = [{ t: '2026-09-28 12:00', ms: Date.parse('2026-09-28T12:00:00-03:00'), pt1: 50, pt2: 51, p: 1 }]; grava2('sg_pt_M1_TS6.json', o); }
+    // e, na MESMA rodada, um dia novo do L82 (outra pasta) no 20/09: so os loggers relidos na pasta dizem o dia do reparo (RE-101, X3)
+    zipEst(NOVO8, [[L82, [D20]]], PASTA8);
+    // o historico SEM o campo `reparos` (o de producao antes deste lote): o reparo tem de rodar
+    for (const [n, c] of [['sg_pt_M1_TS8.json', { pt1: 50, pt2: 51, p: 1 }], ['sg_etc_M1_TS8.json', { p: 1, cap: 704, rede: 2, qtd: 2 }]]) {
+      const o = le2(n); o.serie = o.serie.concat([Object.assign({ t: '2026-09-29 12:02', ms: Date.parse('2026-09-29T12:02:00-03:00') }, c)]).sort((x, y) => (x.t < y.t ? -1 : 1)); grava2(n, o); }
+    mudaHist((h) => { delete h.reparos; });
+    r = roda2(gen);
+    const sem20 = (L) => L.filter((x) => x.slice(0, 10) !== D20);
+    const a7 = serie2('sg_pt_M1_TS7.json'), e7 = etc2('sg_etc_M1_TS7.json'), a8 = serie2('sg_pt_M1_TS8.json'), a6 = serie2('sg_pt_M1_TS6.json');
+    const tem20 = a7.filter((x) => x.startsWith('2026-09-20 12:00|')).length === 1 && e7.filter((x) => x.startsWith('2026-09-20 12:00|')).length === 1;
+    const marca = ex2('sg_hist.json') && (le2('sg_hist.json').reparos || []).includes(ID_REP);
+    const tem1202 = a8.filter((x) => x.startsWith('2026-09-29 12:02|')).length === 1 && etc2('sg_etc_M1_TS8.json').filter((x) => x.startsWith('2026-09-29 12:02|')).length === 1;
+    R.okDoisReparo = r.ok && /reparo ensaio-dois-loggers/.test(r.log) && igual2(sem20(a7), E7()) && igual2(sem20(e7), soEtc(E7())) && tem20
+      && igual2(a8.filter((x) => !x.startsWith('2026-09-29 12:02|')), [...E8(), ...esp2(L82, [D20])].sort()) && tem1202 && a6.length === 0 && marca;
+    R.txt.reparo = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + 'TS7 ' + sem20(a7).length + ' (esp ' + E7().length + ') · 03/10 ' + a7.filter((x) => x.startsWith(D03)).length
+      + ' · tarde de 30/09 ' + a7.filter((x) => x >= '2026-09-30 16:45' && x < '2026-10').length + ' · 20/09 ' + tem20
+      + ' · TS8 29/09 12:02 ' + tem1202 + ' · TS6 PT ' + a6.length + ' · marca ' + (marca ? 'gravada' : 'FALTA');
+    // 6 · o reparo nao se repete: nada novo, nada relido, arquivos de 5 min iguais
+    const antes2 = Object.fromEntries(fs.readdirSync(OUT2).filter((n) => /^sg_(pt|etc)_/.test(n)).map((n) => [n, JSON.stringify(le2(n).serie)]));
+    r = roda2(gen);
+    R.okDoisUmaVez = r.ok && /novos ou mudados: 0/.test(r.log) && !/reparo /.test(r.log) && Object.keys(antes2).length === 6
+      && Object.keys(antes2).every((n) => JSON.stringify(le2(n).serie) === antes2[n]);
+    R.txt.umaVez = (r.log.match(/novos ou mudados: \d+[^\n]*/) || ['?'])[0];
+    // 7 · rodada normal com o lote da tarde de 30/09 do TS7: funde com a manha, nao substitui
+    zipEst(TARDE2, [[L7, ['2026-09-30'], () => [201, 287]]]);
+    r = roda2(gen);
+    const s30 = serie2('sg_pt_M1_TS7.json').filter((x) => x.startsWith('2026-09-30'));
+    R.okDoisFunde = r.ok && s30.length === 288 && s30.some((x) => x.startsWith('2026-09-30 08:00|')) && s30.some((x) => x.startsWith('2026-09-30 20:00|'));
+    R.txt.funde = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + '30/09 no TS7: ' + s30.length + ' de 288';
+    // 8 · o logger TROCADO em 01/10: o L7 ate 12:00, o L9 (decidido TS7) a partir de 12:05. Sem instante em comum: passa, e o dia e a uniao
+    mudaHist((h) => { h.tsLogger[L9] = decisao('TS7'); });
+    zipEst(TROCA2, [[L7, [D01], () => [0, 144]], [L9, [D01], () => [145, 287]]]);
+    r = roda2(gen);
+    const s01 = serie2('sg_pt_M1_TS7.json').filter((x) => x.startsWith(D01)), e01 = [...esp2(L7, [D01], () => [0, 144]), ...esp2(L9, [D01], () => [145, 287])];
+    R.okDoisTroca = r.ok && igual2(s01, e01);
+    R.txt.troca = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + '01/10 no TS7: ' + s01.length + ' de ' + e01.length;
+    /* 9 a 11 · o reparo que nao releu nada NAO e marcado (RE-103): a rodada passa (a fonte sem a pasta gera o resto), com o aviso no
+       log, e a marca so anda para o reparo que releu o logger de CADA eletrocentro que ele refaz */
+    const marcado = (id) => ex2('sg_hist.json') && (le2('sg_hist.json').reparos || []).includes(id);
+    const aviso = (r, id) => (r.log.match(new RegExp('::warning::[^\\n]*reparo ' + id + '[^\\n]*')) || [''])[0].replace(/^::warning::gen-sungrow: /, '').slice(0, 120);
+    // 9 · prefixo que nao casa zip nenhum
+    r = comReparos("{ 'ensaio-prefixo-errado': { reler: ['M10/TS7/'], refazer: ['M1_TS7'] } }", (g) => roda2(g));
+    R.okDoisPrefixo = r.ok && /reparo ensaio-prefixo-errado: nenhum zip casa/.test(aviso(r, 'ensaio-prefixo-errado')) && !marcado('ensaio-prefixo-errado');
+    R.txt.prefixo = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + 'marca ' + (marcado('ensaio-prefixo-errado') ? 'gravada' : 'nao anda') + ' · ' + (aviso(r, 'ensaio-prefixo-errado') || 'SEM AVISO');
+    // 10 · o prefixo casa zip, mas a pasta nao traz logger nenhum
+    r = comReparos("{ 'ensaio-sem-logger': { reler: ['M10/TS09/'], refazer: ['M1_TS7'] } }", (g) => roda2(g));
+    R.okDoisSemLogger = r.ok && /nao trouxeram logger de M1_TS7/.test(aviso(r, 'ensaio-sem-logger')) && !marcado('ensaio-sem-logger');
+    R.txt.semLogger = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + 'marca ' + (marcado('ensaio-sem-logger') ? 'gravada' : 'nao anda') + ' · ' + (aviso(r, 'ensaio-sem-logger') || 'SEM AVISO');
+    // 10b · a pasta traz logger (o L82 do TS8 e o L7 do TS7), mas nao o do eletrocentro que o reparo refaz (o L5 do TS6)
+    r = comReparos("{ 'ensaio-sem-o-do-ts6': { reler: ['M10/TS08/'], refazer: ['M1_TS6'] } }", (g) => roda2(g));
+    R.okDoisSemOLogger = r.ok && /nao trouxeram logger de M1_TS6/.test(aviso(r, 'ensaio-sem-o-do-ts6')) && !marcado('ensaio-sem-o-do-ts6');
+    R.txt.semOLogger = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + 'marca ' + (marcado('ensaio-sem-o-do-ts6') ? 'gravada' : 'nao anda') + ' · ' + (aviso(r, 'ensaio-sem-o-do-ts6') || 'SEM AVISO');
+    // 11 · o prefixo em outra caixa casa (o cofre aceita o nome em qualquer caixa): rele a pasta e a marca anda
+    r = comReparos("{ 'ensaio-caixa': { reler: ['m10/'], refazer: ['M1_TS7'] } }", (g) => roda2(g));
+    R.okDoisCaixa = r.ok && /reparo ensaio-caixa: [1-9]\d* zip/.test(r.log) && /reparo ensaio-caixa: [1-9]\d* logger/.test(r.log) && marcado('ensaio-caixa');
+    R.txt.caixa = (r.ok ? '' : 'ESTOUROU ' + erroDe(r) + ' · ') + 'marca ' + (marcado('ensaio-caixa') ? 'gravada' : 'FALTA') + ' · '
+      + ((r.log.match(/reparo ensaio-caixa: \d+ logger[^\n]*/) || [aviso(r, 'ensaio-caixa') || 'sem a linha do reparo'])[0].slice(0, 120));
+    /* 12 · o historico some com o TS7 contaminado no ar (RE-301): o reparo NAO nasce feito. A rodada pode cair depois (sem a decisao do
+       TS, os dois da pasta TS7 colidem): o que se julga e a decisao do reparo, que sai antes, no log */
+    errado('sg_pt_M1_TS7.json', 'sg_pt_M1_TS8.json');
+    fs.unlinkSync(path.join(OUT2, 'sg_hist.json'));
+    r = roda2(gen);
+    R.okDoisSemHist = /pendente\(s\), com arquivo publicado: [^\n]*ensaio-dois-loggers/.test(r.log) && !/nascido\(s\) feito\(s\): [^\n·]*ensaio-dois-loggers/.test(r.log);
+    R.txt.semHist = (r.log.match(/sem historico publicado:[^\n]*/) || ['sem a linha'])[0].slice(0, 160);
+  } catch (e) { R.erro = String(e.message).split('\n')[0]; }
+  return R;
+}
+const genDois = path.join(__dirname, '_dois_sungrow_' + process.pid + '.js');
+let R2 = { txt: {} };
+if (!srcDois) ok(false, 'a constante REPAROS do gerador nao casou uma vez so (o ensaio troca ela pela do ensaio)');
+else { fs.writeFileSync(genDois, srcDois); try { R2 = cenarioDois(genDois); } finally { fs.unlinkSync(genDois); } }
+if (R2.erro) ok(false, 'o cenario dos dois loggers estourou: ' + R2.erro);
+ok(R2.okDoisBase, 'dois loggers na pasta TS7: cada um no arquivo do TS decidido (PT100 e eletrocentro): ' + R2.txt.base);
+ok(R2.okDoisMigra, 'esquema novo: a releitura leva a decisao e a marca do reparo, e o dia relido substitui o dia: ' + R2.txt.migra);
+ok(R2.okDoisRefazer, 'REFAZER: idem: ' + R2.txt.refazer);
+ok(R2.okDoisColisao, 'dois loggers no mesmo TS com instantes em comum: aborta nomeando o eletrocentro, nada muda: ' + R2.txt.colisao);
+ok(R2.okDoisColisaoEtc, 'logger sem PT100 no mesmo TS: a guarda pega pelo eletrocentro: ' + R2.txt.colisaoEtc);
+ok(R2.okDoisReparo, 'o reparo: no TS7 e no TS6, todo dia lido pelo logger deles substituido (a tarde do TS8 sai, o 03/10 de outra pasta volta), o TS8 relido nao e refeito, o dia sem zip fica: ' + R2.txt.reparo);
+ok(R2.okDoisUmaVez, 'o reparo nao se repete: ' + R2.txt.umaVez);
+ok(R2.okDoisFunde, 'rodada normal: o lote da tarde funde com a manha do mesmo dia: ' + R2.txt.funde);
+ok(R2.okDoisTroca, 'logger trocado ao meio-dia, os dois no mesmo TS: passa e o dia e a uniao: ' + R2.txt.troca);
+ok(R2.okDoisPrefixo, 'reparo com prefixo que nao casa zip nenhum: avisa e a marca nao anda: ' + R2.txt.prefixo);
+ok(R2.okDoisSemLogger, 'reparo cuja pasta nao traz logger: avisa e a marca nao anda: ' + R2.txt.semLogger);
+ok(R2.okDoisSemOLogger, 'reparo cuja pasta nao traz o logger do eletrocentro que ele refaz: avisa e a marca nao anda: ' + R2.txt.semOLogger);
+ok(R2.okDoisCaixa, 'reparo com o prefixo em outra caixa: casa, rele e marca: ' + R2.txt.caixa);
+ok(R2.okDoisSemHist, 'historico apagado com o arquivo do reparo no ar: o reparo nao nasce feito: ' + R2.txt.semHist);
+/* o plantio julga o MOTIVO (regex sobre o texto do passo) e exige os passos ANTERIORES ao alvo de pe: senao uma cascata ou um
+   estouro contaria como prova. `trocas`: [de, para], cada `de` casando uma vez so */
+function planta2(nome, trocas, chave, motivo) {
+  let s = srcDois;
+  for (const [de, para] of trocas) { if (!s || s.split(de).length !== 2) { ok(false, 'plantio ' + nome + ': trecho nao casou'); return; } s = s.split(de).join(para); }
+  const g = path.join(__dirname, '_plantio_dois_sungrow_' + process.pid + '.js');
+  fs.writeFileSync(g, s);
+  let r2;
+  try { r2 = cenarioDois(g); } finally { fs.unlinkSync(g); }
+  const txt = r2.txt[chave.replace(/^okDois/, '').replace(/^./, (c) => c.toLowerCase())] || '';
+  const antes = ORDEM2.slice(0, ORDEM2.indexOf(chave)).filter((k) => r2[k] !== true);
+  ok(r2[chave] === false && motivo.test(txt) && !antes.length, 'plantio "' + nome + '" reprova em ' + chave + ' pelo motivo (' + motivo + ')'
+    + (antes.length ? ' · CAIRAM ANTES: ' + antes.join(', ') : '') + (motivo.test(txt) ? '' : ' · texto: ' + txt.slice(0, 160)) + (r2.erro ? ' (estourou: ' + r2.erro.slice(0, 80) + ')' : ''));
+}
+planta2('decisao perdida na releitura', [['tsLoggerAnt = a.tsLogger || null;', 'tsLoggerAnt = null;']], 'okDoisMigra', /pela pasta/);
+planta2('decisao perdida so no REFAZER', [["const h0 = REFAZER ? await leAnterior('sg_hist.json') : hist;", 'const h0 = REFAZER ? null : hist;']], 'okDoisRefazer', /pela pasta/);
+planta2('reparo perdido na releitura', [['reparosAnt = a.reparos || null;', 'reparosAnt = null;']], 'okDoisMigra', /reparo refeito/);
+planta2('dia relido funde na releitura completa', [[': releTudo ? dNovo : new Set();', ': new Set();']], 'okDoisMigra', /23:00 FICOU/);
+planta2('releitura completa desligada', [['const releTudo = REFAZER || migra || releDisp;', 'const releTudo = false;']], 'okDoisMigra', /23:00 FICOU/);
+planta2('sem a guarda de dois loggers', [['if (colisoes.length) throw', 'if (false) throw']], 'okDoisColisao', /PASSOU/);
+planta2('guarda depois de gravar', [['if (colisoes.length) throw', 'if (false) throw'],
+  ['  /* -------- conferencia: energia do dia', "  if (colisoes.length) throw new Error('dois loggers no mesmo eletrocentro: ' + colisoes.join(' · '));\n  /* -------- conferencia: energia do dia"]], 'okDoisColisao', /mudaram: (?!nenhum)/);
+planta2('guarda so com o PT100', [['...Object.keys(ptRodada[sn] || {}), ...Object.keys(etcRodada[sn] || {})]))', '...Object.keys(ptRodada[sn] || {})]))']], 'okDoisColisaoEtc', /PASSOU/);
+planta2('dia relido funde no reparo', [["const diasNovos = refazEtc.has(k) ? new Set([...dNovo, ...(diasDoEtc[k] || [])]) : releTudo ? dNovo : new Set();",
+  'const diasNovos = releTudo ? dNovo : new Set();']], 'okDoisReparo', /tarde de 30\/09 [1-9]/);
+planta2('reparo refaz todo eletrocentro relido', [['const refazEtc = new Set(feitos.flatMap((id) => REPAROS[id].refazer));',
+  'const refazEtc = new Set([...loggersReparo].filter((sn) => tsDoLogger[sn]).map(etcDoLogger));']], 'okDoisReparo', /12:02 false/);
+planta2('reparo so com os dias do PT100', [['for (const t of [...Object.keys(ptRodada[sn] || {}), ...Object.keys(etcRodada[sn] || {})]) s.add(t.slice(0, 10));',
+  'for (const t of [...Object.keys(ptRodada[sn] || {})]) s.add(t.slice(0, 10));']], 'okDoisReparo', /TS6 PT 1/);
+planta2('eletrocentro do reparo sem PT100 novo pulado', [['if (!novo.size && ant && !refazEtc.has(k)) continue;', 'if (!novo.size && ant) continue;']], 'okDoisReparo', /TS6 PT 1/);
+planta2('reparo sem reler a pasta', [['|| doReparo(z.nome));', ');']], 'okDoisReparo', /tarde de 30\/09 [1-9]/);
+planta2('reparo sem os loggers da pasta', [['for (const id of idsDoZip(z.nome)) loggersPorReparo[id].add(m[1]);', '']], 'okDoisReparo', /tarde de 30\/09 [1-9]/);
+planta2('reparo sem marca', [['H.reparos.push(...feitos);', '']], 'okDoisReparo', /marca FALTA/);
+// na rodada do reparo o TS8 e relido sem ser refeito: substituir sempre ja derruba o instante legitimo dele (o 12:02) ali
+planta2('dia sempre substituido', [[': releTudo ? dNovo : new Set();', ': dNovo;']], 'okDoisReparo', /12:02 false/);
+// o L8 e o L82 dividem o TS8 desde a base (sem instante em comum): a guarda que nao olha os instantes ja derruba a base
+planta2('guarda sem olhar os instantes', [['if (comuns) colisoes.push', 'if (sns.length > 1) colisoes.push']], 'okDoisBase', /dois loggers[^\n]*M1_TS8/);
+planta2('reparo que nao releu nada marcado como feito', [['const feitos = reparos.filter((id) => REPAROS[id].refazer.every((k) => etcsLidos(id).has(k)));', 'const feitos = reparos;']], 'okDoisPrefixo', /marca gravada/);
+planta2('reparo marcado com qualquer logger', [['const feitos = reparos.filter((id) => REPAROS[id].refazer.every((k) => etcsLidos(id).has(k)));',
+  'const feitos = reparos.filter((id) => loggersPorReparo[id].size);']], 'okDoisSemOLogger', /marca gravada/);
+planta2('aviso do prefixo calado', [["if (semZip.length) console.error('::warning::", "if (false) console.error('::warning::"]], 'okDoisPrefixo', /SEM AVISO/);
+planta2('aviso da pasta sem logger calado', [["if (semLogger.length) console.error('::warning::", "if (false) console.error('::warning::"]], 'okDoisSemLogger', /SEM AVISO/);
+planta2('reparo nasce feito com o arquivo publicado', [["if (await leAnterior(p + k + '.json')) nada = false;", '']], 'okDoisSemHist', /nascido\(s\) feito\(s\): ensaio/);
+planta2('prefixo do reparo distingue a caixa', [['REPAROS[id].reler.some((p) => nome.toUpperCase().startsWith(p.toUpperCase()))', 'REPAROS[id].reler.some((p) => nome.startsWith(p))']], 'okDoisCaixa', /marca FALTA/);
 
 console.log(falhas.length ? '\n' + falhas.length + ' FALHA(S)' : '\nensaio-sungrow: tudo ok');
 process.exit(falhas.length ? 1 : 0);

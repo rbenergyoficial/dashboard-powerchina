@@ -5,6 +5,11 @@ data/irr_hora_seed.json
 # documentacao de trabalho do Claude — fica local, o repo e PUBLICO
 CLAUDE.md
 
+# as copias PLANTADAS dos geradores que os ensaios gravam em scripts/ (o require ./lib-... so resolve ali) e apagam no fim:
+# uma execucao morta no meio (Ctrl-C) deixa a copia, e ela e um gerador adulterado de proposito
+scripts/_plantio_*
+scripts/_dois_*
+
 # resto de npm i local — nao entra no repo: um lockfile aqui muda o que TODOS os workflows instalam
 package.json
 package-lock.json

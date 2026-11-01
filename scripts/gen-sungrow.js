@@ -20,6 +20,10 @@
  * 🔴 DIA PARCIAL SE PROVA (esquema 2, 03/10/2026): cada inversor-dia diz se o logger viu a janela de geracao nas duas
  *    pontas (`parcial`); a conferencia com o SCADA so compara o dia provado inteiro. O historico de esquema 1 e relido.
  * 🔴 SO O 404 E "PRIMEIRA RODADA". Falha ao ler o historico publicado aborta: regravar sem ele apagaria o acumulado.
+ * 🔴 UM LOGGER POR ELETROCENTRO (sg-ts-logger, 01/11/2026). O TS de cada logger sai da potencia (tsDoLogger) e a decisao
+ *    persiste no historico; a releitura completa (esquema novo, REFAZER) a LEVA junto. Dois loggers no mesmo eletrocentro com
+ *    instantes em comum abortam a rodada antes de gravar: fundidos, um cobriria o outro no arquivo de 5 min acumulado. Na
+ *    releitura completa (e no REPARO, para os eletrocentros que ele nomeia), o dia relido SUBSTITUI o dia inteiro no arquivo de 5 min.
  *
  * 🔴 DISPONIBILIDADE (lib-sungrow-disp, 11/10/2026): o estado de cada inversor a cada 5 min vai para um historico proprio
  *    (`sg_disp_hist.json`, interno) e sai `sg_disp_dia.json` (publico: por usina e Complexo, dia a dia) e `sg_disp_inv_dia.json`
@@ -79,6 +83,15 @@ const MPPT_DIAS_MIN = 5;                                    // dias com a razao 
 // modulos por string: a placa do parque (1.155 inversores, strings de 29 modulos). Um modulo a menos = 1/29 da tensao
 const MOD_STRING = 29;
 const DIAS_PT = 365;                                        // a serie de 5 min do PT100 por eletrocentro guarda um ano
+/* 🔴 REPARO POR MARCA (sg-ts-logger, 01/11/2026): `reler` sao os prefixos cujos zips se releem UMA vez; `refazer`, os eletrocentros
+   cujos arquivos de 5 min (sg_pt_, sg_etc_) tem o dia SUBSTITUIDO por todo dia em que o logger do proprio eletrocentro leu alguma
+   coisa (PT100 ou eletrocentro) nesses zips. Os outros eletrocentros relidos so fundem, como numa rodada normal. O `reler` tem de
+   cobrir TODA pasta onde o logger aparece (o CSV do logger vem do `PID 100` e, desde 06/10/2026, do `Coletor` de qualquer pasta).
+   A marca vai para o historico (H.reparos) so na rodada que grava, e so para o reparo que releu o logger de cada eletrocentro dele.
+   sg-ts-logger: as duas releituras de 14/10/2026 (esquemas 6 -> 7 -> 8) perderam a decisao do TS dos loggers; os dois da pasta TS7 do
+   M1 (o do TS7 e o do TS8) cairam no TS7 pela pasta e o do TS8 cobriu o sg_pt_M1_TS7 e o sg_etc_M1_TS7 de 03/04 a ~13/10. O TS8
+   ficou certo (211 de 211 dias contra o resumo do logger) e nao entra. Releitura: os 1.845 zips do M1 (1,1 GB, medido em 01/11) */
+const REPAROS = { 'sg-ts-logger': { reler: ['M10/'], refazer: ['M1_TS7'] } };
 const K_EXPORTS = 4;                                        // exports mais recentes por usina na passada normal
 const BLOB = 'https://rbenergydata.blob.core.windows.net/dados/';
 const parque = (nn) => 'M' + (Number(nn) === 10 ? 1 : Number(nn));   // M10 = M1 (nomenclatura das usinas)
@@ -275,11 +288,37 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   /* 🔴 MIGRACAO POR MARCA: o historico de esquema 1 nao guarda a primeira e a ultima amostra do dia (t0, t1), sem as quais
      o dia parcial nao se prova; e o PID ainda carrega os minutos com tensao. Esquema velho = reler todos os zips, uma vez */
   const migra = !!hist && (hist.esquema || 1) < ESQ_HIST;
+  /* a decisao do TS de cada logger SOBREVIVE a releitura (sg-ts-logger): ela fala do aparelho, nao do esquema. Sem ela, a
+     rodada que rele tudo so decide pela potencia de P_DIAS dias e cai na pasta onde a votacao nao fecha (14/10/2026: 9 de 56) */
+  // e a marca dos REPAROS feitos tambem: o reparo e de um defeito do arquivo publicado, que a releitura nao refaz
+  let tsLoggerAnt = null, reparosAnt = null, semHistorico = false;
+  { const h0 = REFAZER ? await leAnterior('sg_hist.json') : hist; const a = h0 || {}; tsLoggerAnt = a.tsLogger || null; reparosAnt = a.reparos || null; semHistorico = !h0; }
   if (migra) { console.log('  historico esquema ' + (hist.esquema || 1) + ' -> ' + ESQ_HIST + ': relendo todos os zips'); hist = null; }
   const lidosAnt = REFAZER || migra ? null : await leAnterior('sg_lidos.json');
   const identAnt = await leAnterior('sg_ident.json');
   const H = hist || { esquema: ESQ_HIST, inv: {}, pid: {}, est: {}, pid5: {} };
   H.pinv = H.pinv || {}; H.pest = H.pest || {}; delete H.pt5;                  // potencia de 5 min dos ultimos P_DIAS dias: prova o TS do logger
+  /* sem historico publicado e SEM os arquivos de 5 min do `refazer` no ar (a primeira carga), nao ha o que reparar: esse reparo nasce
+     feito. Com historico sem a marca (o de antes deste lote), ou com o arquivo do `refazer` publicado (historico apagado, RE-301), o
+     reparo roda. Antes do tsLogger: a releitura sai com as chaves na mesma ordem */
+  let nascemFeitos = [];
+  if (!H.reparos && !reparosAnt && semHistorico) {
+    for (const id of Object.keys(REPAROS)) {
+      let nada = true;
+      for (const k of REPAROS[id].refazer) for (const p of ['sg_pt_', 'sg_etc_']) if (await leAnterior(p + k + '.json')) nada = false;
+      if (nada) nascemFeitos.push(id);
+    }
+    console.log('  sem historico publicado: reparo(s) nascido(s) feito(s): ' + (nascemFeitos.join(', ') || 'nenhum') + ' · pendente(s), com arquivo publicado: '
+      + (Object.keys(REPAROS).filter((id) => !nascemFeitos.includes(id)).join(', ') || 'nenhum'));
+  }
+  H.reparos = H.reparos || reparosAnt || nascemFeitos;
+  if (!H.tsLogger && tsLoggerAnt) { H.tsLogger = tsLoggerAnt; console.log('  TS de ' + Object.keys(tsLoggerAnt).length + ' logger(s) mantido da rodada anterior (releitura)'); }
+  const reparos = Object.keys(REPAROS).filter((id) => !H.reparos.includes(id)), prefReparo = reparos.flatMap((id) => REPAROS[id].reler);
+  // sem distinguir caixa: o cofre aceita o nome em qualquer caixa (lib-sungrow-cofre, NOME_RAW)
+  const idsDoZip = (nome) => reparos.filter((id) => REPAROS[id].reler.some((p) => nome.toUpperCase().startsWith(p.toUpperCase())));
+  const doReparo = (nome) => idsDoZip(nome).length > 0;
+  // os loggers lidos nos zips de cada reparo: os eletrocentros deles refazem o dia, e o reparo sem logger nenhum NAO e marcado
+  const loggersPorReparo = Object.fromEntries(reparos.map((id) => [id, new Set()]));
   const P_DIAS = 3;
   /* 🔴 O CORTE E FEITO DURANTE A LEITURA, nao no fim (03/10/2026): na carga inteira (824 zips, seis meses) guardar a
      potencia de 5 min de todo dia e cortar depois levou o processo a 3,4 GB e o coletor de lixo a dominar o tempo. O
@@ -304,8 +343,16 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   DH = DH || D.histVazio();
   const lidos = new Map(Object.entries((lidosAnt && lidosAnt.zips) || {}));
   const raw = await listaRaw();
-  const novos = releDisp ? raw : raw.filter((z) => lidos.get(z.nome) !== z.bytes);
-  console.log('fonte ' + FONTE + ': ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : releDisp ? ' (sem sg_disp_hist: todos)' : ''));
+  /* reparo pendente cujo prefixo nao casa zip nenhum AVISA e fica pendente: marcado como feito sem reler nada, ele nunca mais rodaria
+     (um erro de digitacao no prefixo deixaria o arquivo contaminado com o log dizendo "reparo"). Avisa, nao aborta: a fonte sem a pasta
+     (um ensaio, uma fonte recortada) continua gerando o resto */
+  const semZip = reparos.filter((id) => !raw.some((z) => idsDoZip(z.nome).includes(id)));
+  if (semZip.length) console.error('::warning::gen-sungrow: reparo ' + semZip.join(', ') + ': nenhum zip casa o prefixo ' + semZip.map((id) => REPAROS[id].reler.join(', ')).join(' · ') + '; a marca NAO anda');
+  const novos = releDisp ? raw : raw.filter((z) => lidos.get(z.nome) !== z.bytes || doReparo(z.nome));
+  // a rodada que rele TODOS os zips: o dia relido substitui o dia inteiro no arquivo de 5 min do eletrocentro (sg-ts-logger)
+  const releTudo = REFAZER || migra || releDisp;
+  console.log('fonte ' + FONTE + ': ' + raw.length + ' zips · novos ou mudados: ' + novos.length + (REFAZER ? ' (REFAZER)' : releDisp ? ' (sem sg_disp_hist: todos)' : '')
+    + (reparos.length ? ' · reparo ' + reparos.join(', ') + ': ' + raw.filter((z) => doReparo(z.nome)).length + ' zip(s) de ' + prefReparo.join(', ') : ''));
   let dispFora = 0;
 
   const junta = (dias, linhas) => { for (const x of linhas) { const a = dias[x.d]; if (!a || x.n > a.n) dias[x.d] = x; } };
@@ -358,6 +405,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         // a temperatura de 5 min do barramento de BT (PT 1, PT 2) e a potencia do eletrocentro no mesmo carimbo, para o
         // arquivo por eletrocentro (so o que esta rodada leu; o resto vem do arquivo publicado). O historico nao guarda mais
         // a serie: ela so servia ao `sg_pt_5min_<usina>`, que saiu em 06/10/2026
+        for (const id of idsDoZip(z.nome)) loggersPorReparo[id].add(m[1]);
         const sr = ptRodada[m[1]] || (ptRodada[m[1]] = {});
         for (const x of dl) { const v = x._pt; delete x._pt; if (v) for (const [h, a] of Object.entries(v)) sr[x.d + ' ' + h] = a; }
         const se = etcRodada[m[1]] || (etcRodada[m[1]] = {});
@@ -704,6 +752,41 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const trocados = Object.entries(tsDoLogger).filter(([sn, a]) => a.ts !== H.est[sn].pasta);
   console.log('  loggers: ' + Object.keys(tsDoLogger).length + ' · pela potencia ' + Object.values(tsDoLogger).filter((a) => a.por === 'potencia').length
     + ' · TS diferente da pasta: ' + trocados.map(([sn, a]) => H.est[sn].ufv + ' pasta ' + H.est[sn].pasta + ' -> ' + a.ts).join(', '));
+  /* 🔴 UM LOGGER POR ELETROCENTRO EM CADA INSTANTE (sg-ts-logger): dois loggers no mesmo TS com instantes em comum NESTA rodada
+     teriam as series fundidas no arquivo de 5 min (o ultimo a escrever ganha) e o acumulado nao se desfaz sozinho. Aborta antes de
+     gravar o que depende do TS do logger: o sg_lidos nao anda e a proxima rodada rele. Logger trocado (o velho para, o novo comeca)
+     nao tem instante em comum e passa */
+  const etcDoLogger = (sn) => H.est[sn].ufv + '_' + tsDoLogger[sn].ts;
+  const porEtcLogger = {};
+  for (const sn of Object.keys(tsDoLogger)) (porEtcLogger[etcDoLogger(sn)] || (porEtcLogger[etcDoLogger(sn)] = [])).push(sn);
+  const colisoes = [];
+  for (const [k, sns] of Object.entries(porEtcLogger)) {
+    if (sns.length < 2) continue;
+    const dono = new Map(); let comuns = 0;
+    for (const sn of sns) for (const t of new Set([...Object.keys(ptRodada[sn] || {}), ...Object.keys(etcRodada[sn] || {})])) {
+      if (dono.has(t)) comuns += 1; else dono.set(t, sn); }
+    if (comuns) colisoes.push(k + ': ' + sns.map((sn) => sn + ' (pasta ' + H.est[sn].pasta + ', pela ' + tsDoLogger[sn].por + ')').join(' e ') + ', ' + comuns + ' instante(s) em comum');
+  }
+  if (colisoes.length) throw new Error('dois loggers no mesmo eletrocentro, nada gravado do que depende do TS do logger: ' + colisoes.join(' · '));
+  /* o reparo FEITO: o que releu o logger de CADA eletrocentro do `refazer`. O resto fica pendente, com aviso: sem o logger, o dia do
+     arquivo nao tem por que ser trocado, e a marca, se andasse, encerraria o reparo sem efeito */
+  const loggersReparo = new Set(Object.values(loggersPorReparo).flatMap((s) => [...s]));
+  const etcsLidos = (id) => new Set([...loggersPorReparo[id]].filter((sn) => tsDoLogger[sn]).map(etcDoLogger));
+  const feitos = reparos.filter((id) => REPAROS[id].refazer.every((k) => etcsLidos(id).has(k)));
+  const semLogger = reparos.filter((id) => !semZip.includes(id) && !feitos.includes(id));
+  if (semLogger.length) console.error('::warning::gen-sungrow: reparo ' + semLogger.join(', ') + ': os zips de ' + semLogger.map((id) => REPAROS[id].reler.join(', ')).join(' · ')
+    + ' nao trouxeram logger de ' + semLogger.map((id) => REPAROS[id].refazer.filter((k) => !etcsLidos(id).has(k)).join(', ')).join(' · ') + '; a marca NAO anda');
+  const refazEtc = new Set(feitos.flatMap((id) => REPAROS[id].refazer));
+  /* os dias que o reparo substitui num eletrocentro: todo dia em que o PROPRIO logger dele leu alguma coisa nos zips relidos, no PT100 ou
+     no eletrocentro (o logger sem sensor PT100 tambem limpa o sg_pt_). Dia em que so o logger de outro TS tem leitura nao entra: o dia
+     legitimo de outra pasta nao se distingue dele sem reler essa pasta (no M1/TS7, os 212 dias do arquivo tem leitura do logger dele) */
+  const diasDoEtc = {};
+  for (const sn of loggersReparo) {
+    if (!tsDoLogger[sn] || !refazEtc.has(etcDoLogger(sn))) continue;
+    const s = diasDoEtc[etcDoLogger(sn)] || (diasDoEtc[etcDoLogger(sn)] = new Set());
+    for (const t of [...Object.keys(ptRodada[sn] || {}), ...Object.keys(etcRodada[sn] || {})]) s.add(t.slice(0, 10));
+  }
+  if (reparos.length) console.log('  reparo ' + reparos.join(', ') + ': ' + loggersReparo.size + ' logger(s) relido(s); o dia relido substitui o dia em ' + ([...refazEtc].sort().join(', ') || 'nenhum eletrocentro'));
   const tsPid = (o) => { const a = o.logger && tsDoLogger[o.logger]; return a ? a : { ts: o.pasta, por: 'pasta' }; };
   const pidRows = [];
   for (const [id, o] of Object.entries(H.pid)) { const a = tsPid(o);
@@ -752,8 +835,12 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     for (const k of [...etcs].sort()) {
       const novo = porEtc[k] || new Map();
       const ant = await leAnterior(pref + k + '.json');
-      if (!novo.size && ant) continue;                     // nada novo deste eletrocentro: o publicado continua valendo
-      const tudo = new Map(((ant && ant.serie) || []).map((r) => [r.t, campos.map((c) => r[c])]));
+      if (!novo.size && ant && !refazEtc.has(k)) continue;  // nada novo deste eletrocentro: o publicado continua valendo
+      /* na releitura completa o dia relido SUBSTITUI o dia inteiro: o instante que so o publicado tem nesse dia veio de outro logger.
+         No reparo, todo dia em que o logger do eletrocentro leu algo. Na rodada normal o dia funde (o lote do meio-dia traz so a tarde) */
+      const dNovo = new Set([...novo.keys()].map((t) => t.slice(0, 10)));
+      const diasNovos = refazEtc.has(k) ? new Set([...dNovo, ...(diasDoEtc[k] || [])]) : releTudo ? dNovo : new Set();
+      const tudo = new Map(((ant && ant.serie) || []).filter((r) => !diasNovos.has(r.t.slice(0, 10))).map((r) => [r.t, campos.map((c) => r[c])]));
       for (const [t, v] of novo) tudo.set(t, v);
       const ts = [...tudo.keys()].sort();
       const corte = ts.length ? new Date(Date.parse(ts[ts.length - 1].slice(0, 10) + 'T00:00:00Z') - (DIAS_PT - 1) * 864e5).toISOString().slice(0, 10) : '';
@@ -800,6 +887,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   pesos['sg_ident.json'] = await escreve('sg_ident.json', { gerado_em: agora, esquema: 2, ident, busca,
     sem_posicao: semPos.map((sn) => ({ sn, ufv: H.inv[sn].ufv, pasta: H.inv[sn].pasta, ultimo_dia: Object.keys(H.inv[sn].dias).sort().pop() })) });
   pesos['sg_disp_hist.json'] = await escreve('sg_disp_hist.json', DH);
+  H.reparos.push(...feitos);                               // a marca do reparo so anda na rodada que grava o historico
   pesos['sg_hist.json'] = await escreve('sg_hist.json', H);
   pesos['sg_lidos.json'] = await escreve('sg_lidos.json', { gerado_em: agora, zips: Object.fromEntries(lidos) });
   // o sinal de GRAVOU, separado do vermelho do recusado do cofre: os passos que leem os sg_* dependem dele, nao do verde do passo
