@@ -103,6 +103,37 @@ CASOS.novos = (M) => {
 };
 caso('dado novo na lista avisa de novo; a mesma lista (ou menor) nao; vale o ultimo ids da issue', CASOS.novos);
 
+const VENC = { gerado: '2026-11-02T09:05:00Z', itens: [
+  { item: 'credencial leitura-portal (contêiner dados, conta rbenergydata)', tipo: 'sas_politica', dono: 'Portal Corporativo', fonte: 'política armazenada',
+    critico: true, vence: '2026-11-09', dias_restantes: 7, alerta: '7' },
+  { item: 'token do GitHub deste computador', tipo: 'token', dono: 'humano', fonte: 'cabeçalho da API', critico: false, vence: '2027-01-01',
+    dias_restantes: 60, alerta: '60' },
+  { item: 'senha da VPN', tipo: 'senha', dono: 'humano', fonte: 'sem prazo', critico: false, vence: null, dias_restantes: null, alerta: 'sem_validade' },
+  { item: 'chave key1 da conta rbenergydata', tipo: 'chave_conta', dono: 'humano', fonte: 'criação', critico: true, criada: '2026-06-11', idade_dias: 143,
+    dias_restantes: null, alerta: null },
+] };
+CASOS.venc = (M) => {
+  const A = M.decideVencimentos(VENC, Date.parse('2026-11-02T12:00:00Z'));
+  const av = A.filter((a) => a.soSeNova);
+  assert.deepStrictEqual(av.map((a) => a.tipo).sort(), ['vencimento', 'vencimento'], 'so o 7 e o 60 avisam (sem_validade e a chave sem alerta, nao)');
+  assert.deepStrictEqual(fecha(A), ['vencimento:vigia'], 'arquivo do dia: o vigia parado fecha');
+  for (const a of av) {
+    const pub = a.titulo + ' ' + a.corpo + ' ' + a.chave;
+    assert.ok(!/rbenergydata|contêiner|conteiner|leitura-portal|GitHub|computador/i.test(pub), 'nome do item no texto publico: ' + pub);
+    assert.ok(/rbenergydata|GitHub/.test(a.corpoEmail), 'o nome vai no e-mail');
+  }
+  const k1 = M.decideVencimentos(VENC, Date.parse('2026-11-02T18:00:00Z')).filter((a) => a.soSeNova).map((a) => a.chave + a.titulo).sort();
+  assert.deepStrictEqual(av.map((a) => a.chave + a.titulo).sort(), k1, 'chave estavel no mesmo dia');
+  const ren = JSON.parse(JSON.stringify(VENC)); ren.itens[0].vence = '2027-11-09';
+  assert.notStrictEqual(M.decideVencimentos(ren, Date.parse('2026-11-02T12:00:00Z')).find((a) => a.soSeNova).chave, av[0].chave, 'renovado: outra chave');
+};
+caso('vencimentos: avisa o 60 e o 7, nao o sem validade; o nome so no e-mail; a chave muda com a renovacao', CASOS.venc);
+caso('vencimentos: arquivo com mais de 3 dias avisa que o vigia parou', (M) => {
+  const A = M.decideVencimentos(Object.assign({}, VENC, { itens: [] }), Date.parse('2026-11-06T12:00:00Z'));
+  assert.deepStrictEqual(avisa(A), ['vencimento:vigia']);
+});
+caso('vencimentos: arquivo sem a lista estoura', (M) => assert.throws(() => M.decideVencimentos({ gerado: VENC.gerado }, Date.now())));
+
 /* plantios: a regra desligada tem de reprovar o caso que a prova */
 function plantio(nome, de, para, prova) {
   const src = fs.readFileSync(require.resolve('./aviso-malha'), 'utf8');
@@ -122,6 +153,9 @@ plantio('o atrasado (at) avisando', "(f.st === 'fa' || f.st === 'sem')", "(f.st 
 plantio('a hora do Acervo lida como UTC', "+ '-03:00') : NaN;", "+ 'Z') : NaN;", CASOS.utc);
 plantio('dado novo calado pelo evento aberto', 'if (!novos.length) return a;', 'return a;', CASOS.novos);
 plantio('o primeiro ids no lugar do ultimo', 'try { ult = JSON.parse(m[1]); }', 'try { ult = ult || JSON.parse(m[1]); }', CASOS.novos);
+plantio('o nome do item na issue publica', "'<b>Uma ' + tipo +", "'<b>' + x.item + ' ' + tipo +", CASOS.venc);
+plantio('o sem_validade avisando', "if (VENC_NIVEL.indexOf(String(x.alerta)) < 0) continue;", 'if (!x.alerta) continue;', CASOS.venc);
+plantio('a chave sem a data (a renovacao calada)', "chave: 'vencimento:' + ref + ':' + x.vence + ':' + x.alerta", "chave: 'vencimento:' + ref + ':' + x.alerta", CASOS.venc);
 plantio('a falha fechando a qualquer hora', '&& m >= ACERVO_FECHA[0] && m <= ACERVO_FECHA[1]) A.push', ') A.push', CASOS.falhaFechaSoNoFim);
 
 console.log(falhas ? '\nensaio-aviso-malha: ' + falhas + ' FALHA(S)' : '\nensaio-aviso-malha: tudo certo');

@@ -132,6 +132,14 @@ Module._load = originalLoad;
   ok(/ja aberta #/.test(e7.issue), 'o evento aberto antes das 120 segue achado (' + e7.issue + ')');
   ok(estado.chamadas.slice(nCh7).every((x) => x.metodo === 'GET'), 'e nada foi aberto nem comentado');
 
+  console.log('\n8 · `corpoEmail` (o detalhe so para o destinatario) nunca chega a issue publica');
+  const nCh8 = estado.chamadas.length;
+  await alerta({ tipo: 'vencimento', chave: 'vencimento:teste8', titulo: 'credencial a vencer (teste8)', assunto: 'x',
+    corpo: 'texto publico', corpoEmail: 'SEGREDO-DO-EMAIL conta-x conteiner-y' });
+  const posts8 = estado.chamadas.slice(nCh8).filter((x) => x.metodo === 'POST').map((x) => JSON.stringify(x.body));
+  ok(posts8.length > 0 && posts8.every((b) => b.indexOf('SEGREDO-DO-EMAIL') < 0 && b.indexOf('corpoEmail') < 0),
+    'o corpo e o JSON da issue nao levam o corpoEmail (' + posts8.length + ' POST)');
+
   console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'abrir, comentar e fechar funcionam, e o dedup segura o ruido'));
   process.exit(mau ? 1 : 0);
 })().catch((e) => { console.log('ERRO ' + e.message); process.exit(1); });

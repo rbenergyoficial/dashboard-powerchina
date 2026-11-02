@@ -104,7 +104,8 @@ async function mandaEmail(acao) {
     message: {
       subject: String(acao.assunto || acao.tipo || 'Alerta Mauriti').slice(0, 240),
       // O corpo dos vigias ja e HTML (`<b>`, `<br>`, `<ul>`) — declarar `Text` mostraria as tags.
-      body: { contentType: 'HTML', content: texto(acao.corpo) },
+      // `corpoEmail` (aviso-vencimentos, 02/11/2026): o detalhe que so o destinatario le; a issue (publica) fica com o `corpo`
+      body: { contentType: 'HTML', content: texto(acao.corpoEmail || acao.corpo) },
       toRecipients: MAIL_PARA.split(/[;,]/).map((e) => e.trim()).filter(Boolean)
         .map((e) => ({ emailAddress: { address: e } })),
     },
@@ -235,7 +236,7 @@ async function alerta(acao) {
     try {
       const aberta = await achaAberta(titulo);
       const corpo = texto(acao.corpo) + '\n\n---\n`' + JSON.stringify(
-        Object.fromEntries(Object.entries(acao).filter(([k]) => !['corpo', 'assunto'].includes(k)))
+        Object.fromEntries(Object.entries(acao).filter(([k]) => !['corpo', 'assunto', 'corpoEmail'].includes(k)))
       ) + '`';
       if (acao.resolve) {
         if (!aberta) out.issue = 'nada aberto para fechar';

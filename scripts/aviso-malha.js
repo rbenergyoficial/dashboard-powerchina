@@ -11,6 +11,7 @@
  *     Inclui o dado congelado regravado todo dia, que o vigia do relogio nao pega (o workflow segue verde). O evento aberto guarda os
  *     ids avisados (o JSON que o lib-alerta poe na issue): dado NOVO na lista avisa de novo (comenta e manda o e-mail), senao um dado
  *     parado ha dias calaria todos os que vencessem depois;
+ *   · `--vencimentos`: as credenciais a vencer (portal-admin/vencimentos.json), ver decideVencimentos;
  *   · `--so-acervo`: a TAREFA DO ACERVO parada ou com conjunto falhando, lida do estado que ela grava a cada rodada (acervo/estado.json).
  *     Roda na nuvem e num passo proprio, que roda mesmo com o gerador da malha quebrado.
  *
@@ -124,6 +125,43 @@ async function idsAvisados(titulo) {
   return null;
 }
 
+/* Os vencimentos (aviso-vencimentos, 02/11/2026): o arquivo que a tarefa do Acervo grava uma vez por dia (vigia-vencimentos, da Auditoria
+ * de dados). Um evento por item E por limiar E pela data de vencimento: o 60, o 30, o 7 (so os criticos, o vigia decide) e o vencido avisam
+ * uma vez cada; a renovacao muda a data e o ciclo recomeca. A issue (publica) leva so o tipo, o dono, a data e os dias, com uma referencia
+ * curta (os 8 primeiros do sha1 do nome); o nome do item, que traz conta e conteiner, vai so no `corpoEmail`. Arquivo velho (mais de 3 dias)
+ * avisa que o vigia parou. */
+const VENC_TIPO = { sas_politica: 'credencial de acesso a dados', chave_conta: 'chave da conta de armazenamento', segredo_app: 'segredo de aplicativo',
+  token: 'token de acesso', certificado: 'certificado', senha: 'senha' };
+const VENC_NIVEL = ['60', '30', '7', 'vencido'];
+const VENC_VELHO_MS = 3 * 86400000;
+const dataBR = (d) => String(d).slice(8, 10) + '/' + String(d).slice(5, 7) + '/' + String(d).slice(0, 4);
+function decideVencimentos(v, agoraMs) {
+  if (!v || !Array.isArray(v.itens)) throw new Error('arquivo de vencimentos sem a lista de itens');
+  const A = [];
+  const g = Date.parse(v.gerado);
+  const velho = !isFinite(g) || agoraMs - g > VENC_VELHO_MS;
+  A.push(velho
+    ? { tipo: 'vencimento_vigia', chave: 'vencimento:vigia', titulo: 'vigia de vencimentos parado', soSeNova: true,
+      assunto: '🟠 Mauriti · a lista de vencimentos nao se atualiza', corpo: '<b>A lista de vencimentos das credenciais nao e atualizada ha mais de 3 dias.</b>'
+        + '<br><br>Ela e refeita uma vez por dia pela atualizacao automatica do Acervo. Enquanto isso, nenhum vencimento novo e avisado.' }
+    : { tipo: 'vencimento_vigia', chave: 'vencimento:vigia', titulo: 'vigia de vencimentos parado', resolve: true,
+      assunto: '✅ Mauriti · a lista de vencimentos voltou a se atualizar', corpo: 'A lista de vencimentos das credenciais voltou a ser atualizada.' });
+  const crypto = require('crypto');
+  for (const x of v.itens) {
+    if (VENC_NIVEL.indexOf(String(x.alerta)) < 0) continue;
+    const ref = crypto.createHash('sha1').update(String(x.item)).digest('hex').slice(0, 8);
+    const tipo = VENC_TIPO[x.tipo] || 'credencial';
+    const quando = x.alerta === 'vencido' ? 'VENCEU em ' + dataBR(x.vence) : 'vence em ' + dataBR(x.vence) + ' (' + x.dias_restantes + ' dias)';
+    A.push({ tipo: 'vencimento', chave: 'vencimento:' + ref + ':' + x.vence + ':' + x.alerta, titulo: tipo + ' a vencer (' + ref + ', ' + x.alerta + ')', soSeNova: true,
+      assunto: (x.alerta === 'vencido' || x.alerta === '7' ? '🔴' : '🟠') + ' Mauriti · ' + tipo + ' ' + quando,
+      corpo: '<b>Uma ' + tipo + (x.critico ? ' critica' : '') + ' ' + quando + '.</b><br><br>Referencia ' + ref + ' · responsavel: ' + x.dono + '.'
+        + '<br>O nome esta no e-mail enviado ao responsavel e na lista de vencimentos da area do administrador.',
+      corpoEmail: '<b>' + x.item + '</b> ' + quando + (x.critico ? ' (critica)' : '') + '.<br><br>Responsavel: ' + x.dono + '.<br>De onde vem a data: ' + x.fonte
+        + '.<br>Referencia ' + ref + '.' });
+  }
+  return A;
+}
+
 function leLocal(arq) { const b = fs.readFileSync(arq); return JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8')); }
 
 async function leMalha() {
@@ -141,14 +179,24 @@ async function leAcervo() {
   return LD.json(LD.BASE + 'acervo/estado.json');   // null = 404: sem registro, avisa como parada (na janela)
 }
 
+async function leVencimentos() {
+  if (process.env.VENC_JSON) return leLocal(process.env.VENC_JSON);
+  const LC = require('./lib-conteiner');
+  if (!LC.credencial()) throw new Error('sem credencial para ler os vencimentos');
+  const r = await LC.conteiner('portal-admin').getBlobClient('vencimentos.json').download();   // o papel do job: so leitura deste nome
+  const p = []; for await (const c of r.readableStreamBody) p.push(c);
+  const b = Buffer.concat(p);
+  return JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8'));
+}
+
 async function main() {
-  const soAcervo = process.argv.indexOf('--so-acervo') > 0;
+  const soAcervo = process.argv.indexOf('--so-acervo') > 0, soVenc = process.argv.indexOf('--vencimentos') > 0;
   const agoraMs = process.env.AGORA ? Date.parse(process.env.AGORA) : Date.now();
   if (!isFinite(agoraMs)) throw new Error('AGORA ilegivel');
   const seco = process.env.SECO === '1';
   const falta = ['GITHUB_TOKEN', 'AZ_MAIL_TENANT_ID', 'AZ_MAIL_CLIENT_ID', 'MAIL_DE', 'MAIL_PARA'].filter((k) => !String(process.env[k] || '').trim());
   if (!seco && falta.length) { console.error('::error::aviso-malha: canal incompleto, falta ' + falta.join(', ') + ' — nada julgado'); return 1; }
-  let acoes = soAcervo ? decideAcervo(await leAcervo(), agoraMs) : decideMalha(await leMalha());
+  let acoes = soVenc ? decideVencimentos(await leVencimentos(), agoraMs) : soAcervo ? decideAcervo(await leAcervo(), agoraMs) : decideMalha(await leMalha());
   if (seco) { for (const a of acoes) console.log((a.resolve ? 'fecha ' : 'AVISA ') + a.chave + ' · ' + a.assunto); return 0; }
   const { alerta, tituloDe } = require('./lib-alerta');
   const v = [];
@@ -162,9 +210,9 @@ async function main() {
     const chegou = /^enviado/.test(out.email || '') || /^ja aberta #\d/.test(out.issue || '');
     if (!chegou || /^FALHOU/.test(out.issue || '')) { falhou++; console.error('::error::aviso-malha: ' + a.chave + ' · email: ' + out.email + ' · issue: ' + out.issue); }
   }
-  console.log('aviso-malha' + (soAcervo ? ' (acervo)' : '') + ': ' + n + ' evento(s) julgado(s) em aberto, ' + (acoes.length - n) + ' normalizacao(oes) conferida(s)');
+  console.log('aviso-malha' + (soVenc ? ' (vencimentos)' : soAcervo ? ' (acervo)' : '') + ': ' + n + ' evento(s) julgado(s) em aberto, ' + (acoes.length - n) + ' normalizacao(oes) conferida(s)');
   return falhou ? 1 : 0;
 }
 
 if (require.main === module) main().then((c) => process.exit(c)).catch((e) => { console.error('ERRO: ' + (e && e.message ? e.message : e)); process.exit(1); });
-else module.exports = { decideMalha, decideAcervo, idsDoTexto, marcaNovos, ACERVO_PRAZO_MIN, ACERVO_JANELA, ACERVO_FECHA };
+else module.exports = { decideMalha, decideAcervo, decideVencimentos, idsDoTexto, marcaNovos, ACERVO_PRAZO_MIN, ACERVO_JANELA, ACERVO_FECHA };

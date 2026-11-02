@@ -86,3 +86,16 @@ jobs:
           MAIL_DE: ${{ vars.MAIL_DE }}
           MAIL_PARA: ${{ vars.MAIL_PARA }}
         run: node scripts/aviso-malha.js --so-acervo
+      # aviso-vencimentos (02/11/2026, autorizado pelo humano): as credenciais a vencer (portal-admin/vencimentos.json, gravado uma vez por
+      # dia pela tarefa do Acervo). O papel do job no portal-admin LE este nome (gravar segue so na malha). O nome do item vai so no e-mail.
+      - name: Aviso por e-mail · credenciais a vencer
+        if: always() && steps.ensaio_aviso.outcome == 'success'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/aviso-malha.js --vencimentos
