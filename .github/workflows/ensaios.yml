@@ -186,6 +186,9 @@ jobs:
       - name: Ensaio · o estado da malha de dados (gen-malha-estado)
         if: always()
         run: node scripts/ensaio-malha-estado.js
+      - name: Ensaio · aviso da malha (sem rede)
+        if: always()
+        run: node scripts/ensaio-aviso-malha.js
 
       # A energia e a demanda do mes da Way2 (gen-way2-mes.js): as tres
       # chamadas, a guarda de forma, a comparacao ponto x dia (hoje e ontem vivos) e o corpo gravado exato.

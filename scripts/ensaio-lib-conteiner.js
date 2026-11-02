@@ -103,6 +103,7 @@ const LEITORES = {
     'ensaio-isol-zero.js M3', 'ensaio-ef-imp.js M3', 'ensaio-disp-contrato.js', 'ensaio-energia-conjunto.js', 'ensaio-sem-registro.js',
     'ensaio-inversor-cru.js', 'ensaio-leitura-congelada.js', 'ensaio-rampa-amanhecer.js', 'ensaio-strings.js'],
   'alarmes-scada.yml': ['ensaio-alarmes-scada.js'],   // lê 27 e 28/10/2026 reais do cofre pelo OIDC
+  'malha-estado.yml': ['aviso-malha.js', 'aviso-malha.js --so-acervo'],   // aviso-malha (01/11/2026): relê a malha e lê o estado do Acervo
 };
 /* a chave em qualquer das formas de lê-la: a CHAMADA da cadeia de conexão (o `fromConnectionString:` de um SDK simulado não conta), a
    chamada por colchete, a credencial de chave, a variável por ponto, por colchete ou desestruturada. Fica de fora, declarado: a variável lida

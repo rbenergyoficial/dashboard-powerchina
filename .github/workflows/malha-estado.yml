@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   actions: read
+  issues: write   # aviso-malha: o lib-alerta guarda o evento numa issue (a memoria do dedup) e manda o e-mail
   # 🔐 SEM A CHAVE DA CONTA (plano OIDC, etapa 4, 26/10/2026): o gerador grava pelo OIDC do proprio job (AZURE_CLIENT_ID e
   #    AZURE_TENANT_ID no env DO PASSO; identificadores, nao credenciais). No conteiner do portal admin, um papel proprio so com
   #    ler e gravar blob (sem apagar nada, nem o conteiner), e a condicao pelo nome do arquivo da malha: os outros arquivos do
@@ -54,3 +55,34 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/gen-malha-estado.js
+      # aviso-malha (01/11/2026, auditoria de automacao do SIGO, item 1): o e-mail do que a malha mede e nenhum outro vigia avisa.
+      # O ensaio do aviso vem DEPOIS do gerador: regressao nele barra so o aviso, nunca a publicacao da malha. Roda mesmo com o gerador
+      # falho (`always()`), porque o aviso do Acervo nao depende dele.
+      - name: Ensaio · as regras do aviso da malha (sem rede)
+        id: ensaio_aviso
+        if: always()
+        run: node scripts/ensaio-aviso-malha.js
+      # O dado publicado fora do prazo: so se o gerador gravou nesta rodada (sem `if`, o padrao `success()`); com o gerador falho o blob
+      # seria o da rodada anterior, e o gerador falho ja e acusado pelo vigia do relogio.
+      - name: Aviso por e-mail · dado publicado fora do prazo
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/aviso-malha.js
+      # A tarefa do Acervo parada ou falhando: le so o estado que ela grava; roda mesmo com o gerador da malha quebrado.
+      - name: Aviso por e-mail · tarefa do Acervo
+        if: always() && steps.ensaio_aviso.outcome == 'success'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZ_MAIL_TENANT_ID: ${{ vars.AZ_MAIL_TENANT_ID }}
+          AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
+          MAIL_DE: ${{ vars.MAIL_DE }}
+          MAIL_PARA: ${{ vars.MAIL_PARA }}
+        run: node scripts/aviso-malha.js --so-acervo
