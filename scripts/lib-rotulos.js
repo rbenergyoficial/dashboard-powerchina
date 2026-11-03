@@ -31,6 +31,27 @@ const DIC = {
   'Cortado pelo ONS': { en: 'Curtailed by the ONS', zh: 'ONS 限电' },
   'Outras perdas': { en: 'Other losses', zh: '其他损失' },
   'Referência abaixo do verificado': { en: 'Reference below verified', zh: '参考值低于实测' },
+  // --- selos da posição do mês (executivo.json, manchete_ufv) · PROMOVER selos-exec-idiomas. Confiança da projeção
+  //     (`cf_nivel`, `cf_texto`), veredito do Complexo (`proj_rotulo`, `ctr_cpx_rot`, que é ele sem " DA META") e de cada grupo
+  //     (`ctr_ppa_rot`, `ctr_ml_rot`), e a frase do contrato (`ctr_texto`). A cor sai de `*_cor`/`*_fundo`: o texto não decide nada
+  'alta': { en: 'high', zh: '高' },
+  'média': { en: 'medium', zh: '中' },
+  'baixa': { en: 'low', zh: '低' },
+  'mês fechado': { en: 'closed month', zh: '已结算月份' },
+  'realizado': { en: 'actual', zh: '已实现' },
+  'META BATIDA': { en: 'TARGET MET', zh: '已达标' },
+  'META NÃO BATIDA': { en: 'TARGET MISSED', zh: '未达标' },
+  'REALIZADO': { en: 'ACTUAL', zh: '已实现' },
+  'ACIMA DA META': { en: 'ABOVE TARGET', zh: '高于目标' },
+  'NO LIMITE DA META': { en: 'BORDERLINE', zh: '临界' },
+  'ABAIXO DA META': { en: 'BELOW TARGET', zh: '低于目标' },
+  'ACIMA': { en: 'ABOVE', zh: '高于目标' },
+  'ABAIXO': { en: 'BELOW', zh: '低于目标' },
+  'NO LIMITE': { en: 'BORDERLINE', zh: '临界' },
+  'BATE': { en: 'ON TRACK', zh: '可达标' },
+  'NÃO BATE': { en: 'OFF TRACK', zh: '难以达标' },
+  'contrato PPA seguro': { en: 'PPA contract secure', zh: 'PPA 合同有保障' },
+  'contrato PPA em risco': { en: 'PPA contract at risk', zh: 'PPA 合同有风险' },
   // --- barra de selos (way2_saude.json) · 13 páginas -----------------------
   'Way2': { en: 'Way2', zh: 'Way2' },
   'Medidores': { en: 'Meters', zh: '电表' },
@@ -162,6 +183,8 @@ const FORMAS = [
   // grupo de tensão: a vírgula decimal é convenção pt-BR
   { re: /^34,5 kV$/, en: () => '34.5 kV', zh: () => '34.5 kV' },
   { re: /^230 kV$/, en: () => '230 kV', zh: () => '230 kV' },
+  // erro da projeção em pontos percentuais (`cf_texto`, executivo.json): o número passa igual nas três línguas
+  { re: /^(±\d+(?:\.\d+)? pp)$/, en: (m) => m[1], zh: (m) => m[1] },
   // rótulo de MÊS (`set/25`) — é o eixo de todo gráfico mês a mês. Vai por FORMA, não por
   // tabela: uma tabela de meses precisaria de linha nova a cada ano.
   { re: /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\/(\d{2})$/,

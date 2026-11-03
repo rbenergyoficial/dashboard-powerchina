@@ -331,7 +331,8 @@ async function writeOut(obj, nome, opts) {
   guardaTextoPublico(obj);
   // `etapa` (PROMOVER cascata-etapa-idiomas): o nome da barra da cascata vinha so em portugues e as paginas EN e 中文 o
   // mostravam assim no eixo; `etapa` segue a CHAVE do filtro do painel, e o rotulo de cada lingua vai na irma
-  rot.localizaTudo(obj, ['lbl', 'label', 'sub', 'u', 'etapa']);
+  // os selos da posição do mês (PROMOVER selos-exec-idiomas): saíam só em português no cabeçalho do [950] das páginas EN e 中文
+  rot.localizaTudo(obj, ['lbl', 'label', 'sub', 'u', 'etapa', 'cf_nivel', 'cf_texto', 'proj_rotulo', 'ctr_cpx_rot', 'ctr_ppa_rot', 'ctr_ml_rot', 'ctr_texto']);
   const json = JSON.stringify(obj);
   const alvo = nome || OUT_BLOB;
   if (process.env.LOCAL_OUT) {                       // 2o blob vira <LOCAL_OUT sem .json>.<nome>
