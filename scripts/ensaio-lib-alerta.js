@@ -22,11 +22,16 @@ const httpsFalso = {
       on() { return this; },
       write(d) { corpo.push(d); },
       end() {
-        const body = corpo.length ? JSON.parse(corpo.join('')) : null;
+        let body = null;
+        if (corpo.length) { const s = corpo.join(''); try { body = JSON.parse(s); } catch (e) { body = s; } }   // o pedido do token e form-urlencoded
         estado.chamadas.push({ metodo: op.method, caminho: op.path, body });
         let resp = null, status = 200;
         const p = op.path;
-        if (op.method === 'GET' && /\/issues\?/.test(p) && estado.getFalha) {
+        // o caminho do e-mail (caso 9): o token de identidade do GitHub, a troca no Entra e o sendMail do Graph
+        if (/^oidc\./.test(op.hostname || '')) resp = { value: 'id-token-de-ensaio' };
+        else if (op.hostname === 'login.microsoftonline.com') resp = { access_token: 'token-graph-de-ensaio' };
+        else if (op.hostname === 'graph.microsoft.com') status = 202;
+        else if (op.method === 'GET' && /\/issues\?/.test(p) && estado.getFalha) {
           resp = { message: 'Server Error' }; status = estado.getFalha;
         } else if (op.method === 'GET' && /\/issues\?/.test(p)) {
           // paginado como a API: 100 por pagina, na ordem em que foram abertas (a mais nova primeiro)
@@ -139,6 +144,29 @@ Module._load = originalLoad;
   const posts8 = estado.chamadas.slice(nCh8).filter((x) => x.metodo === 'POST').map((x) => JSON.stringify(x.body));
   ok(posts8.length > 0 && posts8.every((b) => b.indexOf('SEGREDO-DO-EMAIL') < 0 && b.indexOf('corpoEmail') < 0),
     'o corpo e o JSON da issue nao levam o corpoEmail (' + posts8.length + ' POST)');
+
+  console.log('\n9 · o e-mail sai, e o destinatario NAO vai ao retorno nem ao log publico (lib-alerta-destino, 03/11/2026)');
+  // 🔴 o log do Actions e publico (o repositorio e publico): o endereco de quem recebe o alerta nao pode aparecer nele
+  Object.assign(process.env, { AZ_MAIL_TENANT_ID: 'tenant-de-ensaio', AZ_MAIL_CLIENT_ID: 'cliente-de-ensaio', MAIL_DE: 'de@ensaio.test',
+    MAIL_PARA: 'pessoa-secreta@ensaio.test', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.ensaio.test/token?x=1',
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'oidc-de-ensaio' });
+  Module._load = function (req, pai) {
+    if (req === 'https' && pai && /lib-alerta\.js$/.test(pai.filename)) return httpsFalso;
+    return originalLoad.apply(this, arguments);
+  };
+  delete require.cache[require.resolve('./lib-alerta.js')];
+  const L9 = require(path.join(__dirname, 'lib-alerta.js'));   // de novo: a lib le o MAIL_* ao carregar
+  Module._load = originalLoad;
+  const linhas9 = [], log0 = console.log;
+  console.log = (...a) => { linhas9.push(a.join(' ')); };
+  let r9;
+  try { r9 = await L9.alerta({ tipo: 't9', chave: 'ensaio:destino9', titulo: 'destino 9', assunto: 'x', corpo: 'x' }); }
+  finally { console.log = log0; }
+  const envio9 = estado.chamadas.filter((x) => /\/sendMail$/.test(x.caminho)).pop();
+  ok(envio9 && JSON.stringify(envio9.body).indexOf('pessoa-secreta@ensaio.test') >= 0, 'o Graph recebeu o pedido com o destinatario');
+  ok(/^enviado/.test(r9.email), 'o canal diz que enviou (' + r9.email + ')');
+  ok(JSON.stringify(r9).indexOf('pessoa-secreta') < 0, '🔴 o retorno do alerta nao leva o endereco');
+  ok(linhas9.length > 0 && linhas9.every((l) => l.indexOf('pessoa-secreta') < 0), '🔴 a linha do log nao leva o endereco');
 
   console.log('\n' + (mau ? '[X] ' + mau + ' problemas' : 'abrir, comentar e fechar funcionam, e o dedup segura o ruido'));
   process.exit(mau ? 1 : 0);

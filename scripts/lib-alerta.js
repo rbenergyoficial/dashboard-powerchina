@@ -115,7 +115,8 @@ async function mandaEmail(acao) {
     path: '/v1.0/users/' + encodeURIComponent(MAIL_DE) + '/sendMail', method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(corpo) }, timeout: 60000 }, corpo);
-  return 'enviado para ' + MAIL_PARA;
+  // 🔴 so 'enviado': este texto vai a linha do log do Actions, que e publico; o endereco fica no Graph (lib-alerta-destino, 03/11/2026)
+  return 'enviado';
 }
 
 function pedeGh(caminho, metodo, corpo) {
