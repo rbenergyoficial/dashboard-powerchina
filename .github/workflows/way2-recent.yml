@@ -201,7 +201,7 @@ jobs:
       - name: Ensaio · alarmes dos medidores (regra, forjados)
         id: ensaio_alarmes
         if: ${{ !cancelled() && steps.coleta.outcome == 'success' }}
-        run: node scripts/ensaio-alarme-circuito.js --forjados && node scripts/ensaio-gen-alarmes-way2.js
+        run: node scripts/ensaio-alarme-circuito.js --forjados && node scripts/ensaio-gen-alarmes-way2.js && node scripts/ensaio-alarmes-eventos.js
       - name: Alarmes dos medidores (alarmes_way2.json)
         if: ${{ !cancelled() && steps.ensaio_alarmes.outcome == 'success' }}
         env:
@@ -209,6 +209,12 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
         run: node scripts/gen-alarmes-way2.js
+      - name: Eventos para a voz e a ponte (alarmes/eventos.json)
+        if: ${{ !cancelled() && steps.ensaio_alarmes.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/gen-alarmes-eventos.js
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor

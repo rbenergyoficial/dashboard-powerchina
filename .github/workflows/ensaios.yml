@@ -236,3 +236,4 @@ jobs:
           node scripts/ensaio-gen-alarmes-way2.js
           node scripts/ensaio-gen-alarmes-scada.js
           node scripts/ensaio-alarmes-base.js
+          node scripts/ensaio-alarmes-eventos.js
