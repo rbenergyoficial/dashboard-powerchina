@@ -41,10 +41,12 @@ async function leBaseAlarmes() {
   const le = async (n) => (process.env.LOCAL_HIST_DIR ? bruto(fs.readFileSync(path.join(process.env.LOCAL_HIST_DIR, path.basename(n)))) : bruto(await streamToBuffer((await conteiner(OUT_CONTAINER).getBlobClient(n).download()).readableStreamBody)));
   const mesDe = (n) => /(\d{4})_(\d{2})\.json$/.exec(n).slice(1).join('-');
   const logger = {}, scada = {};
-  for (const n of await lista('hist/alarmes_logger_')) logger[mesDe(n)] = await le(n);
+  // o prefixo pega também o armazém (arm) e o manifesto (lidos) do gerador do logger: só o mês publicado interessa
+  const soMes = (l) => l.filter((n) => /\/alarmes_[a-z]+_\d{4}_\d{2}\.json$/.test(n));
+  for (const n of soMes(await lista('hist/alarmes_logger_'))) logger[mesDe(n)] = await le(n);
   const ini = Object.keys(logger).sort()[0];
   if (!ini) throw new Error('hist/alarmes_logger_ sem nenhum mês');
-  for (const n of await lista('hist/alarmes_scada_')) { const m = mesDe(n); if (m >= ini && !logger[m]) scada[m] = await le(n); }
+  for (const n of soMes(await lista('hist/alarmes_scada_'))) { const m = mesDe(n); if (m >= ini && !logger[m]) scada[m] = await le(n); }
   return AB.base({ logger, scada, ate: agora, classePorTexto: classeP2, ...(process.env.ALARMES_CORTE_MIN ? { corte_min: process.env.ALARMES_CORTE_MIN } : {}) });
 }
 async function writeOut(obj) { const json = JSON.stringify(obj);

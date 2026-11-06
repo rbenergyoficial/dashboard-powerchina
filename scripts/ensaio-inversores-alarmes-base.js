@@ -96,6 +96,8 @@ console.log('✅ o código real passa');
     ['M02', 'TS02', 'INV09', '15/03/2026', 'F', 'Queda da rede', 'Ocorre'], ['M02', 'TS02', 'INV09', '15/04/2026', 'F', 'Queda da rede', 'Ocorre'], ['M02', 'TS02', 'INV08', '15/05/2026', 'F', 'Queda da rede', 'Ocorre']]), 'M02');
   XLSX.writeFile(wb2, path.join(rawD, 'p2.xlsx'));
   const roda = (extra) => spawnSync(process.execPath, [path.join(__dirname, 'gen-inversores.js')], { encoding: 'utf8', env: { ...process.env, ALARMES_CORTE_MIN: '2026-01', LOCAL_DIR: rawD, LOCAL_OUT: path.join(t0, 'out.json'), ...extra } });
+  fs.writeFileSync(path.join(hist, 'alarmes_logger_arm_2026_04.json'), JSON.stringify({ esquema: 9, dias: {} }));   // o armazém e o manifesto moram no mesmo prefixo
+  fs.writeFileSync(path.join(hist, 'alarmes_logger_lidos.json'), JSON.stringify({ zips: {} }));
   fs.writeFileSync(path.join(hist, 'alarmes_logger_2026_04.json'), JSON.stringify(LOG(['2026-04-03', '2026-04-04'], [E1, E2, PARADA])));
   const r = roda({ LOCAL_HIST_DIR: hist });
   if (r.status !== 0) { console.log('  🔴 o gerador quebrou: ' + (r.stderr || r.stdout).slice(-300)); process.exit(1); }
