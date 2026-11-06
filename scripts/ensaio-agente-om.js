@@ -15,6 +15,8 @@
  *   (3) entidade a menos (a guarda do gerador); (4) o mes em curso dentro dos fechados.
  * CASOS DO RENDIMENTO (19/10/2026): um dia forjado com buraco no meio e outro com buraco na ponta, montados pela lib do
  *   portal_vivo e pelo gerador; valores a mao; plantios com a regra de antes de cada lado (ver casosRendimento).
+ * VIRADA DO DIA: o painel passa ao dia novo antes de a primeira leitura do MUST chegar, e o resumo sai sem MUST por alguns
+ *   minutos. Os dois plantios do MUST pulam so ai, ate as 02:00 de Brasilia; depois disso a falta volta a reprovar.
  *
  *   node scripts/ensaio-agente-om.js            (BASE_DADOS=<pasta> le uma rodada local; sem ela, o blob publico)
  */
@@ -38,6 +40,15 @@ function le(nome) {
   });
 }
 const copia = (o) => JSON.parse(JSON.stringify(o));
+/* a virada do dia: resumo sem nenhuma leitura do MUST, gerado antes das 02:00 BRT. Fora dessa janela devolve null e o plantio
+   recusa como sempre: MUST sumido no meio do dia nao pode passar calado. Hora ilegivel tambem nao abre a janela. */
+const JANELA_VIRADA_MIN = 120;
+function viradaSemMust(must, gerado) {
+  if (!must || must.instante || Object.keys(must.por_parque || {}).length) return null;
+  const ms = Date.parse(gerado); if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms - 3 * 3600000); const min = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return min < JANELA_VIRADA_MIN ? 'pula: virada do dia, o MUST de hoje ainda nao chegou' : null;
+}
 const USINAS = ENTIDADES.filter((e) => /^M\d$/.test(e));
 const CAP_COMPLEXO = 343.77;
 const EPS = 1e-9;
@@ -318,6 +329,10 @@ function casosRendimento(R, falhas) {
 
 (async () => {
   const falhas = [];
+  [['vazio as 00:17', { por_parque: {} }, '2026-11-06T03:17:00Z', true], ['vazio as 01:59', { por_parque: {} }, '2026-11-06T04:59:00Z', true],
+   ['vazio as 02:00', { por_parque: {} }, '2026-11-06T05:00:00Z', false], ['vazio as 09:00', { por_parque: {} }, '2026-11-06T12:00:00Z', false],
+   ['vazio sem hora', { por_parque: {} }, undefined, false], ['com leitura as 00:17', { instante: '00:10', por_parque: { Complexo: {} } }, '2026-11-06T03:17:00Z', false]]
+    .forEach(([nome, m, g, pula]) => { if (!!viradaSemMust(m, g) !== pula) falhas.push('virada do dia, ' + nome + ': esperado ' + (pula ? 'pular' : 'recusar')); });
   const R = await le('agente_om.json');
   const base = julga(R).concat(guarda(R).mau);
   base.forEach((m) => falhas.push('PRODUTO: ' + m));
@@ -400,11 +415,13 @@ function casosRendimento(R, falhas) {
   plantio('rendimento trocado entre usinas', (Y) => trocaExtremos([['hoje',
     Object.fromEntries(Y.tempo_real.rendimento.por_usina.map((x) => [x.ufv, x]))]], 'mwh_por_mw', 0.05, 'MWh/MW (madrugada?)'),
   /rendimento M\d /);
-  /* plantios que NAO dependem do estado da hora: pico x instante e carga x potencia valem com qualquer leitura */
+  /* pico x instante e carga x potencia valem com qualquer leitura; o MUST so nao tem leitura na virada do dia (viradaSemMust) */
   plantio('pico do MUST abaixo do instante', (Y) => {
+    const v = viradaSemMust(Y.tempo_real.must, R.gerado); if (v) return v;
     const x = Y.tempo_real.must.por_parque.Complexo; if (!x || x.pico_hoje_mw == null) return false; x.agora_mw = x.pico_hoje_mw + 1; return true;
   }, /MUST Complexo pico/);
   plantio('MUST no intervalo vazio do fim da serie', (Y) => {
+    const v = viradaSemMust(Y.tempo_real.must, R.gerado); if (v) return v;
     const x = Y.tempo_real.must.por_parque.Complexo; if (!x || !Y.tempo_real.must.instante) return false; x.agora_mw = null; return true;
   }, /sem leitura do Complexo/);
   plantio('carga de transformador descolada da potencia', (Y) => {
