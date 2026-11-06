@@ -44,6 +44,8 @@ const PARADAS = new Map([[0x8000, 'parado'], [0x1300, 'parada_chave'], [0x1500, 
 const INVALIDO = 0xFFFE;
 const COL = { cod: 'Código de falha', st: 'Status do dispositivo', p: 'Potência ativa total' };
 
+// prioridade (tabela do humano, 05/11/2026; a mesma da lib-alarmes-scada): inversor parado é Média; alarme com o inversor operando é Baixa
+const prioridade = (c) => (c === 'inversor_falha' || c === 'inversor_parada' ? 3 : 4);
 // inteiro legível ou null (a sentinela da lib-sungrow é ilegível)
 const inteiro = (s) => { const t = String(s == null ? '' : s).trim(); if (!t) return null; const x = Number(t); return Number.isFinite(x) ? Math.trunc(x) : null; };
 const exige = (cab, nome, onde) => { const i = S.col(cab, nome); if (i < 0) throw new Error(onde + ': coluna "' + nome + '" ausente'); return i; };
@@ -186,6 +188,7 @@ function compoe(arms, ident, de, ate, { gerado = null } = {}) {
     const o = { id: e.c + ':' + e.t + ':' + e.i + ':' + e.m + (e.v != null ? ':' + e.v : ''), c: e.c, t: e.t, i: e.i, f: e.f, m: idx(e.m) };
     if (e.v != null) o.v = e.v; if (e.s != null) o.s = e.s; if (e.o) o.o = e.o; if (e.pk != null) o.pk = e.pk; if (e.fx) o.fx = 1;
     if (e.inv) { o.inv = e.inv; o.k = e.k; } if (e.str) o.str = e.str;
+    o.p = prioridade(e.c);
     return o;
   });
   for (const t of Object.keys(eq)) if (!ev.some((e) => e.t === t)) delete eq[t];
@@ -204,4 +207,4 @@ function faixaDoZip(nome, ano) {
   return [ini, fim];
 }
 
-module.exports = { ESQUEMA, PARADAS, COL, trechos, diaAlarmes, junta, armVazio, costura, classeDe, compoe, faixaDoZip, diaMais };
+module.exports = { ESQUEMA, PARADAS, COL, prioridade, trechos, diaAlarmes, junta, armVazio, costura, classeDe, compoe, faixaDoZip, diaMais };

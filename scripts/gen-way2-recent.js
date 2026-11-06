@@ -335,6 +335,8 @@ function gerarSaude(dados, agoraMs) {
     const saude = gerarSaude(dadosMesclados, Date.now());
     const sb = JSON.stringify(saude);
     await container.getBlockBlobClient('way2_saude.json').upload(sb, Buffer.byteLength(sb), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=60' } });
+    // alarmes-base: a cópia da rodada para o gen-alarmes-way2 ler a queda de medidor sem baixar o blob de volta (a cada 5 min)
+    if (process.env.ELET_LOCAL_DIR) try { require('fs').mkdirSync(process.env.ELET_LOCAL_DIR, { recursive: true }); require('fs').writeFileSync(require('path').join(process.env.ELET_LOCAL_DIR, 'way2_saude.json'), sb); } catch (e) { console.log('  copia local da saude nao gravada (' + e.message + ')'); }
     console.log(`way2_saude.json OK · âncora ${saude.ancora} (há ${saude.idade_min} min) · `
       + `${saude.resumo.ok}/${saude.resumo.total} medidores (${saude.resumo.atraso} atraso, ${saude.resumo.falha} falha) · `
       + `${saude.eventos.length} eventos · ${(sb.length / 1024).toFixed(0)} KB`);

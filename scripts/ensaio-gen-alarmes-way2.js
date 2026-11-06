@@ -95,6 +95,34 @@ function rodadas(G) {
     && c9[0].fim === '2026-11-05T00:00:00', JSON.stringify(c9));
 
   C('coleta sem slot: nada a gravar', G.compoe({ dados: [] }, r4, ms('2026-11-06T00:01:00')) === null);
+
+  // alarmes-base: a queda de medidor vem do way2_saude e fica em lista própria (a tela lê todo `eventos` como desligamento)
+  const S1 = { atualizado: '2026-11-05T19:00:00', eventos: [{ pid: 6196, nome: 'SE · TR1', de: '2026-11-05T18:45:00', ate: null, min: 15, aberto: true, tipo: 'falha' },
+    { pid: 6215, nome: 'M7 · C1', de: '2026-11-05T10:00:00', ate: '2026-11-05T11:00:00', min: 60, aberto: false, tipo: 'falha' }, { pid: 6216, nome: 'M8 · C1', de: '2026-11-05T23:50:00', ate: '2026-11-06T00:10:00', min: 20, aberto: false, tipo: 'virada' }] };
+  const m1 = G.compoe(coleta('2026-11-05', '00:05', '09:00'), r3, ms('2026-11-05T19:00:00'), S1);
+  C('medidor: entra em lista própria, não em eventos', m1 && m1.medidor_com.length === 2 && !m1.eventos.some((e) => e.c === 'medidor_com'), JSON.stringify(m1 && m1.medidor_com));
+  C('medidor: o id é estável e a tag vem do medidor', m1 && m1.medidor_com.some((e) => e.id === 'med:6196:2026-11-05T18:45:00' && e.tag === '04T1' && e.fim === null && e.p === 3), JSON.stringify(m1 && m1.medidor_com));
+  C('medidor: virada de dia não é queda', m1 && !m1.medidor_com.some((e) => e.pid === 6216));
+  const S2 = { atualizado: '2026-11-05T19:30:00', eventos: [{ pid: 6196, nome: 'SE · TR1', de: '2026-11-05T18:45:00', ate: '2026-11-05T19:20:00', min: 35, aberto: false, tipo: 'falha' }] };
+  const m2 = G.compoe(coleta('2026-11-05', '00:05', '09:30'), m1, ms('2026-11-05T19:30:00'), S2);
+  C('medidor: fecha com o mesmo id', m2 && m2.medidor_com.filter((e) => e.pid === 6196).length === 1 && m2.medidor_com.find((e) => e.pid === 6196).fim === '2026-11-05T19:20:00', JSON.stringify(m2 && m2.medidor_com));
+  const S3 = { atualizado: '2026-11-05T20:00:00', eventos: [{ pid: 6197, nome: 'SE · TR2', de: '2026-11-05T19:40:00', ate: null, min: 20, aberto: true, tipo: 'falha' }] };
+  const m3 = G.compoe(coleta('2026-11-05', '00:05', '10:00'), m2, ms('2026-11-05T20:00:00'), S3);
+  const S4 = { atualizado: '2026-11-05T20:30:00', eventos: [] };
+  const m4 = G.compoe(coleta('2026-11-05', '00:05', '10:30'), m3, ms('2026-11-05T20:30:00'), S4);
+  C('medidor: aberto que sumiu do vigia fecha com fim inferido', m4 && m4.medidor_com.some((e) => e.pid === 6197 && e.fim === '2026-11-05T20:30:00' && e.fx === 1), JSON.stringify(m4 && m4.medidor_com));
+  const m5 = G.compoe(coleta('2026-11-05', '00:05', '10:35'), m4, ms('2026-11-05T20:35:00'), null);
+  C('medidor: sem a saúde a lista segue como estava', m5 && G.assina({ medidor_com: m5.medidor_com }) === G.assina({ medidor_com: m4.medidor_com }));
+  const m6 = G.compoe(coleta('2026-11-20', '00:05', '09:00'), m5, ms('2026-11-20T09:05:00'), { eventos: [] });
+  C('medidor: o que terminou há mais de 7 dias sai', m6 && m6.medidor_com.length === 0, JSON.stringify(m6 && m6.medidor_com));
+  // o mês: id repetido fica o mais novo; o do outro mês não entra
+  const ant = { eventos: [{ id: 'a', ini: '2026-11-01T10:00:00', fim: null }, { id: 'b', ini: '2026-11-02T10:00:00', fim: '2026-11-02T11:00:00' }], medidor_com: [] };
+  const nov = { gerado: 'x', eq: {}, eventos: [{ id: 'a', ini: '2026-11-01T10:00:00', fim: '2026-11-01T12:00:00' }, { id: 'c', ini: '2026-10-31T10:00:00', fim: null }], medidor_com: [] };
+  const fm = G.fundeMes(ant, nov, '2026-11');
+  C('mês: funde por id e guarda o que a janela de 7 dias já podou', fm.eventos.length === 2 && fm.eventos.find((e) => e.id === 'a').fim === '2026-11-01T12:00:00' && fm.eventos.some((e) => e.id === 'b'), JSON.stringify(fm.eventos));
+  C('mês: fica só o mês do início', !fm.eventos.some((e) => e.id === 'c') && G.mesesDe(nov).join() === '2026-10,2026-11', G.mesesDe(nov).join());
+  C('mês: nome do blob', G.nomeMes('2026-11') === 'hist/alarmes_way2_2026_11.json');
+  C('mês: fim mudou = regrava', G.assina({ eventos: [{ id: 'a', fim: null }] }) !== G.assina({ eventos: [{ id: 'a', fim: 'x' }] }));
   return f;
 }
 
@@ -110,6 +138,12 @@ const PLANTIOS = [
   ['a janela recalculada começa no 1º slot (não na borda esquerda)', 'const janelaIni = t0 - SLOT_MS;', 'const janelaIni = t0;'],
   ['a poda de 70 dias em vez de 7', 'const JANELA_DIAS = 7;', 'const JANELA_DIAS = 70;'],
   ['lido até pelo 1º medidor, não pela cobertura', ".filter(([, n]) => n >= COBERTURA_MIN)", ".filter(([, n]) => n >= 1)"],
+  ['a queda de medidor misturada em eventos', "eq: A.EQ, eventos, medidor_com:", "eq: A.EQ, eventos: eventos.concat(medidorCom(saude, pub && pub.medidor_com, agoraMs)), medidor_com:"],
+  ['virada de dia conta como queda', "if (e.tipo && e.tipo !== 'falha') continue;\n", "\n"],
+  ['o aberto que sumiu do vigia fica aberto', "{ e.fim = saude.atualizado || A.isoBRT(agoraMs); e.fx = 1; }", "{ }"],
+  ['sem a saúde a lista zera', "if (!saude || !Array.isArray(saude.eventos)) return [...m.values()];", "if (!saude || !Array.isArray(saude.eventos)) return [];"],
+  ['o mês perde o que a janela podou', "const juntos = (k) => { const m = new Map(((atual && atual[k]) || []).map((e) => [e.id, e]));", "const juntos = (k) => { const m = new Map();"],
+  ['o mês aceita episódio de outro mês', ".slice(0, 7) === mes) m.set(e.id, e);", ".slice(0, 7)) m.set(e.id, e);"],
 ];
 const tmp = fs.mkdtempSync(path.join(__dirname, '.ensaio-gen-alarmes-'));   // ao lado: o require('./lib-…') do gerador acha a lib
 let ruim = 0;

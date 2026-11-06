@@ -5,7 +5,7 @@
  * Lê do cofre `backup-dados-scada` os CSV diários `SCADA_DB/bruto/alarmes/<AAAA-MM>/alarms_<AAAA-MM-DD>.csv.gz` (a versão mais nova de
  * cada dia, lib-alarmes-scada.escolheVersoes) e grava em `dados`:
  *   hist/alarmes_scada_<AAAA>_<MM>.json   o mês inteiro (a tela só busca quando o período passa de 7 dias);
- *   alarmes_scada.json                     os últimos 7 dias com arquivo (lista + resumo de TCU sem comunicação).
+ *   alarmes_scada.json                     os últimos 7 dias com arquivo (lista + resumo de TCU sem comunicação). Nada de login nos dois: quem reconheceu e quem comandou não se grava.
  * Toda regra (classe, episódio, agrupamento, formato) mora na lib-alarmes-scada.js; aqui só se lista, lê e grava.
  *
  * Modo normal: refaz o(s) mês(es) que a janela de 7 dias toca e, desde o primeiro mês com dia novo no cofre (o histórico chega aos poucos),
@@ -46,7 +46,9 @@ async function lePublicado(nome) {
 }
 
 async function escreve(nome, obj) {
-  const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
+  const txt = JSON.stringify(obj);
+  A.exigeSemOperador(txt, nome);
+  const gz = zlib.gzipSync(Buffer.from(txt));
   if (process.env.LOCAL_OUT_DIR) { const f = path.join(process.env.LOCAL_OUT_DIR, nome); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, gz); return gz.length; }
   await conteiner(OUT).getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });

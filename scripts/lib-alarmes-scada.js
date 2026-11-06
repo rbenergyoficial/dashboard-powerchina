@@ -41,9 +41,19 @@
  *   pela Area; reemissão do E3 descartada (`transicao`); registro de estado e comando fora da lista (`SO_ESTADO`); GMG normalmente
  *   aberto; alarmes simultâneos de TCU em grupo, no topo; o reinício do supervisório (28/10 19:46) detectado e marcado `ri`, com os
  *   instantes em `reinicio`; o trafo auxiliar na classe do eletrocentro. Em 27+28/10: nenhum disjuntor falso aberto, nada às 19:46 sem `ri`.
+ * BASE NOVA (alarmes-base, 05/11/2026, decisões do humano): esquema 2. O E3 casa saída e entrada pelo InTime, mas entrada sem linha de saída
+ *   ficava "em aberto" para sempre: a entrada seguinte do MESMO ponto encerra a anterior, com o fim inferido marcado `fx` (a saída real, se
+ *   chegar depois, vale e tira o `fx`). Classes novas `trafo_ts`, `rele_ts`, `pid`, `falha_ied` e `sa_cc_ca`. Cada evento leva `p` (1 Crítica,
+ *   2 Alta, 3 Média, 4 Baixa) ou `est: 1` (indicação de estado: porta, local/remoto, posição; fora da contagem de alarmes), `in: 1`
+ *   (intermitente: 3 ou mais ativações em 60 s, ISA-TR18.2.5) e `a_conferir: 1` (sem fim há mais de 24 h, sem ser disjuntor: separado dos
+ *   ativos até a conferência no supervisório; 🔴 a voz nunca fala evento `a_conferir`, e a marca vale em qualquer nível, inclusive em `fi`). A coluna
+ *   Severity não serve para prioridade: é 0 em 97,7 % das linhas. Do cofre vêm também `ak: 1` (reconhecido) e `cn` (ConditionName, o código do ponto).
+ *   🔴 O LOGIN DO OPERADOR É SÓ DO ADMINISTRADOR (humano, 05/11/2026): nunca entra em `ev` nem em `estados`. compoe devolve `op_adm` {ev: {id: login},
+ *   estados: {'dia|tag|texto': [logins]}} como propriedade NÃO enumerável (JSON.stringify não a leva); o gerador não o grava (decisão de 06/11/2026:
+ *   sem arquivo de logins por enquanto), e `exigeSemOperador` recusa gravar blob de equipe com login.
  */
 
-const ESQUEMA = 1;
+const ESQUEMA = 2;
 const JANELA_PAI_S = 60;            // proteção ↔ abertura do mesmo equipamento
 const RAJADA_LOGGER_MIN = 10;       // falhas de comunicação de logger do PPC a menos disto viram o mesmo trecho
 const SEM_SAIDA = '1899-12-30';
@@ -72,14 +82,23 @@ function transicao(r, dia) {
    06:23, 91 em 4. Nesse minuto o episódio aberto leva `ri` (ativo desde antes do reinício: o início real é desconhecido) e não duplica o
    mesmo alarme já aberto antes; a linha de DISJUNTOR do minuto é estado retransmitido e sai. Os instantes vão em `reinicio`. */
 const REINICIO_N = 300, REINICIO_CL = 6;
-const SO_ESTADO = (r, cl) => (r.EventType === 'Command' && cl !== 'disjuntor') || (r.EventType === 'Event' && cl === 'se_auxiliar');
+// O critério pelas classes não vê o reinício que só traz inversor e comunicação (29/01/2025 12:04: 7.868 entradas, 2 classes). O sinal próprio é a
+// REENTRADA: ponto que entra sem ter saído. Medido em todo minuto com 1.500+ entradas de 10/2024–02/2025 e 07–11/2026: no reinício, 79 a 100 %; no
+// surto real de entradas, perto de 0 % (22/07/2026 15:27, 5.371 entradas, 0 %; 27/09/2026 05:48, 5.289, 0 %; 04/02/2025 11:23, 10.134, 0 %).
+// 🔴 O critério das classes ganhou piso de 5.000 entradas: os distúrbios reais de 29/01/2026 03:43 (2.415), 28/03/2026 14:47 (1.774) e 15:16 (954) e 21/09/2026
+// 14:10 (888) passavam nele, eram marcados reinício, saíam da lista da tela e, com o mesmo ponto em aberto num episódio antigo, o `ri` engolia o TRIP SEP.
+// Os reinícios de verdade de 2026 têm 9.009 a 14.768 entradas. E proteção só leva `ri` se o ponto já estava no ar.
+const REINICIO_TODAS = 2000, REINICIO_RE = 0.5, REINICIO_CL_TODAS = 5000;
+const DA_SE = new Set(['se_auxiliar', 'sa_cc_ca', 'falha_ied']);   // as três saem do mesmo 'resto da SE': o registro de estado segue fora da lista
+const SO_ESTADO = (r, cl) => (r.EventType === 'Command' && cl !== 'disjuntor') || (r.EventType === 'Event' && DA_SE.has(cl));
 
 // ---- CSV ----
 // UMA linha por vez (gerador) e só as colunas que a regra usa: o mês cheio do começo de 2025 tem 40–66 mil linhas CLASSIFICADAS por dia
 // (falha de comunicação e alarme de TCU), e o mês inteiro com as 19 colunas estourava a memória (fev/2025, 4,3 GB). Os textos que se
 // repetem (área, ponto, mensagem, condição, valor) ficam numa cópia só (`intern`, um Map que dura a composição).
-const CAMPOS = ['E3TimeStamp', 'InTime', 'OutTime', 'ConditionActive', 'ConditionName', 'FormattedValue', 'Area', 'FullAlarmSourceName', 'Message', 'Severity', 'EventType'];
-const REPETE = new Set(['ConditionActive', 'ConditionName', 'FormattedValue', 'Area', 'FullAlarmSourceName', 'Message', 'Severity', 'EventType']);
+const CAMPOS = ['E3TimeStamp', 'InTime', 'OutTime', 'ConditionActive', 'ConditionName', 'FormattedValue', 'Area', 'FullAlarmSourceName', 'Message', 'Severity', 'EventType', 'Acked', 'ActorID'];
+const REPETE = new Set(['ConditionActive', 'ConditionName', 'FormattedValue', 'Area', 'FullAlarmSourceName', 'Message', 'Severity', 'EventType', 'Acked', 'ActorID']);
+const OPCIONAL = new Set(['EventType', 'Acked', 'ActorID']);
 function* linhasCsv(txt, intern = new Map()) {
   const s = txt.charCodeAt(0) === 0xfeff ? txt.slice(1) : txt;
   const um = (v) => { const x = intern.get(v); if (x !== undefined) return x; intern.set(v, v); return v; };
@@ -88,7 +107,7 @@ function* linhasCsv(txt, intern = new Map()) {
     if (linha.length === 1 && linha[0] === '') return;
     if (!cab) {
       cab = linha;
-      for (const c of CAMPOS.filter((c) => c !== 'EventType')) {
+      for (const c of CAMPOS.filter((c) => !OPCIONAL.has(c))) {
         if (!cab.includes(c)) throw new Error('lib-alarmes-scada: CSV sem a coluna ' + c + ' (cabeçalho: ' + cab.slice(0, 6).join(';') + '…)');
       }
       idx = CAMPOS.map((c) => [c, cab.indexOf(c)]).filter(([, k]) => k >= 0);
@@ -124,6 +143,8 @@ function classe(area, msg) {
     if (/PERMISS/.test(m)) return null;
     if (/\bDJ\b.* - ESTADO$|- SC# - ESTADO$/.test(m)) return 'disjuntor';
     if (/TRIP|PROTE|ATUA|PICKUP|END FAULT|SEP/.test(m)) return 'protecao';
+    if (/GOOSE|GPS|FALHA CANAL|BOBINA|FALHA INTERNA|FALHA COMUNICA|PSD-FALHA/.test(m)) return 'falha_ied';   // o sistema de proteção e controle
+    if (/\bRET#|RETIFICADOR|BATERIA|\bQCA|\bQCC|\bQSA|\bSLI\b|FALTA (TENS.O )?(CC|CA|VCA)\b|FALTA VCA|FALTA TENS.O/.test(m)) return 'sa_cc_ca';   // CC e CA da SE
     return 'se_auxiliar';
   }
   if (/TCU#/.test(m)) {
@@ -135,7 +156,26 @@ function classe(area, msg) {
   if (a.includes('PPC')) return 'ppc';
   // o trafo auxiliar é do eletrocentro (ponto DIDO do TS: 'MRT05 TS1 ALARME TEMPERATURA TRAFO AUX')
   if (/PORTA|FUMA|SPD|QF[AB]|QS[AB]|RMU|DJ TS|COMANDO|TRAFO AUX/.test(m)) return 'eletrocentro';
+  // o que caía em 'outro' e tem dono no eletrocentro (auditoria de 05/11/2026): 'MRT05 TS1 EMU01 TR01 RELÉ BUCHHOLZ TRIP', 'RL01 50N-2', 'PID1 ALARME HARDWARE'
+  if (/\bPID( #|#| [AB]\b)/.test(m)) return 'pid';
+  if (/\bRL# /.test(m)) return 'rele_ts';
+  if (/\bTR# |BUCHHOLZ|DE G.S\b|DISJUNTOR GERAL/.test(m)) return 'trafo_ts';
   return 'outro';
+}
+
+// ---- prioridade (tabela aprovada pelo humano em 05/11/2026) ----
+// 1 Crítica: trip de 230 kV, SEP e, no trafo do eletrocentro, trip de Buchholz e de temperatura do óleo · 2 Alta: 34,5 kV e serviços auxiliares ·
+// 3 Média: inversor parado e comunicação · 4 Baixa: rastreador e anemômetro. O disjuntor só é alarme com proteção junto (`fmt`): sem ela é posição.
+const ESTADO_RE = /STATUS|ESTADO|\bLOCAL\b|REMOTO|PORT[AÃ]O?\b|\bNORMAL$|^TODAS |^\S+ (FECHADA|ABERTA|INDEFINIDO)$/;
+function prioridade(cl, m, n) {
+  if (ESTADO_RE.test(m)) return 0;
+  if (cl === 'protecao') return n !== 'cubiculo' && !/MCB/.test(m) && /\bSEP\b|TRIP|ATUA/.test(m) ? 1 : 2;   // MCB: o minidisjuntor do TP, não o trip do vão
+  if (/\bSEP\b/.test(m)) return 1;
+  if (cl === 'trafo_ts') return /BUCHHOLZ TRIP|.LEO TRIP|TRIP DE G.S/.test(m) ? 1 : 2;
+  if (['rele_ts', 'falha_ied', 'sa_cc_ca', 'se_auxiliar', 'ppc'].includes(cl)) return 2;
+  if (cl === 'eletrocentro') return /FUMA/.test(m) ? 2 : 4;
+  if (['inversor_falha', 'comunicacao', 'pid'].includes(cl) || /GATEWAY|PARADA DE EMERG/.test(m)) return 3;
+  return 4;
 }
 
 // ---- equipamento ----
@@ -143,6 +183,29 @@ const USINA = (mrt) => (mrt === '10' ? 'M1' : 'M' + Number(mrt));
 // cubículo → usina: os circuitos por usina vêm do lib-scada-db.js (uma escrita só)
 const CUB_USINA = Object.freeze(Object.fromEntries(Object.entries(require('./lib-scada-db').CIRCUITOS)
   .flatMap(([u, cubs]) => cubs.map((c) => ['CUB' + c, u]))));
+// a árvore de ativos do SIGO chama de outro nome o que o supervisório chama assim: `no` no dicionário `eq` é o nó da árvore (arvore_ui.json). A
+// numeração Trina não entra: depende de decisão do humano. SC-TE12DS e SC-TE22DS não aparecem na árvore e ficam sem nó.
+const ALIAS_SE = Object.freeze({
+  '52-1': 'SE|QCA-E|52-1', '52-2': 'SE|QCA-E|52-2', '52-3': 'SE|QCA-E|52-3', '52-4': 'SE|QCA-E|52-4',
+  '52-TE11': 'SE|CUB-4.1', '52-TE21': 'SE|CUB-5.2', '52-TE32': 'SE|CUB-12.1', '52-TE42': 'SE|CUB-13.2',
+  'SC-TE11DS': 'SE|CUB-4.1|DS', 'SC-TE11ES': 'SE|CUB-4.1|ES', 'SC-TE21DS': 'SE|CUB-5.2|DS', 'SC-TE21ES': 'SE|CUB-5.2|ES', 'SC-TE32DS': 'SE|CUB-12.1|DS', 'SC-TE42DS': 'SE|CUB-13.2|DS',
+  '72-1A': 'SE|QCC-11|72-1A', '72-2A': 'SE|QCC-11|72-2A', '72-1B': 'SE|QCC-12|72-1B', '72-2B': 'SE|QCC-12|72-2B',
+  UC: 'SE|IED-UC', UC1: 'SE|IED-UC1', UCT1: 'SE|IED-UCT1', UCT2: 'SE|IED-UCT2', UPAT1: 'SE|IED-UPAT1', UPAT2: 'SE|IED-UPAT2', UPPT1: 'SE|IED-UPPT1', UPPT2: 'SE|IED-UPPT2',
+  URT1: 'SE|04T1|URT', URT2: 'SE|04T2|URT',
+});
+// STI: no supervisório o TCU é numerado no ELETROCENTRO (M1/TS4/NCU02/TCU091 é o 1º da NCU02); na árvore, na NCU. Só 3 eletrocentros têm 2 NCU;
+// tamanho da 1ª NCU pela árvore de ativos, conferido contra os TCU que o supervisório publica (a NCU02 começa no número seguinte)
+const NCU1_STI = Object.freeze({ 'M1/TS4': 90, 'M3/TS3': 57, 'M3/TS8': 64 });
+function tcuNaNcu(tag) {
+  const x = tag.match(/^(M[1-4]\/TS\d+)\/NCU02\/TCU(\d+)$/);
+  return x && NCU1_STI[x[1]] ? 'TCU ' + (Number(x[2]) - NCU1_STI[x[1]]) : null;
+}
+// quem reconheceu ou comandou: 'System' é o próprio supervisório, não entra. O login vai só para o `op_adm`
+const operador = (r) => (r.ActorID && r.ActorID !== 'System' ? r.ActorID : null);
+function exigeSemOperador(txt, nome) {
+  if (/MRT\\/.test(txt)) throw new Error('lib-alarmes-scada: ' + nome + ' traz login de operador (MRT\\…): blob de equipe não grava');
+}
+const noEq = (e) => { const o = { u: e.u, n: e.n, pai: e.pai }; if (e.no) o.no = e.no; if (e.lc) o.lc = e.lc; return o; };
 const DO_TRAFO = { M1: '04T1', M2: '04T1', M5: '04T1', M6: '04T1', M3: '04T2', M4: '04T2', M7: '04T2', M8: '04T2', M9: '04T2' };
 // o cubículo sai do PONTO (FullAlarmSourceName 'SE_MRT.CUB11_2.…' ou a mensagem 'CUB11_2- …'); a Area só quando o ponto não diz: o E3 tem
 // Area trocada em pontos de SC (27/10/2026 17:11:57, 'CUB11_2- SC1 - ESTADO' com Area GRL.SE_MRT.[CUB10-2]; 97 linhas em 27 e 28/10)
@@ -155,7 +218,9 @@ function equipamento(r) {
     const tag = CUB_DO_PONTO(r) || x[1].replace(/^CUB(\d+)-(\d+)$/, 'CUB$1_$2');
     const u = CUB_USINA[tag] || 'SE';
     const n = /^CUB/.test(tag) ? 'cubiculo' : /^(04|14)T\d$/.test(tag) ? 'trafo' : /^04[LF]/.test(tag) ? 'linha' : 'se';
-    return { tag, u, n, pai: n === 'cubiculo' && DO_TRAFO[u] ? DO_TRAFO[u] : 'SE' };
+    const r0 = { tag, u, n, pai: n === 'cubiculo' && DO_TRAFO[u] ? DO_TRAFO[u] : 'SE' };
+    if (ALIAS_SE[tag]) r0.no = ALIAS_SE[tag];
+    return r0;
   }
   const inv = (r.Message || '').match(/^MRT(\d{2})\s+TS(\d+)\s+INV(\d+)\b/);
   if (inv) { const u = USINA(inv[1]), ts = u + '/TS' + Number(inv[2]); return { tag: ts + '/INV' + inv[3].padStart(2, '0'), u, n: 'inversor', pai: ts }; }
@@ -163,7 +228,7 @@ function equipamento(r) {
   const tcu = (r.Message || '').match(/TCU(\d+)/);
   if (x) {
     const u = USINA(x[1]), ts = u + '/TS' + x[2];
-    if (tcu && x[3]) return { tag: ts + '/NCU' + x[3] + '/TCU' + tcu[1], u, n: 'tcu', pai: ts + '/NCU' + x[3] };
+    if (tcu && x[3]) { const tag = ts + '/NCU' + x[3] + '/TCU' + tcu[1], lc = tcuNaNcu(tag), r0 = { tag, u, n: 'tcu', pai: ts + '/NCU' + x[3] }; if (lc) r0.lc = lc; return r0; }
     if (x[3]) return { tag: ts + '/NCU' + x[3], u, n: 'ncu', pai: ts };
     return { tag: ts, u, n: 'eletrocentro', pai: u };
   }
@@ -182,7 +247,7 @@ const texto = (r) => (r.Message || '').replace(/^MRT\d{2}\s+TS\d+\s+(NCU\d+|TCU\
 // `semente`: disjuntores ainda ABERTOS na publicação anterior ({tag, m, i, k, sv, eq}), para o FECHADO de hoje fechar a abertura de
 // dias atrás (o M9C1 ficou semanas aberto em 2025). A chave do disjuntor é tag + texto, a mesma que se refaz do publicado.
 function episodios(rows, semente = []) {
-  const cond = new Map();
+  const cond = new Map(), abertoDe = new Map();   // abertoDe: ponto → episódios dele ainda sem fim (a entrada seguinte encerra)
   const ordem = rows.map((r) => ({ r, cl: classe(r.Area || '', r.Message || '') })).filter((x) => x.cl)
     .sort((a, b) => (a.r.E3TimeStamp < b.r.E3TimeStamp ? -1 : a.r.E3TimeStamp > b.r.E3TimeStamp ? 1 : 0));
   const djAbertos = new Map(), djEv = [];
@@ -200,13 +265,43 @@ function episodios(rows, semente = []) {
       continue;
     }
     const ini = iso(r.InTime) || iso(r.E3TimeStamp);
-    const chave = (r.FullAlarmSourceName || r.Area) + '|' + (r.ConditionName || r.Message) + '|' + ini;
+    const ponto = (r.FullAlarmSourceName || r.Area) + '|' + (r.ConditionName || r.Message), chave = ponto + '|' + ini;
     let e = cond.get(chave);
-    if (!e) { e = { cl, eq, i: ini, f: null, m: texto(r), v: r.FormattedValue || '', k: 0, sv: r.Severity }; if (r._ri) e.ri = 1; cond.set(chave, e); }
+    if (!e) {
+      e = { cl, eq, i: ini, f: null, m: texto(r), v: r.FormattedValue || '', k: 0, sv: r.Severity, cn: r.ConditionName }; if (r._ri) e.ri = 1; cond.set(chave, e);
+      const l = abertoDe.get(ponto) || abertoDe.set(ponto, []).get(ponto);
+      // 🔴 entrada nova encerra a anterior do mesmo ponto: sem linha de saída ela ficava em aberto para sempre. O regravado no reinício (`ri`) não
+      // encerra: é o mesmo alarme, que continua. A linha de saída (ConditionActive 0) também não. O fim inferido leva `fx`.
+      if (r.ConditionActive === '1' && !r._ri) for (const a of l) if (!a.f && a.i < ini) { a.f = ini; a.fx = 1; }
+      l.push(e);
+      if (l.length > 8) abertoDe.set(ponto, l.filter((x) => !x.f));
+    }
     e.k++;
-    if (r.ConditionActive === '0') e.f = iso(r.OutTime) || iso(r.E3TimeStamp);
+    if (r.Acked === '1') { e.ak = 1; if (operador(r)) e.op = operador(r); }
+    if (r.ConditionActive === '0') { e.f = iso(r.OutTime) || iso(r.E3TimeStamp); delete e.fx; }
   }
   return [...djEv, ...cond.values()];
+}
+
+// intermitente (ISA-TR18.2.5): 3 ou mais ativações do mesmo ponto em 60 s. Marca `in` em cada episódio da rajada
+const INTERM_N = 3, INTERM_S = 60;
+function marcaIntermitente(eps) {
+  const por = new Map();
+  for (const e of eps) { if (e.cl === 'disjuntor' || e.ri) continue; const k = e.eq.tag + '|' + e.m; (por.get(k) || por.set(k, []).get(k)).push(e); }
+  for (const l of por.values()) {
+    if (l.length < INTERM_N) continue;
+    l.sort((a, b) => ms(a.i) - ms(b.i));
+    for (let j = 0; j + INTERM_N - 1 < l.length; j++) if (ms(l[j + INTERM_N - 1].i) - ms(l[j].i) <= INTERM_S * 1000) for (let x = j; x < j + INTERM_N; x++) l[x].in = 1;
+  }
+}
+// sem fim há mais de 24 h (EEMUA 191), sem ser disjuntor: a maioria começou em 2025 e não tem retorno registrado. Separado dos ativos até a conferência.
+// Disjuntor fica de fora: o par ABERTO/FECHADO dele é confiável (o M9C1 ficou semanas aberto em 2025). Refeito a cada corte, porque anda com o tempo.
+const A_CONFERIR_H = 24;
+function marcaAConferir(ev, fimIso) {
+  const lim = new Date(ms(fimIso) - A_CONFERIR_H * 3600e3 - 3 * 3600e3).toISOString().slice(0, 19);
+  const marca = (e) => { if (e.f === null && e.c !== 'disjuntor' && e.i < lim) e.a_conferir = 1; else delete e.a_conferir; (e.fi || []).forEach(marca); };
+  ev.forEach(marca);
+  return ev;
 }
 
 // resumo por dia e equipamento (entradas, minutos no estado, recortados no dia): TCU sem comunicação ('tcu_com') e redução de potência
@@ -332,19 +427,24 @@ function agrupaSe(eps) {
 function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
   const ord = textos.slice().sort((a, b) => (a.dia < b.dia ? -1 : 1));
   // laço, nunca push(...lista): dois dias reais (255 mil linhas) estouram a pilha no espalhamento
-  const rows = [], retx = [], est = new Map(), eqEst = new Map();
+  const rows = [], retx = [], est = new Map(), eqEst = new Map(), porMinT = new Map(), noAr = new Set(), estOp = {};
   for (const { dia, txt } of ord) {
     let n = 0;
     for (const r of linhasCsv(txt)) {
+      if (r.ConditionActive === '0') noAr.delete(r.FullAlarmSourceName);   // antes do `transicao`: a saída reemitida também diz que o ponto não está no ar
       if (!transicao(r, dia)) { n++; continue; }
+      if (r.ConditionActive === '1') { const m = (r.InTime || r.E3TimeStamp).slice(0, 16), x = porMinT.get(m) || porMinT.set(m, { n: 0, re: 0 }).get(m); x.n++; if (noAr.has(r.FullAlarmSourceName)) { x.re++; r._re = 1; } noAr.add(r.FullAlarmSourceName); }
       const cl = classe(r.Area || '', r.Message || '');
       // a linha sem classe (operação normal do inversor, estado de TCU…) sai JÁ: o mês inteiro com elas estoura a memória (fev/2025, 4 GB)
       if (!cl) continue;
       if (SO_ESTADO(r, cl)) {
-        if (r.ConditionActive === '0') continue;                                // o estado conta na entrada
         const e = equipamento(r), t = e.tag, d = (iso(r.InTime) || iso(r.E3TimeStamp)).slice(0, 10), m = texto(r), k = d + '|' + t + '|' + m;
-        eqEst.set(t, { u: e.u, n: e.n, pai: e.pai });
-        const x = est.get(k) || [d, t, m, 0]; x[3]++; est.set(k, x); continue;
+        // o comando chega só com ConditionActive 0 (medido em 27/10 e 03/11): quem comandou se guarda antes de descartar a linha
+        if (operador(r)) { const l = estOp[k] || (estOp[k] = []); if (!l.includes(operador(r))) l.push(operador(r)); }   // só no op_adm
+        if (r.ConditionActive === '0') continue;                                // o estado conta na entrada
+        eqEst.set(t, noEq(e));
+        const x = est.get(k) || [d, t, m, 0]; x[3]++; est.set(k, x);
+        continue;
       }
       rows.push(r);
     }
@@ -358,13 +458,16 @@ function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
     const m = (r.InTime || r.E3TimeStamp).slice(0, 16), x = porMin.get(m) || porMin.set(m, { n: 0, cl: new Set() }).get(m);
     x.n++; x.cl.add(cl);
   }
-  const reinicio = [...porMin].filter(([, x]) => x.n >= REINICIO_N && x.cl.size >= REINICIO_CL).map(([m]) => m).sort();
+  const todas = (m) => (porMinT.get(m) || { n: 0 }).n;
+  const reinicio = [...new Set([...porMin].filter(([m, x]) => x.n >= REINICIO_N && x.cl.size >= REINICIO_CL && todas(m) >= REINICIO_CL_TODAS).map(([m]) => m)
+    .concat([...porMinT].filter(([, x]) => x.n >= REINICIO_TODAS && x.re / x.n >= REINICIO_RE).map(([m]) => m)))].sort();
   if (reinicio.length) {
     const noMin = (r) => reinicio.includes((r.InTime || r.E3TimeStamp).slice(0, 16));
     for (let k = rows.length - 1; k >= 0; k--) {
       const r = rows[k];
       if (r.ConditionActive !== '1' || !noMin(r)) continue;
-      if (classe(r.Area || '', r.Message || '') === 'disjuntor') rows.splice(k, 1); else r._ri = 1;
+      const clk = classe(r.Area || '', r.Message || '');
+      if (clk === 'disjuntor') rows.splice(k, 1); else if (clk !== 'protecao' || r._re) r._ri = 1;
     }
   }
   const lido0 = (ord[0] ? ord[0].dia : de) + 'T00:00:00';
@@ -381,6 +484,7 @@ function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
   const eps0 = episodios(rows, semente);
   for (const e of eps0) if (!e.ri) { const k = e.eq.tag + '|' + e.m; (abertos.get(k) || abertos.set(k, []).get(k)).push(e); }
   const eps = eps0.filter((e) => !e.ri || !(abertos.get(e.eq.tag + '|' + e.m) || []).some((x) => ms(x.i) < ms(e.i) && (!x.f || ms(x.f) >= ms(e.i))));
+  marcaIntermitente(eps);
   const fimJanela = ate + 'T23:59:59';
   const tcu = resumoDiario(eps, fimJanela, 'tcu_com').filter((x) => x[0] >= de && x[0] <= ate);
   const red = resumoDiario(eps, fimJanela, 'inversor_reducao').filter((x) => x[0] >= de && x[0] <= ate);
@@ -394,7 +498,7 @@ function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
   const eqDic = {}, msgs = [], mIdx = new Map();
   const idx = (m) => { if (!mIdx.has(m)) { mIdx.set(m, msgs.length); msgs.push(m); } return mIdx.get(m); };
   const fmt = (e) => {
-    eqDic[e.eq.tag] = { u: e.eq.u, n: e.eq.n, pai: e.eq.pai };
+    eqDic[e.eq.tag] = noEq(e.eq);
     const o = { id: e.cl + ':' + e.eq.tag + ':' + e.i + ':' + idx(e.m), c: e.cl, t: e.eq.tag, i: e.i, f: e.f, m: idx(e.m) };
     if (e.v) o.v = e.v; if (e.k > 1 || (e.cl === 'disjuntor' && e.k)) o.k = e.k; if (e.sv && e.sv !== '0') o.sv = Number(e.sv);
     if (e.fi && e.fi.length) o.fi = e.fi.sort((a, b) => (a.i < b.i ? -1 : 1)).map(fmt);
@@ -402,6 +506,15 @@ function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
     if (e.inv) o.inv = e.inv;
     if (e.tcu) o.tcu = e.tcu;
     if (e.ri) o.ri = 1;
+    if (e.fx) o.fx = 1;
+    if (e.ak) o.ak = 1;
+    if (e.op) o._op = e.op;
+    if (e.cn) o.cn = e.cn;
+    if (e.in) o.in = 1;
+    // disjuntor: alarme só com proteção junto (leva a prioridade dela); sem proteção é posição. O pai herda a maior prioridade dos filhos
+    const pf = (o.fi || []).map((x) => x.p).filter(Boolean), p0 = e.cl === 'disjuntor' ? 0 : prioridade(e.cl, e.m, e.eq.n);
+    const pm = Math.min(p0 || 9, ...pf);
+    if (pm < 9) o.p = pm; else o.est = 1;
     return o;
   };
   // o id leva o texto curto (estável entre rodadas). Duas origens com o mesmo texto no mesmo segundo no mesmo equipamento (27/10: o
@@ -413,16 +526,30 @@ function compoe(textos, de, ate, { gerado = null, anterior = null } = {}) {
   const ev = junta(ev0);
   // os ainda sem fim do anterior que não foram refeitos aqui (nem por semente nem pela linha de saída) seguem como estavam
   const reindexa = (o) => { const n = { ...o, m: idx(anterior.msg[o.m]) }; if (o.fi) n.fi = o.fi.map(reindexa); eqDic[o.t] = anterior.eq[o.t]; return n; };
-  for (const o of antAbertos) if (o.c !== 'disjuntor' && !porId.has(o.id)) { const n = reindexa(o); porId.set(n.id, n); ev.push(n); }
+  // ...e a entrada seguinte do mesmo ponto encerra também o herdado: é o órfão que atravessa a virada do mês
+  const entradas = new Map();
+  for (const e of eps) if (e.cl !== 'disjuntor' && !e.ri) { const k = e.eq.tag + '|' + e.m; if (e.i < (entradas.get(k) || '9')) entradas.set(k, e.i); }
+  for (const o of antAbertos) if (o.c !== 'disjuntor' && !porId.has(o.id)) {
+    const n = reindexa(o), prox = entradas.get(o.t + '|' + anterior.msg[o.m]);
+    if (!n.p && !n.est) { const pz = prioridade(o.c, anterior.msg[o.m], (anterior.eq[o.t] || {}).n); if (pz) n.p = pz; else n.est = 1; }   // herdado do esquema 1, antes do backfill
+    if (prox && prox > o.i) { n.f = prox; n.fx = 1; }
+    porId.set(n.id, n); ev.push(n);
+  }
   ev.sort((a, b) => (a.i < b.i ? -1 : a.i > b.i ? 1 : a.t < b.t ? -1 : 1));
-  for (const [, tag] of tcu) { const p = tag.split('/'); eqDic[tag] = { u: p[0], n: 'tcu', pai: p.slice(0, 3).join('/') }; }
+  for (const [, tag] of tcu) { const p = tag.split('/'); eqDic[tag] = { u: p[0], n: 'tcu', pai: p.slice(0, 3).join('/') }; if (tcuNaNcu(tag)) eqDic[tag].lc = tcuNaNcu(tag); }
   for (const [, tag] of red) { const p = tag.split('/'); eqDic[tag] = { u: p[0], n: 'inversor', pai: p.slice(0, 2).join('/') }; }
   const estados = [...est.values()].filter((x) => x[0] >= de && x[0] <= ate).sort((p, q) => (p[0] + p[1] + p[2] < q[0] + q[1] + q[2] ? -1 : 1));
   for (const [, tag] of estados) if (!eqDic[tag]) eqDic[tag] = eqEst.get(tag);
   const dias = ord.map((x) => x.dia).filter((d) => d >= de && d <= ate);
-  return { esquema: ESQUEMA, fonte: 'supervisorio', gerado, janela: { de, ate }, dias, eq: eqDic, msg: msgs, ev, tcu_com: tcu, inv_red: red,
-    estados, retx: retx.filter((x) => x[0] >= de && x[0] <= ate), reinicio: reinicio.map((m) => m.replace(' ', 'T')).filter((m) => m.slice(0, 10) >= de && m.slice(0, 10) <= ate) };
+  marcaAConferir(ev, fimJanela);
+  const opEv = {}, tiraOp = (o) => { if (o._op) { opEv[o.id] = o._op; delete o._op; } (o.fi || []).forEach(tiraOp); };
+  ev.forEach(tiraOp);
+  const opEst = {}; for (const k of Object.keys(estOp)) if (k.slice(0, 10) >= de && k.slice(0, 10) <= ate) opEst[k] = estOp[k];
+  return comOperador({ esquema: ESQUEMA, fonte: 'supervisorio', gerado, janela: { de, ate }, dias, eq: eqDic, msg: msgs, ev, tcu_com: tcu, inv_red: red,
+    estados, retx: retx.filter((x) => x[0] >= de && x[0] <= ate), reinicio: reinicio.map((m) => m.replace(' ', 'T')).filter((m) => m.slice(0, 10) >= de && m.slice(0, 10) <= ate) }, { ev: opEv, estados: opEst });
 }
+// não enumerável: nenhum JSON.stringify do objeto publicado leva o login, nem por engano do gerador
+const comOperador = (o, op) => Object.defineProperty(o, 'op_adm', { value: op, enumerable: false });
 
 // a janela publicada (7 dias) a partir das publicações mensais: junta, recorta e refaz os dicionários (só o que a janela usa)
 function recorta(objs, de, ate, { gerado = null } = {}) {
@@ -430,7 +557,7 @@ function recorta(objs, de, ate, { gerado = null } = {}) {
   const idx = (m) => { if (!mIdx.has(m)) { mIdx.set(m, msgs.length); msgs.push(m); } return mIdx.get(m); };
   for (const o of objs) for (const e of o.ev) if ((e.f || fimJ) >= iniJ && e.i <= fimJ) porId.set(e.id, { e, o });   // o mês mais novo ganha
   const re = (e, o) => { eq[e.t] = o.eq[e.t]; const n = { ...e, m: idx(o.msg[e.m]) }; if (e.fi) n.fi = e.fi.map((x) => re(x, o)); return n; };
-  const ev = [...porId.values()].map(({ e, o }) => re(e, o)).sort((a, b) => (a.i < b.i ? -1 : a.i > b.i ? 1 : a.t < b.t ? -1 : 1));
+  const ev = marcaAConferir([...porId.values()].map(({ e, o }) => re(e, o)).sort((a, b) => (a.i < b.i ? -1 : a.i > b.i ? 1 : a.t < b.t ? -1 : 1)), fimJ);
   // `chave`: quantas posições identificam a linha (dia + tag; nos estados, + texto). O mês mais novo ganha
   const resumo = (campo, chave = 2) => {
     const out = [], vistos = new Set();
@@ -458,5 +585,5 @@ function escolheVersoes(nomes) {
   return new Map([...por.entries()].sort().map(([d, x]) => [d, x.nome]));
 }
 
-module.exports = { ESQUEMA, linhasCsv, classe, equipamento, episodios, resumoDiario, agrupaInversor, anexaGrupos, agrupaLogger, agrupaSe, compoe, recorta,
-  escolheVersoes };
+module.exports = { ESQUEMA, REINICIO_TODAS, exigeSemOperador, ALIAS_SE, NCU1_STI, tcuNaNcu, linhasCsv, classe, prioridade, equipamento, episodios, resumoDiario, marcaIntermitente, marcaAConferir, agrupaInversor, anexaGrupos,
+  agrupaLogger, agrupaSe, compoe, recorta, escolheVersoes };

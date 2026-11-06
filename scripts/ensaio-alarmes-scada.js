@@ -23,7 +23,7 @@
  */
 const fs = require('fs'), os = require('os'), path = require('path'), zlib = require('zlib');
 const LIB = path.join(__dirname, 'lib-alarmes-scada.js');
-const DIA_REAL = '2026-10-27', DIA_REAL2 = '2026-10-28';
+const DIA_REAL = '2026-10-27', DIA_REAL2 = '2026-10-28', DIA_SEP = '2026-09-21';
 
 async function leReal(dia) {
   if (process.env.ALARMES_DIR) {
@@ -105,7 +105,7 @@ const CASCATA = csv([
   L(D, '18:45:00', { ini: '18:41:00', out: '18:45:00', ativo: 0, cond: 'L3', val: 'NORMAL', area: 'GRL.UFV.MRT.PPC.MRT08', msg: 'MRT08 COMUNICAÇÃO LOGGER TS3' }),
 ]);
 
-function casos(A, REAL, REAL2) {
+function casos(A, REAL, REAL2, REAL_SEP) {
   const f = [];
   const C = (nome, ok, det) => { if (!ok) f.push(nome + (det ? ' · ' + det : '')); };
   const txt = (o, e) => o.msg[e.m];
@@ -120,6 +120,25 @@ function casos(A, REAL, REAL2) {
     if (e) C('27/10: ' + cub + ' leva as proteções do cubículo como filhos', pr.length >= 1 && pr.every((x) => x.t === cub),
       JSON.stringify((e.fi || []).map((x) => x.t + '/' + x.c)));
   }
+  // alarmes-base: os trips reais continuam na base, inclusive com o mesmo ponto em aberto num episódio antigo sem fim (o órfão não engole a ativação nova)
+  const plano = (o) => { const s = []; const anda = (e) => { s.push(e); (e.fi || []).forEach(anda); }; o.ev.forEach(anda); return s; };
+  const achaTrip = (o, tag, m, i) => plano(o).find((x) => x.t === tag && o.msg[x.m] === m && x.i === i);
+  for (const cub of ['CUB10_2', 'CUB15_2']) for (const m of ['TRIP GERAL', 'END FAULT', 'PROTEÇÃO 50N ATUADA']) C('27/10: ' + cub + ' ' + m + ' às 06:23:08', !!achaTrip(r, cub, m, DIA_REAL + 'T06:23:08'));
+  const dj15 = r.ev.find((x) => x.c === 'disjuntor' && x.t === 'CUB15_2' && x.i === DIA_REAL + 'T06:23:08');
+  C('27/10: disjuntor com proteção é alarme de 34,5 kV (Alta)', dj15 && dj15.p === 2 && !dj15.est, JSON.stringify(dj15 && { p: dj15.p, est: dj15.est }));
+  const iniAnt = (d, x) => d + 'T' + x;
+  const semAnt = (d, tag, n, m) => ({ dias: [new Date(Date.parse(d + 'T12:00:00Z') - 86400e3).toISOString().slice(0, 10)], eq: { [tag]: { u: 'SE', n, pai: 'SE' } }, msg: [m],
+    ev: [{ id: 'protecao:' + tag + ':' + iniAnt(new Date(Date.parse(d + 'T12:00:00Z') - 86400e3).toISOString().slice(0, 10), '10:00:00') + ':' + m, c: 'protecao', t: tag, i: iniAnt(new Date(Date.parse(d + 'T12:00:00Z') - 86400e3).toISOString().slice(0, 10), '10:00:00'), f: null, m: 0, p: 1 }] });
+  const rs = A.compoe([{ dia: DIA_SEP, txt: REAL_SEP }], DIA_SEP, DIA_SEP, { gerado: 'ensaio' });
+  const tripSep = achaTrip(rs, '04T2', 'TRIP SEP PP (Sistema Axia)', DIA_SEP + 'T14:10:36');
+  C('21/09: o distúrbio das 14:10 não é reinício', !rs.reinicio.length, JSON.stringify(rs.reinicio));
+  C('21/09: TRIP SEP às 14:10:36, Crítica', tripSep && tripSep.c === 'protecao' && tripSep.p === 1, JSON.stringify(tripSep));
+  const rs2 = A.compoe([{ dia: DIA_SEP, txt: REAL_SEP }], DIA_SEP, DIA_SEP, { gerado: 'ensaio', anterior: semAnt(DIA_SEP, '04T2', 'trafo', 'TRIP SEP PP (Sistema Axia)') });
+  const sep2 = achaTrip(rs2, '04T2', 'TRIP SEP PP (Sistema Axia)', DIA_SEP + 'T14:10:36');
+  const velho = plano(rs2).find((x) => x.t === '04T2' && rs2.msg[x.m] === 'TRIP SEP PP (Sistema Axia)' && x.i < DIA_SEP);
+  C('21/09: o órfão do mesmo ponto não engole o TRIP SEP e fecha nele', !!sep2 && velho && velho.f === DIA_SEP + 'T14:10:36' && velho.fx === 1, JSON.stringify({ sep2: !!sep2, velho }));
+  const rt = A.compoe([{ dia: DIA_REAL, txt: REAL }], DIA_REAL, DIA_REAL, { gerado: 'ensaio', anterior: semAnt(DIA_REAL, 'CUB10_2', 'cubiculo', 'TRIP GERAL') });
+  C('27/10: o órfão do mesmo ponto não engole o TRIP GERAL', !!achaTrip(rt, 'CUB10_2', 'TRIP GERAL', DIA_REAL + 'T06:23:08'));
   const textos = r.msg.join('|');
   C('27/10: nada da operação normal do inversor nem do FALHA gêmeo', !/RODANDO|DISPATCH RUN|CONECTADO À REDE|INICIANDO|EM ESPERA/.test(textos) && !r.msg.includes('FALHA'));
   // o M7 tem 2 eletrocentros de 22 inversores (placa): a parada das 06:23 é UM grupo com os 44, dentro do CUB10_2
@@ -237,7 +256,8 @@ function casos(A, REAL, REAL2) {
 
 (async () => {
   const REAL = await leReal(DIA_REAL), REAL2 = await leReal(DIA_REAL2);
-  const reais = casos(require(LIB), REAL, REAL2);
+  const REAL_SEP = await leReal(DIA_SEP);
+  const reais = casos(require(LIB), REAL, REAL2, REAL_SEP);
   if (reais.length) { console.log('🔴 a lib real reprova:'); reais.forEach((x) => console.log('  - ' + x)); process.exit(1); }
   console.log('✅ lib real: todos os casos passam');
   const SRC = fs.readFileSync(LIB, 'utf8').replace(/\r\n/g, '\n');
@@ -261,11 +281,13 @@ function casos(A, REAL, REAL2) {
     ['o GMG como disjuntor normalmente fechado', 'NORMAL_ABERTO.has(eq.tag) ?', 'false ?'],
     ['alarmes de TCU sem grupo', "const doTcu = (e) => e.cl === 'tcu_alarme';", 'const doTcu = (e) => false;'],
     ['o grupo de TCU vai para o disjuntor', 'if (g.tcu) { fora.push(g); continue; }', ''],
-    ['sem detecção do reinício', 'const REINICIO_N = 300,', 'const REINICIO_N = 1e9,'],
+    ['sem detecção do reinício', 'const REINICIO_N = 300,', 'const REINICIO_N = 1e9, REINICIO_FORA = 0,'],
     ['o regravado no reinício duplica', "const eps = eps0.filter((e) => !e.ri ||", "const eps = eps0.filter((e) => true ||"],
     ['o regravado no reinício entra nos grupos', 'eps.filter((x) => !x.ri && (x.cl in TEXTO_GRUPO', 'eps.filter((x) => (x.cl in TEXTO_GRUPO'],
     ['o trafo auxiliar fora do eletrocentro', '|COMANDO|TRAFO AUX/', '|COMANDO/'],
     ['a semente atravessa o buraco', 'const antAbertos = anterior && encosta ?', 'const antAbertos = anterior ?'],
+    ['o aberto antigo engole a ativação nova', "const eps = eps0.filter((e) => !e.ri ||", "const eps = eps0.filter((e) => false ||"],
+    ['distúrbio real vira reinício (critério das classes sem o piso)', "x.cl.size >= REINICIO_CL && todas(m) >= REINICIO_CL_TODAS", "x.cl.size >= REINICIO_CL"],
     ['o recorte não refaz os textos', 'const n = { ...e, m: idx(o.msg[e.m]) };', 'const n = { ...e }; idx(o.msg[e.m]);'],
   ];
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ensaio-alarmes-scada-'));
@@ -276,7 +298,7 @@ function casos(A, REAL, REAL2) {
       if (!SRC.includes(de)) { console.log('🔴 PLANTIO INVÁLIDO (trecho não achado): ' + nome); ruim++; return; }
       const arq = path.join(tmp, 'lib-' + k + '.js');
       fs.writeFileSync(arq, SRC.replace(de, para));
-      let f; try { f = casos(require(arq), REAL, REAL2); } catch (e) { f = ['estourou: ' + e.message]; }
+      let f; try { f = casos(require(arq), REAL, REAL2, REAL_SEP); } catch (e) { f = ['estourou: ' + e.message]; }
       if (f.length) console.log('  ✅ reprovado: ' + nome + ' (' + f[0].slice(0, 160) + ')');
       else { console.log('  🔴 PASSOU SEM SER PEGO: ' + nome); ruim++; }
     });

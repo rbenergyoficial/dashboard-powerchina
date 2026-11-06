@@ -235,3 +235,4 @@ jobs:
           node scripts/ensaio-alarme-circuito.js
           node scripts/ensaio-gen-alarmes-way2.js
           node scripts/ensaio-gen-alarmes-scada.js
+          node scripts/ensaio-alarmes-base.js

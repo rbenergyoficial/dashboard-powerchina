@@ -58,7 +58,7 @@ jobs:
           restore-keys: ensaio-alarmes-scada-
       # Quais meses o gerador refaz (janela, mes incompleto, cadeia) e o atraso do arquivo de ontem, com CSV forjados e plantios. Sem rede.
       - name: Ensaio · os meses que o gerador refaz e o atraso (sem rede)
-        run: node scripts/ensaio-gen-alarmes-scada.js
+        run: node scripts/ensaio-gen-alarmes-scada.js && node scripts/ensaio-alarmes-base.js
       # A regra sobre dois dias reais fixos do cofre e dias forjados, com plantios. Dia fixo que sumiu do cofre reprova.
       - name: Ensaio · alarmes do supervisorio (dias reais e forjados, com plantios)
         env:

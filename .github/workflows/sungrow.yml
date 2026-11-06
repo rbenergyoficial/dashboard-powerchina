@@ -9,6 +9,10 @@ on:
         description: 'reler todos os zips do logger (1 = sim; a primeira carga leva perto de 1 h)'
         required: false
         default: ''
+      alarmes_de:
+        description: 'refazer o historico dos alarmes do inversor desde AAAA-MM-DD (cofre + sungrow-raw); vazio = rodada normal'
+        required: false
+        default: ''
 concurrency:
   # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
   group: gen-sungrow-${{ github.ref }}
@@ -203,7 +207,9 @@ jobs:
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-          FONTE: cofre
+          # alarmes-base (05/11/2026): com alarmes_de, a uniao do cofre com o sungrow-raw, que guarda o que veio antes de 18/10/2026
+          FONTE: ${{ inputs.alarmes_de != '' && 'uniao' || 'cofre' }}
+          DE: ${{ inputs.alarmes_de }}
         run: node scripts/gen-alarmes-logger.js
       # O setpoint por eletrocentro (sp_ts_<usina>_<ts>.json) nao e gerado aqui: a fonte dele e o export do supervisorio, que nao chega
       # mais. O gerador e o ensaio ficam no repositorio para quando houver fonte nova.
