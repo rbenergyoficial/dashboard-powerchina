@@ -93,9 +93,9 @@ function vozResumo(eventos, d) {
   if (!d) return null;
   const c = { 1: 0, 2: 0, 3: 0 };
   for (const e of eventos) if (e.fonte[0] !== 'medicao' && !e.a_conferir && dia(e.i) === d && c[e.sev] !== undefined) c[e.sev] += e.n || 1;
-  const nome = [[c[1], 'crítica', 'críticas'], [c[2], 'alta', 'altas'], [c[3], 'média', 'médias']].filter((x) => x[0]).map((x) => x[0] + ' ' + (x[0] === 1 ? x[1] : x[2]));
+  const nome = [[c[1], 'ocorrência crítica', 'ocorrências críticas'], [c[2], 'ocorrência alta', 'ocorrências altas'], [c[3], 'ocorrência média', 'ocorrências médias']].filter((x) => x[0]).map((x) => x[0] + ' ' + (x[0] === 1 ? x[1] : x[2]));
   if (!nome.length) return null;
-  return { chave: 'resumo:' + d, dia: d, criticas: c[1], altas: c[2], medias: c[3], fala: 'Resumo do dia ' + d.slice(8, 10) + ' do ' + d.slice(5, 7) + ': ' + nome.join(', ') + ' ocorrências. Detalhes na tela de alarmes.' };
+  return { chave: 'resumo:' + d, dia: d, criticas: c[1], altas: c[2], medias: c[3], fala: 'Resumo do dia ' + d.slice(8, 10) + ' do ' + d.slice(5, 7) + ': ' + nome.join(', ') + '. Detalhes na tela de alarmes.' };
 }
 
 function ligaPonte(e, agoraMs) {
