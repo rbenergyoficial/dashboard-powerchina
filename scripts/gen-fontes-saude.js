@@ -122,7 +122,8 @@ async function inversores() {
     const msP1 = Date.parse(f.substituicoes_planilha_em);
     const dP1 = dias(msP1);
     const [y, m] = f.alarmes_ultimo_mes.split('-').map(Number);
-    const fimMes = new Date(Date.UTC(y, m, 0, 23, 59, 59) + 3 * 3600000);   // ultimo dia do mes coberto, 23:59 BRT
+    // inversores-alarmes-base: a base nova diz o último dia lido; o mês corrente, ainda aberto, não pode contar até o fim dele
+    const fimMes = f.alarmes_ultimo_dia ? new Date(f.alarmes_ultimo_dia + 'T23:59:59-03:00') : new Date(Date.UTC(y, m, 0, 23, 59, 59) + 3 * 3600000);   // ultimo dia coberto, 23:59 BRT
     const dP2 = dias(fimMes.getTime());
     const CINZA = '#8B93A1';
     return [

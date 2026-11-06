@@ -35,6 +35,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i xlsx@0.18.5 @azure/storage-blob@12
+      - name: Ensaio · o p2 pela base nova de alarmes (juncao, classes e ponta a ponta)
+        run: node scripts/ensaio-inversores-alarmes-base.js
       - name: Gerar inversores.json
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}

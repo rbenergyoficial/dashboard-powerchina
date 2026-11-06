@@ -7,6 +7,7 @@
  * Modo teste local: LOCAL_DIR (pasta com os 2 xlsx) / LOCAL_OUT (arquivo de saída).
  */
 const XLSX = require('xlsx');
+const AB = require('./lib-alarmes-inversor.js');
 const rot = require('./lib-rotulos.js');   // rotulo de mes nas tres linguas (paginas EN/中文)
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'inversores-raw';
 // planilha que o nome declara NÃO ser a vigente. O humano foi explícito: cópia antiga e rascunho
@@ -29,6 +30,22 @@ async function loadRawBuffers() {
   for await (const b of cont.listBlobsFlat()) { if (!/\.xls[xm]$/i.test(b.name)) continue;
     out.push({ name: b.name, mod: (b.properties || {}).lastModified, buf: await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody) }); }
   return out;
+}
+// a base nova de alarmes (lote inversores-alarmes-base): os meses do logger e, só para o mês que ele não cobrir, o do supervisório. Falha de leitura derruba a rodada:
+// cair na planilha em silêncio voltaria o selo e os números para junho sem nada ficar vermelho. LOCAL_HIST_DIR = pasta com hist/ para rodar sem rede
+async function leBaseAlarmes() {
+  const zlib = require('zlib'), fs = require('fs'), path = require('path');
+  const agora = HOJE.toISOString().slice(0, 7), bruto = (b) => JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8'));
+  const nomes = process.env.LOCAL_HIST_DIR ? fs.readdirSync(process.env.LOCAL_HIST_DIR).map((n) => 'hist/' + n) : null;
+  const lista = async (pref) => { if (nomes) return nomes.filter((n) => n.startsWith(pref)); const o = []; for await (const b of conteiner(OUT_CONTAINER).listBlobsFlat({ prefix: pref })) o.push(b.name); return o; };
+  const le = async (n) => (process.env.LOCAL_HIST_DIR ? bruto(fs.readFileSync(path.join(process.env.LOCAL_HIST_DIR, path.basename(n)))) : bruto(await streamToBuffer((await conteiner(OUT_CONTAINER).getBlobClient(n).download()).readableStreamBody)));
+  const mesDe = (n) => /(\d{4})_(\d{2})\.json$/.exec(n).slice(1).join('-');
+  const logger = {}, scada = {};
+  for (const n of await lista('hist/alarmes_logger_')) logger[mesDe(n)] = await le(n);
+  const ini = Object.keys(logger).sort()[0];
+  if (!ini) throw new Error('hist/alarmes_logger_ sem nenhum mês');
+  for (const n of await lista('hist/alarmes_scada_')) { const m = mesDe(n); if (m >= ini && !logger[m]) scada[m] = await le(n); }
+  return AB.base({ logger, scada, ate: agora, classePorTexto: classeP2, ...(process.env.ALARMES_CORTE_MIN ? { corte_min: process.env.ALARMES_CORTE_MIN } : {}) });
 }
 async function writeOut(obj) { const json = JSON.stringify(obj);
   if (process.env.LOCAL_OUT) { require('fs').writeFileSync(process.env.LOCAL_OUT, json); return json.length; }
@@ -193,7 +210,7 @@ function leEstoqueSN(wb) {
 }
 
 // ---------- análise ----------
-function analyze(wb1, wb2) {
+function analyze(wb1, wb2, base) {
   // P1
   // a aba de falhas sai do CONTEÚDO, não de SheetNames[0]: a planilha ganhou quatro abas em
   // 20/08/2026 e a ordem delas não é contrato nosso.
@@ -335,28 +352,10 @@ function analyze(wb1, wb2) {
   for (const sn of wb2.SheetNames) { const R = rowsOf(wb2.Sheets[sn]); const H = R[0]; const g = { campo: cIdx(H, 'CAMPO'), sub: cIdx(H, 'SUBCAMPO'), inv: cIdx(H, 'INVERSOR'), hor: cIdx(H, 'Horário'), tipo: cIdx(H, 'Tipo'), nome: cIdx(H, 'Nome'), st: cIdx(H, 'Status') };
     if (g.campo < 0) continue; const oc = R.slice(1).filter(r => norm(r[g.campo]) !== '' && norm(r[g.st]) === 'Ocorre'); parques.push(parkNorm(sn));
     for (const r of oc) ev.push({ parque: parkNorm(r[g.campo]), inv: [r[g.campo], r[g.sub], r[g.inv]].map((x, i) => [parkNorm, tsNorm, invNorm][i](x)).join('/'), nome: norm(r[g.nome]), classe: classeP2(r[g.nome]), tipo: norm(r[g.tipo]), date: toDate(r[g.hor]) }); }
-  const evInv = ev.filter(x => ehInversor(x.classe));
-  const badActors = tally(evInv.map(x => x.inv)).slice(0, 15).map(([inv, n]) => ({ inv, n, parque: inv.split('/')[0] }));
-  const dts2 = ev.map(x => x.date).filter(Boolean); const per = dts2.length ? (Math.max(...dts2) - Math.min(...dts2)) / 864e5 : 0;
-  const P2 = { eventos: ev.length, falha_inversor: evInv.length, rede: ev.filter(x => x.classe === 'Rede').length, aviso: ev.filter(x => x.classe.startsWith('Aviso')).length,
-    parques: [...new Set(parques)].filter(Boolean), inversores_distintos: new Set(ev.map(x => x.inv)).size,
-    por_classe: tally(ev.map(x => x.classe)).map(([classe, n]) => ({ classe, n })), bad_actors: badActors,
-    modos_inversor: tally(evInv.map(x => x.nome)).map(([nome, n]) => ({ nome, n })),
-    por_parque: [...new Set(ev.map(x => x.parque))].filter(Boolean).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map(p => ({ parque: p, eventos: ev.filter(x => x.parque === p).length, falha_inversor: evInv.filter(x => x.parque === p).length, rede: ev.filter(x => x.parque === p && x.classe === 'Rede').length })),
-    isolamento_por_mes: tally(evInv.filter(x => x.classe.includes('isolamento')).map(x => ym(x.date)).filter(Boolean)).map(([mes, n]) => ({ mes, n })).sort((a, b) => a.mes.localeCompare(b.mes)) };
-  // TABELA-FATO do P2 — agregada no grão inversor×classe×mês (não as 13.579 linhas cruas!).
-  // Permite os MESMOS filtros $parque/$ano do P1: no Grafana faz-se Group by + SUM(n).
-  { const m = new Map();
-    for (const e of ev) { const mes = ym(e.date); const k = [e.parque, e.inv, e.classe, mes].join('|');
-      if (!m.has(k)) m.set(k, { parque: e.parque, inv: e.inv, ts: (e.inv || '').split('/')[1] || null, classe: e.classe,
-        eh_inversor: ehInversor(e.classe) ? 'Falha do inversor' : 'Rede/aviso',
-        ano: e.date ? e.date.getFullYear() : null, mes, mes_lbl: mes ? mesLbl(mes) : null, n: 0 });
-      m.get(k).n++; }
-    P2.fatos = [...m.values()]; }
-  // ATENÇÃO SEMÂNTICA: isto é tempo médio entre ALARMES do SCADA (MTBA), NÃO entre falhas. P2 não significa queima.
-  P2.mtba_dias = round(P2.inversores_distintos * per / (P2.falha_inversor || 1), 1);
-  P2.rede_pct = round(100 * P2.rede / (P2.eventos || 1));
-  P2.bad_actor = P2.bad_actors[0] || { inv: '—', n: 0 };
+  // inversores-alarmes-base (06/11/2026): a planilha fica até o mês anterior ao logger; dali em diante, a base nova. A conta é a mesma (lib-alarmes-inversor)
+  const J2 = AB.junta(ev, base, ym);
+  console.log('P2: planilha até antes de ' + base.corte + ' · ' + J2.planilha + ' linhas · base nova ' + J2.base + ' · fora: ' + J2.fora.depois_do_corte + ' depois do corte, ' + J2.fora.sem_data + ' sem data');
+  const { P2, evInv } = AB.agregaP2(J2.ev, parques, { tally, ym, mesLbl, round, ehInversor });
 
   // cruzado
   const p2ByInv = new Map(); for (const e of evInv) p2ByInv.set(e.inv, (p2ByInv.get(e.inv) || 0) + 1);
@@ -459,7 +458,8 @@ function analyze(wb1, wb2) {
   console.log('P1 <- ' + (escolhido1 || '(nenhum)') + '   [o mais recente de ' + raws.length + ' arquivo(s) no container]');
   console.log('P2 <- ' + (escolhido2 || '(nenhum)'));
   if (!wb1 || !wb2) throw new Error('faltou ' + (!wb1 ? 'P1 (Failure Control)' : '') + (!wb2 ? ' P2 (Registro Falhas)' : '') + ' no container');
-  const out = analyze(wb1, wb2);
+  const base = await leBaseAlarmes();
+  const out = analyze(wb1, wb2, base);
   // Frescor da FONTE, para o selo do cabecalho (gen-fontes-saude): quando a equipe salvou cada
   // planilha e ate onde o dado dela chega. Um registro de eventos parado nao e registro velho —
   // por isso a data em que a planilha foi salva vai SEPARADA da data do ultimo evento. Sem nome
@@ -469,6 +469,10 @@ function analyze(wb1, wb2) {
     alarmes_planilha_em: m2 > 0 ? new Date(m2).toISOString() : null,
     substituicoes_ultima: out.p1.fatos.map(x => x.data).filter(Boolean).sort().pop() || null,
     alarmes_ultimo_mes: out.p2.fatos.map(x => x.mes).filter(Boolean).sort().pop() || null,
+    alarmes_ultimo_dia: base.ultimo_dia,
+    alarmes_base_desde: base.corte,
+    alarmes_base_meses: base.por_mes,
+    alarmes_sem_cobertura: base.sem_cobertura,
   };
   const size = await writeOut(out);
   const d = out.dicionario || {}; const e = out.estoque_sn;
