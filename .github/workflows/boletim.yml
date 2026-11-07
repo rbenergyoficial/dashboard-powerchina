@@ -72,7 +72,7 @@ jobs:
       - name: Rodada
         env:
           BOLETIM_DIR: ${{ runner.temp }}/bd
-          BOLETIM_LOGO: ${{ runner.temp }}/bd/boletim__logo_intrepid_800.png
+          BOLETIM_LOGO: ${{ github.workspace }}/scripts/boletim/logo_intrepid_800.png
           BOLETIM_AGORA: ${{ steps.decide.outputs.agora }}
           FONTE_DIR: /usr/share/fonts/truetype/dejavu
           CHROME: google-chrome

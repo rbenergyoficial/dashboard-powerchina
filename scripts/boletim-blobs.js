@@ -13,7 +13,7 @@ const fs = require('fs'), path = require('path'), zlib = require('zlib');
 
 const LEVE = { exige: ['acervo/catalogo.json'], opcional: ['boletim/estado.json', 'boletim/fila.json', 'boletim/indice.json'] };
 const PESADO = { exige: ['executivo.json', 'pr_ufv.json', 'sg_disp_dia.json', 'irr_ufv.json', 'benchmark_ne.json', 'way2_30min.json',
-  'irr_plano_30min.json', 'boletim/logo_intrepid_800.png'], opcional: [] };
+  'irr_plano_30min.json'], opcional: [] };   // o logotipo do cabeçalho vem do repositório (scripts/boletim/logo_intrepid_800.png)
 const ULTIMOS = ['boletim/fila.json', 'boletim/indice.json', 'boletim/estado.json'];   // sobem por último, nesta ordem
 const TIPO = { '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.mp4': 'video/mp4' };
 
