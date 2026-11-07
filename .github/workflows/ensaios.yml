@@ -20,6 +20,7 @@ on:
     paths:
       - 'scripts/**'
       - '.github/workflows/ensaios.yml'
+      - 'relogio/agenda.json'                  # cadeia-manha (07/11/2026): a ordem da cadeia da manha e julgada sobre a agenda
       # a fiacao da copia do historico do medidor nesses tres e julgada aqui (ensaio-le-blob, item 9), e so aqui para o executivo
       - '.github/workflows/executivo.yml'
       - '.github/workflows/way2-agg.yml'
@@ -187,6 +188,10 @@ jobs:
       - name: Ensaio · o estado da malha de dados (gen-malha-estado)
         if: always()
         run: node scripts/ensaio-malha-estado.js
+      - name: Ensaio · a ordem da cadeia da manhã (agenda do relógio)
+        if: always()
+        env: { DADOS_SAS: '' }
+        run: node scripts/ensaio-cadeia-manha.js
       - name: Ensaio · aviso da malha (sem rede)
         if: always()
         run: node scripts/ensaio-aviso-malha.js

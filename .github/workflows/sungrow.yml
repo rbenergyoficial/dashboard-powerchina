@@ -1,8 +1,12 @@
 name: Logger Sungrow -> sg_*.json (inversor, PID e eletrocentro a cada 5 min)
 on:
   schedule:
-    - cron: '17 13 * * *' # 10:17 BRT — o lote do logger chega de dia
-    - cron: '47 15 * * *' # 12:47 BRT — segunda rodada: a ponte tenta de novo ate as 12:00 quando a primeira manha falha
+    - cron: '52 9 * * *'  # 06:52 BRT — o lote do logger chega com a ponte das 05:55 (cofre gravado por volta de 06:12) e a irradiancia do dia
+                          #   (estacao-logger 06:47, ~1,5 min) ja esta publicada; o sg_disp_dia normalmente fica gravado antes do executivo
+                          #   das 07:13 (medido: 9 a 12,5 min depois do inicio); se atrasar, o executivo das 08:13 corrige
+    - cron: '17 13 * * *' # 10:17 BRT — recuperacao dos dias em que a ponte precisou de nova tentativa: refaz os produtos so do logger
+                          #   (inversor, string, PID, alarmes); a disponibilidade desse dia fecha as 12:47, depois da estacao das 12:33
+    - cron: '47 15 * * *' # 12:47 BRT — ultima rodada: a ponte tenta de novo ate as 12:00 quando a manha falha
   workflow_dispatch:
     inputs:
       refazer:
