@@ -14,6 +14,8 @@
  * Causa: a do supervisório, em até 2 slots de 5 min do início do evento (o início da medição cai num slot: 1 de folga de cada lado). Proteção vem antes de disjuntor. No
  * circuito, a usina ou o trafo dele; no trafo, ele; na SE, a SE. Sem causa com o supervisório cobrindo o dia, a pendência fecha sem causa.
  * Supervisório e logger chegam com atraso (D+1): vão agrupados por classe e minuto, na tela e sem voz; o dia vira um só `voz_resumo` (humano, 06/11/2026).
+ * Análise ao vivo (analise-ao-vivo, 07/11/2026): os achados do analise_vivo.json entram com a fonte 'analise', a prioridade que o achado traz e a fala que ele
+ * escreveu; só fala o achado que pede voz (o agrupado não fala: a medição já falou o trafo ou a SE). Nunca liga a ponte.
  */
 
 const ESQUEMA = 1;
@@ -47,6 +49,21 @@ function deMedicao(way2, agoraMs) {
   return [...circ, ...med].map((e) => (e.f === null && msBRT(e.i) < lim ? { ...e, a_conferir: 1 } : e));
 }
 
+// a análise ao vivo: um evento por achado, com a fala do próprio achado
+/* arquivo de outro esquema é ignorado inteiro e devolve null: fica o que está publicado da análise (como na rodada sem novidade). Achado sem id, início ou
+   tipo é descartado com aviso. Nenhum dos dois derruba a medição */
+const ESQUEMA_ANALISE = 1;
+function deAnalise(an) {
+  if (!an) return null;
+  if (an.esquema !== ESQUEMA_ANALISE) { console.log('::warning::analise_vivo.json com esquema ' + an.esquema + ' (esperado ' + ESQUEMA_ANALISE + '): fica o que está publicado da análise'); return null; }
+  return (Array.isArray(an.achados) ? an.achados : []).filter((a) => {
+    const ok = a && typeof a.id === 'string' && a.id && typeof a.ini === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(a.ini) && typeof a.tipo === 'string' && a.tipo;
+    if (!ok) console.log('::warning::achado da análise sem id, início ou tipo: descartado (' + JSON.stringify(a).slice(0, 120) + ')');
+    return ok;
+  }).map((a) => ({ id: 'analise:' + a.id, tag: a.tag, classe: a.tipo, sev: a.p, i: a.ini, f: a.fim || null, fonte: ['analise'], pai: null,
+    tx: a.texto || null, fala: a.voz ? a.fala || null : null, causa_buscar: false }));
+}
+
 // o supervisório e o logger: por classe e minuto. O que está a conferir, o estado e a Baixa não entram
 function agrupa(ev, msg, fonte) {
   const m = new Map();
@@ -77,12 +94,14 @@ function acheCausa(e, scada, eqMed) {
 
 function textos(e) {
   const n = nomeTag(e.tag), c = CLASSE_FALA[e.classe] || 'ocorrência', h = e.i.slice(11, 16);
+  if (e.fonte[0] === 'analise') return { tela: 'A análise indica: ' + (e.tx || c) + ', às ' + h, fala: e.fala || '' };
   if (e.fonte[0] === 'medicao') return { tela: 'A medição indica ' + c + ': ' + n.tela + ', às ' + h, fala: 'A medição indica ' + c + ', ' + n.fala + ', às ' + h };
   const q = (e.n > 1 ? e.n + ' ocorrências' : 'Ocorrência') + ' de prioridade ' + (SEV_NOME[e.sev] || '').toLowerCase(), tx = e.tx ? ': ' + e.tx : '';
   return { tela: q + ' em ' + n.tela + ', às ' + h + tx, fala: q + ' em ' + n.fala + ', às ' + h };
 }
 
 function vozDe(e) {
+  if (e.fonte[0] === 'analise') return !e.a_conferir && e.fala && [1, 2, 3].includes(e.sev) && !e.f ? { etapa: 1, chave: e.id + ':1', fala: e.fala } : null;
   if (e.a_conferir || e.pai || e.fonte[0] !== 'medicao' || ![1, 2, 3].includes(e.sev)) return null;
   const etapa = e.causa ? 2 : 1, t = textos(e);
   return { etapa, chave: e.id + ':' + etapa, fala: etapa === 2 ? t.fala + '. Causa: ' + porExtenso(e.causa.texto) : t.fala };
@@ -92,7 +111,7 @@ function vozDe(e) {
 function vozResumo(eventos, d) {
   if (!d) return null;
   const c = { 1: 0, 2: 0, 3: 0 };
-  for (const e of eventos) if (e.fonte[0] !== 'medicao' && !e.a_conferir && dia(e.i) === d && c[e.sev] !== undefined) c[e.sev] += e.n || 1;
+  for (const e of eventos.filter((x) => x.fonte[0] !== 'analise')) if (e.fonte[0] !== 'medicao' && !e.a_conferir && dia(e.i) === d && c[e.sev] !== undefined) c[e.sev] += e.n || 1;
   const nome = [[c[1], 'ocorrência crítica', 'ocorrências críticas'], [c[2], 'ocorrência alta', 'ocorrências altas'], [c[3], 'ocorrência média', 'ocorrências médias']].filter((x) => x[0]).map((x) => x[0] + ' ' + (x[0] === 1 ? x[1] : x[2]));
   if (!nome.length) return null;
   return { chave: 'resumo:' + d, dia: d, criticas: c[1], altas: c[2], medias: c[3], fala: 'Resumo do dia ' + d.slice(8, 10) + ' do ' + d.slice(5, 7) + ': ' + nome.join(', ') + '. Detalhes na tela de alarmes.' };
@@ -122,7 +141,7 @@ function guarda(eventos) {
 }
 
 /* scada e logger nulos = sem novidade nesta rodada: fica o que o publicado já tem deles */
-function compoe({ way2, scada = null, logger = null, pub = null, agoraMs }) {
+function compoe({ way2, scada = null, logger = null, analise = null, pub = null, agoraMs }) {
   const antes = (pub && pub.eventos) || [];
   const deFora = (f, novo) => (novo ? novo : antes.filter((e) => e.fonte[0] === f));
   const cob = scada && scada.janela ? scada.janela.ate : (pub && pub.causa_coberta_ate) || null;
@@ -137,7 +156,8 @@ function compoe({ way2, scada = null, logger = null, pub = null, agoraMs }) {
     delete o.causa_buscar;
     return o;
   });
-  const fora = [...deFora('supervisorio', scada ? agrupa(scada.ev, scada.msg || [], 'supervisorio') : null), ...deFora('logger', logger ? agrupa(logger.ev, logger.msg || [], 'logger') : null)]
+  const fora = [...deFora('supervisorio', scada ? agrupa(scada.ev, scada.msg || [], 'supervisorio') : null), ...deFora('logger', logger ? agrupa(logger.ev, logger.msg || [], 'logger') : null),
+    ...deFora('analise', analise ? deAnalise(analise) : null)]
     .map((e) => { const { causa_buscar, ...o } = e; const a = antes.find((x) => x.id === e.id);
       return { ...o, visto: a ? a.visto : (o.visto || new Date(agoraMs).toISOString()), causa: null, causa_pendente: false }; });
   const lim = agoraMs - JANELA_DIAS * 86400e3;
@@ -155,4 +175,4 @@ function compoe({ way2, scada = null, logger = null, pub = null, agoraMs }) {
   };
 }
 
-module.exports = { ESQUEMA, JANELA_DIAS, A_CONFERIR_H, SEV_MED, CAUSA_SLOTS, deMedicao, agrupa, acheCausa, vozDe, vozResumo, ligaPonte, mesmo, guarda, compoe, msBRT };
+module.exports = { ESQUEMA, JANELA_DIAS, A_CONFERIR_H, SEV_MED, CAUSA_SLOTS, deMedicao, deAnalise, agrupa, acheCausa, vozDe, vozResumo, ligaPonte, mesmo, guarda, compoe, msBRT };

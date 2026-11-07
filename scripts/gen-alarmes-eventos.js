@@ -6,12 +6,14 @@
  * fica no próprio arquivo, em `marcas`. Falha ao ler essas duas fontes não derruba a rodada: fica o que está publicado.
  * Grava com If-Match no ETag lido (If-None-Match na primeira vez): outra rodada no meio, desiste e a próxima refaz.
  * Env: a credencial pela lib-conteiner (o OIDC do job).
- * Ensaio sem rede: LOCAL_WAY2 · LOCAL_SCADA · LOCAL_LOGGER · LOCAL_PUB · LOCAL_OUT · AGORA (ISO BRT).
+ * Análise ao vivo (analise-ao-vivo, 07/11/2026): lê também o analise_vivo.json da rodada (gravado logo antes pelo gen-analise-vivo.js; ~KB). Ilegível: fica o que
+ * está publicado da análise.
+ * Ensaio sem rede: LOCAL_WAY2 · LOCAL_SCADA · LOCAL_LOGGER · LOCAL_ANALISE · LOCAL_PUB · LOCAL_OUT · AGORA (ISO BRT).
  */
 const fs = require('fs'), zlib = require('zlib');
 const L = require('./lib-alarmes-eventos'), S = require('./lib-alarmes-scada');
 
-const CONTAINER = 'dados', BLOB = 'alarmes/eventos.json', WAY2 = 'alarmes_way2.json', SCADA = 'alarmes_scada.json', LOGGER = 'alarmes_logger.json';
+const CONTAINER = 'dados', BLOB = 'alarmes/eventos.json', WAY2 = 'alarmes_way2.json', SCADA = 'alarmes_scada.json', LOGGER = 'alarmes_logger.json', ANALISE = 'analise_vivo.json';
 
 const gunzipSe = (b) => (b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b);
 const parse = (b) => JSON.parse(gunzipSe(b).toString('utf8').replace(/^﻿/, ''));
@@ -41,7 +43,7 @@ function resumo(o, b) {
 async function main() {
   const agoraMs = process.env.AGORA ? L.msBRT(process.env.AGORA) : Date.now();
   if (process.env.LOCAL_OUT) {
-    const o = L.compoe({ way2: leLocal(process.env.LOCAL_WAY2), scada: leLocal(process.env.LOCAL_SCADA), logger: leLocal(process.env.LOCAL_LOGGER), pub: leLocal(process.env.LOCAL_PUB), agoraMs });
+    const o = L.compoe({ way2: leLocal(process.env.LOCAL_WAY2), scada: leLocal(process.env.LOCAL_SCADA), logger: leLocal(process.env.LOCAL_LOGGER), analise: leLocal(process.env.LOCAL_ANALISE), pub: leLocal(process.env.LOCAL_PUB), agoraMs });
     const txt = JSON.stringify(o);
     S.exigeSemOperador(txt, BLOB);
     fs.writeFileSync(process.env.LOCAL_OUT, txt);
@@ -59,7 +61,9 @@ async function main() {
   const way2 = parse(await C.conteiner(CONTAINER).getBlockBlobClient(WAY2).downloadToBuffer());
   const marcas = (pub && pub.marcas) || {}, novas = {};
   const scada = await novoOuNada(SCADA, marcas, novas), logger = await novoOuNada(LOGGER, marcas, novas);
-  const o = { ...L.compoe({ way2, scada, logger, pub, agoraMs }), marcas: novas };
+  let analise = null;
+  try { analise = parse(await C.conteiner(CONTAINER).getBlockBlobClient(ANALISE).downloadToBuffer()); } catch (e) { if (nao404(e)) console.log('::warning::' + ANALISE + ' ilegível nesta rodada (' + e.message + '): fica o que está publicado'); }
+  const o = { ...L.compoe({ way2, scada, logger, analise, pub, agoraMs }), marcas: novas };
   const txt = JSON.stringify(o);
   S.exigeSemOperador(txt, BLOB);
   const buf = zlib.gzipSync(Buffer.from(txt, 'utf8'));

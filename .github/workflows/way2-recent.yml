@@ -209,6 +209,21 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
         run: node scripts/gen-alarmes-way2.js
+      # analise-ao-vivo (07/11/2026): a Analise de dados ao vivo, sem IA (liberado e nao recuperou, ocorrencia agrupada, circuito energizado sem geracao,
+      # medidor sem dado), sobre a MESMA copia local da coleta; grava analise_vivo.json ANTES dos eventos, que levam os achados com voz para a faixa e a fala.
+      # A regra se julga nos forjados (passo logo abaixo, sem rede); os dias reais e os plantios rodam no ensaios.yml.
+      # Passo proprio: a regra da analise reprovada segura so o gerador dela; os alarmes, os eventos e a voz da medicao seguem.
+      - name: Ensaio · analise ao vivo (regra, forjados)
+        id: ensaio_analise
+        if: ${{ !cancelled() && steps.coleta.outcome == 'success' }}
+        run: node scripts/ensaio-analise-vivo.js --forjados
+      - name: Analise ao vivo (analise_vivo.json)
+        if: ${{ !cancelled() && steps.ensaio_alarmes.outcome == 'success' && steps.ensaio_analise.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
+        run: node scripts/gen-analise-vivo.js
       - name: Eventos para a voz e a ponte (alarmes/eventos.json)
         if: ${{ !cancelled() && steps.ensaio_alarmes.outcome == 'success' }}
         env:

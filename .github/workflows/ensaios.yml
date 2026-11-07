@@ -238,3 +238,10 @@ jobs:
           node scripts/ensaio-alarmes-base.js
           node scripts/ensaio-alarmes-eventos.js
           node scripts/ensaio-sager-painel.js
+
+      # A Analise de dados ao vivo (lote analise-ao-vivo, 07/11/2026), em passo proprio: a regra sobre 4 dias REAIS do medidor (21/09 o 04T2 sem tensao,
+      # 27/10 dois circuitos abertos, 29/10 liberado e nao recuperou, 06/11 nada e o controle preso plantado), os forjados, o gerador e os plantios.
+      # Os 4 dias vem da rede a cada execucao (~16 MB): o dado do medidor nao vai para o cache do repositorio publico (decisao do humano, 07/11/2026).
+      - name: Ensaio · analise ao vivo (dias reais, gerador e plantios)
+        if: always()
+        run: node scripts/ensaio-analise-vivo.js

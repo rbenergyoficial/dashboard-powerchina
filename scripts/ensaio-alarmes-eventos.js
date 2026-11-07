@@ -106,6 +106,31 @@ function julga(L) {
   const r10 = L.compoe({ way2: W([]), pub: r8, agoraMs: ag + 9 * 86400e3 });
   C(r10.eventos.length === 0, 'não poda o que passou da janela');
 
+  // a análise ao vivo (analise-ao-vivo, 07/11/2026): fala só o achado que pede voz, nunca liga a ponte, não entra no resumo, segue na rodada sem novidade
+  { const AN = { esquema: 1, achados: [
+      { id: 'liberado_nao_recuperou:Complexo:2026-11-06T12:57', tipo: 'liberado_nao_recuperou', p: 2, tag: 'Complexo', ini: '2026-11-06T13:10:00', fim: null,
+        texto: 'Liberado às 12:57 e a potência ficou em 300 MW, no valor pedido antes (300 MW)', fala: 'Atenção: liberado às 12:57, mas a potência do complexo não voltou.', voz: true },
+      { id: 'ocorrencia:trafo_sem_tensao:04T2:x', tipo: 'ocorrencia_agrupada', p: 1, tag: '04T2', ini: '2026-11-06T09:00:00', fim: null, texto: 'Transformador 04T2 sem tensão: 11 circuitos', voz: false },
+      { id: 'circuito_sem_geracao:M5C1:x', tipo: 'circuito_sem_geracao', p: 3, tag: 'M5C1', ini: '2026-11-06T08:00:00', fim: '2026-11-06T08:30:00', texto: 'Circuito M5C1 energizado e sem geração', fala: 'Atenção: Mauriti 5, circuito 1.', voz: true }] };
+    const ra = L.compoe({ way2: W([]), analise: AN, agoraMs: ag }), ea = ra.eventos.filter((e) => e.fonte[0] === 'analise');
+    const lib = ea.find((e) => e.classe === 'liberado_nao_recuperou'), agr = ea.find((e) => e.classe === 'ocorrencia_agrupada'), fec = ea.find((e) => e.classe === 'circuito_sem_geracao');
+    C(ea.length === 3, 'a análise não entrou inteira: ' + ea.length);
+    C(lib && lib.voz && lib.voz.fala === AN.achados[0].fala && lib.sev === 2 && /A análise indica/.test(lib.texto), 'o achado com voz não fala o texto dele');
+    C(agr && !agr.voz, 'o agrupado falou (a medição já fala o trafo)');
+    C(fec && !fec.voz, 'o achado encerrado falou');
+    C(ea.every((e) => !e.liga_ponte), 'a análise ligou a ponte');
+    C(L.vozResumo(ea, '2026-11-06') === null, 'o resumo do dia contou a análise');
+    /* RW-006: achado sem id, início ou tipo sai com aviso; esquema diferente ignora a análise; a medição segue nos dois casos */
+    const ruim = { esquema: 1, achados: AN.achados.concat([{ id: 'sem-ini', tipo: 'circuito_sem_geracao', p: 3, tag: 'M1C1' }, { ini: '2026-11-06T08:00:00', tipo: 'x', p: 3 }, null]) };
+    const rr = L.compoe({ way2: W([C1]), analise: ruim, agoraMs: ag });
+    C(rr.eventos.filter((e) => e.fonte[0] === 'analise').length === 3 && rr.eventos.some((e) => e.fonte[0] === 'medicao'), 'o achado sem id, início ou tipo entrou, ou derrubou a medição');
+    const re = L.compoe({ way2: W([C1]), analise: { ...AN, esquema: 2 }, agoraMs: ag });
+    C(!re.eventos.some((e) => e.fonte[0] === 'analise') && re.eventos.some((e) => e.fonte[0] === 'medicao'), 'o esquema diferente da análise entrou, ou derrubou a medição');
+    const rp = L.compoe({ way2: W([C1]), analise: { ...AN, esquema: 2 }, pub: ra, agoraMs: ag + 300000 }), lp = rp.eventos.find((e) => e.id === lib.id);
+    C(lp && lp.visto === lib.visto && lp.voz && lp.voz.chave === lib.voz.chave && rp.eventos.some((e) => e.fonte[0] === 'medicao'), 'o esquema diferente apagou a análise já publicada');
+    const rb = L.compoe({ way2: W([]), pub: ra, agoraMs: ag + 300000 }), lb = rb.eventos.find((e) => e.id === lib.id);
+    C(lb && lb.visto === lib.visto && lb.voz && lb.voz.chave === lib.voz.chave, 'a rodada sem novidade da análise perdeu o achado ou mudou a chave da fala'); }
+
   // texto público
   const txt = JSON.stringify(r3) + JSON.stringify(r8);
   C(!/\.json|\.js\b|blob|cn_|_Ind\d|DADOS_|ELET_/.test(txt.replace(/"id":"[^"]*"/g, '')), 'nome interno em texto');
@@ -164,6 +189,13 @@ const PLANTIOS = [
   ['a rodada apaga o supervisório', "antes.filter((e) => e.fonte[0] === f)", "[]"],
   ['a medição a conferir não marca', "(e.f === null && msBRT(e.i) < lim ? { ...e, a_conferir: 1 } : e)", 'e'],
   ['não poda', "(e.f ? msBRT(e.f) : Infinity) >= lim)", 'true)'],
+  ['a análise fala o agrupado', "!e.a_conferir && e.fala && [1, 2, 3].includes(e.sev) && !e.f ?", "!e.a_conferir && [1, 2, 3].includes(e.sev) && !e.f ?"],
+  ['a análise fala o encerrado', "&& !e.f ? { etapa: 1", "? { etapa: 1"],
+  ['o resumo conta a análise', "eventos.filter((x) => x.fonte[0] !== 'analise')", 'eventos'],
+  ['a análise some na rodada sem novidade', "...deFora('analise', analise ? deAnalise(analise) : null)]", ']'],
+  ['a análise de outro esquema entra', "if (an.esquema !== ESQUEMA_ANALISE) {", "if (false) {"],
+  ['o esquema diferente apaga o publicado', "fica o que está publicado da análise'); return null; }", "fica o que está publicado da análise'); return []; }"],
+  ['o achado sem id, início ou tipo entra', "    return ok;\n  }).map((a) => ({ id: 'analise:' + a.id,", "    return true;\n  }).map((a) => ({ id: 'analise:' + a.id,"],
 ];
 const tmp = fs.mkdtempSync(path.join(__dirname, '.ensaio-alarmes-eventos-'));
 let ruim = 0;
