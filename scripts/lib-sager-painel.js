@@ -80,8 +80,8 @@ function mesDe(serie, mes, F) {
 
 /* por dia: o que a pagina pinta sem baixar os meses. `real` = disponibilidade pelo estado dos inversores (sg_disp_dia), em MW medios */
 function diario(meses, sgDisp, cap) {
-  const D = { dias: [], c: { gv: [], gfin: [], gref: [], lim_n: [], ene: [], cnf: [], outra: [] }, u: {} };
-  US.forEach((u) => { D.u[u] = { s: [], o: [], w: [], k: [], disp: [], real: [], prop: [], zeros: [] }; });
+  const D = { dias: [], c: { gv: [], gfin: [], gref: [], lim_n: [], ene: [], cnf: [], outra: [], ab_n: [], ab_pub: [], ab_pro: [], cx_pro: [] }, u: {} };
+  US.forEach((u) => { D.u[u] = { s: [], o: [], w: [], k: [], disp: [], real: [], prop: [], zeros: [], dpr: [], pend_n: [], corr_n: [] }; });
   const sg = new Map(((sgDisp && sgDisp.serie) || []).map((x) => [x.dia, x]));
   for (const m of meses) {
     const grupo = new Map();
@@ -93,6 +93,13 @@ function diario(meses, sgDisp, cap) {
       const imp = { ENE: 0, CNF: 0, outra: 0 };
       for (const i of I) if (c.lim[i] && c.gfin[i] != null && c.gv[i] != null) { const k = m.raz[i] in imp ? m.raz[i] : 'outra'; imp[k] += Math.max(0, c.gfin[i] - c.gv[i]) / 2; }
       D.c.ene.push(+imp.ENE.toFixed(2)); D.c.cnf.push(+imp.CNF.toFixed(2)); D.c.outra.push(+imp.outra.toFixed(2));
+      /* painel-sager-ons-v2: o conjunto dos dados abertos contra o conjunto publicado e contra a soma com a proposta, nas meias horas com geracao */
+      const sPro = (i) => US.reduce((a, u) => a + ((m.u[u].prop[i] != null ? m.u[u].prop[i] : m.u[u].disp[i]) || 0), 0);
+      const Ig = I.filter((i) => c.gv[i] > 0 && c.o_disp[i] != null && c.disp[i] != null);
+      D.c.ab_n.push(Ig.length);
+      D.c.ab_pub.push(Ig.filter((i) => Math.abs(c.o_disp[i] - c.disp[i]) <= 0.35).length);
+      D.c.ab_pro.push(Ig.filter((i) => Math.abs(c.o_disp[i] - sPro(i)) <= 0.35).length);
+      D.c.cx_pro.push(I.filter((i) => c.disp[i] != null && Math.abs(c.disp[i] - sPro(i)) <= 0.35).length);
       for (const u of US) {
         const U = m.u[u], X = D.u[u], e = (k) => (I.every((i) => U[k][i] != null) ? +I.reduce((a, i) => a + U[k][i] / 2, 0).toFixed(3) : null);
         X.s.push(e('s')); X.o.push(e('o')); X.w.push(e('w')); X.k.push(e('k'));
@@ -101,6 +108,10 @@ function diario(meses, sgDisp, cap) {
         X.real.push(pct == null ? null : +(pct / 100 * cap[u]).toFixed(3));
         X.prop.push(+I.reduce((a, i) => a + (U.prop[i] != null ? Math.max(0, U.prop[i] - (U.disp[i] || 0)) / 2 : 0), 0).toFixed(2));
         X.zeros.push(I.filter((i) => U.disp[i] === 0).length);
+        /* painel-sager-ons-v2: a celula contestada esta pendente enquanto a publicada fica mais de 0,1 MW abaixo da proposta; igual ou acima, corrigida */
+        X.dpr.push(+(I.reduce((a, i) => a + ((U.prop[i] != null ? U.prop[i] : U.disp[i]) || 0), 0) / I.length).toFixed(3));
+        X.pend_n.push(I.filter((i) => U.prop[i] != null && U.prop[i] - (U.disp[i] || 0) > 0.1).length);
+        X.corr_n.push(I.filter((i) => U.prop[i] != null && U.prop[i] - (U.disp[i] || 0) <= 0.1).length);
       }
     }
   }
@@ -148,14 +159,25 @@ function guarda(serie, D, C, cap) {
   if (!D.dias.length) throw new Error('nenhum dia');
 }
 
-/* tudo junto. F = { serie (leRelatorio), cmp, ons:{restricao,irradiancia}, est, sg, cap, gerado } */
+/* painel-sager-ons-v2: o registro da contestacao. `base` = o maior pendente ja visto naquele dia e usina (MW·h), lido da rodada anterior;
+   quando o ONS republica e a publicada alcanca a proposta, o pendente cai e a base fica: corrigido = base − pendente. Sem rodada anterior, base = pendente */
+function registro(D, ant) {
+  const pos = new Map(((ant && ant.dias) || []).map((d, i) => [d, i]));
+  for (const u of US) {
+    const X = D.u[u], A = ant && ant.u && ant.u[u] && (ant.u[u].base || ant.u[u].prop);
+    X.base = D.dias.map((d, i) => { const j = pos.get(d), a = A && j != null ? A[j] : null; return +Math.max(X.prop[i], a == null ? 0 : a).toFixed(2); });
+  }
+}
+
+/* tudo junto. F = { serie (leRelatorio), cmp, ons:{restricao,irradiancia}, est, sg, cap, gerado, anterior (o indice da rodada anterior, ou nulo) } */
 function compoe(F) {
   const idx = { cmp: indiceCmp(F.cmp), ons: indiceOns(F.ons), est: indiceEstacao(F.est) };
   const ms = [...new Set(F.serie.map((s) => s.t.slice(0, 7)))].sort();
   const meses = ms.map((m) => mesDe(F.serie, m, idx));
   const D = diario(meses, F.sg, F.cap), C = conferencia(meses);
+  registro(D, F.anterior);
   guarda(F.serie, D, C, F.cap);
   return { indice: { esquema: ESQUEMA, gerado: F.gerado, de: D.dias[0], ate: D.dias[D.dias.length - 1], meses: ms, usinas: US, ...D, resumo: resumo(D), conferencia: C }, meses };
 }
 
-module.exports = { ESQUEMA, US, leRelatorio, mesDe, diario, conferencia, resumo, compoe, indiceCmp, indiceOns, indiceEstacao };
+module.exports = { ESQUEMA, US, leRelatorio, mesDe, diario, conferencia, resumo, registro, compoe, indiceCmp, indiceOns, indiceEstacao };

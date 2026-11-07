@@ -76,6 +76,20 @@ function roda(L) {
   C(cf('disp_soma_prop').dif === 0 && cf('disp_soma').dif === 144, 'disponibilidade do conjunto');
   C(cf('irr_est').dif === 0, 'irradiancia x estacao');
   C(I.u.M1.real[0] === 49.11, 'real pelo sg_disp_dia');
+  /* painel-sager-ons-v2: contestacao pendente x corrigida, o registro da rodada anterior e o conjunto dos dados abertos */
+  C(I.u.M2.pend_n[0] === 48 && I.u.M2.corr_n[0] === 0 && I.u.M1.pend_n[0] === 0 && I.u.M1.corr_n[0] === 0, 'contestadas pendentes: ' + I.u.M2.pend_n[0]);
+  C(Math.abs(I.u.M2.dpr[0] - 24.555) < 0.001 && I.u.M2.disp[0] === 0, 'disponibilidade com a proposta');
+  C(Math.abs(I.u.M2.base[0] - I.u.M2.prop[0]) < 0.01, 'sem rodada anterior a base e o pendente');
+  const sc = L.leRelatorio(folha(dias)); sc.forEach((s) => { if (s.t.slice(0, 10) === dias[0]) s.p[1] = 24.555; });   // o ONS republicou a M2 no 1º dia (p segue M1..M9)
+  const ant = { dias: [dias[0]], u: { M2: { base: [I.u.M2.prop[0]] } } };
+  const fc = montaFontes(null, dias); fc.ons.restricao[0].consolidado.forEach((x) => { if (x.ts.slice(0, 10) === dias[0]) x.disp = +Object.values(CAP).reduce((a2, b) => a2 + b, 0).toFixed(3); });
+  const I2 = L.compoe({ ...fc, serie: sc, anterior: ant }).indice;
+  C(I2.u.M2.pend_n[0] === 0 && I2.u.M2.corr_n[0] === 48 && I2.u.M2.prop[0] === 0, 'republicado nao virou corrigido: ' + I2.u.M2.pend_n[0] + '/' + I2.u.M2.corr_n[0]);
+  C(Math.abs(I2.u.M2.base[0] - I.u.M2.prop[0]) < 0.01 && I2.u.M2.base[1] === I2.u.M2.prop[1], 'o registro esqueceu o contestado: ' + I2.u.M2.base[0]);
+  C(I2.c.ab_n[0] === 24 && I2.c.ab_pub[0] === 24 && I2.c.ab_pro[0] === 24 && I2.c.cx_pro[0] === 48, 'conjunto dos dados abertos: ' + [I2.c.ab_n[0], I2.c.ab_pub[0], I2.c.ab_pro[0], I2.c.cx_pro[0]]);
+  C(I.c.ab_pro[0] === 0 && I.c.ab_n[0] === 24, 'aberto diferente nao foi acusado');
+  const I3 = L.compoe({ ...fc, serie: L.leRelatorio(folha(dias)) }).indice;   // M2 ainda pendente e o conjunto aberto com a proposta
+  C(I3.c.ab_pro[0] === 24 && I3.c.ab_pub[0] === 24 && I3.u.M2.pend_n[0] === 48, 'aberto com a proposta nao foi visto: ' + [I3.c.ab_pro[0], I3.c.ab_pub[0]]);
   const mal = folha(dias); mal.cel.delete('A11'); mal.cel.delete('B11');
   let e1 = 0; try { L.leRelatorio(folha(['2026-10-01']).cel ? (() => { const f = folha(['2026-10-01']); f.cel.delete('A58'); return f; })() : mal); } catch (x) { e1 = 1; }
   C(e1, 'dia partido nao estourou');
@@ -102,6 +116,9 @@ const PL = [
   ['guarda da capacidade cala', "if (v != null && v > cap[US[i]] * 1.02) throw", "if (false) throw"],
   ['guarda do conjunto cala', "if (g.dif) throw", "if (false) throw"],
   ['estacao errada', "r3(num(e['e' + n]))", "r3(num(e['e' + ((n % 9) + 1)]) * 0.5)"],
+  ['corrigida conta como pendente', "U.prop[i] - (U.disp[i] || 0) > 0.1).length", "U.prop[i] - (U.disp[i] || 0) > -1e9).length"],
+  ['registro esquece a rodada anterior', "return +Math.max(X.prop[i], a == null ? 0 : a).toFixed(2);", "return +X.prop[i].toFixed(2);"],
+  ['aberto contra a soma publicada', "Math.abs(c.o_disp[i] - sPro(i)) <= 0.35", "Math.abs(c.o_disp[i] - US.reduce((a, u) => a + (m.u[u].disp[i] || 0), 0)) <= 0.35"],
 ];
 const fonte = fs.readFileSync(L0, 'utf8'), dir = fs.mkdtempSync(path.join(__dirname, '.pl-'));
 let ruins = 0;

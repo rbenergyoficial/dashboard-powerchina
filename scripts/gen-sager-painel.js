@@ -4,6 +4,7 @@
  *
  * Le: `RelatorioGeral_MRT_Historico.xlsx` (a versao mais nova, no `backup-dados-scada`), `cmp_30min.json`, `ons_restricao_AAAA_MM.json`,
  * `ons_irradiancia_AAAA_MM.json`, `estacao_logger_30min.json` e `sg_disp_dia.json`.
+ * Le tambem o proprio `sager_painel.json` da rodada anterior: dele vem o registro do que ja foi contestado (painel-sager-ons-v2).
  * Grava: `sager_painel.json` (indice por dia, resumo e conferencia) e `hist/sager_painel_AAAA_MM.json` (o mes por patamar).
  * O relatorio do mes aberto muda; os meses fechados so sao regravados se o conteudo mudou.
  *
@@ -45,7 +46,7 @@ async function main() {
   const serie = L.leRelatorio(S.leXlsx(await leRelatorio(), 'Patamares'));
   const ms = [...new Set(serie.map((s) => s.t.slice(0, 7)))].sort();
   const F = { serie, cap: CAPU, gerado: new Date().toISOString(), ons: { restricao: [], irradiancia: [] } };
-  [F.cmp, F.est, F.sg] = await Promise.all(['cmp_30min.json', 'estacao_logger_30min.json', 'sg_disp_dia.json'].map(lePublico));
+  [F.cmp, F.est, F.sg, F.anterior] = await Promise.all(['cmp_30min.json', 'estacao_logger_30min.json', 'sg_disp_dia.json', 'sager_painel.json'].map(lePublico));   // anterior: o registro da contestacao (painel-sager-ons-v2)
   if (!F.cmp) throw new Error('cmp_30min.json ausente: sem ele nao ha medidor nem supervisorio');
   for (const m of ms) {
     const a = m.replace('-', '_');
