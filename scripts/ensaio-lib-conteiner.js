@@ -43,7 +43,7 @@ const MIGRADOS = {
   'oleo.yml': { 'gen-oleo.js': { OUT_CONTAINER: 'dados', OUT_BLOB: 'oleo-ensaio.json' } },   // etapa 3, piloto
   'must.yml': { 'gen-must.js': null },                                                         // etapa 4, os diários simples
   'irradiancia-ons.yml': { 'gen-irradiancia-ons.js': null },
-  'sager-disp.yml': { 'gen-sager-disp.js': null },
+  'sager-disp.yml': { 'gen-sager-disp.js': null, 'gen-sager-painel.js': null },
   'way2-mes.yml': { 'gen-way2-mes.js': null },                                                 // etapa 4, os de 10 e 15 min e de hora em hora
   'way2-agg.yml': { 'gen-way2-agg.js': null, 'gen-fontes-saude.js': null },
   'trafo-medidor.yml': { 'gen-trafo-way2.js': null },

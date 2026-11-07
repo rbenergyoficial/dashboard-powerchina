@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
       # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
@@ -46,3 +46,12 @@ jobs:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: node scripts/gen-sager-disp.js
+      - name: Ensaio · Painel SAGER-ONS (sem rede)
+        run: node scripts/ensaio-sager-painel.js
+      - name: Gerar sager_painel.json
+        env:
+          RAW: backup-dados-scada
+          OUT: dados
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/gen-sager-painel.js
