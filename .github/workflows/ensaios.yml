@@ -55,6 +55,7 @@ on:
       - '.github/workflows/trafo.yml'   # a fiacao da copia do bruto do supervisorio (ensaio-cache-blob, item 12)
       - '.github/workflows/malha-estado.yml'   # plano OIDC, etapa 4, os dois ultimos: a mesma fiacao
       - '.github/workflows/apagar-blob.yml'
+      - '.github/workflows/boletim.yml'   # boletim-desempenho (07/11/2026): a fiacao sem a chave (ensaio-lib-conteiner, MIGRADOS)
   workflow_dispatch: {}
 
 permissions:
@@ -245,3 +246,12 @@ jobs:
       - name: Ensaio · analise ao vivo (dias reais, gerador e plantios)
         if: always()
         run: node scripts/ensaio-analise-vivo.js
+
+      # O Boletim de Desempenho (lote boletim-desempenho, 07/11/2026): calendario, guardas de texto, semeadura e o transporte dos blobs
+      # (gzip, opcionais, ordem de subida), sem rede e sem credencial. Roda tambem no boletim.yml, antes de cada rodada.
+      - name: Ensaio · boletim de desempenho (regras, transporte e plantios)
+        if: always()
+        env: { DADOS_SAS: '' }
+        run: |
+          python3 scripts/boletim/ensaio_boletim.py
+          node scripts/ensaio-boletim-blobs.js

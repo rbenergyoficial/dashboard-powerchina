@@ -1,0 +1,94 @@
+# Boletim de Desempenho: gera o diário (uma vez por dia), o mensal, os fatos relevantes e a fila de envio ao WeCom. NÃO envia nada:
+# quem envia é o Function App, com o endereço do robô na configuração dele.
+# Cada rodada decide sozinha o que falta (scripts/boletim/fila.py · tarefas), primeiro só com as entradas leves (estado, fila, índice,
+# ONS, catálogo); as pesadas só descem quando há o que gerar. O horário do diário vive em fila.py (HORA_DIARIO); o cron acompanha, e o
+# ensaio confere que a janela cobre o horário. Rodar de novo não repete nada; dia que falhou se recupera na rodada seguinte.
+name: boletim
+on:
+  schedule:
+    - cron: '41 10 * * *'      # 07:41 de Brasília (o diário sai a partir das 07:40)
+    - cron: '11,41 11 * * *'   # 08:11 e 08:41: o agendador do GitHub atrasa de 30 a 90 min; a janela cobre
+    - cron: '11 12 * * *'      # 09:11
+  workflow_dispatch:
+    inputs:
+      semeia:
+        description: 'primeira rodada: marca os RD já emitidos e o total da vida como vistos, fixa o início e esvazia a fila (não gera nada)'
+        type: boolean
+        default: false
+      feitos:
+        description: 'com semeia: o que já foi ao grupo à mão, separado por vírgula (diario:AAAA-MM-DD, mensal:AAAA-MM-DD, rd:CODIGO)'
+        type: string
+        default: 'diario:2026-11-06,ons:2026-11-06,mensal:2026-10-31'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: boletim-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boletim:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      # Fora do main o Entra recusa a credencial federada com um erro que parece credencial quebrada: este passo FALHA antes, dizendo a
+      # causa. A ref vem da variável de ambiente, nunca interpolada no script.
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '22' }
+      - name: Pacotes
+        run: npm i @azure/storage-blob@12
+      - name: Ensaio · boletim (regras e transporte, sem rede)
+        id: ensaio
+        run: |
+          python3 scripts/boletim/ensaio_boletim.py
+          node scripts/ensaio-boletim-blobs.js
+      - name: Entradas leves
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/boletim-blobs.js baixa "$RUNNER_TEMP/bd" leve
+      - name: Decide
+        id: decide
+        env:
+          BOLETIM_DIR: ${{ runner.temp }}/bd
+          SEMEIA: ${{ inputs.semeia }}
+        run: |
+          if [ "$SEMEIA" = "true" ]; then python3 scripts/boletim/rodada.py --precisa --semeia; else python3 scripts/boletim/rodada.py --precisa; fi
+      - name: Entradas pesadas
+        if: steps.decide.outputs.pesado == 'true'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/boletim-blobs.js baixa "$RUNNER_TEMP/bd" pesado
+      - name: Pacotes do render
+        if: steps.decide.outputs.pesado == 'true'
+        run: python3 -m pip install --quiet pillow==11.0.0 pypdf==5.1.0 imageio-ffmpeg==0.5.1
+      - name: Rodada
+        env:
+          BOLETIM_DIR: ${{ runner.temp }}/bd
+          BOLETIM_LOGO: ${{ runner.temp }}/bd/boletim__logo_intrepid_800.png
+          BOLETIM_AGORA: ${{ steps.decide.outputs.agora }}
+          FONTE_DIR: /usr/share/fonts/truetype/dejavu
+          CHROME: google-chrome
+          SEMEIA: ${{ inputs.semeia }}
+          FEITOS: ${{ inputs.feitos }}
+        run: |
+          python3 scripts/boletim/prepara.py scripts/boletim/boletim_aprovado.py scripts/boletim/boletim_ci.py
+          if [ "$SEMEIA" = "true" ]; then
+            python3 scripts/boletim/rodada.py --semeia --feitos "$FEITOS"
+          else
+            python3 scripts/boletim/rodada.py
+          fi
+      - name: Saídas
+        if: ${{ !cancelled() && steps.ensaio.outcome == 'success' && steps.decide.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: |
+          if [ -d "$RUNNER_TEMP/bd/saida/boletim" ]; then node scripts/boletim-blobs.js sobe "$RUNNER_TEMP/bd"; else echo "nada a subir"; fi

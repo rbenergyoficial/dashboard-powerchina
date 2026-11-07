@@ -72,6 +72,7 @@ const MIGRADOS = {
   'malha-estado.yml': { 'gen-malha-estado.js': null },   // etapa 4: no portal-admin, o papel so no arquivo da malha
   'alarmes-scada.yml': { 'gen-alarmes-scada.js': null },   // alarmes-scada (29/10/2026): a tabela de alarmes do supervisorio, D+1
   'apagar-blob.yml': { 'apagar-blob.js': null },         // etapa 4: o papel no `dados` ja inclui apagar
+  'boletim.yml': { 'boletim-blobs.js': null },          // boletim-desempenho (07/11/2026): baixa e sobe o Boletim de Desempenho
 };
 /* os workflows que só LEEM o `dados` (nenhum script deles grava): a SAS de leitura no lugar da chave, e nenhum OIDC */
 const SO_LEITURA = ['ensaio-comparativo.yml', 'ensaio-must.yml'];
