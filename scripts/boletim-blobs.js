@@ -11,10 +11,12 @@
 'use strict';
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 
-const LEVE = { exige: ['acervo/catalogo.json'], opcional: ['boletim/estado.json', 'boletim/fila.json', 'boletim/indice.json'] };
+const LEVE = { exige: ['acervo/catalogo.json'], opcional: ['boletim/estado.json', 'boletim/fila.json', 'boletim/indice.json', 'boletim/curvas.json'] };
 const PESADO = { exige: ['executivo.json', 'pr_ufv.json', 'sg_disp_dia.json', 'irr_ufv.json', 'benchmark_ne.json', 'way2_30min.json',
   'irr_plano_30min.json'], opcional: [] };   // o logotipo do cabeçalho vem do repositório (scripts/boletim/logo_intrepid_800.png)
 const ULTIMOS = ['boletim/fila.json', 'boletim/indice.json', 'boletim/estado.json'];   // sobem por último, nesta ordem
+const GZIP = ['boletim/curvas.json'];   // a página lê este pela API, que repassa o gzip: sobe comprimido (Content-Encoding)
+const DERIVADOS = ['boletim/curvas.json'];   // refeito pela rodada: ilegível vale como ausente (::warning::), nunca derruba o diário
 const TIPO = { '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.mp4': 'video/mp4' };
 
 let CONT = null;   // o ensaio injeta um contêiner falso
@@ -57,8 +59,17 @@ async function baixa(pasta, grupo, agora) {
       if (ausente(e) && opcional.includes(nome)) { console.log('sem', nome, '(opcional)'); continue; }
       throw new Error('entrada do boletim ausente ou ilegível: ' + nome + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')');
     }
-    const puro = descomprime(buf);
-    if (nome.endsWith('.json')) JSON.parse(puro.toString('utf8').replace(/^﻿/, ''));   // JSON quebrado para aqui, não na rodada
+    let puro;
+    try {
+      puro = descomprime(buf);
+      if (nome.endsWith('.json')) {
+        const o = JSON.parse(puro.toString('utf8').replace(/^\uFEFF/, ''));   // JSON quebrado para aqui, não na rodada
+        if (DERIVADOS.includes(nome) && (!o || o.esquema !== 1)) throw new Error('esquema ' + (o && o.esquema));
+      }
+    } catch (e) {
+      if (DERIVADOS.includes(nome)) { console.log('::warning::' + nome + ' ilegível (' + e.message.slice(0, 120) + '): a rodada refaz do zero'); continue; }
+      throw new Error('entrada do boletim ilegível: ' + nome + ' (' + e.message.slice(0, 120) + ')');
+    }
     fs.writeFileSync(dest, puro);
     console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));
   }
@@ -87,7 +98,11 @@ async function sobe(pasta) {
   let n = 0;
   for (const nome of ordem(nomes)) {
     const tipo = TIPO[path.extname(nome)] || 'application/octet-stream';
-    await c.getBlockBlobClient(nome).uploadFile(path.join(raiz, nome), { blobHTTPHeaders: { blobContentType: tipo } });
+    const bb = c.getBlockBlobClient(nome);
+    if (GZIP.includes(nome)) {
+      const gz = zlib.gzipSync(fs.readFileSync(path.join(raiz, nome)));
+      await bb.uploadData(gz, { blobHTTPHeaders: { blobContentType: tipo, blobContentEncoding: 'gzip' } });
+    } else await bb.uploadFile(path.join(raiz, nome), { blobHTTPHeaders: { blobContentType: tipo } });
     n += 1;
   }
   console.log('subidos', n, 'arquivo(s) para dados/boletim/');

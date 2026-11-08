@@ -2,6 +2,7 @@
 """Ensaio do Boletim de Desempenho (lote boletim-desempenho, 07/11/2026). Sem rede e sem Chrome: só as regras.
 Cada regra tem o caso que ela existe para RECUSAR, e um PLANTIO (o código com a trava arrancada) que tem de reprovar.
     python ensaio_boletim.py          sai 0 = aprovado; 1 = alguma regra falhou ou algum plantio passou"""
+import contextlib
 import datetime as dt
 import importlib.util
 import io
@@ -136,6 +137,34 @@ def casos(F):
         open(os.path.join(d, 'sg_disp_dia.json'), 'w', encoding='utf-8').write('{"serie": [{"dia": "2026-11-07"}]}')
         open(os.path.join(d, 'irr_ufv.json'), 'w', encoding='utf-8').write('{"janela": {"fim": "2026-11-07 23:30:00"}}')
         ok(F.faltam_no_dia(d, '2026-11-07') == ['PR'], 'dia completo: falta só o PR')
+    # as curvas da página: a mesma conta do boletim (soma dos pontos, nula se falta um), sem o dia em curso, acumulando a anterior
+    import curvas as C
+    w2 = {'dados': [{'nomeGrandeza': 'Demat', 'pontoId': 6196, 'valores': [{'data': '2026-11-06T12:00:00', 'valor': 150000.0}, {'data': '2026-11-07T12:00:00', 'valor': 9000.0}]},
+                    {'nomeGrandeza': 'Demat', 'pontoId': 6197, 'valores': [{'data': '2026-11-06T12:00:00', 'valor': 140000.0}, {'data': '2026-11-07T12:00:00', 'valor': 9000.0}]},
+                    {'nomeGrandeza': 'Demre', 'pontoId': 6196, 'valores': [{'data': '2026-11-06T12:30:00', 'valor': 1.0}]}]}
+    ant = {'esquema': 1, 'slots': C.SLOTS, 'dias': {'2026-11-01': {u: [1.0] * 28 for u in C.PONTOS}}}
+    cv = C.monta(w2, {'serie_dia': [{'dia': '2026-11-06', 'ufv': 'Complexo', 'gti': 6.1}, {'dia': '2026-11-06', 'ufv': 'M1', 'gti': 9.9}]},
+                 ant, '2026-11-07')
+    i12 = C.SLOTS.index('12:00')
+    ok(cv['dias']['2026-11-06']['Complexo'][i12] == 290.0 and cv['dias']['2026-11-06']['Complexo'][i12 + 1] is None,
+       'curvas: a soma dos dois pontos do conjunto em MW, e nula onde falta medição')
+    ok('2026-11-07' not in cv['dias'] and '2026-11-01' in cv['dias'] and cv['irr_dia'] == {'2026-11-06': 6.1},
+       'curvas: sem o dia em curso, acumulando a rodada anterior; a irradiação é a do conjunto')
+    bom = dict(ant, ate='2026-11-06')
+    ok(C.velho(None, '2026-11-06') and C.velho(dict(bom, ate='2026-11-05'), '2026-11-06') and not C.velho(bom, '2026-11-06'),
+       'curvas: sem o arquivo ou parado antes de ontem, refaz')
+    # fora da forma vale como ausente: refaz do zero, sem estourar
+    fora = ['x', {'esquema': 2, 'dias': {}}, {'esquema': 1, 'slots': C.SLOTS, 'dias': []}, {'esquema': 1, 'slots': C.SLOTS, 'dias': {'2026-11-01': 'x'}}]
+    try:
+        cvs = [C.monta(w2, {}, a, '2026-11-07') for a in fora]
+        ok(all(list(x['dias']) == ['2026-11-06'] for x in cvs) and all(C.velho(a, '2026-11-06', '2026-11-07') for a in fora),
+           'curvas anteriores fora da forma: refeitas do zero, sem estourar')
+    except Exception as e:
+        ok(False, 'curvas anteriores fora da forma: refeitas do zero, sem estourar (%s)' % e)
+    # no máximo uma tentativa por dia: dia sem a medição de ontem não faz toda rodada descer o pesado
+    ok(cv['tentado_em'] == '2026-11-07' and not C.velho(dict(bom, ate='2026-11-05', tentado_em='2026-11-07'), '2026-11-06', '2026-11-07')
+       and C.velho(dict(bom, ate='2026-11-05', tentado_em='2026-11-06'), '2026-11-06', '2026-11-07'),
+       'curvas: uma tentativa por dia (tentado_em)')
     ok(F.ESPERA_DIA_COMPLETO is False and F.HORA_DIARIO == '07:40', 'a espera do dia completo fica desligada e o diário às 07:40 (decisão do humano)')
     # a disponibilidade do dia que ainda não chegou: "apuração às 10h", nunca um número parcial nem "—%"
     r0 = {'dia': '2026-11-07', 'liq': 2328.62, 'meta_dia': 2066.67, 'limitado': {'h': 0, 'est': None}, 'pr': 81.2, 'disp': None,
@@ -224,9 +253,70 @@ PLANTIOS = [
 ]
 
 
+PLANTIOS_CURVAS = [
+    ('a curva soma com ponto faltando', "arr.append(None if any(x is None for x in v) else sum(v))", "arr.append(sum(x or 0 for x in v))"),
+    ('o dia em curso entra nas curvas', "        if hoje and d >= hoje:\n            continue\n", ""),
+    ('as curvas esquecem a rodada anterior', "out = dias_validos(anterior)", "out = {}"),
+    ('as curvas nunca envelhecem', "return not curvas.get('ate') or curvas['ate'] < ontem", "return False"),
+    ('curvas anteriores fora da forma', "out = dias_validos(anterior)", "out = dict((anterior or {}).get('dias') or {})"),
+    ('as curvas refazem toda rodada', "if hoje and curvas.get('tentado_em') == hoje:", "if False:"),
+]
+
+
+PLANTIOS_RODADA = [
+    ('a falha das curvas derruba o diário', "except Exception as e:   # noqa: BLE001\n            erro_curvas", "except ZeroDivisionError as e:   # noqa: BLE001\n            erro_curvas"),
+    ('a falha das curvas sai verde', "    if barrados or erro_curvas:", "    if barrados:"),
+]
+
+
+def ensaio_rodada_curvas(R=None):
+    """a rodada com as curvas quebradas: o diário entra na fila e o estado é gravado; a falha das curvas sai vermelha no fim"""
+    import json
+    import curvas as C
+    R = R or __import__('rodada')
+    falhas = []
+    ok = lambda c, m: falhas.append(m) if not c else None
+    ex = executivo()
+    for nome, prep, quebra, espera_rc in (
+            ('curvas anteriores fora da forma', {'boletim__curvas.json': {'esquema': 1, 'slots': C.SLOTS, 'dias': 'x'}}, False, 0),
+            ('as curvas estouram na rodada', {}, True, 1)):
+        with tempfile.TemporaryDirectory() as d:
+            arqs = dict({'boletim__estado.json': {'esquema': 1, 'feitos': [], 'semeado': '2026-11-06T20:00', 'desde': '2026-11-06'},
+                         'boletim__fila.json': {'itens': []}, 'executivo.json': ex, 'irr_ufv.json': {'serie_dia': []},
+                         'way2_30min.json': {'dados': [{'nomeGrandeza': 'Demat', 'pontoId': 6196, 'valores': [{'data': '2026-11-06T12:00:00', 'valor': 1.0}]}]}}, **prep)
+            for k, v in arqs.items():
+                json.dump(v, open(os.path.join(d, k), 'w', encoding='utf-8'))
+            R.DIR, R.SAI = d, os.path.join(d, 'saida', 'boletim')
+            gera0, monta0 = R.gera, R.C.monta
+            R.gera = lambda modo, dia, render: ({'dia': dia, 'liq': 3000.0, 'meta_dia': 2000.0, 'limitado': {'h': 0, 'est': None}, 'pr': 80.0, 'disp': 99.0,
+                                                 'complexo': {'pct': 20.0, 'proj_pct': 100}, 'ppa': {'pct': 20.0, 'proj_pct': 100}}, {}, [], 'boletim/diario/' + dia)
+            if quebra:
+                def _q(*a, **k):
+                    raise ValueError('medição de mentira')
+                R.C.monta = _q
+            argv0, rc = sys.argv, 0
+            sys.argv = ['rodada.py', '--agora', '2026-11-07T07:45', '--sem-render']
+            os.environ.pop('BOLETIM_AGORA', None)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):   # o log da rodada não polui o veredito
+                    R.main()
+            except SystemExit as e:
+                rc = e.code or 0
+            except Exception as e:   # noqa: BLE001
+                rc = 'estourou: %s' % e
+            finally:
+                sys.argv, R.gera, R.C.monta = argv0, gera0, monta0
+            fl = os.path.join(d, 'saida', 'boletim', 'fila.json')
+            fila = json.load(open(fl, encoding='utf-8')) if os.path.exists(fl) else {'itens': []}
+            est = os.path.exists(os.path.join(d, 'saida', 'boletim', 'estado.json'))
+            ok(any(i['id'] == 'diario-2026-11-06' for i in fila['itens']) and est and rc == espera_rc,
+               'rodada com %s: o diário entra na fila, o estado é gravado e a saída é %s (saiu %r)' % (nome, espera_rc, rc))
+    return falhas
+
+
 def main():
     sys.stdout.reconfigure(encoding='utf-8')
-    falhas = casos(carrega(FONTE)) + ensaio_prepara() + ensaio_guarda_pt()
+    falhas = casos(carrega(FONTE)) + ensaio_prepara() + ensaio_guarda_pt() + ensaio_rodada_curvas()
     for f in falhas:
         print('  FALHOU ·', f)
     print('código real:', 'APROVADO' if not falhas else 'REPROVADO (%d)' % len(falhas))
@@ -239,6 +329,33 @@ def main():
         except Exception as e:
             f = ['quebrou: %s' % e]
         print('  plantio "%s": %s' % (nome, 'reprovado, como devia (%s)' % f[0] if f else 'PASSOU — o ensaio não pega'))
+        ruim |= not f
+    # as curvas da página: o plantio vai no curvas.py (o ensaio importa o módulo pelo nome)
+    CV = io.open(os.path.join(AQUI, 'curvas.py'), encoding='utf-8').read()
+    for nome, de, para in PLANTIOS_CURVAS:
+        if CV.count(de) != 1:
+            print('  PLANTIO SEM ÂNCORA:', nome); ruim = True; continue
+        sys.modules['curvas'] = carrega(CV.replace(de, para), 'curvas')
+        try:
+            f = casos(carrega(FONTE))
+        except Exception as e:
+            f = ['quebrou: %s' % e]
+        finally:
+            del sys.modules['curvas']
+        print('  plantio "%s": %s' % (nome, 'reprovado, como devia (%s)' % f[0] if f else 'PASSOU — o ensaio não pega'))
+        ruim |= not f
+    # a rodada: o plantio vai no rodada.py (a falha das curvas deixa de ser contida)
+    RD = io.open(os.path.join(AQUI, 'rodada.py'), encoding='utf-8').read()
+    for nome, de, para in PLANTIOS_RODADA:
+        if RD.count(de) != 1:
+            print('  PLANTIO SEM ÂNCORA:', nome); ruim = True; continue
+        m = types.ModuleType('rodada'); m.__file__ = os.path.join(AQUI, 'rodada.py')
+        exec(compile(RD.replace(de, para), 'rodada', 'exec'), m.__dict__)
+        try:
+            f = ensaio_rodada_curvas(m)
+        except Exception as e:   # noqa: BLE001
+            f = ['quebrou: %s' % e]
+        print('  plantio "%s": %s' % (nome, 'reprovado, como devia (%s)' % f[0][:110] if f else 'PASSOU — o ensaio não pega'))
         ruim |= not f
     print('ensaio do boletim:', 'REPROVADO' if ruim else 'APROVADO')
     sys.exit(1 if ruim else 0)

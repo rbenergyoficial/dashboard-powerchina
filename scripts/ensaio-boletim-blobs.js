@@ -28,7 +28,10 @@ function falso(blobs) {   // blobs: nome -> Buffer | erro
       if (!b) { const e = new Error('The specified blob does not exist.'); e.statusCode = 404; e.code = 'BlobNotFound'; throw e; }
       return b;
     } }),
-    getBlockBlobClient: (n) => ({ uploadFile: async () => { subidos.push(n); } }),
+    gz: {},
+    getBlockBlobClient: function (n) { const self = this; return {
+      uploadFile: async () => { subidos.push(n); },
+      uploadData: async (b, o) => { subidos.push(n); self.gz[n] = (o && o.blobHTTPHeaders && o.blobHTTPHeaders.blobContentEncoding) === 'gzip' && b[0] === 0x1f && b[1] === 0x8b; } }; },
   };
 }
 
@@ -51,6 +54,19 @@ async function casos(B) {
     try { est = JSON.parse(fs.readFileSync(path.join(tmp, 'a', 'boletim__estado.json'), 'utf8')); } catch (e) { }
     ok(est && est.desde === '2026-11-06', 'o blob em gzip é gravado como JSON puro');
     ok(!fs.existsSync(path.join(tmp, 'a', 'ons_restricao_2026_12.json')), 'o opcional ausente não vira arquivo');
+    // 2b. as curvas da página são derivadas: no blob corrompidas (gzip quebrado, JSON quebrado, esquema outro) valem como ausentes;
+    //     o estado corrompido continua parando
+    for (const [rot, b] of [['gzip quebrado', Buffer.from([0x1f, 0x8b, 1, 2, 3])], ['JSON quebrado', Buffer.from('{"esq')], ['esquema outro', gz({ esquema: 2 })]]) {
+      B._usaConteiner(falso(Object.assign({}, leve, { 'boletim/curvas.json': b })));
+      erro = null;
+      try { await B.baixa(path.join(tmp, 'cv' + rot.replace(/ /g, '')), 'leve', agora); } catch (e) { erro = e; }
+      ok(!erro && !fs.existsSync(path.join(tmp, 'cv' + rot.replace(/ /g, ''), 'boletim__curvas.json')) && fs.existsSync(path.join(tmp, 'cv' + rot.replace(/ /g, ''), 'boletim__estado.json')),
+        'curvas.json corrompido no blob (' + rot + '): vale como ausente e o resto desce' + (erro ? ' (' + erro.message + ')' : ''));
+    }
+    B._usaConteiner(falso(Object.assign({}, leve, { 'boletim/estado.json': Buffer.from('{"esq') })));
+    erro = null;
+    try { await B.baixa(path.join(tmp, 'ce'), 'leve', agora); } catch (e) { erro = e; }
+    ok(erro && /estado/.test(erro.message), 'o estado corrompido continua parando a baixa');
     // 3. obrigatório ausente para
     B._usaConteiner(falso({ 'boletim/estado.json': gz({}) }));
     erro = null;
@@ -68,13 +84,14 @@ async function casos(B) {
     ok(ordem.slice(-3).join(',') === 'boletim/fila.json,boletim/indice.json,boletim/estado.json' && ordem[0].startsWith('boletim/diario/'),
       'a subida põe edições, enviados e fatos antes de fila, índice e estado: ' + ordem.join(' '));
     const sai = path.join(tmp, 's', 'saida', 'boletim');
-    for (const n of ['estado.json', 'fila.json', 'indice.json', 'diario/2026-11-07/diario_claro.html', 'fatos/x.mp4']) {
+    for (const n of ['estado.json', 'fila.json', 'indice.json', 'diario/2026-11-07/diario_claro.html', 'fatos/x.mp4', 'curvas.json']) {
       fs.mkdirSync(path.dirname(path.join(sai, n)), { recursive: true }); fs.writeFileSync(path.join(sai, n), '{}');
     }
     const f = falso({}); B._usaConteiner(f);
     await B.sobe(path.join(tmp, 's'));
-    ok(f.subidos.slice(-3).join(',') === 'boletim/fila.json,boletim/indice.json,boletim/estado.json' && f.subidos.length === 5,
+    ok(f.subidos.slice(-3).join(',') === 'boletim/fila.json,boletim/indice.json,boletim/estado.json' && f.subidos.length === 6,
       'a subida de verdade segue a ordem: ' + f.subidos.join(' '));
+    ok(f.gz['boletim/curvas.json'] === true, 'as curvas da página sobem em gzip, com o Content-Encoding (a API repassa)');
   } finally { console.log = log; fs.rmSync(tmp, { recursive: true, force: true }); }
   return falhas;
 }
@@ -83,6 +100,8 @@ const PLANTIOS = [
   ['sem descomprimir', "b.length > 1 && b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b", 'b'],
   ['o ONS obrigatório', "opcional: [...LEVE.opcional, ...meses(agora)] };", "opcional: LEVE.opcional, exige: [...LEVE.exige, ...meses(agora)] };"],
   ['qualquer 404 vale como ausente', "e.statusCode === 404 && (e.code === 'BlobNotFound' || (e.details && e.details.errorCode === 'BlobNotFound'))", 'e.statusCode === 404'],
+  ['curvas.json corrompido no blob', "if (DERIVADOS.includes(nome)) { console.log(", "if (false) { console.log("],
+  ['as curvas sobem sem gzip', "const GZIP = ['boletim/curvas.json'];", 'const GZIP = [];'],
   ['a ordem de subida alfabética', "return [...resto, ...ULTIMOS.filter((n) => nomes.includes(n))];", 'return nomes.slice().sort();'],
 ];
 

@@ -22,9 +22,19 @@ import sys
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 import fila as F  # noqa: E402
+import curvas as C  # noqa: E402
 
 DIR = os.environ.get('BOLETIM_DIR') or os.getcwd()
 SAI = os.path.join(DIR, 'saida', 'boletim')
+
+
+def le_curvas():
+    """o curvas.json da rodada anterior; ilegível vale como ausente (é derivado, a rodada refaz do zero)"""
+    try:
+        return le('boletim/curvas.json')
+    except Exception as e:   # noqa: BLE001
+        print('::warning::curvas da página ilegíveis, refeitas do zero: ' + str(e)[:200])
+        return None
 
 
 def le(nome, padrao=None):
@@ -129,8 +139,10 @@ def main():
             return
         F.exige_semeado(estado)
         ts = F.tarefas(agora, estado, F.ons_dias(DIR))
-        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts) or 'nenhuma')
-        saida_gh(pesado='true' if ts else 'false', agora=agora.isoformat(timespec='minutes'))
+        # as curvas de 30 min da página: sem o arquivo, ou parado antes de ontem, a rodada desce a medição e o refaz
+        cv = C.velho(le_curvas(), (agora.date() - dt.timedelta(days=1)).isoformat(), agora.date().isoformat())
+        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts) or 'nenhuma', '· curvas da página:', 'refazer' if cv else 'em dia')
+        saida_gh(pesado='true' if ts or cv else 'false', agora=agora.isoformat(timespec='minutes'))
         return
     fila = le('boletim/fila.json', {'itens': []})
     indice = le('boletim/indice.json', {'diario': {}, 'mensal': {}})
@@ -182,6 +194,18 @@ def main():
                     arqs_f, imgs_f = [rel(mp4)], [rel(png)]
                 novos.append({'id': 'fato-' + fato['id'], 'tipo': 'fato', 'dia': dia, 'texto': fato['texto'], 'imagens': imgs_f, 'arquivos': arqs_f})
                 feitos.append('fato:' + fato['id'])
+    w2 = le('way2_30min.json')
+    erro_curvas = None
+    if w2 is not None:
+        # a página do SIGO desenha as curvas do boletim: a mesma conta do boletim.py, só a demanda ativa por entidade. São DERIVADAS:
+        # falha aqui não derruba o diário (fila, índice e estado seguem gravados; a rodada sai vermelha no fim)
+        try:
+            cv = C.monta(w2, le('irr_ufv.json', {}), le_curvas(), agora.date().isoformat())
+            grava('curvas.json', cv)
+            print('curvas da página:', len(cv['dias']), 'dias, de', cv['de'], 'a', cv['ate'])
+        except Exception as e:   # noqa: BLE001
+            erro_curvas = str(e)[:300] or type(e).__name__
+            print('::error::curvas da página não refeitas: ' + erro_curvas)
     for item in F.itens_rd(le('acervo/catalogo.json', {}), agora.date(), dict(estado, feitos=feitos)):
         novos.append(item)
         feitos.append('rd:' + item['codigo'])
@@ -194,6 +218,7 @@ def main():
     print('rodada', agora.isoformat(timespec='minutes'), '·', len(novos), 'novo(s):', ', '.join(n['id'] for n in novos) or 'nada')
     if barrados:
         print('::error::boletim barrado pela guarda de português (não enviado, tenta de novo na próxima rodada): ' + ', '.join(barrados))
+    if barrados or erro_curvas:
         sys.exit(1)
 
 
