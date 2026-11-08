@@ -125,5 +125,15 @@ function conteiner(nome) {
     + faltaOidc().join(', ') + ')');
 }
 
-module.exports = { conteiner, credencial, _usaTransporte: (f) => { pedeJson = f; }, _usaEspera: (f) => { espera = f; }, _pedeJsonHttps: pedeJsonHttps,
+/* OUTRA CONTA, SÓ PELO OIDC (lote ppc-rdo, 01/11/2026): o contêiner `indicadores` do armazenamento do SIGO Gestão (siddgestaodocs), onde o
+   Gestão publica as ordens do RDO. A identidade do pipeline tem ali SÓ `Storage Blob Data Reader`, só nesse contêiner (dado em 01/11/2026,
+   com a autorização do humano). A cadeia de conexão do DADOS_STORAGE é da rbenergydata e não serve: sem OIDC, estoura. */
+function conteinerEm(contaUrl, nome) {
+  if (!contaUrl || !nome) throw new Error('lib-conteiner: conteinerEm() sem conta ou sem contêiner');
+  if (faltaOidc().length) throw new Error('lib-conteiner: ler ' + contaUrl + ' pede o OIDC completo (falta: ' + faltaOidc().join(', ') + ')');
+  const { BlobServiceClient } = require('@azure/storage-blob');
+  return new BlobServiceClient(contaUrl, OIDC || (OIDC = credencialOidc())).getContainerClient(nome);
+}
+
+module.exports = { conteiner, conteinerEm, credencial, _usaTransporte: (f) => { pedeJson = f; }, _usaEspera: (f) => { espera = f; }, _pedeJsonHttps: pedeJsonHttps,
   _zera: () => { OIDC = null; } };

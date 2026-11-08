@@ -23,11 +23,18 @@ import re
 MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 SEMANA = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo']
 MARCO_GWH = 50          # um aviso a cada 50 GWh de energia acumulada desde a operação comercial
-# O HORÁRIO DO DIÁRIO, num lugar só: a partir desta hora de Brasília (HH:MM) o diário do dia anterior sai. 07:40 = depois do executivo
-# (07:13), com PR e irradiação do dia completos; a disponibilidade dos inversores só chega às 10:17 e sai como "apuração às 10h".
+# O HORÁRIO DO DIÁRIO, num lugar só: a partir desta hora de Brasília (HH:MM) o diário do dia anterior sai. 08:00 (humano, 08/11/2026: "O
+# boletim diário pode ser 08h00"): depois do executivo (07:13, PR e irradiação do dia completos) e da coleta Sungrow da cadeia da manhã
+# (06:52, com o lote do logger que a ponte das 05:55 grava no cofre por volta das 06:12). Se a ponte falhar, a disponibilidade dos
+# inversores só chega na recuperação das 10:17 e sai como "apuração às 10h", nunca um número parcial.
 # Mudou a hora? Mude o cron do boletim.yml junto: o ensaio confere que a janela do cron cobre HORA_DIARIO (primeira passada até
 # 10 min depois dela, e passadas por pelo menos 80 min). Parâmetro de ambiente: BOLETIM_HORA_DIARIO
-HORA_DIARIO = os.environ.get('BOLETIM_HORA_DIARIO') or '07:40'
+HORA_DIARIO = os.environ.get('BOLETIM_HORA_DIARIO') or '08:00'
+# O envio das 17:30 "Geração × limite do dia" (lote boletim-1730, humano 08/11/2026: "ok no boletim do dia 17H30"): o dia corrente, uma vez,
+# a partir de HORA_CURVA e só até HORA_CURVA_FIM (passado isso, o dia fica sem a folha: a curva de ontem não vai ao grupo no dia seguinte).
+# O cron da tarde acompanha (o ensaio confere). Parâmetros: BOLETIM_HORA_CURVA, BOLETIM_HORA_CURVA_FIM
+HORA_CURVA = os.environ.get('BOLETIM_HORA_CURVA') or '17:30'
+HORA_CURVA_FIM = os.environ.get('BOLETIM_HORA_CURVA_FIM') or '20:00'
 DISP_PENDENTE = {'pt': 'apuração às 10h', 'en': 'computed at 10h'}   # a disponibilidade do dia que ainda não chegou: nunca um número parcial
 # opção (DESLIGADA): esperar o dia completo nas entradas que chegam depois das 07:00 (PR e irradiação da estação, disponibilidade dos
 # inversores) até HORA_LIMITE_ESPERA; passado o limite, sai com o que houver. Liga com BOLETIM_ESPERA_DIA_COMPLETO=1
@@ -78,6 +85,15 @@ def tarefas(agora_brt, estado, ons_dias):
         if u >= desde and 'mensal:' + u not in feitos:
             out.append(('mensal', u))
     return out
+
+
+def tarefa_curva(agora_brt, estado):
+    """a folha das 17:30 do dia corrente: uma vez, entre HORA_CURVA e HORA_CURVA_FIM, nunca antes da semeadura"""
+    hoje = agora_brt.date().isoformat()
+    hm = agora_brt.strftime('%H:%M')
+    if not (HORA_CURVA <= hm < HORA_CURVA_FIM) or hoje < (estado.get('desde') or hoje) or 'curva:' + hoje in set(estado.get('feitos', [])):
+        return []
+    return [('curva', hoje)]
 
 
 def marca(modo, dia, sobra, ons):
@@ -154,47 +170,69 @@ def rd_esperados(ano, mes):
     return out
 
 
-def rd_do_periodo(catalogo, ano, mes):
+def _falha_rd(falhas, d, e):
+    """o documento ruim do catálogo: com a lista, registra e segue para o próximo; sem a lista, estoura (quem chama decidiu não tratar)"""
+    if falhas is None:
+        raise e
+    c = str((d.get('codigo') if isinstance(d, dict) else None) or '?')
+    if not any(f['codigo'] == c for f in falhas):
+        falhas.append({'codigo': c, 'motivo': (str(e) or type(e).__name__)[:200]})
+
+
+def rd_do_periodo(catalogo, ano, mes, falhas=None):
     """Do catálogo do acervo, os RD emitidos (AP) do período que fechou, com o PDF PT e o EN. Devolve [(tipo, doc)]; o que ainda não foi
     emitido simplesmente não aparece (e aparece numa rodada seguinte, quando o acervo publicar)."""
-    docs = [d for d in (catalogo or {}).get('documentos', []) if d.get('tipo') == 'RD' and d.get('emissao') == 'AP']
+    docs = []
+    for d in (catalogo or {}).get('documentos', []):
+        try:
+            if d.get('tipo') == 'RD' and d.get('emissao') == 'AP':
+                docs.append(d)
+        except Exception as e:   # noqa: BLE001
+            _falha_rd(falhas, d, e)
     out = []
     for esp in rd_esperados(ano, mes):
         tipo = esp[0]
         for d in docs:
-            t = _norm(d.get('titulo'))
-            if tipo == 'mensal' and t.endswith(_norm(esp[1])) and 'trimestre' not in t and 'semestre' not in t:
-                pass
-            elif tipo in ('trimestral', 'semestral') and re.search(r'do %s\D{0,3}\s*%s$' % (esp[1], re.escape(_norm(esp[2]))), t):
-                pass
-            elif tipo == 'anual' and re.search(r'desempenho operacional %s$' % re.escape(esp[1]), t):
-                pass
-            else:
-                continue
-            idi = {p.get('idioma'): p for p in d.get('pdfs', [])}
-            if 'pt' in idi and 'en' in idi:
-                out.append((tipo, d))
+            try:
+                t = _norm(d.get('titulo'))
+                if tipo == 'mensal' and t.endswith(_norm(esp[1])) and 'trimestre' not in t and 'semestre' not in t:
+                    pass
+                elif tipo in ('trimestral', 'semestral') and re.search(r'do %s\D{0,3}\s*%s$' % (esp[1], re.escape(_norm(esp[2]))), t):
+                    pass
+                elif tipo == 'anual' and re.search(r'desempenho operacional %s$' % re.escape(esp[1]), t):
+                    pass
+                else:
+                    continue
+                idi = {p.get('idioma'): p for p in d.get('pdfs', [])}
+                if 'pt' in idi and 'en' in idi:
+                    out.append((tipo, d))
+            except Exception as e:   # noqa: BLE001
+                _falha_rd(falhas, d, e)
     return out
 
 
 RD_EN = {'mensal': 'Monthly', 'trimestral': 'Quarterly', 'semestral': 'Half-year', 'anual': 'Annual'}
 
 
-def itens_rd(catalogo, hoje_brt, estado):
-    """Itens de RD a pôr na fila: os do período que fechou no último dia 1º (até 60 dias para trás), cada código uma vez só."""
+def itens_rd(catalogo, hoje_brt, estado, falhas=None):
+    """Itens de RD a pôr na fila: os do período que fechou no último dia 1º (até 60 dias para trás), cada código uma vez só. Com `falhas`
+    (lista), o documento ruim vai para ela e os outros seguem."""
     feitos = set(estado.get('feitos', []))
     out = []
     ref = hoje_brt.replace(day=1) - dt.timedelta(days=1)          # o último mês fechado
     for k in range(2):                                             # o mês fechado e o anterior (RD que atrasou mais de um mês)
         a, m = (ref.year, ref.month) if k == 0 else ((ref.replace(day=1) - dt.timedelta(days=1)).year, (ref.replace(day=1) - dt.timedelta(days=1)).month)
-        for tipo, d in rd_do_periodo(catalogo, a, m):
-            if 'rd:' + d['codigo'] in feitos:
-                continue
-            pdfs = sorted(d['pdfs'], key=lambda p: p.get('idioma') != 'pt')
-            out.append({'id': 'rd-' + d['codigo'], 'tipo': 'rd', 'rd_tipo': tipo, 'codigo': d['codigo'],
-                        'texto': f'SIGO · {RD_EN[tipo]} performance report issued: {d["codigo"]} Rev{d.get("revisao", "00")}. '
-                                 'Attached: the Portuguese and the English versions.',
-                        'imagens': [], 'arquivos': [p['blob'] for p in pdfs if p.get('idioma') in ('pt', 'en')]})
+        for tipo, d in rd_do_periodo(catalogo, a, m, falhas):
+            try:
+                if 'rd:' + d['codigo'] in feitos:
+                    continue
+                pdfs = sorted(d['pdfs'], key=lambda p: p.get('idioma') != 'pt')
+                out.append({'id': 'rd-' + d['codigo'], 'tipo': 'rd', 'rd_tipo': tipo, 'codigo': d['codigo'],
+                            'texto': f'SIGO · {RD_EN[tipo]} performance report issued: {d["codigo"]} Rev{d.get("revisao", "00")}. '
+                                     'Attached: the Portuguese and the English versions.',
+                            'imagens': [], 'arquivos': [p['blob'] for p in pdfs if p.get('idioma') in ('pt', 'en')]})
+            except Exception as e:   # noqa: BLE001
+                _falha_rd(falhas, d, e)
     return out
 
 
@@ -331,6 +369,39 @@ def texto_en(modo, r):
                       f'Month PR {nf_en(r.get("pr"), 1)}% ({nf_en(r.get("pr_sem_corte"), 1)}% without curtailment) · availability {nf_en(r.get("disp"), 2)}%.'])
 
 
+# os motivos que o Gestão grava (coleta_parser.js e a lista fechada do RDO, rdo.js MOTIVOS), em inglês; código desconhecido sai neutro,
+# "other reason (CODE)", nunca cru nem em português
+MOTIVO_EN = {'ENE_FREQ': 'energy, frequency control', 'FLUXO': 'flow or interchange', 'ELE_SGI': 'contingency, SGI or unavailability',
+             'REATIVO': 'reactive power control', 'PATAMAR': 'load level', 'OUTRO': 'other reason'}
+
+
+def motivo_en(m):
+    if m in MOTIVO_EN:
+        return MOTIVO_EN[m]
+    c = re.sub(r'[^A-Z0-9_]', '', str(m or '').upper())
+    # o código que coincide com palavra portuguesa ("DE", "EM"...) cairia na guarda do inglês: sai sem ele
+    return 'other reason (%s)' % c if c and not PT_RESTO.search(c) else 'other reason'
+
+
+def texto_curva_en(r):
+    """O texto das 17:30 ao grupo (só inglês): os números do mesmo resumo da folha. Dia sem ordem diz isso; coletor parado avisa."""
+    d = r['dia']
+    linhas = [f'SIGO · Generation × limit of the day · {SEMANA_EN[dt.date.fromisoformat(d).weekday()]}, {data_en(d)}, metering to {r["medicao_ate"]}',
+              f'Generation: {nf_en(r.get("energia_mwh"))} MWh (peak {nf_en(r.get("pico_mw"), 1)} MW).']
+    if r.get('n_ordens'):
+        mot = ', '.join(motivo_en(m) for m in r.get('motivos') or []) or '—'
+        linhas.append(f'ONS orders: {r["n_ordens"]} between {r["primeira"]} and {r["ultima"]}; {nf_en(r.get("horas_sob_limite"), 1)} h under limit, '
+                      f'minimum {nf_en(r.get("limite_min_mw"), 0)} MW ({mot}).')
+    elif r.get('herdada'):
+        linhas.append(f'No new ONS order; the day started under the order of the previous day ({nf_en(r.get("horas_sob_limite"), 1)} h under limit).')
+    else:
+        linhas.append(f'No ONS curtailment order recorded in the day to {r["medicao_ate"]}.')
+    if r.get('coletor') == 'parado':
+        linhas.append('Warning: the order collector is stopped; the limit may be incomplete.')
+    linhas.append('Limit from the ONS orders received by Iqony; the official ONS figures come in the daily bulletin of tomorrow.')
+    return '\n'.join(linhas)
+
+
 PT_RESTO = re.compile(r'[ãõçáéíóúâêô]|\b(?:de|do|da|dos|das|em|com|não|mês|dia|meta|usina|corte|geração)\b', re.I)
 
 
@@ -353,6 +424,14 @@ def confere_texto(t):
 
 
 # ───────────────────────── a fila ─────────────────────────
+def valida_item(n):
+    """as guardas de texto de um item da fila, num lugar só: a rodada chama dentro do try de cada item (a recusa vira erro daquele item) e a
+    junta_fila de novo, por garantia"""
+    confere_texto(n.get('texto', ''))
+    sem_portugues(n.get('texto', ''))   # ao grupo vai só inglês (humano, 07/11/2026)
+    return n
+
+
 def junta_fila(fila, novos, hoje_brt):
     """Acrescenta os itens novos (id único) e descarta os de mais de 30 dias."""
     lim = (hoje_brt.date() - dt.timedelta(days=JANELA_FILA_DIAS)).isoformat()
@@ -361,22 +440,27 @@ def junta_fila(fila, novos, hoje_brt):
     for n in novos:
         if n['id'] in ids:
             continue
-        confere_texto(n.get('texto', ''))
-        sem_portugues(n.get('texto', ''))   # ao grupo vai só inglês (humano, 07/11/2026)
+        valida_item(n)
         n.setdefault('criado', hoje_brt.isoformat(timespec='minutes'))
         itens.append(n)
         ids.add(n['id'])
     return {'esquema': 1, 'gerado': hoje_brt.isoformat(timespec='minutes'), 'itens': itens}
 
 
-def ons_dias(pasta):
-    """Os dias que o ONS já publicou, pelos arquivos ons_restricao_AAAA_MM.json baixados."""
+def ons_dias(pasta, falhas=None):
+    """Os dias que o ONS já publicou, pelos arquivos ons_restricao_AAAA_MM.json baixados. O arquivo ilegível não derruba quem chama (a decisão
+    e a folha das 17:30 não dependem dele): vira aviso e entra em `falhas` (lista), para a rodada recair só no diário e no mensal."""
     out = set()
     for f in os.listdir(pasta):
         if f.startswith('ons_restricao_') and f.endswith('.json'):
-            c = json.load(open(os.path.join(pasta, f), encoding='utf-8')).get('consolidado') or []
-            if isinstance(c, str):
-                import ast
-                c = ast.literal_eval(c)
-            out.update(str(x.get('ts', ''))[:10] for x in c if x.get('ts'))
+            try:
+                c = json.load(open(os.path.join(pasta, f), encoding='utf-8-sig')).get('consolidado') or []
+                if isinstance(c, str):
+                    import ast
+                    c = ast.literal_eval(c)
+                out.update(str(x.get('ts', ''))[:10] for x in c if x.get('ts'))
+            except Exception as e:   # noqa: BLE001
+                print('::warning::arquivo do ONS ilegível, %s: %s' % (f, (str(e) or type(e).__name__)[:200]))
+                if falhas is not None:
+                    falhas.append(f)
     return out

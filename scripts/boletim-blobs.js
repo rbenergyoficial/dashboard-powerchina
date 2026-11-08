@@ -2,6 +2,9 @@
 /* boletim-blobs.js · o transporte do Boletim de Desempenho no pipeline, pelo contêiner `dados`.
  *   node scripts/boletim-blobs.js baixa <pasta> leve     o que decide a rodada: estado, fila, índice, os dois arquivos do ONS, catálogo
  *   node scripts/boletim-blobs.js baixa <pasta> pesado   o que gera o boletim: executivo, PR, disponibilidade, irradiação, medição, logotipo
+ *   node scripts/boletim-blobs.js baixa <pasta> tarde    a folha das 17:30 (boletim-1730): a medição de 5 min e as ORDENS DA IQONY, que o
+ *                                                        Gestão publica em siddgestaodocs/indicadores/restricao_iqony.json (leitura pelo OIDC,
+ *                                                        lib-conteiner.conteinerEm; a identidade do pipeline tem Reader só nesse contêiner)
  *   node scripts/boletim-blobs.js sobe  <pasta>          <pasta>/saida/boletim/** para dados/boletim/**, nesta ordem: edições, enviados e
  *                                                        fatos; depois fila.json, indice.json e estado.json (quem lê a fila acha os arquivos)
  * Credencial: a do pipeline (lib-conteiner, OIDC). Na máquina, só para LER, o SAS de leitura em DADOS_SAS (nunca impresso); `sobe` com
@@ -14,12 +17,23 @@ const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const LEVE = { exige: ['acervo/catalogo.json'], opcional: ['boletim/estado.json', 'boletim/fila.json', 'boletim/indice.json', 'boletim/curvas.json'] };
 const PESADO = { exige: ['executivo.json', 'pr_ufv.json', 'sg_disp_dia.json', 'irr_ufv.json', 'benchmark_ne.json', 'way2_30min.json',
   'irr_plano_30min.json'], opcional: [] };   // o logotipo do cabeçalho vem do repositório (scripts/boletim/logo_intrepid_800.png)
+const TARDE = { exige: ['way2_recent.json'], opcional: [] };
+// as ordens da Iqony (a fonte do degrau do RDO, decisão do humano de 07/11): outra conta, gravadas sem gzip pelo Gestão
+const GESTAO = { conta: process.env.GESTAO_CONTA_URL || 'https://siddgestaodocs.blob.core.windows.net', conteiner: 'indicadores',
+  blob: 'restricao_iqony.json', local: 'gestao__restricao_iqony.json' };
 const ULTIMOS = ['boletim/fila.json', 'boletim/indice.json', 'boletim/estado.json'];   // sobem por último, nesta ordem
 const GZIP = ['boletim/curvas.json'];   // a página lê este pela API, que repassa o gzip: sobe comprimido (Content-Encoding)
 const DERIVADOS = ['boletim/curvas.json'];   // refeito pela rodada: ilegível vale como ausente (::warning::), nunca derruba o diário
 const TIPO = { '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.mp4': 'video/mp4' };
 
 let CONT = null;   // o ensaio injeta um contêiner falso
+let GCONT = null;  // e o do Gestão
+function abreGestao() {
+  if (GCONT) return GCONT;
+  const L = require('./lib-conteiner');
+  if (typeof L.conteinerEm !== 'function') throw new Error('ler as ordens da Iqony pede o lib-conteiner com conteinerEm (lote ppc-rdo)');
+  return L.conteinerEm(GESTAO.conta, GESTAO.conteiner);
+}
 function abre(modo) {
   if (CONT) return CONT;
   const temOidc = process.env.AZURE_CLIENT_ID && process.env.AZURE_TENANT_ID;
@@ -41,7 +55,8 @@ function meses(agora) {   // o mês corrente e o anterior, em Brasília (os arqu
 function listas(grupo, agora) {
   if (grupo === 'leve') return { exige: LEVE.exige, opcional: [...LEVE.opcional, ...meses(agora)] };
   if (grupo === 'pesado') return PESADO;
-  throw new Error('grupo desconhecido: ' + grupo + ' (leve|pesado)');
+  if (grupo === 'tarde') return TARDE;
+  throw new Error('grupo desconhecido: ' + grupo + ' (leve|pesado|tarde)');
 }
 
 const ausente = (e) => !!e && e.statusCode === 404 && (e.code === 'BlobNotFound' || (e.details && e.details.errorCode === 'BlobNotFound'));
@@ -51,6 +66,8 @@ async function baixa(pasta, grupo, agora) {
   const { exige, opcional } = listas(grupo, agora || new Date());
   const c = abre('ler');
   fs.mkdirSync(pasta, { recursive: true });
+  // a tarde: as ordens da Iqony PRIMEIRO (alguns KB); sem elas a folha não sai e a medição de 5 min (7,25 MB em gzip) nem desce
+  if (grupo === 'tarde') await baixaIqony(pasta);
   for (const nome of [...exige, ...opcional]) {
     const dest = path.join(pasta, nome.replace(/\//g, '__'));
     let buf;
@@ -73,6 +90,19 @@ async function baixa(pasta, grupo, agora) {
     fs.writeFileSync(dest, puro);
     console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));
   }
+}
+
+/* as ordens da Iqony: sem elas a folha das 17:30 não sai (o limite não se inventa); a forma é conferida aqui, não na rodada */
+async function baixaIqony(pasta) {
+  let buf;
+  try { buf = await abreGestao().getBlobClient(GESTAO.blob).downloadToBuffer(); }
+  catch (e) { throw new Error('ordens da Iqony ausentes ou ilegíveis: ' + GESTAO.conteiner + '/' + GESTAO.blob + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')'); }
+  const puro = descomprime(buf);
+  let o;
+  try { o = JSON.parse(puro.toString('utf8').replace(/^﻿/, '')); } catch (e) { throw new Error('ordens da Iqony ilegíveis: ' + e.message.slice(0, 120)); }
+  if (!o || o.versao !== 1 || !Array.isArray(o.eventos) || !Array.isArray(o.campos)) throw new Error('ordens da Iqony fora da forma (versao ' + (o && o.versao) + ')');
+  fs.writeFileSync(path.join(pasta, GESTAO.local), puro);
+  console.log('baixado', GESTAO.conteiner + '/' + GESTAO.blob, puro.length, 'bytes ·', o.eventos.length, 'eventos · gerado', o.gerado_em);
 }
 
 function lista(raiz) {
@@ -114,4 +144,5 @@ if (require.main === module) {
     .catch((e) => { console.error('::error::' + e.message); process.exit(1); });
 }
 
-module.exports = { meses, listas, ausente, descomprime, ordem, baixa, sobe, LEVE, PESADO, _usaConteiner: (c) => { CONT = c; } };
+module.exports = { meses, listas, ausente, descomprime, ordem, baixa, sobe, LEVE, PESADO, TARDE, GESTAO, _usaConteiner: (c) => { CONT = c; },
+  _usaGestao: (c) => { GCONT = c; } };

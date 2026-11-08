@@ -9,7 +9,7 @@
 const fs = require('fs'), os = require('os'), path = require('path'), zlib = require('zlib'), Module = require('module');
 
 const ALVO = path.join(__dirname, 'boletim-blobs.js');
-const FONTE = fs.readFileSync(ALVO, 'utf8');
+const FONTE = fs.readFileSync(ALVO, 'utf8').replace(/\r\n/g, '\n');   // CRLF na árvore do Windows, LF no runner: o plantio de várias linhas casa nos dois
 
 function carrega(src) {
   const m = new Module(ALVO, null);
@@ -19,10 +19,11 @@ function carrega(src) {
 }
 
 function falso(blobs) {   // blobs: nome -> Buffer | erro
-  const subidos = [];
+  const subidos = [], pedidos = [];
   return {
-    subidos,
+    subidos, pedidos,
     getBlobClient: (n) => ({ downloadToBuffer: async () => {
+      pedidos.push(n);
       const b = blobs[n];
       if (b instanceof Error) throw b;
       if (!b) { const e = new Error('The specified blob does not exist.'); e.statusCode = 404; e.code = 'BlobNotFound'; throw e; }
@@ -92,6 +93,26 @@ async function casos(B) {
     ok(f.subidos.slice(-3).join(',') === 'boletim/fila.json,boletim/indice.json,boletim/estado.json' && f.subidos.length === 6,
       'a subida de verdade segue a ordem: ' + f.subidos.join(' '));
     ok(f.gz['boletim/curvas.json'] === true, 'as curvas da página sobem em gzip, com o Content-Encoding (a API repassa)');
+    // 6. a tarde (boletim-1730): a medição de 5 min do `dados` e as ordens da Iqony do contêiner do Gestão; sem as ordens, PARA
+    const iq = { versao: 1, campos: ['dia', 'h', 'tipo', 'mw', 'raz', 'mot', 'origem_ons', 'destino', 'conf', 'corr'], eventos: [['2026-11-07', '06:41', 'limite', 210, 'ENE', 'ENE_FREQ', 'COSR-NE', 'rdo', null, null]] };
+    B._usaConteiner(falso({ 'way2_recent.json': gz({ dados: [] }) }));
+    B._usaGestao(falso({ 'restricao_iqony.json': Buffer.from(JSON.stringify(iq)) }));
+    erro = null;
+    try { await B.baixa(path.join(tmp, 't'), 'tarde', agora); } catch (e) { erro = e; }
+    let iql = null;
+    try { iql = JSON.parse(fs.readFileSync(path.join(tmp, 't', 'gestao__restricao_iqony.json'), 'utf8')); } catch (e) { }
+    ok(!erro && iql && iql.eventos.length === 1 && fs.existsSync(path.join(tmp, 't', 'way2_recent.json')),
+      'a tarde baixa a medição de 5 min e as ordens da Iqony' + (erro ? ' (' + erro.message + ')' : ''));
+    for (const [rot, gb] of [['ausentes', {}], ['fora da forma', { 'restricao_iqony.json': Buffer.from(JSON.stringify({ versao: 2, eventos: [] })) }]]) {
+      const dados = falso({ 'way2_recent.json': gz({ dados: [] }) });
+      B._usaConteiner(dados);
+      B._usaGestao(falso(gb));
+      erro = null;
+      try { await B.baixa(path.join(tmp, 't' + rot.replace(/ /g, '')), 'tarde', agora); } catch (e) { erro = e; }
+      ok(erro && /Iqony/.test(erro.message), 'as ordens da Iqony ' + rot + ' param a baixa da tarde (o limite não se inventa)');
+      ok(!dados.pedidos.includes('way2_recent.json'), 'as ordens da Iqony ' + rot + ': a medição de 5 min (7,25 MB) nem é pedida (pedidos: ' + dados.pedidos.join(' ') + ')');
+    }
+    B._usaGestao(null);
   } finally { console.log = log; fs.rmSync(tmp, { recursive: true, force: true }); }
   return falhas;
 }
@@ -103,6 +124,10 @@ const PLANTIOS = [
   ['curvas.json corrompido no blob', "if (DERIVADOS.includes(nome)) { console.log(", "if (false) { console.log("],
   ['as curvas sobem sem gzip', "const GZIP = ['boletim/curvas.json'];", 'const GZIP = [];'],
   ['a ordem de subida alfabética', "return [...resto, ...ULTIMOS.filter((n) => nomes.includes(n))];", 'return nomes.slice().sort();'],
+  ['a tarde sem as ordens da Iqony', "  if (grupo === 'tarde') await baixaIqony(pasta);", ''],
+  ['a medição desce antes das ordens', "  if (grupo === 'tarde') await baixaIqony(pasta);\n  for (const nome of [...exige, ...opcional]) {\n    const dest = path.join(pasta, nome.replace(/\\//g, '__'));\n    let buf;\n    try { buf = await c.getBlobClient(nome).downloadToBuffer(); }\n    catch (e) {\n      if (ausente(e) && opcional.includes(nome)) { console.log('sem', nome, '(opcional)'); continue; }\n      throw new Error('entrada do boletim ausente ou ilegível: ' + nome + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')');\n    }\n    let puro;\n    try {\n      puro = descomprime(buf);\n      if (nome.endsWith('.json')) {\n        const o = JSON.parse(puro.toString('utf8').replace(/^\\uFEFF/, ''));   // JSON quebrado para aqui, não na rodada\n        if (DERIVADOS.includes(nome) && (!o || o.esquema !== 1)) throw new Error('esquema ' + (o && o.esquema));\n      }\n    } catch (e) {\n      if (DERIVADOS.includes(nome)) { console.log('::warning::' + nome + ' ilegível (' + e.message.slice(0, 120) + '): a rodada refaz do zero'); continue; }\n      throw new Error('entrada do boletim ilegível: ' + nome + ' (' + e.message.slice(0, 120) + ')');\n    }\n    fs.writeFileSync(dest, puro);\n    console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));\n  }",
+   "  for (const nome of [...exige, ...opcional]) {\n    const dest = path.join(pasta, nome.replace(/\\//g, '__'));\n    let buf;\n    try { buf = await c.getBlobClient(nome).downloadToBuffer(); }\n    catch (e) {\n      if (ausente(e) && opcional.includes(nome)) { console.log('sem', nome, '(opcional)'); continue; }\n      throw new Error('entrada do boletim ausente ou ilegível: ' + nome + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')');\n    }\n    let puro;\n    try {\n      puro = descomprime(buf);\n      if (nome.endsWith('.json')) {\n        const o = JSON.parse(puro.toString('utf8').replace(/^\\uFEFF/, ''));   // JSON quebrado para aqui, não na rodada\n        if (DERIVADOS.includes(nome) && (!o || o.esquema !== 1)) throw new Error('esquema ' + (o && o.esquema));\n      }\n    } catch (e) {\n      if (DERIVADOS.includes(nome)) { console.log('::warning::' + nome + ' ilegível (' + e.message.slice(0, 120) + '): a rodada refaz do zero'); continue; }\n      throw new Error('entrada do boletim ilegível: ' + nome + ' (' + e.message.slice(0, 120) + ')');\n    }\n    fs.writeFileSync(dest, puro);\n    console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));\n  }\n  if (grupo === 'tarde') await baixaIqony(pasta);"],
+  ['as ordens fora da forma passam', "if (!o || o.versao !== 1 || !Array.isArray(o.eventos) || !Array.isArray(o.campos)) throw", "if (false) throw"],
 ];
 
 (async () => {

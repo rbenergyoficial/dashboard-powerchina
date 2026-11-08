@@ -3,12 +3,17 @@
 # Cada rodada decide sozinha o que falta (scripts/boletim/fila.py · tarefas), primeiro só com as entradas leves (estado, fila, índice,
 # ONS, catálogo); as pesadas só descem quando há o que gerar. O horário do diário vive em fila.py (HORA_DIARIO); o cron acompanha, e o
 # ensaio confere que a janela cobre o horário. Rodar de novo não repete nada; dia que falhou se recupera na rodada seguinte.
+# À tarde (lote boletim-1730), a folha "Geração × limite do dia" do dia corrente, uma vez, entre HORA_CURVA e HORA_CURVA_FIM (fila.py), com
+# entradas próprias: a medição de 5 min e as ordens de restrição registradas no SIGO Gestão.
 name: boletim
 on:
   schedule:
-    - cron: '41 10 * * *'      # 07:41 de Brasília (o diário sai a partir das 07:40)
-    - cron: '11,41 11 * * *'   # 08:11 e 08:41: o agendador do GitHub atrasa de 30 a 90 min; a janela cobre
-    - cron: '11 12 * * *'      # 09:11
+    - cron: '1 11 * * *'       # 08:01 de Brasília (o diário sai a partir das 08:00)
+    - cron: '31 11 * * *'      # 08:31: o agendador do GitHub atrasa de 30 a 90 min; a janela cobre
+    - cron: '1,31 12 * * *'    # 09:01 e 09:31
+    - cron: '37 20 * * *'      # 17:37 de Brasília: a folha das 17:30 (sai a partir das 17:30, até as 20:00)
+    - cron: '7,37 21 * * *'    # 18:07 e 18:37
+    - cron: '7 22 * * *'       # 19:07
   workflow_dispatch:
     inputs:
       semeia:
@@ -61,15 +66,32 @@ jobs:
         run: |
           if [ "$SEMEIA" = "true" ]; then python3 scripts/boletim/rodada.py --precisa --semeia; else python3 scripts/boletim/rodada.py --precisa; fi
       - name: Entradas pesadas
+        id: pesadas
         if: steps.decide.outputs.pesado == 'true'
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         run: node scripts/boletim-blobs.js baixa "$RUNNER_TEMP/bd" pesado
+      # O diário (entradas pesadas) e a folha das 17:30 (entradas da tarde) são DESACOPLADOS: a falha de um não barra o outro. A Rodada roda
+      # se a decisão saiu; ela sabe pelo PESADO_OK e pelo TARDE_OK o que não desceu, registra o erro de cada um e sai vermelha no fim.
       - name: Pacotes do render
-        if: steps.decide.outputs.pesado == 'true'
+        if: ${{ !cancelled() && steps.decide.outcome == 'success' && (steps.decide.outputs.pesado == 'true' || steps.decide.outputs.tarde == 'true') }}
         run: python3 -m pip install --quiet pillow==11.0.0 pypdf==5.1.0 imageio-ffmpeg==0.5.1
+      # O ensaio da folha roda em TODA execução (não depende da decisão, que usa a mesma regra da fila): sem ele, uma regra que nunca gera a
+      # folha ficaria verde para sempre. Não precisa dos pacotes do render.
+      - name: Ensaio · folha da tarde
+        id: ensaio_tarde
+        if: ${{ !cancelled() }}
+        run: python3 scripts/boletim/ensaio_curva1730.py
+      - name: Entradas da tarde
+        id: tarde
+        if: ${{ !cancelled() && steps.decide.outcome == 'success' && steps.decide.outputs.tarde == 'true' && steps.ensaio_tarde.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+        run: node scripts/boletim-blobs.js baixa "$RUNNER_TEMP/bd" tarde
       - name: Rodada
+        if: ${{ !cancelled() && steps.decide.outcome == 'success' }}
         env:
           BOLETIM_DIR: ${{ runner.temp }}/bd
           BOLETIM_LOGO: ${{ github.workspace }}/scripts/boletim/logo_intrepid_800.png
@@ -78,6 +100,8 @@ jobs:
           CHROME: google-chrome
           SEMEIA: ${{ inputs.semeia }}
           FEITOS: ${{ inputs.feitos }}
+          PESADO_OK: ${{ steps.pesadas.outcome }}
+          TARDE_OK: ${{ steps.tarde.outcome }}
         run: |
           python3 scripts/boletim/prepara.py scripts/boletim/boletim_aprovado.py scripts/boletim/boletim_ci.py
           if [ "$SEMEIA" = "true" ]; then

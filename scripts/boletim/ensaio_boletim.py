@@ -14,6 +14,8 @@ import types
 AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 FONTE = io.open(os.path.join(AQUI, 'fila.py'), encoding='utf-8').read()
+WF = os.path.join(AQUI, '..', '..', '.github', 'workflows', 'boletim.yml')
+WF_TEXTO = None   # o plantio do cron troca o texto do workflow (None = o arquivo)
 
 
 def carrega(src, nome='fila_x'):
@@ -59,15 +61,15 @@ def casos(F):
     ok = lambda c, msg: falhas.append(msg) if not c else None
     h = lambda s: dt.datetime.fromisoformat(s)
     # calendário
-    ok(F.tarefas(h('2026-11-07T07:39'), {'feitos': []}, set()) == [], 'antes das 07:40 não gera o diário')
-    ok(F.tarefas(h('2026-11-07T07:41'), {'feitos': []}, set()) == [('diario', '2026-11-06')], 'às 07:41 gera o diário de ontem')
+    ok(F.tarefas(h('2026-11-07T07:59'), {'feitos': []}, set()) == [], 'antes das 08:00 não gera o diário')
+    ok(F.tarefas(h('2026-11-07T08:01'), {'feitos': []}, set()) == [('diario', '2026-11-06')], 'às 08:01 gera o diário de ontem')
     ok(F.tarefas(h('2026-11-07T09:00'), {'feitos': ['diario:2026-11-06']}, set()) == [], 'diário feito não se repete')
     # o complemento saiu do plano (humano, 07/11/2026): com o ONS publicado, a qualquer hora, nada além do diário de uma vez
     pub = {'2026-11-04', '2026-11-05', '2026-11-06'}
     ok(all(m != 'complemento' for hr in range(24) for m, _ in F.tarefas(h('2026-11-07T%02d:05' % hr), {'feitos': ['diario:2026-11-06']}, pub)),
        'o complemento voltou: o diário sai uma vez por dia, sem segunda edição quando o ONS publica')
     ok(F.tarefas(h('2026-11-07T17:35'), {'feitos': ['diario:2026-11-06']}, pub) == [], 'à tarde, com o ONS publicado, nada novo')
-    ok(('mensal', '2026-10-31') in F.tarefas(h('2026-11-01T07:45'), {'feitos': []}, set()), 'mensal no dia 1º')
+    ok(('mensal', '2026-10-31') in F.tarefas(h('2026-11-01T08:05'), {'feitos': []}, set()), 'mensal no dia 1º')
     # metas só do Complexo e do PPA, uma vez por fato
     ex = executivo(meta_cx=1300.0, meta_ppa=500.0, meta_ml=230.0)   # PPA passa a meta no dia 05; Complexo e ML no dia 06
     f1 = F.fatos(ex, '2026-11-06', {'feitos': []})
@@ -101,16 +103,16 @@ def casos(F):
     ok(F.itens_rd(catalogo(), dt.date(2026, 10, 3), {'feitos': ['rd:' + c for c in ids]}) == [], 'RD já enviado não volta')
     ok(F.itens_rd(catalogo(emissao='PR'), dt.date(2026, 10, 3), {'feitos': []}) == [], 'RD não emitido (PR) não vai')
     ok(F.itens_rd(catalogo(en=False), dt.date(2026, 10, 3), {'feitos': []}) == [], 'RD sem a versão EN espera')
-    ok(('mensal', '2026-09-30') in F.tarefas(h('2026-10-01T07:45'), {'feitos': []}, set()), 'sem RD emitido, o mensal sai assim mesmo')
+    ok(('mensal', '2026-09-30') in F.tarefas(h('2026-10-01T08:05'), {'feitos': []}, set()), 'sem RD emitido, o mensal sai assim mesmo')
     # recuperação: dias anteriores não feitos (até o teto), nunca antes da semeadura; mensal até o dia 5
-    ok(F.tarefas(h('2026-11-09T07:45'), {'feitos': ['diario:2026-11-06'], 'desde': '2026-11-06'}, set())
+    ok(F.tarefas(h('2026-11-09T08:05'), {'feitos': ['diario:2026-11-06'], 'desde': '2026-11-06'}, set())
        == [('diario', '2026-11-07'), ('diario', '2026-11-08')], 'a rodada que não rodou se recupera (07 e 08/11, o mais antigo primeiro)')
-    ok(F.tarefas(h('2026-11-20T07:45'), {'feitos': [], 'desde': '2026-11-01'}, set())
+    ok(F.tarefas(h('2026-11-20T08:05'), {'feitos': [], 'desde': '2026-11-01'}, set())
        == [('diario', '2026-11-17'), ('diario', '2026-11-18'), ('diario', '2026-11-19')], 'a recuperação tem teto de 3 dias')
-    ok(F.tarefas(h('2026-11-08T07:45'), {'feitos': [], 'desde': '2026-11-07'}, set()) == [('diario', '2026-11-07')],
+    ok(F.tarefas(h('2026-11-08T08:05'), {'feitos': [], 'desde': '2026-11-07'}, set()) == [('diario', '2026-11-07')],
        'nada anterior à semeadura sai')
     ok(F.tarefas(h('2026-11-08T06:30'), {'feitos': [], 'desde': '2026-11-06'}, set()) == [('diario', '2026-11-06')],
-       'antes das 07:40 só recupera dia anterior a ontem')
+       'antes das 08:00 só recupera dia anterior a ontem')
     ok(('mensal', '2026-11-30') in F.tarefas(h('2026-12-03T07:10'), {'feitos': [], 'desde': '2026-11-06'}, set()), 'o mensal se recupera no dia 3')
     ok(not any(m == 'mensal' for m, _ in F.tarefas(h('2026-12-06T07:10'), {'feitos': [], 'desde': '2026-11-06'}, set())), 'o mensal tem teto no dia 5')
     ok(not any(m == 'mensal' for m, _ in F.tarefas(h('2026-11-03T07:10'), {'feitos': [], 'desde': '2026-11-02'}, set())),
@@ -165,21 +167,24 @@ def casos(F):
     ok(cv['tentado_em'] == '2026-11-07' and not C.velho(dict(bom, ate='2026-11-05', tentado_em='2026-11-07'), '2026-11-06', '2026-11-07')
        and C.velho(dict(bom, ate='2026-11-05', tentado_em='2026-11-06'), '2026-11-06', '2026-11-07'),
        'curvas: uma tentativa por dia (tentado_em)')
-    ok(F.ESPERA_DIA_COMPLETO is False and F.HORA_DIARIO == '07:40', 'a espera do dia completo fica desligada e o diário às 07:40 (decisão do humano)')
+    ok(F.ESPERA_DIA_COMPLETO is False and F.HORA_DIARIO == '08:00', 'a espera do dia completo fica desligada e o diário às 08:00 (decisão do humano, 08/11)')
     # a disponibilidade do dia que ainda não chegou: "apuração às 10h", nunca um número parcial nem "—%"
     r0 = {'dia': '2026-11-07', 'liq': 2328.62, 'meta_dia': 2066.67, 'limitado': {'h': 0, 'est': None}, 'pr': 81.2, 'disp': None,
           'complexo': {'pct': 22.1, 'proj_pct': 110}, 'ppa': {'pct': 30.1, 'proj_pct': 151}}
     te, tp = F.texto_en('diario', r0), F.texto('diario', r0)
     ok('Availability: computed at 10h' in te.replace('· availability', '· Availability') and '—' not in te and 'apuração às 10h' in tp, 'disponibilidade ausente vira "computed at 10h" / "apuração às 10h"')
     ok('availability 99.87%' in F.texto_en('diario', dict(r0, disp=99.87)), 'disponibilidade presente sai com o número')
-    # o cron do boletim.yml cobre o horário do diário (a hora vive num lugar só; o cron tem de acompanhar)
-    wf = os.path.join(AQUI, '..', '..', '.github', 'workflows', 'boletim.yml')
-    if os.path.exists(wf):
-        ps = passadas_brt(io.open(wf, encoding='utf-8').read())
+    # o cron do boletim.yml cobre o horário do diário (a hora vive num lugar só; o cron tem de acompanhar). Só as passadas da MANHÃ
+    # (antes da folha das 17:30): as da tarde não cobrem o diário (sem o corte, a checagem passaria pela tarde em silêncio)
+    wf = WF_TEXTO if WF_TEXTO is not None else (io.open(WF, encoding='utf-8').read() if os.path.exists(WF) else None)
+    if wf is not None:
+        ps = passadas_brt(wf)
         hm = int(F.HORA_DIARIO[:2]) * 60 + int(F.HORA_DIARIO[3:])
-        dep = [p for p in ps if p >= hm - 5]
-        ok(dep and dep[0] <= hm + 10 and max(ps) >= hm + 80,
-           'a janela do cron cobre o diário das %s (passadas: %s)' % (F.HORA_DIARIO, ' '.join('%02d:%02d' % divmod(p, 60) for p in ps)))
+        hc = int(F.HORA_CURVA[:2]) * 60 + int(F.HORA_CURVA[3:])
+        pm = [p for p in ps if p < hc]
+        dep = [p for p in pm if p >= hm - 5]
+        ok(dep and dep[0] <= hm + 10 and max(pm) >= hm + 80,
+           'a janela do cron cobre o diário das %s (passadas da manhã: %s)' % (F.HORA_DIARIO, ' '.join('%02d:%02d' % divmod(p, 60) for p in pm)))
     return falhas
 
 
@@ -233,13 +238,13 @@ PLANTIOS = [
     ('a meta do ML vira fato', "for u in ('Complexo', 'PPA'):", "for u in ('Complexo', 'PPA', 'ML'):"),
     ('o fato se repete', "if acum >= man['meta_mwh'] > antes and 'fato:' + fid not in feitos", "if acum >= man['meta_mwh'] > antes"),
     ('a guarda de "ONS apurou 0" some', "PROIBIDO = [re.compile(r'ONS\\s+apurou\\s+0', re.I), re.compile(r'apurou\\s+0[,.]?0*\\s*MWh', re.I)]", "PROIBIDO = []"),
-    ('texto em português vai ao grupo', "        sem_portugues(n.get('texto', ''))", "        pass"),
+    ('texto em português vai ao grupo', "    sem_portugues(n.get('texto', ''))   # ao grupo vai só inglês", "    pass   # ao grupo vai só inglês"),
     ('o estimado perde a marca', "return f'Limited by the ONS: ≈ {nf_en(ld[\"est\"])} MWh estimated", "return f'Limited by the ONS: {nf_en(ld[\"est\"])} MWh"),
     ('RD não emitido vai', "d.get('tipo') == 'RD' and d.get('emissao') == 'AP'", "d.get('tipo') == 'RD'"),
-    ('RD se repete', "            if 'rd:' + d['codigo'] in feitos:\n                continue\n", ""),
+    ('RD se repete', "                if 'rd:' + d['codigo'] in feitos:\n                    continue\n", ""),
     ('o complemento volta', "            out.append(('diario', d))\n",
      "            out.append(('diario', d))\n        elif d in ons_dias and 'ons:' + d not in feitos:\n            out.append(('complemento', d))\n"),
-    ('o diário sai antes das 07:40', "BOLETIM_HORA_DIARIO') or '07:40'", "BOLETIM_HORA_DIARIO') or '07:00'"),
+    ('o diário sai antes das 08:00', "BOLETIM_HORA_DIARIO') or '08:00'", "BOLETIM_HORA_DIARIO') or '07:40'"),
     ('a disponibilidade parcial vira número', "else 'availability: ' + DISP_PENDENTE['en']", "else 'availability —%'"),
     ('o diário não se recupera', "for k in range(TETO_DIAS, 0, -1):", "for k in range(1, 0, -1):"),
     ('a recuperação não tem teto', "TETO_DIAS = 3 ", "TETO_DIAS = 30 "),
@@ -250,6 +255,12 @@ PLANTIOS = [
     ('a semeadura não poda a fila', "'itens': [], 'atualizado': quando}", "'itens': (estado or {}).get('itens_x', [{'id': 'velho'}]), 'atualizado': quando}"),
     ('feitos sem forma', "    if ruins:\n        raise SystemExit('RECUSADO: feitos fora da forma", "    if False:\n        raise SystemExit('RECUSADO: feitos fora da forma"),
     ('a espera vem ligada', "ESPERA_DIA_COMPLETO = os.environ.get('BOLETIM_ESPERA_DIA_COMPLETO') == '1'", "ESPERA_DIA_COMPLETO = True"),
+]
+
+
+# o cron da manhã (o plantio troca o texto do workflow): uma passada só não cobre o atraso do agendador
+PLANTIOS_WF = [
+    ("só '1 11' de manhã", "    - cron: '31 11 * * *'      # 08:31: o agendador do GitHub atrasa de 30 a 90 min; a janela cobre\n    - cron: '1,31 12 * * *'    # 09:01 e 09:31\n", ''),
 ]
 
 
@@ -264,8 +275,9 @@ PLANTIOS_CURVAS = [
 
 
 PLANTIOS_RODADA = [
-    ('a falha das curvas derruba o diário', "except Exception as e:   # noqa: BLE001\n            erro_curvas", "except ZeroDivisionError as e:   # noqa: BLE001\n            erro_curvas"),
-    ('a falha das curvas sai verde', "    if barrados or erro_curvas:", "    if barrados:"),
+    ('a falha das curvas derruba o diário', "except Exception as e:   # noqa: BLE001\n        erro_curvas", "except ZeroDivisionError as e:   # noqa: BLE001\n        erro_curvas"),
+    ('a falha das curvas sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados:",
+     "    if barrados or erro_tarde or erro_diario or erro_rd or erro_enviados:"),
 ]
 
 
@@ -295,7 +307,7 @@ def ensaio_rodada_curvas(R=None):
                     raise ValueError('medição de mentira')
                 R.C.monta = _q
             argv0, rc = sys.argv, 0
-            sys.argv = ['rodada.py', '--agora', '2026-11-07T07:45', '--sem-render']
+            sys.argv = ['rodada.py', '--agora', '2026-11-07T08:05', '--sem-render']
             os.environ.pop('BOLETIM_AGORA', None)
             try:
                 with contextlib.redirect_stdout(io.StringIO()):   # o log da rodada não polui o veredito
@@ -356,6 +368,19 @@ def main():
         except Exception as e:   # noqa: BLE001
             f = ['quebrou: %s' % e]
         print('  plantio "%s": %s' % (nome, 'reprovado, como devia (%s)' % f[0][:110] if f else 'PASSOU — o ensaio não pega'))
+        ruim |= not f
+    # o cron da manhã: o plantio vai no texto do boletim.yml
+    global WF_TEXTO
+    wf0 = io.open(WF, encoding='utf-8').read()
+    for nome, de, para in PLANTIOS_WF:
+        if wf0.count(de) != 1:
+            print('  PLANTIO SEM ÂNCORA:', nome); ruim = True; continue
+        WF_TEXTO = wf0.replace(de, para)
+        try:
+            f = casos(carrega(FONTE))
+        finally:
+            WF_TEXTO = None
+        print('  plantio "%s": %s' % (nome, 'reprovado, como devia (%s)' % f[0] if f else 'PASSOU — o ensaio não pega'))
         ruim |= not f
     print('ensaio do boletim:', 'REPROVADO' if ruim else 'APROVADO')
     sys.exit(1 if ruim else 0)
