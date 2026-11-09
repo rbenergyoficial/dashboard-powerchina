@@ -1,0 +1,55 @@
+name: Custos do Azure (aba Custos da Malha)
+
+# Lote malha-custos (09/11/2026). Humano: "quero um painel no SIGO para medir os custos em tempo real (...) pode ser na Malha",
+# "meta de R$ 250 por mes". Le o custo oficial (Cost Management, BRL, sem imposto; chega com 8 a 24 h de atraso, limite do Azure),
+# a saida de dados de hoje (metrica Egress do storage) e a configuracao do que custa caro (plano dos bancos, discos soltos, a ponte
+# ligada fora de hora). Grava UM arquivo, portal-admin/custos.json, no conteiner privado do admin.
+# 💰 Nao le nada do storage: as consultas vao a API de gestao do Azure, que nao e saida de dados (sem custo de saida).
+# 🔐 O principal do OIDC precisa de: Cost Management Reader e Monitoring Reader na assinatura (so leitura), e o nome custos.json na
+#    condicao do papel proprio do portal-admin. Sem eles, o passo falha dizendo o HTTP 403.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '47 * * * *'  # de hora em hora, fora do :00
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: custos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # piso de 10 min; medido no PC: ~1 min com as repeticoes do limite de pedidos do Cost Management
+    steps:
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6  # v2.3.1
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Ler os custos
+        env:
+          LOCAL_OUT: ${{ runner.temp }}/custos.json
+        run: node scripts/gen-custos.js
+      # O arquivo so sobe se fechar as proprias contas (soma dos dias, imposto, meta, aviso de meta); plantios no proprio ensaio
+      - name: Ensaio · o arquivo fecha as contas
+        run: node scripts/ensaio-custos.js "${{ runner.temp }}/custos.json"
+      - name: Gravar portal-admin/custos.json
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          SOBE: ${{ runner.temp }}/custos.json
+        run: node scripts/gen-custos.js
