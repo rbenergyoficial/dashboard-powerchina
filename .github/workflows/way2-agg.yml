@@ -48,6 +48,11 @@ jobs:
       # arquivo novo, para aqui, antes de ler qualquer dia.
       - name: Ensaio · leitura condicional do historico do medidor
         run: node scripts/ensaio-le-blob.js --so way2-agg   # a lib e a fiacao DESTE gerador; a dos outros, no ensaios.yml a cada push
+      # 💰 custo-way2agg-estado (09/11/2026): a saida anterior (way2_15min/30min/1h, ~42 MB) vem pela copia compactada que a
+      #    execucao anterior gravou em estado-gerador/, so se for da MESMA versao (etag); senao baixa inteira, como antes.
+      #    O ensaio prova a lib e a fiacao do gerador, com plantios, sem rede.
+      - name: Ensaio · copia compactada da saida anterior
+        run: node scripts/ensaio-estado-gz.js
       - name: Restaurar a copia do historico do medidor
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:

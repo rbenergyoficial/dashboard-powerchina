@@ -27,6 +27,8 @@
  *   REFRESH_DIAS (default 3, mínimo 2). RESOLUCOES (csv de nomes de blob p/ limitar; default os 3).
  */
 const LD = require('./lib-le-dados');   // Fase 2: leitura de `dados` com credencial
+const EG = require('./lib-estado-gz');  // custo-way2agg-estado: a saída anterior pela cópia compactada
+if (require.main === module) process.on('exit', () => console.log('  ' + EG.resumo()));
 
 const CONTAINER = 'dados';
 const BLOB_BASE = 'https://rbenergydata.blob.core.windows.net/dados/';
@@ -160,7 +162,8 @@ async function main() {
     const bc = container.getBlockBlobClient(r.blob);
     const cutoffDia = diaBRT(r.janelaDias - 1);   // dia mais antigo a manter na janela
     let existente = null;
-    if (!FORCAR) { try { if (await bc.exists()) existente = parseJson(await bc.downloadToBuffer()); } catch (e) { existente = null; } }
+    // 💰 custo-way2agg-estado (09/11/2026): a saída anterior vem pela cópia compactada (lib-estado-gz), só se for a mesma versão
+    if (!FORCAR) { try { const b = await EG.le(container, r.blob); if (b) existente = parseJson(b); } catch (e) { existente = null; } }
 
     const ultima = existente ? maxDiaBlob(existente) : null;
     const podeIncremental = !!ultima && ultima >= cutoffDia;   // blob válido e dentro da janela
@@ -193,7 +196,11 @@ async function main() {
     const body = JSON.stringify(obj);
     // max-age 10min: o blob muda de hora em hora, então servir cacheado por ≤10min é fresco o bastante
     // E deixa os 13 painéis do Monitor compartilharem 1 download (no-cache faria cada um re-baixar).
-    await bc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=600' } });
+    const up = await bc.upload(body, Buffer.byteLength(body), { blobHTTPHeaders: { blobContentType: 'application/json', blobCacheControl: 'public, max-age=600' } });
+    // a cópia compactada da saída, com a etag desta versão: a próxima execução lê ~10x menos. Falhar aqui não derruba a saída,
+    // que já foi gravada: a próxima execução só baixa a saída inteira.
+    try { const n = await EG.grava(container, r.blob, body, up.etag); console.log(`[${r.blob}] copia compactada ${(n / 1e6).toFixed(2)}MB`); }
+    catch (e) { console.log(`::warning::[${r.blob}] copia compactada nao gravada (${e && e.message ? String(e.message).split('\n')[0] : e}): a proxima execucao baixa a saida inteira`); }
     // 💰 o executivo so usa a potencia (Demat) do agregado de 1 h, uma das 8 grandezas: le um blob so com ela, e nao os ~19,5 MB
     if (r.blob === 'way2_1h.json') {
       const enxuto = JSON.stringify(Object.assign({}, obj, { dados: obj.dados.filter((s) => s.nomeGrandeza === 'Demat') }));
