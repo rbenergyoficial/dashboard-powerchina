@@ -26,7 +26,9 @@ jobs:
       #    e o dia aberto nao vai ao disco. Os CSV do scada-raw (imutaveis) ficam numa entrada de cache propria (.cache-scada).
       CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
       CACHE_SCADA_DIR: ${{ github.workspace }}/.cache-scada
-      LE_DADOS_PROPRIOS: '^(irr_ufv|irr_60min|irr_30min|irr_plano_30min|ons_restricao_all|ons_irradiancia_all|estacao_tudo_30min|estacao_logger_30min|way2_daily|executivo|benchmark_ne|corte_gemeo)\.json$'
+      # custo-releituras (09/11/2026): + os ons_irradiancia_AAAA_MM (15 arquivos, ate 7 processos leem por rodada), ref_hora, perfil_dia,
+      #    pr, pr_ufv, pr_hora, way2_eneat_diario, way2_energia_mes e guarda_liquida (2 a 3 leitores cada): ~7 MB a menos por rodada
+      LE_DADOS_PROPRIOS: '^(irr_ufv|irr_60min|irr_30min|irr_plano_30min|ons_restricao_all|ons_irradiancia_all|ons_irradiancia_\d{4}_\d{2}|estacao_tudo_30min|estacao_logger_30min|way2_daily|executivo|benchmark_ne|corte_gemeo|ref_hora|perfil_dia|pr|pr_ufv|pr_hora|way2_eneat_diario|way2_energia_mes|guarda_liquida)\.json$'
     timeout-minutes: 15
     steps:
       # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
