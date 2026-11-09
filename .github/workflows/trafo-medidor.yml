@@ -71,6 +71,16 @@ jobs:
           path: .cache-blob
           key: hist-publico-trafo-way2-${{ github.run_id }}
           restore-keys: hist-publico-trafo-way2-
+      # 💰 custo-trafo-proprios (09/11/2026): as saidas anteriores (trafo_5min/15min/30min/60min/diario, ~5 MB em gzip) numa entrada de
+      #    cache PROPRIA, guardada a cada rodada: a seguinte pede com If-None-Match a copia que o gerar lembrou ao gravar, e o 304 do
+      #    storage a confirma. Na entrada do historico elas iam velhas (a chave so muda com dia novo) e voltavam 200, inteiras.
+      #    A faxina-cache apaga as entradas superadas.
+      - name: Restaurar as saidas anteriores (copia propria)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-blob/proprios
+          key: trafo-proprios-${{ github.run_id }}
+          restore-keys: trafo-proprios-
       - name: Gerar trafo_*.json (lado de 230 kV pelo medidor, 5 min integralizado)
         id: medidor
         env:
@@ -102,3 +112,11 @@ jobs:
         with:
           path: .cache-blob
           key: hist-publico-trafo-way2-${{ hashFiles('.cache-blob/publico/*.meta') }}
+      # custo-trafo-proprios: a copia das saidas DESTA rodada, que a seguinte confirma pelo 304. So depois do gerar com sucesso.
+      - name: Guardar as saidas desta rodada (copia propria)
+        if: ${{ !cancelled() && steps.medidor.outcome == 'success' && hashFiles('.cache-blob/proprios/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-blob/proprios
+          key: trafo-proprios-${{ hashFiles('.cache-blob/proprios/*.meta') }}

@@ -82,8 +82,20 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with: { node-version: '20' }
       - run: npm i @azure/storage-blob@12
+      # 💰 custo-must-proprios (09/11/2026): as quatro saidas da rodada anterior (~1,2 MB em gzip) numa entrada de cache propria; o
+      #    gerar, o vigia e o alerta pedem com If-None-Match e o 304 do storage confirma a copia. A faxina-cache apaga as superadas.
+      - name: Ensaio · copia propria do must (sem rede)
+        run: node scripts/ensaio-must-proprios.js
+      - name: Restaurar as saidas anteriores (copia propria)
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-blob/proprios
+          key: must-proprios-${{ github.run_id }}
+          restore-keys: must-proprios-
       - name: Gerar as quatro resolucoes
         env:
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^must_(5min|15min|30min|60min)\.json$'   # custo-must-proprios: as saidas pela copia em disco (304)
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
@@ -112,6 +124,8 @@ jobs:
       - name: Medir o frescor do MUST (sem alerta)
         if: always() && (github.event_name == 'schedule' || (inputs.dias || '2') == '2')
         env:
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^must_(5min|15min|30min|60min)\.json$'   # custo-must-proprios: as saidas pela copia em disco (304)
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           WAY2_TOKEN: ${{ secrets.WAY2_TOKEN }}
@@ -136,4 +150,13 @@ jobs:
           AZ_MAIL_CLIENT_ID: ${{ vars.AZ_MAIL_CLIENT_ID }}
           MAIL_DE: ${{ vars.MAIL_DE }}
           MAIL_PARA: ${{ vars.MAIL_PARA_MUST }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob
+          LE_DADOS_PROPRIOS: '^must_(5min|15min|30min|60min)\.json$'   # custo-must-proprios: as saidas pela copia em disco (304)
         run: node scripts/alerta-must.js
+      - name: Guardar as saidas desta rodada (copia propria)
+        if: ${{ !cancelled() && hashFiles('.cache-blob/proprios/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-blob/proprios
+          key: must-proprios-${{ hashFiles('.cache-blob/proprios/*.meta') }}

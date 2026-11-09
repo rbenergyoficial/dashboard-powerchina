@@ -340,9 +340,12 @@ async function grava(nome, obj) {
   // a chave ou o OIDC do job (lib-conteiner); sem createIfNotExists: o `dados` existe, e criar conteiner nao e papel do gerador
   const cont = require('./lib-conteiner').conteiner(CONTAINER);
   const gz = require('zlib').gzipSync(Buffer.from(json, 'utf8'), { level: 9 });
-  await cont.getBlockBlobClient(nome).upload(gz, gz.length,
+  const up = await cont.getBlockBlobClient(nome).upload(gz, gz.length,
     { blobHTTPHeaders: { blobContentType: 'application/json', blobContentEncoding: 'gzip',
       blobCacheControl: 'public, max-age=300' } });
+  // 💰 custo-must-proprios (09/11/2026): a copia em disco desta saida, com a etag do upload. O watchdog e o alerta do mesmo job e a
+  //    rodada seguinte (pelo cache do Actions) pedem com If-None-Match e o 304 do storage a confirma. Sem LE_DADOS_PROPRIOS, nada muda.
+  LD.lembra(nome, up.etag, gz, up.lastModified);
   return gz.length;
 }
 
