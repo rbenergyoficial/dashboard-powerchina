@@ -12,6 +12,8 @@ on:
       - 'relogio/gerar-agenda.js'
       - 'relogio/src/index.js'
       - 'relogio/ensaio-guarda.js'
+      - 'relogio/src/cron.js'
+      - 'relogio/ensaio-cron.js'
   workflow_dispatch:
 
 jobs:
@@ -26,3 +28,5 @@ jobs:
       # a guarda anti-empilhamento tem ensaio proprio, e ele roda aqui tambem: o deploy so
       # acontece quando `relogio/**` muda, e um cron novo num workflow pode furar a margem dela
       - run: node relogio/ensaio-guarda.js
+      # e a agenda viva tem de compilar no relogio de um temporizador (um cron que ele nao sabe tocar fica vermelho aqui)
+      - run: node relogio/ensaio-cron.js

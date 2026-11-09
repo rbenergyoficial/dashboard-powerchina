@@ -165,3 +165,20 @@ POST https://<app>.scm.azurewebsites.net/api/publish?RemoteBuild=false
 
 **A conferência é `/admin/functions`, não o status do deploy**: o pipeline do Kudu reporta
 `status 4` (sucesso) mesmo quando o host não consegue montar o pacote.
+
+## Um temporizador só (lote `relogio-um-temporizador`, 09/11/2026)
+
+Até 09/11 havia um temporizador por linha da agenda (35). O Azure consulta o estado de cada temporizador a cada ~10 s, e a
+conta de armazenamento do relógio (`relogiofunc`) fazia 10 a 12 mil leituras por hora, ~R$ 25/mês só disso (Cost
+Management, "Hot Read Operations"; métrica Transactions/GetBlob: 254.655 em 07/11 com 31 temporizadores, 303.992 em 08/11
+com 35). Agora é UM temporizador de minuto (`relogio`, `0 * * * * *`) que lê a agenda (`src/cron.js`) e dispara o que toca
+naquele minuto. A agenda continua gerada dos workflows e conferida no CI; o que é disparado e quando não muda.
+
+- **Volta de parada:** varre do minuto seguinte ao último registrado pelo Azure (`scheduleStatus.last`) até o atual,
+  inclusive; cada workflow sai uma vez; a varredura para em 6 h. É o que cada temporizador fazia com `isPastDue`.
+- **Recusa na carga** o que não sabe tocar (segundo ≠ 0, dia do mês junto com dia da semana): o deploy fica vermelho.
+- **Falha de um workflow não tira os outros do minuto**; a execução estoura no fim, com os nomes.
+- **Ensaio** `ensaio-cron.js` (no deploy e no `relogio-confere`): interpretador sobre a agenda de 09/11 congelada, contra
+  horários escritos à mão; volta de parada; a agenda viva compila e toca; seis plantios reprovam.
+- **Memória da instância:** 512 MB (era 2048). Cada execução só faz chamadas HTTP ao GitHub; o tempo cobrado é
+  memória × duração.

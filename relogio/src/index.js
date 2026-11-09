@@ -18,6 +18,7 @@
 'use strict';
 const { app } = require('@azure/functions');
 const AGENDA = require('../agenda.json');
+const { regras, plano } = require('./cron');
 
 const REPO = process.env.GH_REPO || 'rbenergyoficial/dashboard-powerchina';
 const REF = process.env.GH_REF || 'main';
@@ -126,27 +127,30 @@ async function dispara(wf, log) {
   return 'disparado';
 }
 
-// Um temporizador por linha da agenda. A agenda e GERADA dos proprios workflows (ver
-// gerar-agenda.js) e conferida no CI: se alguem mudar um cron no workflow e nao aqui, fica
-// vermelho — em vez de o relogio continuar tocando no horario antigo, calado.
-for (const [wf, crons] of Object.entries(AGENDA)) {
-  crons.forEach((schedule, i) => {
-    const nome = 'dispara-' + wf.replace(/\.yml$/, '') + (crons.length > 1 ? '-' + (i + 1) : '');
-    app.timer(nome, {
-      schedule,                    // NCRONTAB: 6 campos, UTC (o mesmo fuso do cron do GitHub)
-      runOnStartup: false,         // subir o app nao e motivo para disparar tudo de uma vez
-      handler: async (_t, ctx) => {
-        try { await dispara(wf, ctx); }
-        catch (e) {
-          // Estourar de proposito: no Azure isso vira execucao falha e fica visivel. Engolir aqui
-          // deixaria o relogio parado sem ninguem saber, que e como se perde dado sem alarme.
-          ctx.error(`${wf}: FALHOU — ${e.message}`);
-          throw e;
-        }
-      }
-    });
-  });
-}
+// UM temporizador de minuto le a agenda e dispara o que toca naquele minuto (lote relogio-um-temporizador,
+// 09/11/2026; o porque e o custo estao em src/cron.js). A agenda continua GERADA dos proprios workflows (ver
+// gerar-agenda.js) e conferida no CI: se alguem mudar um cron no workflow e nao aqui, fica vermelho — em vez de o
+// relogio continuar tocando no horario antigo, calado. Uma linha que este relogio nao sabe tocar derruba a CARGA
+// (compila recusa), e o deploy fica vermelho na conferencia das funcoes.
+const REGRAS = regras(AGENDA);
+
+app.timer('relogio', {
+  schedule: '0 * * * * *',       // todo minuto, segundo 0, UTC
+  runOnStartup: false,           // subir o app nao e motivo para disparar tudo de uma vez
+  handler: async (t, ctx) => {
+    const ultimo = Date.parse(t && t.scheduleStatus && t.scheduleStatus.last);
+    const p = plano(REGRAS, ultimo, Date.now());
+    if (p.de !== p.ate) ctx.warn(`relogio: varrendo ${p.de} a ${p.ate} (volta de parada ou atraso)`);
+    const falhas = [];
+    for (const wf of p.workflows) {
+      try { await dispara(wf, ctx); }
+      catch (e) { ctx.error(`${wf}: FALHOU — ${e.message}`); falhas.push(wf); }
+    }
+    // Estourar de proposito, DEPOIS de tentar todos: no Azure isso vira execucao falha e fica visivel. Engolir aqui
+    // deixaria o relogio parado sem ninguem saber; parar no primeiro erro tiraria os outros workflows do minuto.
+    if (falhas.length) throw new Error('falharam: ' + falhas.join(', '));
+  }
+});
 
 // Sonda manual: abre /api/saude e diz o que o relogio acha que tem de fazer. Serve para conferir
 // que a agenda subiu inteira, sem esperar o proximo horario.
@@ -160,7 +164,8 @@ app.http('saude', {
         repo: REPO, ref: REF,
         temTokenn: Boolean(process.env.GH_TOKEN),
         workflows: linhas.length,
-        temporizadores: linhas.reduce((s, x) => s + x.horarios.length, 0),
+        temporizadores: 1,
+        linhas_da_agenda: linhas.reduce((s, x) => s + x.horarios.length, 0),
         agenda: linhas
       }
     };
