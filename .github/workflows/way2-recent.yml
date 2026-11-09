@@ -209,6 +209,20 @@ jobs:
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
           ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
         run: node scripts/gen-alarmes-way2.js
+      # sinotico-dados (09/11/2026, humano: o Sinotico do SIGO Dados, espelho do supervisorio): o estado de cada disjuntor e o do
+      #    ALARME que o passo de cima acabou de gravar (episodio em curso), e as medidas do ultimo intervalo da coleta desta rodada.
+      #    O ensaio vem antes e o gerador so roda se ele passar; falha aqui nao toca nos alarmes.
+      - name: Ensaio · Sinotico (sem rede)
+        id: ensaio_sinotico
+        if: ${{ !cancelled() }}
+        run: node scripts/ensaio-sinotico.js
+      - name: Sinotico (sinotico.json)
+        if: ${{ !cancelled() && steps.ensaio_sinotico.outcome == 'success' && steps.ensaio_alarmes.outcome == 'success' }}
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ELET_LOCAL_DIR: ${{ runner.temp }}/eletrico
+        run: node scripts/gen-sinotico.js
       # analise-ao-vivo (07/11/2026): a Analise de dados ao vivo, sem IA (liberado e nao recuperou, ocorrencia agrupada, circuito energizado sem geracao,
       # medidor sem dado), sobre a MESMA copia local da coleta; grava analise_vivo.json ANTES dos eventos, que levam os achados com voz para a faixa e a fala.
       # A regra se julga nos forjados (passo logo abaixo, sem rede); os dias reais e os plantios rodam no ensaios.yml.
