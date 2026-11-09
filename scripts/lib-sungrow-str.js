@@ -199,13 +199,19 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
     resumo, serie: ALARMES });
   /* 4 · os de 5 MIN: so os ultimos DIAS_5MIN dias. Strings: so as entradas reais ou com corrente no dia (a vazia nao pesa) */
   let nG = 0;
+  const LIMA = new Map();   // sg-lim-dia: dia -> { ets: Set, g: Map(minuto -> gerando), l: Map(minuto -> limitados) }
+  const somaLim = (k, linhas) => { for (const l of linhas) { if (!Array.isArray(l.lim) || !Array.isArray(l.p) || typeof l.h0 !== 'string') continue;
+    const a = LIMA.get(l.d) || (LIMA.set(l.d, { ets: new Set(), g: new Map(), l: new Map() }), LIMA.get(l.d)); a.ets.add(k);
+    const m0 = Number(l.h0.slice(0, 2)) * 60 + Number(l.h0.slice(3, 5));
+    l.p.forEach((p, i) => { if (p == null || p * 100 <= P_GER_W || l.lim[i] == null) return; const m = m0 + 5 * i;
+      a.g.set(m, (a.g.get(m) || 0) + 1); if (l.lim[i] === 1) a.l.set(m, (a.l.get(m) || 0) + 1); }); } };
   for (const k of mEtcs) {
     const [u, tsx] = k.split('_');
     const novo = (novoG[k] || []).filter((l) => vale(l, u, tsx));
     const antS = await leAnterior('sg_str_' + k + '.json'), antC = await leAnterior('sg_curva_' + k + '.json');
     const vS = ((antS && antS.serie) || []).filter((l) => vale(l, u, tsx)), vC = ((antC && antC.serie) || []).filter((l) => vale(l, u, tsx));
     const tiradosG = ((antS && antS.serie) || []).length - vS.length + ((antC && antC.serie) || []).length - vC.length;
-    if (!novo.length && antS && antC && !tiradosG) continue;
+    if (!novo.length && antS && antC && !tiradosG) { somaLim(k, vC); continue; }
     const tS = new Map(vS.map((l) => [l.d + '|' + l.inv, l]));
     const tC = new Map(vC.map((l) => [l.d + '|' + l.inv, l]));
     const lidas = (l) => (l && l.p ? l.p.filter((x) => x != null).length : -1);
@@ -225,8 +231,33 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
       unidade: 'a cada 5 min a partir de h0: p potencia CA e pdc potencia CC, 0,1 kW (inteiro); t temperatura interna, 0,1 °C; lim 1 = potencia'
         + ' limitada; iso isolamento do arranjo, kOhm (nulo sem leitura); nom potencia nominal do dia, kW (iso e nom desde 20/10/2026: as linhas'
         + ' anteriores nao os tem); sn numero de serie', serie: fica(tC) });
+    somaLim(k, fica(tC));
     nG += 1;
   }
+  /* 5 · sg-lim-dia (09/11/2026): o COMPLEXO
+     a cada 5 min, quantos inversores gerando (mais de 1 kW) e quantos deles com potencia limitada. O 5 min por inversor so vive 7 dias:
+     este arquivo guarda DIAS_LIM dias. Um dia so e regravado com cobertura igual ou maior (eletrocentros com leitura): a ponta da janela
+     de 7 dias, com eletrocentros ja cortados, nao rebaixa o dia publicado */
+  const DIAS_LIM = 400;
+  const antL = await leAnterior('sg_lim_dia.json');
+  const LD = Object.assign({}, (antL && antL.dias) || {});
+  let mudouL = !antL;
+  for (const [d, a] of LIMA) {
+    const ms = [...a.g.keys()].sort((x, y) => x - y); if (!ms.length) continue;
+    const m0 = ms[0], n = (ms[ms.length - 1] - m0) / 5 + 1;
+    const g = new Array(n).fill(0), l = new Array(n).fill(0);
+    for (const m of ms) { g[(m - m0) / 5] = a.g.get(m); l[(m - m0) / 5] = a.l.get(m) || 0; }
+    const novoDia = { h0: String(Math.floor(m0 / 60)).padStart(2, '0') + ':' + String(m0 % 60).padStart(2, '0'), ets: a.ets.size, g, l };
+    const velho = LD[d];
+    if (velho && velho.ets > novoDia.ets) continue;
+    if (velho && JSON.stringify(velho) === JSON.stringify(novoDia)) continue;
+    LD[d] = novoDia; mudouL = true;
+  }
+  const dsL = Object.keys(LD).sort(), corteL = corteDe(dsL.length ? dsL[dsL.length - 1] : '', DIAS_LIM);
+  for (const d of dsL) if (d < corteL) { delete LD[d]; mudouL = true; }
+  if (mudouL) pesos['sg_lim_dia.json'] = await escreve('sg_lim_dia.json', { gerado_em: agora, esquema: 1, janela_dias: DIAS_LIM, fonte: 'logger Sungrow, 5 min',
+    unidade: 'por dia, a cada 5 min a partir de h0 (BRT): g inversores do Complexo gerando (mais de 1 kW) e l quantos deles com potencia limitada'
+      + ' ("Modo de potencia limitada" diferente de zero); ets eletrocentros com leitura no dia', dias: LD });
   console.log('  strings do logger: ' + nD + ' diario(s) e ' + nG + ' de 5 min gravado(s) · entradas reais por usina contra a placa: '
     + resumo.map((x) => x.ufv + ' ' + x.strings_com_corrente + '/' + x.placa).join(', ') + ' · alarmes: '
     + ALARMES.filter((a) => a.classe === 'morta').length + ' sem corrente, ' + ALARMES.filter((a) => a.classe === 'fraca').length + ' fracas (ate ' + ate + ')');

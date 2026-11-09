@@ -240,7 +240,7 @@ async function ensaio(libPath, mudo) {
     await planta('parcial reenviado vence no diario', 'if (a && a.sn === l.sn && a.na != null && a.na > l.na) continue;', '', /^zip parcial reenviado/);
     await planta('parcial reenviado vence no 5 min', 'if (aC && aC.sn === l.sn && lidas(aC) > lidas(l.cv)) continue;', '', /^zip parcial reenviado/);
     await planta('troca tardia sem regravar o diario', 'if (!trocou && ant && !tirados) continue;', 'if (!trocou && ant) continue;', /^troca descoberta depois/);
-    await planta('troca tardia sem regravar o 5 min', 'if (!novo.length && antS && antC && !tiradosG) continue;', 'if (!novo.length && antS && antC) continue;', /^e o 5 min tambem/);
+    await planta('troca tardia sem regravar o 5 min', 'if (!novo.length && antS && antC && !tiradosG) {', 'if (!novo.length && antS && antC) {', /^e o 5 min tambem/);
     await planta('ms em UTC', "ms: Date.parse(d + 'T03:00:00Z')", "ms: Date.parse(d + 'T00:00:00Z')", /^ms do dia em BRT/);
     await planta('dispersao sem o piso de classe', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A)', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, 0)', /^dia escuro/);
     await planta('entradas sem o historico anterior', "STRL.fundeEntradas((entAnt && entAnt.entradas) || [], obs, PISO_A)", 'STRL.fundeEntradas([], obs, PISO_A)', /^a entrada real que so o historico/);

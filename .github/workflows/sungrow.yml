@@ -68,11 +68,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/ensaio-sungrow-disp.js
       # as strings e a curva de 5 min do logger (lib-sungrow-str, sg-logger-str): escala, pico, razao sem a limitacao e sem o piso,
-      # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios
+      # entrada vazia, sentinela, grade de 5 min; os produtos com a troca, a sem corrente e a fraca, o corte de 7 dias, com plantios.
+      # + sg-lim-dia (09/11/2026): o sg_lim_dia.json (inversores gerando e limitados a cada 5 min, 400 dias), com plantios
       - name: Ensaio · strings e curva de 5 min do logger (sem rede)
         id: r_str
         if: ${{ !cancelled() }}
-        run: node scripts/ensaio-sungrow-str.js
+        run: |
+          node scripts/ensaio-sungrow-str.js
+          node scripts/ensaio-sg-lim-dia.js
       # A curva de 30 min por inversor e a razao de cada string (pvstr_hora_<usina>, pvstr_str_<usina>_<ts>)
       # pelo logger, a MEDIA das seis leituras de 5 min (lib-pvstr-logger). Mundo forjado com a conta refeita no ensaio, o gerador de
       # ponta a ponta (semente da copia do supervisorio, abortos sem gravar), o nome da copia no gen-perdas, com plantios. Sem rede
