@@ -27,6 +27,9 @@
  "executivo.yml": [
   "0 13 4,9-22 * * *"
  ],
+ "faxina-cache.yml": [
+  "0 37 */6 * * *"
+ ],
  "inversores.yml": [
   "0 22 0,12,18 * * *"
  ],

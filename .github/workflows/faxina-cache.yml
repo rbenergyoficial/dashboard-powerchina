@@ -1,0 +1,33 @@
+name: Faxina do cache do Actions
+
+# Lote faxina-cache (09/11/2026, auditoria de custo; humano: "pode montar a faxina diaria"). O cache do repositorio tem teto de 10 GB;
+# acima dele o GitHub despeja entradas, e as copias que poupam saida de dados do storage somem. Cada execucao que muda a copia grava
+# uma entrada nova (o sungrow-scada, ~180 MB por execucao, ~2,5 GB/dia), e o restore-keys so usa a MAIS NOVA de cada familia.
+# Fica a mais nova de cada familia e ref; sai o resto que nao foi usado nas ultimas 2 h. Cache e copia regeneravel: nenhum dado.
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '37 */6 * * *'   # a cada 6 h, fora do :00
+
+permissions:
+  actions: write   # apagar entradas do cache (so isso)
+  contents: read
+
+concurrency:
+  group: faxina-cache
+  cancel-in-progress: false
+
+jobs:
+  faxina:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10  # piso de 10 min; a faxina manual de 09/11 (104 entradas) levou ~1 min
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '20' }
+      - name: Ensaio · a regra da faxina (sem rede)
+        run: node scripts/ensaio-faxina-cache.js
+      - name: Apagar as entradas superadas
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/faxina-cache.js
