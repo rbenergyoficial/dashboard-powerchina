@@ -147,38 +147,9 @@ async function grava(nome, obj) {
   const corte = dias.slice(-JANELA_DIAS)[0];
   eventos = eventos.filter((e) => (e.dia || String(e.ts).slice(0, 10)) >= corte);
 
-  // o resumo por dia, que e o que o painel le para nao baixar a serie inteira
-  const porDia = new Map();
-  for (const e of eventos) {
-    const d = e.dia || String(e.ts).slice(0, 10);
-    if (!porDia.has(d)) porDia.set(d, { dia: d, eventos: 0, restritos: 0, primeiro: null, ultimo: null,
-      pot_min: null, cods: new Set(), tecnicos: new Set() });
-    const x = porDia.get(d);
-    x.eventos += 1;
-    if (e.restr) {
-      x.restritos += 1;
-      if (x.pot_min == null || e.pot < x.pot_min) x.pot_min = e.pot;
-      if (e.motivo_cod) x.cods.add(e.motivo_cod);
-    }
-    if (!x.primeiro) x.primeiro = String(e.ts).slice(11);
-    x.ultimo = String(e.ts).slice(11);
-    if (e.tecnico) x.tecnicos.add(e.tecnico);
-  }
-  // a DURACAO sai do degrau, nao da contagem de linhas: `restritos` conta EVENTOS, e um dia com
-  // vinte lancamentos pode ser de duas horas ou de dez. Quem faz a conta e o lib, porque a
-  // auditoria e o ensaio leem a mesma escrita.
-  const dur = P.duracaoRestricao(eventos);
-  const resumo = [...porDia.values()].map((x) => {
-    const d = dur.get(x.dia) || { minutos: 0, aberta: 0 };
-    return { dia: x.dia, eventos: x.eventos, restritos: x.restritos,
-      primeiro: x.primeiro, ultimo: x.ultimo, pot_min: x.pot_min == null ? null : Math.round(x.pot_min * 100) / 100,
-      // em HORAS na tela, mas arredondada uma vez so, aqui: o painel nao refaz conta
-      horas_restricao: Math.round((d.minutos / 60) * 100) / 100,
-      // 1 quando o ultimo lancamento do dia ainda esta restrito — a duracao vira PISO, e o painel
-      // tem de poder dizer isso em vez de desenhar um numero curto como se fosse a medida
-      restricao_aberta: d.aberta,
-      motivo_cods: [...x.cods].sort(), tecnicos: [...x.tecnicos].sort() };
-  });
+  // o resumo por dia, que e o que o painel le para nao baixar a serie inteira; a conta mora no lib (lib-ppc.resumoDias), a mesma do
+  // gerador do RDO do SIGO (gen-ppc-rdo.js). A DURACAO sai do degrau, nao da contagem de linhas.
+  const resumo = P.resumoDias(eventos);
 
   const out = {
     fonte: 'registro da mesa de operacao do controlador de potencia do complexo',

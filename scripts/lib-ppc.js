@@ -270,4 +270,36 @@ function integraliza(ev) {
   return slots;
 }
 
-module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, fundeCopias, integraliza, duracaoRestricao, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };
+/**
+ * O RESUMO POR DIA, que e o que o painel le para nao baixar a serie inteira. Saiu do gen-ppc em 01/11/2026 (lote ppc-rdo) para o
+ * gerador da planilha e o do RDO do SIGO fazerem a MESMA conta. A duracao sai do degrau (duracaoRestricao), nao da contagem de linhas.
+ */
+function resumoDias(eventos) {
+  const porDia = new Map();
+  for (const e of eventos) {
+    const d = e.dia || String(e.ts).slice(0, 10);
+    if (!porDia.has(d)) porDia.set(d, { dia: d, eventos: 0, restritos: 0, primeiro: null, ultimo: null,
+      pot_min: null, cods: new Set(), tecnicos: new Set() });
+    const x = porDia.get(d);
+    x.eventos += 1;
+    if (e.restr) {
+      x.restritos += 1;
+      if (x.pot_min == null || e.pot < x.pot_min) x.pot_min = e.pot;
+      if (e.motivo_cod) x.cods.add(e.motivo_cod);
+    }
+    if (!x.primeiro) x.primeiro = String(e.ts).slice(11);
+    x.ultimo = String(e.ts).slice(11);
+    if (e.tecnico) x.tecnicos.add(e.tecnico);
+  }
+  const dur = duracaoRestricao(eventos);
+  return [...porDia.values()].map((x) => {
+    const d = dur.get(x.dia) || { minutos: 0, aberta: 0 };
+    return { dia: x.dia, eventos: x.eventos, restritos: x.restritos,
+      primeiro: x.primeiro, ultimo: x.ultimo, pot_min: x.pot_min == null ? null : Math.round(x.pot_min * 100) / 100,
+      horas_restricao: Math.round((d.minutos / 60) * 100) / 100,
+      restricao_aberta: d.aberta,
+      motivo_cods: [...x.cods].sort(), tecnicos: [...x.tecnicos].sort() };
+  });
+}
+
+module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, fundeCopias, integraliza, duracaoRestricao, resumoDias, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };

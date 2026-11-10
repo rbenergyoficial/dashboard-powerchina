@@ -91,3 +91,42 @@ jobs:
         with:
           path: .cache-ppc
           key: ppc-raw-${{ hashFiles('.cache-ppc/**/*.meta') }}
+
+  # 🔁 O PPC PELO RDO DO SIGO, EM PARALELO (lote ppc-rdo, 01/11/2026). A planilha da mesa deixa de ser a fonte do PPC; antes de trocar,
+  #    7 dias seguidos batendo (aprovado pelo humano em 26/10/2026). Este job NAO mexe no ppc_restricao.json: publica o
+  #    ppc_restricao_rdo.json (o mesmo formato) e o ppc_paralelo.json (dia a dia, planilha x RDO). Job separado de proposito: se o
+  #    arquivo do Gestao faltar, so ele fica vermelho e o PPC da planilha segue publicando.
+  #    Le o rdo_ordens.json no contêiner `indicadores` do armazenamento do Gestao pelo OIDC (so leitura, so nesse contêiner).
+  #    `needs: gen` poe o leitor do ppc_restricao.json DEPOIS de quem o grava; `!cancelled()` roda mesmo com o gen vermelho (o comparativo
+  #    usa o ultimo publicado). Fora do main o job pula, mas a rodada nao fica verde: o primeiro passo do gen falha dizendo a causa.
+  sombra-rdo:
+    needs: gen
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # a regra, em casos montados e sem rede, ANTES de gerar; os plantios TEM de reprovar
+      - name: Ensaio do PPC pelo RDO (regra e plantios)
+        run: |
+          node scripts/ensaio-ppc-rdo.js
+          node scripts/ensaio-ppc-rdo.js --planta liberacao-restrita
+          node scripts/ensaio-ppc-rdo.js --planta sem-tolerancia
+          node scripts/ensaio-ppc-rdo.js --planta so-dias-do-rdo
+      - name: Gerar ppc_restricao_rdo.json e ppc_paralelo.json
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}   # le o ppc_restricao.json publicado, so para o comparativo
+          OUT_CONTAINER: dados
+          LOCAL_OUT_DIR: ${{ github.event.inputs.ensaio && '/tmp/ppc-rdo' || '' }}
+        run: |
+          if [ -n "${LOCAL_OUT_DIR}" ]; then mkdir -p "${LOCAL_OUT_DIR}"; fi
+          node scripts/gen-ppc-rdo.js
+          if [ -n "${LOCAL_OUT_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -la "${LOCAL_OUT_DIR}"; fi

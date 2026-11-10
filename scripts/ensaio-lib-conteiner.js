@@ -54,7 +54,7 @@ const MIGRADOS = {
   'estacao-logger.yml': { 'gen-estacao-logger.js': null, 'gen-agente-dia.js': null },
   'trafo.yml': { 'gen-trafo.js': null },
   'render-paineis.yml': { 'gen-render-paineis.js': null },
-  'ppc.yml': { 'gen-ppc.js': null },
+  'ppc.yml': { 'gen-ppc.js': null, 'gen-ppc-rdo.js': null },   // + o PPC pelo RDO do SIGO, em paralelo (lote ppc-rdo)
   'comparativo.yml': { 'gen-comparativo.js': null },
   'must-intra.yml': { 'gen-must-intra.js': null, 'gen-must-watchdog.js': null },                   // etapa 4, os frequentes do supervisório e do MUST
   'eneat-intradia-way2.yml': { 'gen-eneat-intradia.js': null },
