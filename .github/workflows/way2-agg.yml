@@ -77,12 +77,30 @@ jobs:
         id: ensaio_selo
         if: always()
         run: node scripts/ensaio-trafo-way2.js --selo
+      # 💰 custo-fontes-proprios (09/11/2026): as fontes que o selo le de hora em hora e que mudam 1 a 3 vezes por dia (ons_restricao_all
+      #    2,7 MB, inversores 1,6 MB, way2_daily 0,85 MB, oleo; ~5 MB por rodada) pela copia em disco, confirmada pelo 304 do storage,
+      #    numa entrada de cache propria (a faxina-cache apaga as superadas). As que mudam mais (irr_ufv, trafo_*, way2_saude) vem 200.
+      - name: Restaurar a copia das fontes do selo
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-fontes/proprios
+          key: fontes-proprios-${{ github.run_id }}
+          restore-keys: fontes-proprios-
       - name: Selos de frescor por fonte
         if: ${{ always() && steps.ensaio_selo.outcome == 'success' }}
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-fontes
+          LE_DADOS_PROPRIOS: '^(ons_restricao_all|inversores|irr_ufv|way2_daily|oleo|trafo_scada_diario|trafo_diario|way2_saude)\.json$'
         run: node scripts/gen-fontes-saude.js
+      - name: Guardar a copia das fontes do selo
+        if: ${{ !cancelled() && hashFiles('.cache-fontes/proprios/*.meta') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: .cache-fontes/proprios
+          key: fontes-proprios-${{ hashFiles('.cache-fontes/proprios/*.meta') }}
       # ⚠️ Falhar ao guardar a copia nao derruba o job: a proxima execucao so baixa mais. A chave e o hash das marcas: execucao sem
       #    dia novo nao regrava o cache.
       - name: Guardar a copia do historico do medidor
