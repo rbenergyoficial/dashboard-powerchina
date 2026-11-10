@@ -192,7 +192,7 @@ function nova(lib) { delete require.cache[require.resolve(lib)]; return require(
     ok(iR > 0 && iC > iR && iG > w.lastIndexOf('CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-blob') && (w.match(/CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-blob/g) || []).length === passos, wf + ': restaura ANTES do primeiro gerador, guarda DEPOIS do ultimo, ' + passos + ' passo(s) com CACHE_BLOB_DIR');
   }
   /* + alarmes-way2 (29/10/2026): o gerador dos alarmes dos medidores le a copia da rodada (4o passo, no fim do job); + analise-ao-vivo (07/11/2026): o 5o */
-  if (julga('way2-recent.yml')) ok((W('way2-recent.yml').match(/ELET_LOCAL_DIR: \$\{\{ runner\.temp \}\}\/eletrico/g) || []).length === 5, 'way2-recent: a copia local da rodada nos 5 passos (coleta, snapshot, dia em curso, alarmes dos medidores, analise ao vivo)');
+  if (julga('way2-recent.yml')) ok((W('way2-recent.yml').match(/ELET_LOCAL_DIR: \$\{\{ runner\.temp \}\}\/eletrico/g) || []).length === 6, 'way2-recent: a copia local da rodada nos 6 passos (coleta, snapshot, dia em curso, alarmes dos medidores, Sinotico, analise ao vivo)');
 
   fs.rmSync(dir, { recursive: true, force: true });
   console.log('\n' + (falhas ? 'REPROVADO: ' + falhas + ' de ' + casos : 'APROVADO: ' + casos + ' de ' + casos));

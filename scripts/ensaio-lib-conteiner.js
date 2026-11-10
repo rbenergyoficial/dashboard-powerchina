@@ -68,7 +68,7 @@ const MIGRADOS = {
     'gen-registro-projecao.js': null },
   'sungrow.yml': { 'gen-sungrow.js': null, 'gen-inv-logger.js': null, 'gen-pvstr-logger.js': null, 'gen-agente-dia.js': null, 'gen-alarmes-logger.js': null },   // etapa 4
   'way2-recent.yml': { 'gen-way2-eletrico.js': null, 'gen-way2-recent.js': null, 'gen-dia-corrente.js': null, 'gen-agente-om.js': null,   // etapa 4
-    'gen-way2-watchdog.js': null, 'gen-alarmes-way2.js': null, 'gen-alarmes-eventos.js': null, 'gen-analise-vivo.js': null },   // + alarmes-way2 (29/10/2026); + analise-ao-vivo (07/11/2026)
+    'gen-way2-watchdog.js': null, 'gen-alarmes-way2.js': null, 'gen-alarmes-eventos.js': null, 'gen-analise-vivo.js': null, 'gen-sinotico.js': null },   // + alarmes-way2 (29/10/2026); + analise-ao-vivo (07/11/2026); + sinotico-dados (09/11/2026)
   'malha-estado.yml': { 'gen-malha-estado.js': null },   // etapa 4: no portal-admin, o papel so no arquivo da malha
   'alarmes-scada.yml': { 'gen-alarmes-scada.js': null },   // alarmes-scada (29/10/2026): a tabela de alarmes do supervisorio, D+1
   'apagar-blob.yml': { 'apagar-blob.js': null },         // etapa 4: o papel no `dados` ja inclui apagar
@@ -204,8 +204,8 @@ try {
     ['o gerador chamado com opções do node, pela cadeia de conexão', 'way2-agg.yml', null, { 'gen-way2-agg.js': ["require('./lib-conteiner').conteiner(CONTAINER)",
       "require('@azure/storage-blob').BlobServiceClient.fromConnectionString(process.env.DADOS_STORAGE).getContainerClient(CONTAINER)"] },
       'gen-way2-agg.js ainda depende da chave'],
-    ['o passo de um gravador sem o OIDC', 'way2-agg.yml', ['        env:\n          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}\n        run: node scripts/gen-fontes-saude.js',
-      '        run: node scripts/gen-fontes-saude.js'], {}, 'gen-fontes-saude.js sem o OIDC'],
+    ['o passo de um gravador sem o OIDC', 'way2-agg.yml', ['          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}\n          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}\n          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-fontes\n',
+      '          CACHE_BLOB_DIR: ${{ github.workspace }}/.cache-fontes\n'], {}, 'gen-fontes-saude.js sem o OIDC'],
     ['o leitor sem credencial', 'vigia.yml', ['          DADOS_SAS: ${{ secrets.DADOS_LEITURA }}', '          OUTRA: x'], {}, 'ensaio-selo-frescor.js (leitor) sem credencial'],
     ['o id-token só no topo, com permissions no job', 'way2-mes.yml', [['permissions:\n  contents: read\n', 'permissions:\n  contents: read\n  id-token: write\n'],
       ['      id-token: write\n', '']], {}, 'sem id-token: write no permissions que vale'],
