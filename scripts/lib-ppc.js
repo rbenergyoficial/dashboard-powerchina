@@ -77,6 +77,35 @@ function codigoMotivo(txt) {
 }
 
 /**
+ * AS LINHAS DA FOLHA, so as que tem celula (lote ppc-folha-esparsa, 11/11/2026). O mesmo que
+ * `sheet_to_json(ws, { header: 1, raw: true, defval: null })`, linha a linha, num array ESPARSO do mesmo comprimento: a linha sem celula
+ * fica sem entrada e quem le trata `L[i] || []` como vazia, como antes.
+ * 🔴 Por que: desde a copia de 31/10/2026 15:58 a planilha da mesa tem um ":" na B1048576 (a ultima linha do Excel). A area usada vai
+ * ate la e o sheet_to_json montava 1.048.576 linhas por copia: ~12 s cada no runner (52 s na maquina) contra ~0,3 s das copias sem a
+ * celula. Com 41 copias assim (11/11), o job do PPC passou dos 10 min: em 11/11 so 3 de 25 rodadas terminaram. A celula continua lida (vira
+ * o defeito `data_ilegivel` da linha 1048576, como antes): so as linhas SEM celula deixam de ser montadas.
+ */
+function linhasDaFolha(XLSX, ws) {
+  if (ws['!data']) return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });   // modo denso: nao e o nosso
+  if (!ws['!ref']) return [];
+  const R = XLSX.utils.decode_range(ws['!ref']);
+  const nCol = R.e.c - R.s.c + 1;
+  const L = [];
+  for (const k of Object.keys(ws)) {
+    if (k[0] === '!') continue;
+    const a = XLSX.utils.decode_cell(k);
+    if (a.r < R.s.r || a.r > R.e.r || a.c < R.s.c || a.c > R.e.c) continue;   // fora da area usada: o sheet_to_json tambem nao le
+    const i = a.r - R.s.r;
+    if (!L[i]) L[i] = new Array(nCol).fill(null);
+    const cel = ws[k];
+    // raw: o valor cru; erro e celula sem valor viram o defval (null), como no sheet_to_json
+    L[i][a.c - R.s.c] = (cel.t === 'e' || cel.v == null) ? null : cel.v;
+  }
+  L.length = R.e.r - R.s.r + 1;
+  return L;
+}
+
+/**
  * Le a planilha e devolve os eventos, ja ordenados, mais a lista de defeitos encontrados.
  * @param {object} XLSX  a biblioteca, injetada por quem chama (a lib nao escolhe dependencia)
  * @param {Buffer|string} fonte  o conteudo do xlsx (Buffer) ou o caminho dele
@@ -87,7 +116,7 @@ function leEventos(XLSX, fonte) {
     : XLSX.readFile(fonte, { cellDates: false });        // CRU: serial, nunca Date
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) throw new Error('a planilha nao tem aba nenhuma');
-  const L = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+  const L = linhasDaFolha(XLSX, ws);
 
   const ev = [];
   const def = [];      // { linha, tipo, valor } — um defeito por ocorrencia, com a linha
@@ -302,4 +331,4 @@ function resumoDias(eventos) {
   });
 }
 
-module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, fundeCopias, integraliza, duracaoRestricao, resumoDias, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };
+module.exports = { PLENA, FOLGA, COL, COL_UFV, leEventos, linhasDaFolha, fundeCopias, integraliza, duracaoRestricao, resumoDias, codigoMotivo, hhmm, msDe, serialParaDia, fracaoParaMin };

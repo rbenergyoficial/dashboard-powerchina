@@ -49,6 +49,10 @@ jobs:
       # mesa corrigiu sai do ar. So dados plantados; reprova a fusao antiga, que nunca apagava.
       - name: Ensaio da fusao das copias da planilha
         run: node scripts/ensaio-ppc-funde.js
+      # A leitura da folha: so as linhas com celula (lib-ppc.linhasDaFolha). Desde 31/10/2026 a planilha tem uma celula na ultima linha
+      # do Excel, e montar a area inteira custava ~12 s por copia: o job passava dos 10 min. Os plantios rodam no ensaios.yml.
+      - name: Ensaio da leitura da folha da planilha (regra)
+        run: node scripts/ensaio-ppc-folha.js
       # 🔴 O container `ppc-raw` e alimentado por um coletor que roda FORA daqui, na maquina onde a
       # pasta esta sincronizada. Se ele parar, este job continua rodando e republicando o que ja
       # tinha — sem erro nenhum. Quem denuncia isso e a idade do ultimo dia na auditoria, e nao
