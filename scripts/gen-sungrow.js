@@ -283,6 +283,26 @@ async function vidaDoExport(a, u) {
 }
 const juntaVida = (sc, r) => { if (!r) return; const md = sc.get(r.dia) || sc.set(r.dia, new Map()).get(r.dia); for (const [p, v] of r.mp) md.set(p, v); };
 const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+/* sg-recarga (18/11/2026): os zips sao BAIXADOS ate JANELA adiante, em paralelo, enquanto o atual e processado. O processamento segue a
+   ordem da lista, um por vez: o dia repetido em dois zips fica com o primeiro que a lista traz, e o sg_lidos guarda os nomes na mesma
+   ordem. A falha de leitura de um zip aparece quando chega a vez DELE, como antes (os anteriores ja processados); a leitura adiantada que
+   falha nao derruba o processo antes disso. A releitura completa (18.916 zips do cofre, ~0,32 s de ida e volta cada) baixava um a um. */
+const JANELA = Math.max(1, Math.floor(Number(process.env.SG_JANELA)) || 8);
+const PROGRESSO = Math.max(1, Math.floor(Number(process.env.SG_PROGRESSO)) || 1000);
+async function* adiante(lista, n) {
+  const voo = [];
+  let prox = 0;
+  const pede = () => { const z = lista[prox]; prox += 1; const p = Promise.resolve().then(() => z.ler()); p.catch(() => {}); voo.push({ z, p }); };
+  while (prox < lista.length && voo.length < n) pede();
+  while (voo.length) {
+    const v = voo.shift();
+    let buf = null, erro = null;
+    try { buf = await v.p; } catch (e) { erro = e; }
+    // repoe DEPOIS de receber: no maximo n downloads ao mesmo tempo, e n adiante enquanto este e processado
+    if (prox < lista.length) pede();
+    yield { z: v.z, buf, erro };
+  }
+}
 
 /* ------------------------------------------------------------------ principal ------------------------------------------ */
 (async () => {
@@ -364,11 +384,17 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const tipos = {};
   /* sg-str-historico: o 5 min de cada string de TODO dia lido vai para o disco (o acumula corta em DIAS_5MIN); no fim, o arquivo mensal */
   const GSTR = SS.abreGuarda(process.env.SG_STR_GUARDA || null);
-  for (const z of novos) {
+  const tLe = Date.now();
+  let nZip = 0;
+  if (novos.length) console.log('  leitura: ' + JANELA + ' zip(s) adiante em paralelo · progresso a cada ' + PROGRESSO);
+  for await (const { z, buf, erro } of adiante(novos, JANELA)) {
+    nZip += 1;
+    if (nZip % PROGRESSO === 0) { const s = (Date.now() - tLe) / 1000;
+      console.log('  progresso: ' + nZip + ' de ' + novos.length + ' zips · ' + Math.round(s) + ' s · previsao +' + Math.round(s / nZip * (novos.length - nZip)) + ' s'); }
     const [mm, tt] = z.nome.split('/');
     const u = parque(mm.slice(1)), tsPasta = 'TS' + Number(tt.slice(2));
     let es;
-    try { es = entradas(await z.ler(), z.nome); } catch (e) { throw new Error(z.nome + ': ' + e.message); }
+    try { if (erro) throw erro; es = entradas(buf, z.nome); } catch (e) { throw new Error(z.nome + ': ' + e.message); }
     /* o PID e identificado pelo LOGGER do mesmo zip (o logger do eletrocentro, na pasta `PID 100`): o TS do logger sai
        da energia dele contra a soma dos inversores identificados, e a caixa herda. A pasta so vale sem essa prova */
     const lidas = [];

@@ -201,11 +201,18 @@ const PRELOAD = `'use strict';
 const Module = require('module'); const fs = require('fs');
 const F = JSON.parse(fs.readFileSync(process.env.FORJA_AZURE, 'utf8'));
 const conta = (s) => fs.appendFileSync(process.env.FORJA_LOG, s + '\\n');
+let voo = 0;
+const lat = (n) => { const b = Number(process.env.FORJA_LATENCIA || 0); if (!b) return 0; let h = 7; for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return Math.round(b * (0.25 + (h % 100) / 66)); };
 const fake = { BlobServiceClient: { fromConnectionString: () => ({ getContainerClient: (c) => ({
   async *listBlobsFlat(o) { conta('lista ' + c); for (const x of (F[c] || [])) if (!o || !o.prefix || x.name.startsWith(o.prefix))
     yield { name: x.name, properties: { contentLength: fs.statSync(x.file).size, lastModified: new Date(x.lastModified), contentMD5: x.md5 ? Buffer.from(x.md5, 'base64') : undefined } }; },
   getBlobClient: (n) => ({ downloadToBuffer: async () => { conta('baixa ' + c + ' ' + n); const x = (F[c] || []).find((y) => y.name === n);
-    if (!x) { const e = new Error('BlobNotFound'); e.statusCode = 404; throw e; } return fs.readFileSync(x.file); } }),
+    if (!x) { const e = new Error('BlobNotFound'); e.statusCode = 404; throw e; }
+    // sg-recarga: latencia por nome (pseudoaleatoria, fixa: a ordem de chegada difere da ordem da lista), downloads simultaneos e falha forjada
+    voo += 1; conta('voo ' + voo + ' ' + Date.now());
+    try { if (process.env.FORJA_FALHA && n === process.env.FORJA_FALHA) throw new Error('falha forjada no download');   // falha JA, antes dos anteriores chegarem
+      const ms = lat(n); if (ms) await new Promise((r) => setTimeout(r, ms));
+      return fs.readFileSync(x.file); } finally { voo -= 1; conta('fim ' + Date.now()); } } }),
   getBlockBlobClient: () => { throw new Error('o ensaio nao grava no Azure'); } }) }) } };
 const orig = Module._load;
 Module._load = function (req, parent, isMain) {
@@ -239,7 +246,7 @@ function roda(gen, mundo, env) {
   const GO = path.join(dir, 'github_output'); fs.writeFileSync(GO, '');   // a saida do passo, como no Actions
   const e = Object.assign({}, process.env, { DADOS_STORAGE: 'forjado', FORJA_AZURE: path.join(dir, 'azure.json'), FORJA_LOG: LOG,
     LOCAL_SCADA_DIR: SC, LOCAL_OUT_DIR: OUT, LOCAL_INV_SCADA: path.join(dir, 'inv_scada_hist.json'), GITHUB_OUTPUT: GO }, env || {});
-  for (const k of ['LOCAL_RAW_DIR', 'LOCAL_RAW_LISTA', 'REFAZER', 'SOMBRA', 'CONFERE_BYTES', 'VIVO_MIN', 'COFRE', 'RAW']) if (!(env && k in env)) delete e[k];
+  for (const k of ['LOCAL_RAW_DIR', 'LOCAL_RAW_LISTA', 'REFAZER', 'SOMBRA', 'CONFERE_BYTES', 'VIVO_MIN', 'COFRE', 'RAW', 'SG_JANELA', 'SG_PROGRESSO', 'FORJA_LATENCIA', 'FORJA_FALHA']) if (!(env && k in env)) delete e[k];
   if (!(env && 'FONTE' in env)) delete e.FONTE;
   if (!(env && 'LIB_COFRE' in env)) delete e.LIB_COFRE;
   const R = { OUT, dir };
@@ -321,6 +328,55 @@ ok(S.okSombraVerde, 'okSombraVerde: SOMBRA=1 com os dois iguais fica verde, conf
 ok(S.okSombraDia, 'okSombraDia: o dia faltando no cofre deixa a sombra vermelha com o lote nomeado');
 ok(S.okSombraBytes, 'okSombraBytes: o mesmo tamanho com outro conteudo deixa a sombra vermelha pela conferencia byte a byte');
 
+/* ------------------------------------------------- 4b · sg-recarga: os zips baixados adiante, em paralelo ------------- */
+/* 48 zips de um dia cada (12 grupos x 4 dias), o mesmo dia em 12 zips com o MESMO numero de amostras e potencia diferente: o gerador fica
+   com o primeiro que a lista traz, entao a ordem de processamento muda o produto (okSensivel prova que o mundo enxerga a ordem; sem isso a
+   igualdade seria vacua). A latencia forjada por nome faz a ordem de CHEGADA diferir da ordem da lista */
+const MUITOS = Array.from({ length: 12 }, (_, g) => String(g * 5 + 1).padStart(2, '0') + ' A ' + String(g * 5 + 5).padStart(2, '0')).flatMap((g, gi) => T.map((d, di) => {
+  const k = gi * 4 + di;
+  const f = guarda('m' + k + '.zip', zip(SNS.map(([sn, v, fa]) => arq(sn, [d], v + 1000 * k, fa * (1 - 0.01 * k)))));
+  return it('M10/TS01/' + g + '/' + d.slice(8) + '.10 A ' + d.slice(8) + '.10.zip', f);
+}));
+const cauda = (log) => log.split('\n').filter(Boolean).slice(-2).join(' | ');
+function casosJanela(gen) {
+  const R = {};
+  const tempos = (x) => x.azure.filter((l) => /^(voo|fim) /.test(l)).map((l) => Number(l.split(' ').pop()));
+  const span = (x) => { const t = tempos(x); return t.length ? Math.max(...t) - Math.min(...t) : NaN; };
+  const pico = (x) => Math.max(0, ...x.azure.filter((l) => l.startsWith('voo ')).map((l) => Number(l.split(' ')[1])));
+  const baixados = (x) => x.azure.filter((l) => l.startsWith('baixa ')).map((l) => l.slice('baixa sungrow-raw '.length));
+  const base = { FONTE: 'raw', FORJA_LATENCIA: '40', SG_PROGRESSO: '10' };
+  const s = roda(gen, { raw: MUITOS }, Object.assign({}, base, { SG_JANELA: '1' }));
+  R.erro = s.codigo ? 'em serie ' + s.codigo + ' · ' + cauda(s.log) : null;
+  if (R.erro) return R;
+  const p = roda(gen, { raw: MUITOS }, Object.assign({}, base, { SG_JANELA: '8' }));
+  const inv = roda(gen, { raw: MUITOS.slice().reverse() }, Object.assign({}, base, { SG_JANELA: '1', FORJA_LATENCIA: '0' }));
+  const d = p.codigo ? ['estourou: ' + cauda(p.log)] : difs(s, p);
+  const nomes = MUITOS.map((x) => x.name);
+  R.okSensivel = inv.codigo === 0 && difs(s, inv).length > 0;
+  R.okIgual = p.codigo === 0 && d.length === 0 && Object.keys(saida(s)).length >= 10 && igual(Object.keys(lidos(p) || {}), nomes);
+  R.okTodos = p.codigo === 0 && igual(baixados(p).slice().sort(), nomes.slice().sort()) && Object.keys(lidos(p) || {}).length === 48;
+  R.okParalelo = pico(s) === 1 && pico(p) >= 2 && pico(p) <= 8;
+  R.okGanho = span(p) < span(s) * 0.5;
+  R.okProgresso = /leitura: 8 zip\(s\) adiante em paralelo/.test(p.log) && /progresso: 10 de 48 zips · \d+ s · previsao \+\d+ s/.test(p.log)
+    && /progresso: 40 de 48 zips/.test(p.log) && !/progresso: 50 /.test(p.log);
+  // o download que falha (logo de saida, com os anteriores ainda chegando): a rodada cai na vez DELE, com o nome, sem gravar nada
+  const nf = MUITOS[5].name;
+  const f = roda(gen, { raw: MUITOS }, Object.assign({}, base, { SG_JANELA: '8', FORJA_FALHA: nf }));
+  R.okFalha = f.codigo !== 0 && f.log.includes(nf + ': falha forjada no download') && !f.gravou && !fs.existsSync(path.join(f.OUT, 'sg_lidos.json'));
+  R.txt = 'difs ' + JSON.stringify(d.slice(0, 3)) + ' · pico ' + pico(s) + '/' + pico(p) + ' · leitura ' + span(s) + ' ms em serie, ' + span(p) + ' ms com 8 adiante'
+    + ' · invertida ' + difs(s, inv).length + ' chave(s) diferente(s) · falha codigo ' + f.codigo + ' gravou ' + f.gravou;
+  return R;
+}
+console.log('4b · a janela paralela de leitura (sg-recarga)');
+const JN = casosJanela(GEN);
+ok(!JN.erro && JN.okSensivel, 'okSensivel: o mundo de 48 zips enxerga a ordem (a lista invertida da outro produto) · ' + (JN.erro || JN.txt));
+ok(!JN.erro && JN.okIgual, 'okIgual: 8 adiante em paralelo da o produto identico chave a chave ao baixar um a um, e o sg_lidos na ordem da lista');
+ok(!JN.erro && JN.okTodos, 'okTodos: os 48 zips baixados uma vez cada e todos no sg_lidos');
+ok(!JN.erro && JN.okParalelo, 'okParalelo: um download por vez com SG_JANELA=1; de 2 a 8 ao mesmo tempo com 8');
+ok(!JN.erro && JN.okGanho, 'okGanho: a leitura com 8 adiante leva menos da metade do tempo da leitura em serie');
+ok(!JN.erro && JN.okProgresso, 'okProgresso: a linha de progresso a cada SG_PROGRESSO zips, com tempo e previsao');
+ok(!JN.erro && JN.okFalha, 'okFalha: o download que falha derruba a rodada na vez dele, com o nome do zip, sem gravar');
+
 /* ---------------------------------------------------------------- 5 · plantios -------------------------------------- */
 console.log('5 · plantios');
 const srcLib = fs.readFileSync(LIB, 'utf8').replace(/\r\n/g, '\n');
@@ -379,6 +435,15 @@ plantaGen('sombra sem a conferencia byte a byte', [['if (x.equals(y)) bIg++;', '
   (g) => casosSombra(g).okSombraBytes);
 plantaGen('uniao sem o cofre', [['const U = C.uniao(await listaRawAzure(), deCofre);', 'const U = C.uniao(await listaRawAzure(), []);']],
   (g) => { const r = casosGerador(g); return r.erro ? 'estourou: ' + r.erro : r.okUniao; });
+// sg-recarga: a janela que processa pela ordem de chegada, a que perde um zip, a que nao paraleliza e a que deixa a falha adiantada solta
+plantaGen('janela pela ordem de chegada', [['    const v = voo.shift();\n', '    const v = voo.splice(await Promise.race(voo.map((x, j) => x.p.then(() => j, () => j))), 1)[0];\n']],
+  (g) => { const r = casosJanela(g); return r.erro ? 'estourou: ' + r.erro : r.okIgual; });
+plantaGen('janela que perde um zip', [['const z = lista[prox]; prox += 1;', 'const z = lista[prox]; prox += prox === 3 ? 2 : 1;']],
+  (g) => { const r = casosJanela(g); return r.erro ? 'estourou: ' + r.erro : r.okIgual || r.okTodos; });
+plantaGen('janela sem paralelo', [['while (prox < lista.length && voo.length < n) pede();', 'while (prox < lista.length && voo.length < 1) pede();']],
+  (g) => { const r = casosJanela(g); return r.erro ? 'estourou: ' + r.erro : r.okParalelo && r.okGanho; });
+plantaGen('falha adiantada solta', [[' p.catch(() => {});', '']],
+  (g) => { const r = casosJanela(g); return r.erro ? 'estourou: ' + r.erro : r.okFalha; });
 
 console.log(falhas.length ? '\nREPROVADO: ' + falhas.length + ' falha(s)' : '\nAPROVADO');
 process.exit(falhas.length ? 1 : 0);

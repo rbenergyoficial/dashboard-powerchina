@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       refazer:
-        description: 'reler todos os zips do logger (1 = sim; a primeira carga leva perto de 1 h)'
+        description: 'reler todos os zips do logger (1 = sim; qualquer valor nao vazio rele tudo; leva horas, com teto de 355 min)'
         required: false
         default: ''
       alarmes_de:
@@ -30,7 +30,11 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    timeout-minutes: 120  # a recarga completa (refazer=1 ou esquema novo) mediu ~65 min; a rodada do dia, no maximo 13 min em 30
+    # sg-recarga (18/11/2026): com refazer, 355 min (o teto de um job hospedado e 360; o relogio so chama de morta a rodada criada ha mais de
+    # 6 h). A releitura de 18/11 (18.916 zips do cofre) foi cancelada aos 116 min ainda lendo. Sem refazer, 120: a rodada do dia leva no
+    # maximo 13 min. A expressao compara com VAZIO, nao com '1': o gerador rele tudo com qualquer valor (REFAZER = !!process.env.REFAZER), e
+    # no cron o input nao existe (null == '' nas expressoes do Actions)
+    timeout-minutes: ${{ github.event.inputs.refazer != '' && 355 || 120 }}
     steps:
       # O dispatch deixa escolher a branch na tela do Actions. Fora do main o Entra recusa a troca com um AADSTS que parece
       # credencial quebrada: este passo FALHA antes, dizendo a causa (falha, nao pula: `if:` que pula esconderia o vermelho).
@@ -48,7 +52,8 @@ jobs:
       # zip, CSV por nome de coluna, identificacao pelo contador de vida e pelo logger, dia parcial, conferencia so com dia
       # inteiro, busca funda e sua memoria, migracao de esquema, saude do inversor e o dicionario de codigos contra o
       # manual, o eletrocentro de 5 min e as horas fora da rede, com plantios. Sem rede: julga a regra antes de gerar. A
-      # primeira rodada depois de um esquema novo do historico rele todos os zips (perto de 40 min, ~65 medidos; timeout 120).
+      # primeira rodada depois de um esquema novo do historico rele todos os zips: desde a fonte uniao (18.916 zips) isso nao cabe no
+      # teto de 110 min do gerar sem refazer; esquema novo do historico vai junto com um dispatch refazer=1 (teto 330, sg-recarga).
       - name: Ensaio do logger Sungrow (sem rede)
         id: r_sungrow
         if: ${{ !cancelled() }}
@@ -62,7 +67,7 @@ jobs:
       # heranca do ultimo estado valido atravessando a meia-noite, falta de leitura fora da conta, irradiancia da estacao,
       # so o inversor que ocupa a posicao no dia, Complexo pela capacidade instalada; o gerador de ponta a ponta (logger
       # forjado fora do historico, recarga sem historico, estacao ausente aborta), com plantios. Sem rede. A primeira rodada
-      # sem sg_disp_hist.json rele todos os zips uma vez (cabe no timeout de 120 min)
+      # sem sg_disp_hist.json rele todos os zips uma vez (desde a fonte uniao, so com refazer=1 cabe no teto: sg-recarga)
       - name: Ensaio · disponibilidade dos inversores pelo logger (sem rede)
         id: r_disp
         if: ${{ !cancelled() }}
@@ -116,6 +121,10 @@ jobs:
           restore-keys: sungrow-scada-
       - name: Gerar sg_*.json
         id: gen_sg
+        # sg-recarga: teto proprio abaixo do job (330 com refazer, 110 sem; os ensaios antes levam ~4 min), para sobrar tempo aos passos de
+        # produto e ao resumo do dia. O passo que estoura sai vermelho sem gravou=1 e os que dependem dele pulam. Os zips sao baixados 8
+        # adiante em paralelo (SG_JANELA) e o log diz o progresso a cada 1.000 zips, com a previsao
+        timeout-minutes: ${{ github.event.inputs.refazer != '' && 330 || 110 }}
         if: ${{ !cancelled() && steps.r_sungrow.outcome == 'success' && steps.r_contador.outcome == 'success' && steps.r_disp.outcome == 'success' && steps.r_str.outcome == 'success' && steps.r_cofre.outcome == 'success' && steps.r_inv_logger.outcome == 'success' && steps.r_proprios.outcome == 'success' }}
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
