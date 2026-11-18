@@ -365,15 +365,13 @@ function roda(gen) {
 const le = (n) => JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(OUT, n))).toString('utf8'));
 const grava = (n, o) => fs.writeFileSync(path.join(OUT, n), zlib.gzipSync(JSON.stringify(o)));
 const semGerado = (n) => JSON.stringify(le(n), (k, v) => (k === 'gerado_em' ? undefined : v));
-/* sg-str-historico (18/11/2026): o gerador grava tambem em hist/ (o arquivo mensal das strings): a saida e listada com a subpasta */
-const arqs = (dir, pre) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? arqs(path.join(dir, e.name), (pre || '') + e.name + '/') : [(pre || '') + e.name]));
 const lidosFundo = (log) => { const m = log.match(/busca funda: (\d+) export/); return m ? Number(m[1]) : 0; };
 
 /* o CENARIO inteiro, cinco rodadas; o gerador de verdade e cada plantio passam por ele todo */
 function cenario(gen, lib) {
   const R = { txt: {} };
   { const q = require.resolve(lib || './lib-sungrow.js'); delete require.cache[q]; R.okLibMppt = casosMppt(require(q)).ok; delete require.cache[q]; }
-  for (const n of fs.readdirSync(OUT)) fs.rmSync(path.join(OUT, n), { recursive: true, force: true });
+  for (const n of fs.readdirSync(OUT)) fs.unlinkSync(path.join(OUT, n));
   // a irradiancia que a disponibilidade (lib-sungrow-disp) le; o ensaio dela e o ensaio-sungrow-disp.js
   grava('estacao_logger_30min.json', ESTACAO);
   const novo = path.join(RAW, 'M06', 'TS01', '01 A 05', '26.09.zip');
@@ -395,14 +393,6 @@ function cenario(gen, lib) {
     // por numero de serie, durante a leitura); nas rodadas seguintes o arquivo publicado acumula, e isso esconderia um corte errado
     { const S1 = fs.existsSync(path.join(OUT, 'sg_str_M1_TS5.json')) ? le('sg_str_M1_TS5.json').serie : [];
       R.okStr5 = DIAS.every((d) => S1.some((x) => x.inv === 'INV01' && x.d === d)); R.txt.str5 = [...new Set(S1.map((x) => x.d))].sort().join(' '); }
-    // sg-str-historico (18/11/2026): o arquivo mensal, por inversor e mes, com TODO dia lido e a mesma corrente do 5 min de 7 dias
-    { const H5 = arqs(OUT).filter((n) => /^hist\/sg_str_M1_TS5_INV\d\d_2026_09\.json$/.test(n)), IX = arqs(OUT).includes('hist/sg_str_meses.json') ? le('hist/sg_str_meses.json') : {};
-      const A1 = H5.includes('hist/sg_str_M1_TS5_INV01_2026_09.json') ? le('hist/sg_str_M1_TS5_INV01_2026_09.json').serie : [];
-      const S1 = fs.existsSync(path.join(OUT, 'sg_str_M1_TS5.json')) ? le('sg_str_M1_TS5.json').serie.filter((x) => x.inv === 'INV01') : [];
-      R.okArq = H5.length > 0 && DIAS.filter((d) => d.slice(0, 7) === '2026-09').every((d) => A1.some((x) => x.d === d))
-        && S1.filter((x) => x.d.slice(0, 7) === '2026-09').every((x) => { const a = A1.find((y) => y.d === x.d); return a && JSON.stringify(a.s) === JSON.stringify(x.s) && JSON.stringify(a.vz) === JSON.stringify(x.vz); })
-        && (IX.meses || []).includes('2026-09') && IX.de && IX.ate;
-      R.txt.arq = H5.length + ' inversor(es) em set/26, INV01 com ' + A1.map((x) => x.d).join(' ') + ' · indice ' + JSON.stringify(IX.meses || null); }
     R.txt.pid = [...new Set(P.map((x) => x.chave + ' (' + x.ts_por + ')'))].join(' ');
     // a temperatura do eletrocentro: o resumo do dia e a serie de 5 min, no TS do logger (TS6), sem o zero e sem o sentinela
     const pMax = Math.max(...HH.map((h, k) => perfil(k, 0.95) + perfil(k, 0.92))), t29 = T.find((x) => x.d === '2026-09-29') || {}, t28 = T.find((x) => x.d === '2026-09-28') || {};
@@ -513,10 +503,10 @@ function cenario(gen, lib) {
       // dia em que todo inversor lido e parcial: nenhuma grandeza fisica (so evento)
       && ud('2026-10-01').tm_max === null && ud('2026-10-01').lim_med === null && ud('2026-10-01').ef_med === null && ud('2026-10-01').iso_min === null;
     R.txt.saude = ['09-28', '09-29', '09-30', '10-01'].map((d) => { const x = ud('2026-' + d); return d + ' inv ' + x.n_inv + ' ev ' + x.n_ev + ' al ' + x.n_alarme + ' fa ' + x.n_falha + ' rede ' + x.n_rede + ' eq ' + x.n_equip + ' tm ' + x.tm_max + ' iso ' + x.iso_min; }).join(' · ');
-    const antes = Object.fromEntries(arqs(OUT).map((n) => [n, semGerado(n)]));
+    const antes = Object.fromEntries(fs.readdirSync(OUT).map((n) => [n, semGerado(n)]));
     // 2 · segunda rodada: nada novo
     log = roda(gen);
-    R.okIdem = /novos ou mudados: 0/.test(log) && arqs(OUT).every((n) => semGerado(n) === antes[n]) && arqs(OUT).length === Object.keys(antes).length;
+    R.okIdem = /novos ou mudados: 0/.test(log) && fs.readdirSync(OUT).every((n) => semGerado(n) === antes[n]);
     R.okNaoRepete = lidosFundo(log) === 0;
     // 3 · migracao por MARCA, com o esquema 6 FIEL (o que esta no ar desde os MPPT): o historico igual (as strings nunca foram para
     //     ele), e SEM os arquivos das strings e da curva (sg-logger-str, 13/10/2026; os demais ja existem e ficam)
@@ -579,8 +569,7 @@ function cenario(gen, lib) {
         const d29 = SD.find((x) => x.inv === 'INV01' && x.d === '2026-09-29') || { pk: [] }, diasS = SD.filter((x) => x.inv === 'INV02').map((x) => x.d).sort().join();
         const al5 = (AL.serie || []).find((a) => a.ufv === 'M1' && a.ts === 'TS5' && a.inv === 'INV01' && a.str === 5);
         const d5 = [...new Set((S5.serie || []).map((x) => x.d))].sort();
-        R.okStr = SDA.janela_dias === 36500 &&   /* sg-str-historico (18/11/2026): o diario das strings sem a janela de 180 dias */
-          diasS === diasM && SD.filter((x) => x.inv === 'INV02' && x.d >= '2026-09-30').every((x) => x.sn === TROCA.sn)
+        R.okStr = SDA.janela_dias === 180 && diasS === diasM && SD.filter((x) => x.inv === 'INV02' && x.d >= '2026-09-30').every((x) => x.sn === TROCA.sn)
           && SD.filter((x) => x.inv === 'INV01').length >= 4 && d29.na > 100 && Math.abs(d29.pk[4] / d29.pk[0] - 0.45) < 0.01 && d29.ms === Date.parse('2026-09-29T03:00:00Z')
           && S5.janela_dias === 7 && d5.length >= 4 && d5.includes('2026-10-04') && (S5.serie || []).filter((x) => x.inv === 'INV02' && x.d >= '2026-09-30').every((x) => x.sn === TROCA.sn)
           && (C5.serie || []).length === (S5.serie || []).length && !!al5 && al5.classe === 'fraca' && Math.abs(al5.pct - 45) < 1;
@@ -625,9 +614,8 @@ ok(R.okTroca, 'a troca: o inversor retirado deixa de valer no primeiro dia do su
 ok(R.okMpptVazio, 'eletrocentro identificado sem nenhum dia de MPPT tem arquivo, com a serie vazia');
 ok(R.okMpptJanela, 'a janela: o arquivo corta o que passa de 365 dias, o ranking so ve os ultimos 30 e exige 5 dias: ' + R.txt.r4);
 ok(R.okRankOrdem, 'o ranking inteiro em ordem (razao, posicao, MPPT)');
-ok(R.okStr, 'strings do logger no gerador: diario sem janela (36500 dias) com a troca do INV02 igual a dos MPPT, a S5 do 501 a 45 % no pico, o 5 min e a curva com mais de um dia, a S5 fraca na lista: ' + R.txt.str);
+ok(R.okStr, 'strings do logger no gerador: diario de 180 dias com a troca do INV02 igual a dos MPPT, a S5 do 501 a 45 % no pico, o 5 min e a curva com mais de um dia, a S5 fraca na lista: ' + R.txt.str);
 ok(R.okStr5, 'strings de 5 min na primeira rodada: os 3 dias do CSV do 501 ficam: ' + R.txt.str5);
-ok(R.okArq, 'arquivo mensal das strings (sg-str-historico): por inversor e mes, todo dia lido, a mesma corrente do 5 min de 7 dias, e o indice dos meses: ' + R.txt.arq);
 ok(R.okStrSaude, 'sg_saude_M1: as strings do dia na linha do 501 em 29/09 (a mais fraca a 45 %, S5, 22 lidas, nenhuma sem corrente): ' + R.txt.strSaude);
 ok(R.okMpptAcumula, 'tensao dos MPPT ACUMULA: com o dia novo do inversor, os dias antigos mantidos e o ranking ate o dia novo');
 ok(R.okSaudeTipo, 'o tipo do dia na saude: alarme, falha, os dois no mesmo inversor-dia e codigo fora do manual, em bits (OU): ' + R.txt.tp);
@@ -738,10 +726,8 @@ planta('minimo de dias rebaixado', 'const MPPT_DIAS_MIN = 5;', 'const MPPT_DIAS_
 planta('ranking com o desempate do MPPT invertido', '|| x.mppt - y.mppt);', '|| y.mppt - x.mppt);', 'okRankOrdem');
 planta('corrente do ranking pela tensao', 'i: med(L.map((l) => l.i[m]))', 'i: med(L.map((l) => l.r[m]))', 'okMppt');
 planta('eletrocentro sem MPPT sem arquivo', 'if (!novo.length && ant && !tirados) continue;', 'if (!novo.length) continue;', 'okMpptVazio');
-planta('strings: 5 min de 1 dia so', 'SS.acumula(strRodada, g5Rodada, m[1], itS, DIAS_5MIN);', 'SS.acumula(strRodada, g5Rodada, m[1], itS, 1);', 'okStr5');
-planta('strings: arquivo mensal sem guardar o dia', 'SS.guarda(GSTR, m[1], itS);', '', 'okArq');
-planta('strings: arquivo mensal sem gravar', 'const A = await SS.arquivo({ G: GSTR,', 'const A = { grupos: 0, gravados: 0, linhas: 0, meses: [] }; ({ G: GSTR,', 'okArq');
-planta('strings: diario de 1 dia', 'dias5: DIAS_5MIN, diasStr: DIAS_STR_DIA });', 'dias5: DIAS_5MIN, diasStr: 1 });', 'okStr');
+planta('strings: 5 min de 1 dia so', 'SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), DIAS_5MIN);', 'SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), 1);', 'okStr5');
+planta('strings: diario de 1 dia', 'dias5: DIAS_5MIN, diasStr: DIAS_STR });', 'dias5: DIAS_5MIN, diasStr: 1 });', 'okStr');
 planta('saude com a chave da dispersao errada', "const sd = STRB.disp.get(x.chave + '|' + x.d);\n      if (sd) { r.smin", "const sd = STRB.disp.get(x.chave + '/' + x.d);\n      if (sd) { r.smin", 'okStrSaude');
 planta('saude com a mais forte no lugar da mais fraca', 'if (sd) { r.smin = sd.min_pct; r.smax = sd.max_pct;', 'if (sd) { r.smin = sd.max_pct; r.smax = sd.max_pct;', 'okStrSaude');
 planta('frota: conversao no dia parcial', 'o.cv[i] = x.parcial === false && x.ecc > 0', 'o.cv[i] = x.ecc > 0', 'okFrota');
@@ -855,7 +841,7 @@ const ORDEM2 = ['okDoisBase', 'okDoisMigra', 'okDoisRefazer', 'okDoisColisao', '
   'okDoisPrefixo', 'okDoisSemLogger', 'okDoisSemOLogger', 'okDoisCaixa', 'okDoisSemHist'];
 function cenarioDois(gen) {
   const R = { txt: {} };
-  for (const n of fs.readdirSync(OUT2)) fs.rmSync(path.join(OUT2, n), { recursive: true, force: true });
+  for (const n of fs.readdirSync(OUT2)) fs.unlinkSync(path.join(OUT2, n));
   for (const a of [TARDE2, TROCA2, SOETC2]) tiraZip(a);
   tiraZip(NOVO8, PASTA8);
   grava2('estacao_logger_30min.json', ESTACAO);

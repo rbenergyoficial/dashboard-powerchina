@@ -106,19 +106,6 @@ function diaStrings(cab, linhas, onde) {
   return out;
 }
 
-/* 🔴 AS ENTRADAS PUBLICADAS NO 5 MIN (sg-str-historico, 18/11/2026). Antes: so as REAIS ou com corrente no dia. A entrada que NUNCA teve
-   corrente nao virava real (a regra pede 3 dias a 40 %) e sumia da tela: M1/TS2/INV06 S9 le 0 A no CSV do logger em todos os dias desde
-   03/04/2026 (S1..S8 e S10..S22 com ~13 A no pico) e a tela mostrava S1-S8 e S10-S22. Agora entra tambem a entrada DENTRO da faixa das
-   reais (numero abaixo da maior real) sem corrente no dia: vai em `vz`, com a leitura do registro (zero), e nao entra na mediana das
-   irmas (nao e real). Medido em 18/11/2026 sobre o sg_str_entradas: 20 inversores com buraco na numeracao, 28 entradas. As entradas
-   acima da maior real (23, 24 sem uso) continuam fora. */
-function entradasPublicadas(g5s, R) {
-  const max = R && R.size ? Math.max(...R) : 0, s = {}, vz = [];
-  g5s.forEach((a, i) => { const n = i + 1, com = a.some((x) => x != null && x > 0);
-    if ((R && R.has(n)) || com) s[n] = a; else if (n < max) { s[n] = a; vz.push(n); } });
-  return { s, vz };
-}
-
 /* ------------------------------------------------------------------ os produtos (o gerador chama) ------------------- */
 /* Pedido do humano (13/10/2026): a pagina PV · Sungrow so com o dado do logger. Por eletrocentro (k = <usina>_<TS>):
    - sg_str_dia_<k>.json  (publico, DIAS_STR dias, acumulado como o sg_mppt_<k>): por inversor-dia o PICO (instante de maior potencia
@@ -231,15 +218,15 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
     for (const l of novo) {
       const aC = tC.get(l.d + '|' + l.inv); if (aC && aC.sn === l.sn && lidas(aC) > lidas(l.cv)) continue;   // a de mais amostras, tambem entre rodadas
       const R = reaisDe(u, tsx, l.inv) || new Set();
-      const { s, vz } = entradasPublicadas(l.g5.s, R);
-      tS.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.g5.h0, reais: [...R].sort((a, b) => a - b), vz, s });
+      const s = {}; l.g5.s.forEach((a, i) => { if (R.has(i + 1) || a.some((x) => x != null && x > 0)) s[i + 1] = a; });
+      tS.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.g5.h0, reais: [...R].sort((a, b) => a - b), s });
       tC.set(l.d + '|' + l.inv, { d: l.d, inv: l.inv, sn: l.sn, h0: l.cv.h0, p: l.cv.p, pdc: l.cv.pdc, t: l.cv.t, lim: l.cv.lim, iso: l.cv.iso, nom: l.cv.nom });
     }
     const dias = [...new Set([...tS.keys(), ...tC.keys()].map((c) => c.slice(0, 10)))].sort().slice(-DIAS_5MIN);
     const fica = (m) => [...m.keys()].filter((c) => dias.includes(c.slice(0, 10))).sort().map((c) => m.get(c));
     pesos['sg_str_' + k + '.json'] = await escreve('sg_str_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_5MIN,
-      unidade: 's corrente de cada entrada a cada 5 min a partir de h0, 0,1 A (inteiro); as entradas reais, as com corrente no dia e as sem'
-        + ' corrente dentro da faixa das reais (vz); reais as entradas que sao string (lib-strings); sn numero de serie', serie: fica(tS) });
+      unidade: 's corrente de cada entrada a cada 5 min a partir de h0, 0,1 A (inteiro); so as entradas reais ou com corrente no dia; reais as'
+        + ' entradas que sao string (lib-strings); sn numero de serie', serie: fica(tS) });
     pesos['sg_curva_' + k + '.json'] = await escreve('sg_curva_' + k + '.json', { gerado_em: agora, usina: u, ts: tsx, esquema: 1, janela_dias: DIAS_5MIN,
       unidade: 'a cada 5 min a partir de h0: p potencia CA e pdc potencia CC, 0,1 kW (inteiro); t temperatura interna, 0,1 °C; lim 1 = potencia'
         + ' limitada; iso isolamento do arranjo, kOhm (nulo sem leitura); nom potencia nominal do dia, kW (iso e nom desde 20/10/2026: as linhas'
@@ -274,7 +261,7 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
   console.log('  strings do logger: ' + nD + ' diario(s) e ' + nG + ' de 5 min gravado(s) · entradas reais por usina contra a placa: '
     + resumo.map((x) => x.ufv + ' ' + x.strings_com_corrente + '/' + x.placa).join(', ') + ' · alarmes: '
     + ALARMES.filter((a) => a.classe === 'morta').length + ' sem corrente, ' + ALARMES.filter((a) => a.classe === 'fraca').length + ' fracas (ate ' + ate + ')');
-  return { disp, reaisDe };
+  return { disp };
 }
 
 /* o gerador chama, para cada CSV de inversor lido: guarda o pico e a razao de todo dia (strRodada[sn]) e o 5 min so dos ultimos `dias5`
@@ -291,91 +278,4 @@ function acumula(strRodada, g5Rodada, sn, itens, dias5) {
   const ds = Object.keys(gr).sort(); for (const d of ds.slice(0, Math.max(0, ds.length - dias5))) delete gr[d];
 }
 
-/* ------------------------------------------------------------------ o ARQUIVO MENSAL das strings ----------------------- */
-/* 🔴 sg-str-historico (18/11/2026), pedido do humano: "eu quero poder consultar todo o historico no SIGO TAMBEM, nao quero limitacao".
-   A aba Analise por string so tinha o sg_str_<k> (7 dias): o 5 min de cada string sai da rodada cortado em DIAS_5MIN DURANTE a leitura
-   (acumula), para caber na memoria. O arquivo mensal guarda TODO dia lido, sem janela, um blob por inversor e mes:
-     hist/sg_str_<usina>_<TS>_<INV>_<AAAA>_<MM>.json  { serie: [{ d, inv, sn, na, h0, reais, vz, s }] }   (a linha do sg_str_<k> + na)
-   e o indice hist/sg_str_meses.json (os meses que existem, para a pagina nao pedir mes que nao ha).
-   Memoria: o dia de cada numero de serie vai para o DISCO durante a leitura (um .json.gz por numero de serie e dia, so o de mais amostras,
-   a mesma regra do acumula); no fim, agrupado por posicao (a do numero de serie no dia, pela `vale`, a mesma regra do sg_str_<k>) e mes,
-   cada grupo funde com o blob publicado: no mesmo dia, o MESMO numero de serie com mais amostras publicadas fica (zip parcial reenviado
-   nao rebaixa); outro numero de serie (troca) ou mais amostras, troca. A releitura completa (REFAZER) refaz todos os meses desde o
-   primeiro zip do sungrow-raw (03/04/2026); a rodada do dia so toca o(s) mes(es) dos dias novos. */
-const zlibA = require('zlib'), fsA = require('fs'), pathA = require('path'), osA = require('os');
-const nomeSn = (sn) => String(sn).replace(/[^A-Za-z0-9_-]/g, '_');
-function abreGuarda(dir) {
-  const d = dir || fsA.mkdtempSync(pathA.join(osA.tmpdir(), 'sg-str-arq-'));
-  fsA.mkdirSync(d, { recursive: true });
-  return { dir: d, idx: new Map() };
-}
-/* itens = a saida do diaStrings de UM numero de serie (o mesmo que vai ao acumula) */
-function guarda(G, sn, itens) {
-  if (!G) return;
-  for (const x of itens) {
-    const nAm = x.cv.p.filter((v) => v != null).length, k = sn + '|' + x.d, a = G.idx.get(k);
-    if (a != null && a >= nAm) continue;
-    G.idx.set(k, nAm);
-    fsA.writeFileSync(pathA.join(G.dir, nomeSn(sn) + '_' + x.d + '.json.gz'), zlibA.gzipSync(JSON.stringify({ h0: x.g5.h0, s: x.g5.s })));
-  }
-}
-const nomeMes = (u, ts, inv, mes) => 'hist/sg_str_' + u + '_' + ts + '_' + inv + '_' + mes.replace('-', '_') + '.json';
-async function arquivo({ G, ident, vale, reaisDe, leAnterior, escreve, pesos, agora, conc }) {
-  const R0 = { grupos: 0, gravados: 0, linhas: 0, meses: [] };
-  if (!G || !G.idx.size) return R0;
-  const grupos = new Map();
-  for (const [k, na] of G.idx) {
-    const i = k.lastIndexOf('|'), sn = k.slice(0, i), d = k.slice(i + 1), a = ident[sn]; if (!a) continue;
-    const [u, ts, inv] = a.pos.split('/');
-    if (!vale({ d, sn, inv }, u, ts)) continue;
-    const g = u + '|' + ts + '|' + inv + '|' + d.slice(0, 7);
-    (grupos.get(g) || grupos.set(g, []).get(g)).push({ sn, d, na });
-  }
-  const mesesNovos = new Set();
-  let dMin = '', dMax = '';
-  const um = async (g, lista) => {
-    const [u, ts, inv, mes] = g.split('|'), nome = nomeMes(u, ts, inv, mes);
-    const ant = await leAnterior(nome);
-    const tudo = new Map(((ant && ant.serie) || []).map((l) => [l.d, l]));
-    const R = reaisDe(u, ts, inv) || new Set(), reais = [...R].sort((p, q) => p - q);
-    const daRodada = new Map();
-    let mudou = !ant;
-    lista.sort((p, q) => (p.d < q.d ? -1 : p.d > q.d ? 1 : q.na - p.na));
-    for (const e of lista) {
-      const r = daRodada.get(e.d); if (r != null && r >= e.na) continue;          // dois numeros de serie na posicao no mesmo dia: o de mais amostras
-      const a = tudo.get(e.d);
-      if (r == null && a && a.sn === e.sn && a.na != null && a.na > e.na) continue;   // zip parcial reenviado nao rebaixa o dia publicado
-      const x = JSON.parse(zlibA.gunzipSync(fsA.readFileSync(pathA.join(G.dir, nomeSn(e.sn) + '_' + e.d + '.json.gz'))).toString('utf8'));
-      const { s, vz } = entradasPublicadas(x.s, R);
-      const l = { d: e.d, inv, sn: e.sn, na: e.na, h0: x.h0, reais, vz, s };
-      daRodada.set(e.d, e.na);
-      if (a && JSON.stringify(a) === JSON.stringify(l)) continue;
-      tudo.set(e.d, l); mudou = true;
-    }
-    R0.grupos += 1;
-    if (!mudou) return;
-    const serie = [...tudo.keys()].sort().map((d) => tudo.get(d));
-    if (serie.length) { if (!dMin || serie[0].d < dMin) dMin = serie[0].d; if (serie[serie.length - 1].d > dMax) dMax = serie[serie.length - 1].d; }
-    pesos[nome] = await escreve(nome, { gerado_em: agora, usina: u, ts, inv, mes, esquema: 1,
-      unidade: 's corrente de cada entrada a cada 5 min a partir de h0, 0,1 A (inteiro); as entradas reais, as com corrente no dia e as sem corrente'
-        + ' dentro da faixa das reais (vz, nao entram na mediana das irmas); reais as entradas que sao string (lib-strings); na amostras com'
-        + ' potencia lida no dia; sn numero de serie. Um arquivo por inversor e mes, sem janela', serie });
-    R0.gravados += 1; R0.linhas += serie.length; mesesNovos.add(mes);
-  };
-  const filas = [...grupos.entries()].sort((p, q) => (p[0] < q[0] ? -1 : 1));
-  let i = 0;
-  await Promise.all(Array.from({ length: Math.max(1, conc || 8) }, async () => { while (i < filas.length) { const [g, l] = filas[i++]; await um(g, l); } }));
-  // o indice dos meses: o publicado mais os desta rodada (so cresce)
-  const antM = await leAnterior('hist/sg_str_meses.json');
-  const meses = [...new Set([...((antM && antM.meses) || []), ...mesesNovos])].sort();
-  const de = [antM && antM.de, dMin].filter(Boolean).sort()[0] || null, ate = [antM && antM.ate, dMax].filter(Boolean).sort().pop() || null;
-  if (!antM || meses.length !== antM.meses.length || de !== antM.de || ate !== antM.ate) {
-    pesos['hist/sg_str_meses.json'] = await escreve('hist/sg_str_meses.json', { gerado_em: agora, esquema: 1, meses, de, ate,
-      unidade: 'os meses (AAAA-MM) com o arquivo mensal das strings hist/sg_str_<usina>_<TS>_<INV>_<AAAA>_<MM>.json; de e ate o primeiro e o'
-        + ' ultimo dia guardados' });
-  }
-  R0.meses = meses; R0.de = de; R0.ate = ate;
-  return R0;
-}
-
-module.exports = { N_ENT, PISO_A, P_GER_W, colunas, diaStrings, acumula, produtos, entradasPublicadas, abreGuarda, guarda, arquivo, nomeMes };
+module.exports = { N_ENT, PISO_A, P_GER_W, colunas, diaStrings, acumula, produtos };

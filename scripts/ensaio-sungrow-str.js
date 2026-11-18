@@ -22,7 +22,6 @@
  */
 'use strict';
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { PLACA } = require('./lib-placa.js');
 
@@ -205,42 +204,6 @@ async function ensaio(libPath, mudo) {
     await SS.produtos({ strRodada: sr, g5Rodada: gr, ident, mEtcs, vale, leAnterior: M3.leAnterior, escreve: M3.escreve, pesos: {}, agora: 'x', dias5: 7, diasStr: 10 });
     const L = M3.store.get('sg_str_dia_M8_TS1.json');
     ok(L.serie.length === 10 && L.serie[0].d === dias[30] && L.janela_dias === 10, 'janela do diario: os ultimos 10 dias (' + L.serie.length + ', a partir de ' + (L.serie[0] || {}).d + ')'); }
-  /* ---------- 5 · sg-str-historico (18/11/2026): a entrada sem corrente dentro da faixa e o arquivo mensal, sem janela ---------- */
-  if (!mudo) console.log('5 · a entrada sem corrente dentro da faixa e o arquivo mensal');
-  { const g = Array.from({ length: 24 }, (_, i) => (i === 8 || i >= 22 ? [0, 0, null] : [10, 20, 30]));   // a S9 zerada (M1/TS2/INV06), 23 e 24 sem uso
-    const { s, vz } = SS.entradasPublicadas(g, new Set(Array.from({ length: 22 }, (_, i) => i + 1).filter((n) => n !== 9)));
-    ok(JSON.stringify(vz) === '[9]' && s[9] && !s[23] && !s[24] && Object.keys(s).length === 22,
-      'a entrada sem corrente dentro da faixa das reais vai no 5 min, em vz; 23 e 24 sem uso ficam fora: vz ' + JSON.stringify(vz) + ', ' + Object.keys(s).length + ' entradas'); }
-  { const raiz = fs.mkdtempSync(path.join(os.tmpdir(), 'ens-sgarq-'));
-    try {
-      const G = SS.abreGuarda(path.join(raiz, 'a')), dA = ['2026-08-29', '2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02'];
-      for (const d of dA) { SS.guarda(G, 'A1', [dia1(d, { f: { 5: 0.45, 9: 0 } })]); SS.guarda(G, 'A2', [dia1(d, {})]); if (d >= '2026-09-01') SS.guarda(G, 'B2', [dia1(d, { f: { 1: 0.5 } })]); }
-      SS.guarda(G, 'A1', [dia1('2026-08-31', { f: { 5: 0.45, 9: 0 }, ate: 150 })]);   // o zip parcial do mesmo dia chega depois do inteiro
-      const reaisA = (u, ts, inv) => new Set(Array.from({ length: 22 }, (_, i) => i + 1).filter((n) => !(inv === 'INV01' && n === 9)));
-      const vA = fazVale('2026-09-01', '2026-09-01'), MA = memoria(), arq = (GG, pesos) => SS.arquivo({ G: GG, ident, vale: vA, reaisDe: reaisA,
-        leAnterior: MA.leAnterior, escreve: MA.escreve, pesos, agora: 'x', conc: 3 });
-      const p1 = {}; await arq(G, p1);
-      const ago = MA.store.get('hist/sg_str_M8_TS1_INV01_2026_08.json') || { serie: [] }, set = MA.store.get('hist/sg_str_M8_TS1_INV01_2026_09.json') || { serie: [] };
-      const i2 = MA.store.get('hist/sg_str_M8_TS1_INV02_2026_09.json') || { serie: [] }, ix = MA.store.get('hist/sg_str_meses.json') || { meses: [] };
-      const inteiro = dia1('2026-08-31', {}).cv.p.filter((v) => v != null).length;
-      ok(ago.serie.map((l) => l.d).join() === '2026-08-29,2026-08-30,2026-08-31' && set.serie.map((l) => l.d).join() === '2026-09-01,2026-09-02',
-        'um arquivo por inversor e mes, com todo dia lido (sem a janela de 7 dias): ' + ago.serie.length + ' + ' + set.serie.length);
-      ok(ago.serie[2] && ago.serie[2].na === inteiro && ago.serie[2].s[1].filter((v) => v != null).length === dia1('2026-08-31', {}).g5.s[0].filter((v) => v != null).length && dia1('2026-08-31', { ate: 150 }).g5.s[0].filter((v) => v != null).length < ago.serie[2].s[1].filter((v) => v != null).length, 'zip parcial depois do inteiro nao rebaixa o dia guardado: ' + (ago.serie[2] || {}).na);
-      const l0 = ago.serie[0] || { s: {}, vz: [] }, mx = (a) => Math.max(...(a || [0]).filter((v) => v != null));
-      ok(JSON.stringify(l0.vz) === '[9]' && mx(l0.s[9]) === 0 && mx(l0.s[1]) === 120 && mx(l0.s[5]) === 54 && !l0.s[23] && l0.sn === 'A1' && l0.inv === 'INV01',
-        'a linha do mes: a S9 sem corrente em vz, a corrente em 0,1 A (12 A e a fraca 5,4 A), 23 e 24 fora');
-      ok(i2.serie.length === 2 && i2.serie.every((l) => l.sn === 'B2') && !(MA.store.get('hist/sg_str_M8_TS1_INV02_2026_08.json') || { serie: [] }).serie.some((l) => l.sn !== 'A2'),
-        'na troca, o dia da posicao e do numero de serie que a ocupa (B2 em setembro, A2 em agosto)');
-      ok(JSON.stringify(ix.meses) === '["2026-08","2026-09"]' && ix.de === '2026-08-29' && ix.ate === '2026-09-02', 'o indice dos meses com o primeiro e o ultimo dia: ' + JSON.stringify(ix));
-      const p2 = {}; await arq(G, p2);
-      ok(!Object.keys(p2).length, 'segunda chamada com o mesmo disco nao regrava nada: ' + Object.keys(p2).join(', '));
-      const G2 = SS.abreGuarda(path.join(raiz, 'b')); SS.guarda(G2, 'A1', [dia1('2026-09-03', {})]); SS.guarda(G2, 'A1', [dia1('2026-08-31', { ate: 150 })]);
-      const p3 = {}; await arq(G2, p3);
-      const set3 = MA.store.get('hist/sg_str_M8_TS1_INV01_2026_09.json') || { serie: [] }, ago3 = MA.store.get('hist/sg_str_M8_TS1_INV01_2026_08.json') || { serie: [] };
-      ok(set3.serie.map((l) => l.d).join() === '2026-09-01,2026-09-02,2026-09-03' && ago3.serie[2] && ago3.serie[2].na === inteiro && !p3['hist/sg_str_M8_TS1_INV01_2026_08.json']
-        && (MA.store.get('hist/sg_str_meses.json') || {}).ate === '2026-09-03',
-        'a rodada seguinte funde o dia novo no mes publicado; o zip parcial reenviado nao rebaixa o mes anterior, que nao e regravado');
-    } finally { fs.rmSync(raiz, { recursive: true, force: true }); } }
   return falhas;
 }
 
@@ -271,14 +234,7 @@ async function ensaio(libPath, mudo) {
     await planta('acumula: 5 min cortado em 1 dia', 'ds.slice(0, Math.max(0, ds.length - dias5))', 'ds.slice(0, Math.max(0, ds.length - 1))', /^o 5 min guarda so os ultimos 7/);
     await planta('troca ignorada no diario', "const novo = (novoD[k] || []).filter((l) => vale(l, u, tsx));", "const novo = (novoD[k] || []);", /^diario: 40 dias/);
     await planta('5 min sem o corte de dias', '.sort().slice(-DIAS_5MIN);', '.sort();', /^dia novo: o 5 min/);
-    await planta('vazia no 5 min', 'if ((R && R.has(n)) || com) s[n] = a; else if (n < max) { s[n] = a; vz.push(n); }', 's[n] = a;', /^no 5 min a morta fica/);
-    // sg-str-historico (18/11/2026)
-    await planta('a regra antiga (some a entrada sem corrente)', 'else if (n < max) { s[n] = a; vz.push(n); }', '', /^a entrada sem corrente dentro da faixa/);
-    await planta('guarda rebaixa com o parcial', 'if (a != null && a >= nAm) continue;', '', /^zip parcial depois do inteiro/);
-    await planta('arquivo rebaixa com o parcial publicado', 'if (r == null && a && a.sn === e.sn && a.na != null && a.na > e.na) continue;', '', /^a rodada seguinte funde/);
-    await planta('arquivo sem a troca', 'if (!vale({ d, sn, inv }, u, ts)) continue;', '', /^na troca/);
-    await planta('arquivo regrava sem mudar', 'if (!mudou) return;', '', /^segunda chamada com o mesmo disco/);
-    await planta('arquivo com a janela de 7 dias', 'const serie = [...tudo.keys()].sort().map((d) => tudo.get(d));', 'const serie = [...tudo.keys()].sort().slice(-1).map((d) => tudo.get(d));', /^um arquivo por inversor e mes/);
+    await planta('vazia no 5 min', 'if (R.has(i + 1) || a.some((x) => x != null && x > 0)) s[i + 1] = a;', 's[i + 1] = a;', /^no 5 min a morta fica/);
     await planta('alarme pela mediana das irmas', 'const mds = ls.map((l) => STRL.mediana([...R.reais].map((n) => l.pk[n - 1]).filter((x) => x != null)));', 'const mds = ls.map((l) => l.md);', /^mediana das REAIS/);
     await planta('regrava sem dado novo', 'if (!trocou && ant && !tirados) continue;', 'if (false) continue;', /^segunda chamada sem dado novo/);
     await planta('parcial reenviado vence no diario', 'if (a && a.sn === l.sn && a.na != null && a.na > l.na) continue;', '', /^zip parcial reenviado/);

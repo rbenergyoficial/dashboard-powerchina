@@ -77,10 +77,7 @@ const ESQ_HIST = 8;                                         // 2: t0/t1 por inve
                                                             // 6: tensao dos MPPT por inversor-dia, com o historico inteiro
                                                             // 7: as strings e a curva de 5 min do logger (sg-logger-str), com o historico inteiro
                                                             // 8: a energia CC do inversor-dia (ecc, sg-frota-dia), com o historico inteiro
-const DIAS_STR = 180;                                       // o sg_frota_dia (o logger guarda ~180 dias)
-/* sg-str-historico (18/11/2026), pedido do humano: "nao quero limitacao". O sg_str_dia_<k> (o pico e a razao do dia de cada string) deixa
-   de cortar em 180 dias: com o corte ele ja tinha perdido 03/04 a 21/05/2026, que estao no sungrow-raw. ~8 KB por eletrocentro e dia */
-const DIAS_STR_DIA = 36500;
+const DIAS_STR = 180;                                       // o arquivo diario das strings por eletrocentro (o logger guarda ~180 dias)
 const DIAS_MPPT = 30;                                       // a janela do ranking dos MPPT (o arquivo por eletrocentro guarda DIAS_PT)
 const MPPT_DIAS_MIN = 5;                                    // dias com a razao do MPPT para ele entrar no ranking
 // modulos por string: a placa do parque (1.155 inversores, strings de 29 modulos). Um modulo a menos = 1/29 da tensao
@@ -232,8 +229,7 @@ async function leAnterior(nome) {
 }
 async function escreve(nome, obj) {
   const gz = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
-  if (process.env.LOCAL_OUT_DIR) { const f = path.join(process.env.LOCAL_OUT_DIR, nome); fs.mkdirSync(path.dirname(f), { recursive: true });   // hist/ (sg-str-historico)
-    fs.writeFileSync(f, gz); return gz.length; }
+  if (process.env.LOCAL_OUT_DIR) { fs.writeFileSync(path.join(process.env.LOCAL_OUT_DIR, nome), gz); return gz.length; }
   const c = svc().getContainerClient(OUT);
   const up = await c.getBlockBlobClient(nome).upload(gz, gz.length, { blobHTTPHeaders: {
     blobContentType: 'application/json', blobContentEncoding: 'gzip', blobCacheControl: 'public, max-age=300' } });
@@ -362,8 +358,6 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   const junta = (dias, linhas) => { for (const x of linhas) { const a = dias[x.d]; if (!a || x.n > a.n) dias[x.d] = x; } };
   let nCsv = 0;
   const tipos = {};
-  /* sg-str-historico: o 5 min de cada string de TODO dia lido vai para o disco (o acumula corta em DIAS_5MIN); no fim, o arquivo mensal */
-  const GSTR = SS.abreGuarda(process.env.SG_STR_GUARDA || null);
   for (const z of novos) {
     const [mm, tt] = z.nome.split('/');
     const u = parque(mm.slice(1)), tsPasta = 'TS' + Number(tt.slice(2));
@@ -394,9 +388,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
         for (const x of dl) { const v = x._mppt; delete x._mppt; if (v && (!mr[x.d] || v.n > mr[x.d].n)) mr[x.d] = v; }
         junta(o.dias, dl);
         // as strings e a curva: no mesmo dia vindo de dois zips, fica o de mais amostras com potencia lida
-        const itS = SS.diaStrings(cab, linhas, onde);
-        SS.acumula(strRodada, g5Rodada, m[1], itS, DIAS_5MIN);
-        SS.guarda(GSTR, m[1], itS);
+        SS.acumula(strRodada, g5Rodada, m[1], SS.diaStrings(cab, linhas, onde), DIAS_5MIN);
       } else if (t === 'pid') {
         const end = m[1].split('_')[0];
         const id = (logger || (u + '/' + tsPasta)) + '/' + end;
@@ -641,11 +633,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
     modulos_por_string: MOD_STRING, unidade: 'r mediana diaria da razao da tensao do MPPT contra os irmaos, na janela; i idem para a corrente;'
       + ' mod = (1 - r) x modulos por string (positivo: tensao abaixo dos irmaos); dias com a razao', serie: rank });
   console.log('  MPPT: ' + mEscritos + ' eletrocentro(s) gravado(s), ' + mLinhas + ' linhas · ranking ' + rank.length + ' MPPT de ' + mDe + ' a ' + mUlt);
-  const STRB = await SS.produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, escreve, pesos, agora, dias5: DIAS_5MIN, diasStr: DIAS_STR_DIA });
-  { const A = await SS.arquivo({ G: GSTR, ident, vale, reaisDe: STRB.reaisDe, leAnterior, escreve, pesos, agora, conc: 8 });
-    console.log('  arquivo mensal das strings: ' + GSTR.idx.size + ' inversor-dias lidos · ' + A.grupos + ' inversor-meses · ' + A.gravados + ' gravados ('
-      + A.linhas + ' linhas) · meses ' + (A.meses.length ? A.meses[0] + ' a ' + A.meses[A.meses.length - 1] : 'nenhum'));
-    try { fs.rmSync(GSTR.dir, { recursive: true, force: true }); } catch (e) { } }
+  const STRB = await SS.produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, escreve, pesos, agora, dias5: DIAS_5MIN, diasStr: DIAS_STR });
   /* -------- SAUDE DO INVERSOR (lote 3): o sg_inv_dia passa do teto de ~1.100 KB que a pagina baixa (M1: 1.325 KB). Aqui
      sai o recorte que a pagina de saude usa, por usina (73 a 333 KB gzipado com o historico inteiro), e um resumo do
      conjunto por usina e dia. Familia, tipo (alarme/falha) e origem (rede/equipamento) de cada codigo: lib-sungrow,
@@ -905,9 +893,7 @@ const maisDias = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).to
   // o sinal de GRAVOU, separado do vermelho do recusado do cofre: os passos que leem os sg_* dependem dele, nao do verde do passo
   if (process.env.GITHUB_OUTPUT) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'gravou=1\n');
   if (!process.env.LOCAL_OUT_DIR) LD.podaProprios();   // a copia do sg_* que esta rodada nao gravou nem leu sai do disco (e do cache)
-  for (const [k, v] of Object.entries(pesos)) if (!k.startsWith('hist/sg_str_')) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');
-  { const h = Object.entries(pesos).filter(([k]) => k.startsWith('hist/sg_str_')); if (h.length) console.log('  hist/sg_str_* (arquivo mensal)  '
-    + h.length + ' blobs, ' + (h.reduce((s, [, v]) => s + v, 0) / 1048576).toFixed(1) + ' MB, maior ' + (Math.max(...h.map(([, v]) => v)) / 1024).toFixed(0) + ' KB'); }
+  for (const [k, v] of Object.entries(pesos)) console.log('  ' + k.padEnd(24) + ' ' + (v / 1024).toFixed(0).padStart(6) + ' KB');
   const cf = confRows.filter((c) => c.n >= 10);
   if (cf.length) { const rz = cf.map((c) => c.razao).sort((a, b) => a - b);
     console.log('  conferencia logger x SCADA: ' + cf.length + ' usina-dias · razao p01 ' + rz[Math.floor(rz.length * 0.01)] + ' p50 ' + rz[rz.length >> 1] + ' p99 ' + rz[Math.floor(rz.length * 0.99)]
