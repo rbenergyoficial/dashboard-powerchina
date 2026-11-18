@@ -68,7 +68,8 @@ try {
     const passos = wf.split(/\n      - name: /).slice(1).map((p) => ({ nome: p.split('\n')[0].trim(), corpo: p }));
     const ESPERADOS = ['Gerar sg_*.json', 'Ensaio · a cascata da usina no dia (produto)', 'Gerar perdas_diario, perdas_inv, strings_alarme e inv_scada pelo logger',
       'Ensaio · dado de inversor das telas pelo logger (produto)', 'Gerar pvstr_hora e pvstr_str pelo logger', 'Ensaio · strings de 30 min pelo logger (produto)'];
-    const tem = (p, v) => (v === 'P' ? /\n\s+LE_DADOS_PROPRIOS: '\^sg_'/ : /\n\s+CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-sungrow/).test(p.corpo);
+    /* sg-str-historico (18/11/2026): o gerar le tambem o arquivo mensal das strings (hist/sg_str_*) pela copia: '^(?:hist/sg_str_|sg_)' */
+    const tem = (p, v) => (v === 'P' ? /\n\s+LE_DADOS_PROPRIOS: '\^(?:sg_|\(\?:hist\/sg_str_\|sg_\))'/ :/\n\s+CACHE_BLOB_DIR: \$\{\{ github\.workspace \}\}\/\.cache-sungrow/).test(p.corpo);
     const ligados = passos.filter((p) => tem(p, 'P')).map((p) => p.nome);
     ok(JSON.stringify(ligados) === JSON.stringify(ESPERADOS), 'os 6 passos que releem sg_* com o padrão, e só eles (' + ligados.length + ')');
     ok(passos.filter((p) => tem(p, 'P') && !tem(p, 'D')).length === 0, 'nenhum passo com o padrão sem o diretório');

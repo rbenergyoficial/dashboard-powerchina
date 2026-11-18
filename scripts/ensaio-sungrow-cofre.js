@@ -249,7 +249,9 @@ function roda(gen, mundo, env) {
   R.gravou = /^gravou=1$/m.test(fs.readFileSync(GO, 'utf8'));
   return R;
 }
-const saida = (R) => Object.fromEntries(fs.readdirSync(R.OUT).sort().map((n) => [n, JSON.stringify(JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(R.OUT, n))).toString('utf8')), (k, v) => (k === 'gerado_em' ? undefined : v))]));
+/* sg-str-historico (18/11/2026): o gerador grava tambem em hist/ (o arquivo mensal das strings): a saida e listada com a subpasta */
+const arqsOut = (dir, pre) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? arqsOut(path.join(dir, e.name), (pre || '') + e.name + '/') : [(pre || '') + e.name]));
+const saida = (R) => Object.fromEntries(arqsOut(R.OUT).sort().map((n) => [n, JSON.stringify(JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(R.OUT, n))).toString('utf8')), (k, v) => (k === 'gerado_em' ? undefined : v))]));
 const difs = (a, b) => { const A = saida(a), B = saida(b); const ks = [...new Set([...Object.keys(A), ...Object.keys(B)])].sort(); return ks.filter((k) => A[k] !== B[k]); };
 const lidos = (R) => { try { return JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(R.OUT, 'sg_lidos.json'))).toString('utf8')).zips; } catch (e) { return null; } };
 const OLD = '2026-10-17T09:20:00Z';
