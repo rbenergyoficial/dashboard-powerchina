@@ -16,7 +16,12 @@
  *     DEPOIS (sem dado novo) regrava o diario e o 5 min sem as linhas do retirado; a mediana das REAIS (nao a das irmas) no alarme,
  *     num dia em que as duas diferem; o piso de classe na dispersao do dia; a janela do diario (diasStr); o historico de entradas
  *     reais acumulado; a placa do resumo pela lib-placa.
- * 4 · plantios na LIB (uma copia mudada, o ensaio inteiro de novo): cada um tem de reprovar COM a falha declarada.
+ * 4 · plantios na LIB (uma copia mudada, o ensaio inteiro de novo): cada um tem de reprovar COM a falha declarada; desde
+ *     sg-str-somada (18/11/2026) tambem na lib-strings (a copia mudada dela, lida por uma copia da lib-sungrow-str).
+ * 6 · sg-str-somada (18/11/2026): o par do MPPT com a leitura somada (uma string a zero e a par com a soma das duas) e `somada`, nao
+ *     `morta`; a S9 zerada com a par a 100 % continua `morta` (o M1/TS2/INV06); a par a 150 % (abaixo de 1,6x) tambem; a zerada que
+ *     nunca foi real entra so como somada e conta no resumo; a dispersao do dia tira o par somado da mais forte e das sem corrente.
+ *     A mediana e a das IRMAS: o dia da secao 3 com 11 strings mortas (mediana das reais 5,4 A) nao vira somada (a S20 a 12 A e sadia).
  *
  * uso: node scripts/ensaio-sungrow-str.js
  */
@@ -71,6 +76,7 @@ async function ensaio(libPath, mudo) {
   const falhas = [];
   const ok = (c, m) => { if (!c) falhas.push(m); if (!mudo) console.log((c ? '  ok   ' : '  FALHA ') + m); };
   delete require.cache[require.resolve(libPath)];
+  for (const k of Object.keys(require.cache)) if (/_plantio_/.test(k)) delete require.cache[k];   // a copia plantada da lib-strings
   const SS = require(libPath);
   const dia1 = (d, o, nome) => { const t = leCsv(csv(d, o)); return SS.diaStrings(t.cab, t.linhas, nome || 'x.csv')[0]; };
   /* ---------- 1 · diaStrings ---------- */
@@ -191,6 +197,10 @@ async function ensaio(libPath, mudo) {
     const B2r = await SS.produtos({ strRodada: sr, g5Rodada: gr, ident, mEtcs, vale, leAnterior: M2.leAnterior, escreve: M2.escreve, pesos: {}, agora: 'x', dias5: 7, diasStr: 180 });
     const A2l = M2.store.get('sg_str_alarme.json'), m9 = A2l.serie.find((a) => a.str === 9) || {};
     ok(A2l.serie.filter((a) => a.classe === 'morta').length === 11 && m9.med_a === 5.4 && m9.a === 0, 'mediana das REAIS no alarme (5,4 A, nao a das irmas 12 A): ' + m9.med_a);
+    ok(!A2l.serie.some((a) => a.classe === 'somada'), 'e nenhuma somada nesse dia: a S20 a 12 A e 2,2x a mediana das reais (5,4 A), mas 1,0x a das irmas (sg-str-somada): '
+      + A2l.serie.filter((a) => a.classe === 'somada').map((a) => 'S' + a.str).join(','));
+    const dUlt = B2r.disp.get('M8/TS2/INV01|' + dC[35]) || {};
+    ok(dUlt.mortas === 11 && dUlt.somadas === 0, 'e a dispersao desse dia conta as 11 sem corrente, nenhum par somado (a mediana das irmas): ' + JSON.stringify(dUlt));
     const dEsc = B2r.disp.get('M8/TS2/INV01|' + dC[10]);
     ok(dEsc && dEsc.min_pct === 0 && dEsc.mortas === 0, 'dia escuro (mediana 2,4 A): dispersao com a S9 a 0 % mas sem sem corrente (piso de classe): ' + JSON.stringify(dEsc || null));
   }
@@ -241,6 +251,37 @@ async function ensaio(libPath, mudo) {
         && (MA.store.get('hist/sg_str_meses.json') || {}).ate === '2026-09-03',
         'a rodada seguinte funde o dia novo no mes publicado; o zip parcial reenviado nao rebaixa o mes anterior, que nao e regravado');
     } finally { fs.rmSync(raiz, { recursive: true, force: true }); } }
+  /* ---------- 6 · sg-str-somada (18/11/2026): o par do MPPT com a leitura somada ---------- */
+  if (!mudo) console.log('6 · o par do MPPT com a leitura somada');
+  { const M6 = memoria(), dS = diasDe('2026-10-01', 36), sr = {}, gr = {};
+    const id6 = { D1: { pos: 'M8/TS2/INV03' }, D2: { pos: 'M8/TS2/INV04' } };
+    /* D1: 30 dias normais (as 22 viram reais) e depois, nos 6 ultimos, o MPPT 1 com a soma na S1 (2,0x) e a S2 a zero, o MPPT 2 com a soma
+       na S4 (1,85x) e a S3 a zero, a S11 a 1,5x com a S12 a zero (abaixo de 1,6x: e morta); e nos 3 ultimos a S9 a zero com a S10 a 100 %
+       (a S9 do M1/TS2/INV06). D2: a S5 com a soma e a S6 a zero desde o primeiro dia (a S6 nunca foi real) */
+    for (const [i, d] of dS.entries()) {
+      SS.acumula(sr, gr, 'D1', [dia1(d, i < 30 ? {} : { f: Object.assign({ 1: 2, 2: 0, 3: 0, 4: 1.85, 11: 1.5, 12: 0 }, i >= 33 ? { 9: 0 } : {}) })], 7);
+      SS.acumula(sr, gr, 'D2', [dia1(d, { f: { 5: 2, 6: 0 } })], 7);
+    }
+    const B6 = await SS.produtos({ strRodada: sr, g5Rodada: gr, ident: id6, mEtcs: ['M8_TS2'], vale: () => true, leAnterior: M6.leAnterior, escreve: M6.escreve, pesos: {}, agora: 'x', dias5: 7, diasStr: 180 });
+    const A6 = M6.store.get('sg_str_alarme.json') || { serie: [], resumo: [], regra: {} }, S6 = A6.serie;
+    const de = (inv, n) => S6.find((a) => a.inv === inv && a.str === n) || {};
+    const s2 = de('INV03', 2), s3 = de('INV03', 3), s9 = de('INV03', 9), s12 = de('INV03', 12), s6 = de('INV04', 6);
+    ok(s2.classe === 'somada' && s2.str_alta === 1 && s2.mppt === 1 && s2.a === 0 && s2.a_alta === 24 && s2.irmas_a === 12 && s2.pct_alta === 200 && s2.desde === dS[30] && s2.dias_fora === 6 && !s2.fora_da_apuracao,
+      'par somado: a S2 a zero com a soma na S1 (2,0x) e somada, nao sem corrente: ' + JSON.stringify(s2));
+    ok(s3.classe === 'somada' && s3.str_alta === 4 && s3.mppt === 2 && s3.a_alta === 22.2 && s3.pct_alta === 185, 'par somado com a soma na string PAR (S4 a 1,85x, a S3 a zero): ' + JSON.stringify(s3));
+    ok(s9.classe === 'morta' && s9.desde === dS[33] && s9.str_alta == null, 'a S9 a zero com a S10 a 100 % continua sem corrente (o M1/TS2/INV06): ' + JSON.stringify(s9));
+    ok(s12.classe === 'morta' && s12.str_alta == null, 'a S12 a zero com a S11 a 1,5x (abaixo de 1,6x) e sem corrente: ' + JSON.stringify(s12));
+    ok(!S6.some((a) => a.inv === 'INV03' && [1, 4, 11].includes(a.str)) && S6.filter((a) => a.inv === 'INV03').length === 4, 'a entrada com a soma nao vira alarme proprio: ' + S6.filter((a) => a.inv === 'INV03').map((a) => 'S' + a.str + ' ' + a.classe).join(', '));
+    ok(s6.classe === 'somada' && s6.fora_da_apuracao === 1 && s6.desde_o_inicio === 1 && s6.str_alta === 5 && !S6.some((a) => a.inv === 'INV04' && a.str !== 6),
+      'a zerada que nunca foi real (a soma desde o primeiro dia) entra so como somada, fora da apuracao: ' + JSON.stringify(s6));
+    const r8 = A6.resumo.find((r) => r.ufv === 'M8') || {};
+    ok(r8.strings_com_corrente === 44 && r8.mppt_somada === 3, 'no resumo a zerada fora da apuracao conta como com corrente (22 + 21 + 1) e os 3 MPPT somados: ' + r8.strings_com_corrente + ', ' + r8.mppt_somada);
+    ok(S6.map((a) => a.classe).join() === 'morta,morta,somada,somada,somada', 'a ordem da lista: sem corrente, somada, fraca: ' + S6.map((a) => a.classe).join());
+    ok(/soma das duas/.test(A6.regra.somada || '') && /1,6/.test(A6.regra.somada || '') && /fora a leitura somada/.test(A6.regra.morta || ''), 'a regra publicada diz a classe somada e o limiar');
+    const d6 = B6.disp.get('M8/TS2/INV03|' + dS[35]) || {};
+    ok(d6.mortas === 2 && d6.somadas === 2 && d6.max_pct === 150 && d6.min_pct === 0 && d6.min_n === 9 && d6.n === 22,
+      'dispersao do dia: o par somado fora da mais forte (150 %, nao 200 %) e das sem corrente (2: S9 e S12), 2 pares somados: ' + JSON.stringify(d6));
+  }
   return falhas;
 }
 
@@ -286,7 +327,7 @@ async function ensaio(libPath, mudo) {
     await planta('troca tardia sem regravar o diario', 'if (!trocou && ant && !tirados) continue;', 'if (!trocou && ant) continue;', /^troca descoberta depois/);
     await planta('troca tardia sem regravar o 5 min', 'if (!novo.length && antS && antC && !tiradosG) {', 'if (!novo.length && antS && antC) {', /^e o 5 min tambem/);
     await planta('ms em UTC', "ms: Date.parse(d + 'T03:00:00Z')", "ms: Date.parse(d + 'T00:00:00Z')", /^ms do dia em BRT/);
-    await planta('dispersao sem o piso de classe', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A)', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, 0)', /^dia escuro/);
+    await planta('dispersao sem o piso de classe', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A, true)', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, 0, true)', /^dia escuro/);
     await planta('entradas sem o historico anterior', "STRL.fundeEntradas((entAnt && entAnt.entradas) || [], obs, PISO_A)", 'STRL.fundeEntradas([], obs, PISO_A)', /^a entrada real que so o historico/);
     await planta('placa sem dividir pela string', 'Math.round(PLACA[u].modulos / MOD_POR_STRING)', 'PLACA[u].modulos', /^M8 com 44 strings reais/);
     await planta('grade so da geracao (sem a meia hora da ponta)', 'const m0 = Math.floor(g0 / 30) * 30, m1 = Math.min(1435, Math.floor(g1 / 30) * 30 + 25),', 'const m0 = g0, m1 = g1,', /^grade de 5 min/);
@@ -294,7 +335,41 @@ async function ensaio(libPath, mudo) {
     await planta('nominal em 0,1 kW', 'cv.nom = ns.length ? r1(Math.max(...ns) / 10) : null;', 'cv.nom = ns.length ? Math.max(...ns) : null;', /^curva: isolamento/);
     await planta('curva publicada sem o isolamento', 'lim: l.cv.lim, iso: l.cv.iso, nom: l.cv.nom });', 'lim: l.cv.lim });', /^a curva publicada leva o isolamento/);
     await planta('diario sem a janela', 'sDia[k] = ks.filter((c) => c.slice(0, 10) >= corte).map((c) => tudo.get(c));', 'sDia[k] = ks.map((c) => tudo.get(c));', /^janela do diario/);
+    // sg-str-somada (18/11/2026)
+    await planta('alarme sem a corrente da par', ', xp: l.pk[p - 1], mi: l.md }))', ', mi: l.md }))', /^par somado: a S2/);
+    await planta('somada pela mediana das reais', ', xp: l.pk[p - 1], mi: l.md }))', ', xp: l.pk[p - 1], mi: mds[i] }))', /^e nenhuma somada nesse dia/);
+    await planta('a zerada nunca real fora da lista', "if (!al || (!real && al.classe !== 'somada')) continue;", 'if (!al || !real) continue;', /^a zerada que nunca foi real/);
+    await planta('resumo sem a zerada fora da apuracao', 'n += som.filter((a) => a.fora_da_apuracao).length;', '', /^no resumo a zerada/);
+    await planta('dispersao sem os pares do MPPT', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A, true)', 'STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A)', /^dispersao do dia: o par somado/);
+    await planta('somada antes da sem corrente', 'const ORD = { morta: 0, somada: 1, fraca: 2 };', 'const ORD = { morta: 0, somada: -1, fraca: 2 };', /^a ordem da lista/);
+    await planta('regra sem a somada', "      somada: 'par do MPPT", "      somadaX: 'par do MPPT", /^a regra publicada/);
   } finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+  /* os plantios na LIB-STRINGS: a copia mudada dela, e uma copia da lib-sungrow-str que a le */
+  const srcS = fs.readFileSync(path.join(__dirname, 'lib-strings.js'), 'utf8');
+  const tmpS = path.join(__dirname, '_plantio_lib_strings.js'), tmpL = path.join(__dirname, '_plantio_lib_sungrow_str_s.js');
+  const plantaStr = async (nome, de, para, espera) => {
+    if (srcS.split(de).length !== 2) { falhasTotal.push('plantio ' + nome + ': trecho nao casou'); console.log('  FALHA plantio ' + nome + ': trecho nao casou'); return; }
+    fs.writeFileSync(tmpS, srcS.split(de).join(para));
+    fs.writeFileSync(tmpL, src.split("require('./lib-strings.js')").join("require('./_plantio_lib_strings.js')"));
+    let r; try { r = await ensaio(tmpL, true); } catch (e) { r = ['estourou: ' + e.message]; }
+    const certo = r.some((m) => espera.test(m));
+    if (!certo) falhasTotal.push('plantio "' + nome + '" (lib-strings) nao reprovou pela falha declarada (' + r.length + ': ' + r.slice(0, 2).join(' | ').slice(0, 200) + ')');
+    console.log((certo ? '  ok   ' : '  FALHA ') + 'plantio "' + nome + '" (lib-strings) reprova em: ' + (r.find((m) => espera.test(m)) || r[0] || 'nada').slice(0, 90));
+  };
+  try {
+    if (src.split("require('./lib-strings.js')").length !== 2) falhasTotal.push('a lib-sungrow-str nao le a lib-strings por um require so');
+    // controle: a copia sem mudanca passa (sem isso um plantio reprovaria so por ler a copia)
+    { fs.writeFileSync(tmpS, srcS); fs.writeFileSync(tmpL, src.split("require('./lib-strings.js')").join("require('./_plantio_lib_strings.js')"));
+      const r = await ensaio(tmpL, true); if (r.length) falhasTotal.push('a copia da lib-strings sem mudanca reprovou: ' + r[0]);
+      console.log((r.length ? '  FALHA ' : '  ok   ') + 'a copia da lib-strings sem mudanca passa (controle dos plantios dela)'); }
+    await plantaStr('par somado classificado como sem corrente', 'if (somadaEm(u.x, u.xp, u.mi)) {', 'if (false) {', /^par somado: a S2/);
+    await plantaStr('limiar da somada em 1,2x', 'const SOMADA = 1.6;', 'const SOMADA = 1.2;', /^a S12 a zero com a S11 a 1,5x/);
+    await plantaStr('par do MPPT errado', 'const parDe = (n) => (n % 2 ? n + 1 : n - 1);', 'const parDe = (n) => n + 1;', /^par somado/);
+    await plantaStr('a zerada com a par a 100 % como somada', 'x <= MORTA_A && xp >= SOMADA * mi;', 'x <= MORTA_A && xp >= 0.9 * mi;', /^a S9 a zero com a S10 a 100 %/);
+    await plantaStr('dispersao com o par somado', "if (classe && pares) for (const [n] of v) { const p = parDe(Number(n)); if (somadaEm(c[n], c[p], mi) || somadaEm(c[p], c[n], mi)) fora.add(Number(n)); }", '', /^dispersao do dia: o par somado/);
+    await plantaStr('dispersao pela mediana das reais', 'const fora = new Set(), mi = razoes(c).md;', 'const fora = new Set(), mi = md;', /^e a dispersao desse dia conta as 11/);
+    await plantaStr('desde da somada sem o trecho', 'while (j > 0 && somadaEm(v[j - 1].x, v[j - 1].xp, v[j - 1].mi)) j -= 1;', '', /^par somado: a S2/);
+  } finally { for (const f of [tmpS, tmpL]) if (fs.existsSync(f)) fs.unlinkSync(f); }
   console.log(falhasTotal.length ? '\nREPROVADO: ' + falhasTotal.length + '\n  ' + falhasTotal.join('\n  ') : '\nAPROVADO');
   process.exit(falhasTotal.length ? 1 : 0);
 })().catch((e) => { console.error('ERRO ' + e.stack); process.exit(1); });

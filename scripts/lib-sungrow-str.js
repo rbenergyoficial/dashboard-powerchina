@@ -127,8 +127,8 @@ function entradasPublicadas(g5s, R) {
    - sg_curva_<k>.json    (publico, DIAS_5MIN dias): a curva de 5 min de cada inversor (CA, CC, temperatura, limitacao);
    - sg_str_entradas.json (interno): quais entradas sao strings de verdade (lib-strings, a regra medida no SCADA em 30/09/2026,
      agora sobre o pico de 5 min do logger), acumulado;
-   - sg_str_alarme.json   (publico): as strings sem corrente e as fracas (lib-strings.alarme) e as strings com corrente por usina
-     contra a placa.
+   - sg_str_alarme.json   (publico): as strings sem corrente e as fracas (lib-strings.alarme), o par do MPPT com a leitura somada
+     (classe `somada`, sg-str-somada 18/11/2026) e as strings com corrente por usina contra a placa.
    Devolve { disp: Map(u/ts/inv|d -> dispersao do dia no pico) } para a saude por inversor-dia.
    🔴 A TROCA VALE PARA TODA LINHA (a mesma regra do sg_mppt_<k>): a linha so fica se o numero de serie ocupa a posicao no dia */
 async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, escreve, pesos, agora, dias5, diasStr }) {
@@ -178,10 +178,15 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
   const r1 = (x) => (x == null ? null : Math.round(x * 10) / 10), r2 = (x) => (x == null ? null : Math.round(x * 100) / 100);
   for (const [k, L] of Object.entries(sDia)) { const [u, ts] = k.split('_');
     for (const l of L) { const c = Object.fromEntries(l.pk.map((x, i) => [i + 1, x]));
-      const ds = STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A);
+      const ds = STRL.dispersao(c, reaisDe(u, ts, l.inv), 0.2, PISO_A, true);   // true: as 24 strings, com o par somado fora (sg-str-somada)
       if (ds) disp.set(u + '/' + ts + '/' + l.inv + '|' + l.d, ds); } }
   /* 3 · os ALARMES: por string real, sobre os dias do arquivo diario (morta no ultimo dia valido; fraca pela mediana dos ultimos
-     30 dias validos), com o pico de cada inversor-dia, como no SCADA */
+     30 dias validos), com o pico de cada inversor-dia, como no SCADA.
+     🔴 sg-str-somada (18/11/2026): a corrente da PAR do MPPT vai junto (xp). Quando a string zerada tem a par com a soma das duas
+     (lib-strings.somadaEm), a classe e `somada`, nao `morta`: em campo as duas geram, o inversor mede a soma numa entrada so. Um
+     registro por par: `str` = a zerada, `str_alta` = a par com a soma, `mppt`, `a_alta` (A) e `pct_alta` (% da mediana). A zerada que
+     nunca chegou a ser real (a soma desde o primeiro dia) tambem entra, so como `somada` (`fora_da_apuracao`), e conta no resumo como
+     string com corrente. Varredura de 17/11/2026: das 53 sem corrente, 44 eram a zerada de um par somado */
   const ALARMES = [];
   let ate = '';
   for (const [k, L] of Object.entries(sDia)) { const [u, ts] = k.split('_');
@@ -190,22 +195,32 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
       const R = REAIS.get(u + '|' + ts + '|' + inv + '|s'); if (!R) continue;
       ls.sort((a, b) => (a.d < b.d ? -1 : 1));
       const mds = ls.map((l) => STRL.mediana([...R.reais].map((n) => l.pk[n - 1]).filter((x) => x != null)));
-      for (const n of [...R.reais].sort((a, b) => a - b)) {
-        const al = STRL.alarme(ls.map((l, i) => ({ dia: l.d, x: l.pk[n - 1], md: mds[i] })), PISO_A);
-        if (!al) continue;
+      const cand = new Set(R.reais); for (const n of R.reais) { const p = STRL.parDe(n); if (p >= 1 && p <= N_ENT) cand.add(p); }
+      for (const n of [...cand].sort((a, b) => a - b)) {
+        const p = STRL.parDe(n), real = R.reais.has(n);
+        const al = STRL.alarme(ls.map((l, i) => ({ dia: l.d, x: l.pk[n - 1], md: mds[i], xp: l.pk[p - 1], mi: l.md })), PISO_A);
+        if (!al || (!real && al.classe !== 'somada')) continue;
         const i = ls.findIndex((l) => l.d === al.dia);
-        ALARMES.push({ ufv: u, ts, inv, str: n, ...al, a: r2(ls[i].pk[n - 1]), med_a: r2(mds[i]), ultimo_com_corrente: R.ultimo_ok[n] || null });
+        const A = { ufv: u, ts, inv, str: n, ...al, a: r2(ls[i].pk[n - 1]), med_a: r2(mds[i]), ultimo_com_corrente: R.ultimo_ok[n] || null };
+        if (al.classe === 'somada') { A.mppt = Math.ceil(n / 2); A.str_alta = p; A.a_alta = r2(ls[i].pk[p - 1]); A.irmas_a = r2(ls[i].md); if (!real) A.fora_da_apuracao = 1; }
+        ALARMES.push(A);
       }
     }
   }
-  ALARMES.sort((a, b) => (a.classe !== b.classe ? (a.classe === 'morta' ? -1 : 1) : a.pct - b.pct || (a.ufv + a.ts + a.inv < b.ufv + b.ts + b.inv ? -1 : 1) || a.str - b.str));
+  const ORD = { morta: 0, somada: 1, fraca: 2 };
+  ALARMES.sort((a, b) => (a.classe !== b.classe ? ORD[a.classe] - ORD[b.classe] : a.pct - b.pct || (a.ufv + a.ts + a.inv < b.ufv + b.ts + b.inv ? -1 : 1) || a.str - b.str));
+  // a zerada de um par somado que nunca foi real gera em campo: conta como string com corrente (sg-str-somada)
   const resumo = Object.keys(PLACA).sort().map((u) => { let n = 0;
     for (const [kk, v] of REAIS) if (kk.startsWith(u + '|') && kk.endsWith('|s')) n += v.reais.size;
+    const som = ALARMES.filter((a) => a.ufv === u && a.classe === 'somada');
+    n += som.filter((a) => a.fora_da_apuracao).length;
     const placa = Math.round(PLACA[u].modulos / MOD_POR_STRING);
-    return { ufv: u, strings_com_corrente: n, placa, sem_corrente_no_registro: placa - n }; });
+    return { ufv: u, strings_com_corrente: n, placa, sem_corrente_no_registro: placa - n, mppt_somada: som.length }; });
   pesos['sg_str_entradas.json'] = await escreve('sg_str_entradas.json', { gerado_em: agora, esquema: 1, entradas: ENT });
   pesos['sg_str_alarme.json'] = await escreve('sg_str_alarme.json', { gerado_em: agora, esquema: 1, fonte: 'logger Sungrow, 5 min', ate,
-    regra: { morta: 'string real com ate ' + STRL.MORTA_A + ' A no pico do inversor no ULTIMO dia valido, com a mediana das strings reais acima de ' + PISO_A + ' A',
+    regra: { morta: 'string real com ate ' + STRL.MORTA_A + ' A no pico do inversor no ULTIMO dia valido, com a mediana das strings reais acima de ' + PISO_A + ' A, fora a leitura somada',
+      somada: 'par do MPPT (strings 2k-1 e 2k) no pico do ULTIMO dia valido: uma com ate ' + STRL.MORTA_A + ' A e a outra com ' + String(STRL.SOMADA).replace('.', ',')
+        + ' vezes a mediana das irmas (as entradas com mais de ' + STRL.IRMA_A + ' A) ou mais. O inversor mede a soma das duas numa entrada so; em campo as duas geram. Inspecionar o inversor em campo',
       fraca: 'mediana, nos ultimos ' + STRL.JANELA_FRACA + ' dias validos, da corrente da string no pico abaixo de ' + Math.round(STRL.FRACA * 100) + ' % da mediana das reais',
       real: 'entrada com ao menos ' + STRL.DIAS_REAL + ' dias validos a ' + Math.round(STRL.RAZAO_REAL * 100) + ' % ou mais da mediana no pico (historico acumulado)',
       pico: 'o instante de maior potencia CA do inversor no dia, no registro de 5 min' },
@@ -273,7 +288,8 @@ async function produtos({ strRodada, g5Rodada, ident, mEtcs, vale, leAnterior, e
       + ' ("Modo de potencia limitada" diferente de zero); ets eletrocentros com leitura no dia', dias: LD });
   console.log('  strings do logger: ' + nD + ' diario(s) e ' + nG + ' de 5 min gravado(s) · entradas reais por usina contra a placa: '
     + resumo.map((x) => x.ufv + ' ' + x.strings_com_corrente + '/' + x.placa).join(', ') + ' · alarmes: '
-    + ALARMES.filter((a) => a.classe === 'morta').length + ' sem corrente, ' + ALARMES.filter((a) => a.classe === 'fraca').length + ' fracas (ate ' + ate + ')');
+    + ALARMES.filter((a) => a.classe === 'morta').length + ' sem corrente, ' + ALARMES.filter((a) => a.classe === 'somada').length + ' MPPT com a leitura somada, '
+    + ALARMES.filter((a) => a.classe === 'fraca').length + ' fracas (ate ' + ate + ')');
   return { disp, reaisDe };
 }
 

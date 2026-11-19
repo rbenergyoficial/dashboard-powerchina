@@ -32,6 +32,17 @@
  *      um continuo. 50 % cai no vao.
  *    ⚠️ A primeira proposta foi 40 %, e estava errada: as strings fracas ficam em 42–46 %, logo ACIMA dele (o degrau
  *       de 5–40 % e o que separa entrada vazia de string, a regra da entrada real, nao a de fraca).
+ * SOMADA = o PAR do MPPT com a leitura somada numa entrada so (sg-str-somada, 18/11/2026). O SG350HX tem 12 MPPT, cada um com as
+ *    strings 2k-1 e 2k. Regra de campo do humano (18/11/2026): quando uma string do par mede ~2x as irmas e a outra 0 A, as DUAS geram
+ *    em campo; o inversor mede a soma numa entrada so (falha de medicao interna; o valor e fisicamente impossivel para uma string) e o
+ *    caso pede inspecao do inversor em campo. Regra: no pico, uma do par com ate MORTA_A e a outra com SOMADA (1,6x) ou mais a mediana
+ *    das IRMAS (as entradas com mais de IRMA_A no instante, a mesma da razao). Nao a das reais: com metade das strings do inversor
+ *    mortas a mediana das reais cai a metade e uma string sadia ao lado de uma morta pareceria a soma (o ensaio forja esse dia).
+ *    Medido no logger (diario de 22/05 a 17/11/2026, 56 eletrocentros, refeito pelo produto em 18/11): a regra acha os 44 pares ativos
+ *    da varredura e nenhum outro; a entrada alta fica entre 1,78x e 2,18x a mediana das irmas (23 a 31,8 A com as irmas a ~13 A); as
+ *    9 sem corrente de verdade continuam morta (a par delas tambem zerada, ou a ~100 %). O limiar e o lado de baixo do que se viu, com
+ *    folga; nao e a corrente de curto-circuito do modulo (PENDENTE-HUMANO, datasheet do modulo). A zerada SAI de morta; as duas ficam
+ *    fora da mais fraca, da mais forte e da contagem das sem corrente na dispersao. Nao confundir com a S9 do M1/TS2/INV06: sem corrente de verdade, a par a ~100 %.
  */
 const RAZAO_REAL = 0.40;
 const DIAS_REAL = 3;
@@ -39,6 +50,13 @@ const MORTA_A = 0.5;
 const FRACA = 0.50;
 const JANELA_FRACA = 30;
 const IRMA_A = 1;      // irma = entrada com mais de 1 A no instante (a mediana nao se contamina com as vazias)
+const SOMADA = 1.6;   // a entrada alta do par somado: 1,6x a mediana das IRMAS ou mais (sg-str-somada)
+
+/* a par da string n no MPPT (strings 2k-1 e 2k = MPPT k) */
+const parDe = (n) => (n % 2 ? n + 1 : n - 1);
+/* leitura somada num instante: a string com ate MORTA_A e a par dela com SOMADA x a mediana das IRMAS ou mais (x e xp em A; mi a
+   mediana das entradas com mais de IRMA_A no instante, a `md` do razoes) */
+const somadaEm = (x, xp, mi) => x != null && xp != null && mi != null && mi > 0 && x <= MORTA_A && xp >= SOMADA * mi;
 
 const mediana = (a) => { const s = a.slice().sort((x, y) => x - y); return s.length ? s[s.length >> 1] : null; };
 
@@ -88,28 +106,39 @@ function indiceReais(estado) {
 }
 
 /* dispersao SO entre as entradas reais, com o zero DENTRO (string morta e 0 %, nao ausencia).
-   Devolve { n, med, min_pct, max_pct, min_n, mortas } ou null (menos de 3 lidas, ou mediana <= piso).
-   `mortas` so e contada com a mediana acima de `pisoClasse` (o piso de leitura). */
-function dispersao(c, reais, piso, pisoClasse) {
+   Devolve { n, med, min_pct, max_pct, min_n, mortas, somadas } ou null (menos de 3 lidas, ou mediana <= piso).
+   `mortas` so e contada com a mediana acima de `pisoClasse` (o piso de leitura). Com `pares` (as entradas sao as 24 STRINGS do SG350HX,
+   2k-1 e 2k no MPPT k; nunca para os MPPT) e a mediana acima do piso de classe, o par do MPPT com a leitura somada (somadaEm, nos dois
+   sentidos; a par pode nao ser real) sai da mais fraca, da mais forte e das mortas, e conta em `somadas` (pares). A mediana fica com as
+   duas: a soma do par e a corrente do MPPT. */
+function dispersao(c, reais, piso, pisoClasse, pares) {
   if (!reais || !reais.size) return null;
   const v = [];
   for (const n of reais) { const x = c[n]; if (x != null) v.push([n, x]); }
   if (v.length < 3) return null;
   const md = mediana(v.map((p) => p[1]));
   if (!(md > piso)) return null;
-  let min = v[0];
-  for (const p of v) if (p[1] < min[1] || (p[1] === min[1] && p[0] < min[0])) min = p;
-  const mx = Math.max(...v.map((p) => p[1]));
+  const classe = md > (pisoClasse == null ? piso : pisoClasse);
+  const fora = new Set(), mi = razoes(c).md;
+  if (classe && pares) for (const [n] of v) { const p = parDe(Number(n)); if (somadaEm(c[n], c[p], mi) || somadaEm(c[p], c[n], mi)) fora.add(Number(n)); }
+  const w = v.filter((p) => !fora.has(Number(p[0])));
+  const u = w.length ? w : v;
+  let min = u[0];
+  for (const p of u) if (p[1] < min[1] || (p[1] === min[1] && p[0] < min[0])) min = p;
+  const mx = Math.max(...u.map((p) => p[1]));
   let mortas = 0;
-  if (md > (pisoClasse == null ? piso : pisoClasse)) for (const [, x] of v) if (x <= MORTA_A) mortas++;
+  if (classe) for (const [, x] of w) if (x <= MORTA_A) mortas++;
   const r2 = (x) => Math.round(x * 100) / 100;
   return { n: v.length, med: r2(md), min_pct: r2((min[1] / md) * 100), max_pct: r2((mx / md) * 100),
-    min_n: Number(min[0]), mortas };
+    min_n: Number(min[0]), mortas, somadas: new Set([...fora].map((n) => Math.ceil(n / 2))).size };
 }
 
-/* o ALARME de uma string real, a partir dos dias em ordem: dias = [{ dia, x, md }] (corrente da string e mediana das
-   reais, no pico). So contam dias VALIDOS (md > piso e x lido). Devolve null (normal) ou
-   { classe, pct, pct_dia, dia, desde, dias_fora, n_janela }:
+/* o ALARME de uma string real, a partir dos dias em ordem: dias = [{ dia, x, md, xp, mi }] (corrente da string, mediana das
+   reais, corrente da PAR do MPPT e mediana das IRMAS, no pico; xp e mi opcionais). So contam dias VALIDOS (md > piso e x lido).
+   Devolve null (normal) ou { classe, pct, pct_dia, dia, desde, dias_fora, n_janela }:
+   - somada: o ultimo dia valido com a leitura somada no MPPT (somadaEm: x <= MORTA_A e xp >= SOMADA x mi); `desde` = inicio do
+     trecho final somado; `pct_alta` = a entrada alta em % da mediana das irmas (sg-str-somada). Vem ANTES da morta: e a zerada que
+     sai dela;
    - morta: o ultimo dia valido com x <= MORTA_A; `desde` = inicio do trecho final morto;
    - fraca: a mediana dos ultimos JANELA_FRACA dias validos abaixo de FRACA; `desde` = primeiro dia do trecho final em
      que essa mediana (calculada dia a dia, sobre a janela que termina nele) ficou abaixo de FRACA. */
@@ -118,6 +147,12 @@ function alarme(dias, piso) {
   if (!v.length) return null;
   const u = v[v.length - 1];
   const r1 = (x) => Math.round(x * 1000) / 10;
+  if (somadaEm(u.x, u.xp, u.mi)) {
+    let j = v.length - 1;
+    while (j > 0 && somadaEm(v[j - 1].x, v[j - 1].xp, v[j - 1].mi)) j -= 1;
+    return { classe: 'somada', pct: r1(u.r), pct_dia: r1(u.r), pct_alta: r1(u.xp / u.mi), dia: u.dia, desde: v[j].dia, dias_fora: v.length - j,
+      n_janela: 1, ...(j === 0 ? { desde_o_inicio: 1 } : {}) };
+  }
   if (u.x <= MORTA_A) {
     let j = v.length - 1;
     while (j > 0 && v[j - 1].x <= MORTA_A) j -= 1;
@@ -135,5 +170,5 @@ function alarme(dias, piso) {
     n_janela: Math.min(JANELA_FRACA, v.length), ...(j === 0 ? { desde_o_inicio: 1 } : {}) };
 }
 
-module.exports = { RAZAO_REAL, DIAS_REAL, MORTA_A, FRACA, JANELA_FRACA, IRMA_A, mediana, razoes, fundeEntradas,
+module.exports = { RAZAO_REAL, DIAS_REAL, MORTA_A, FRACA, JANELA_FRACA, IRMA_A, SOMADA, parDe, somadaEm, mediana, razoes, fundeEntradas,
   indiceReais, dispersao, alarme };
