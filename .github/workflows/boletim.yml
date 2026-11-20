@@ -51,7 +51,7 @@ jobs:
       - name: Ensaio · boletim (regras e transporte, sem rede)
         id: ensaio
         run: |
-          python3 scripts/boletim/ensaio_boletim.py
+          python3 scripts/boletim/ensaio_boletim.py --sem-imagem
           node scripts/ensaio-boletim-blobs.js
       - name: Entradas leves
         env:
@@ -65,6 +65,15 @@ jobs:
           SEMEIA: ${{ inputs.semeia }}
         run: |
           if [ "$SEMEIA" = "true" ]; then python3 scripts/boletim/rodada.py --precisa --semeia; else python3 scripts/boletim/rodada.py --precisa; fi
+      # A imagem do diário (os estados do ONS, boletim-ons-pendente) é ensaiada aqui, quando as entradas pesadas descem. Reprovada, ela não
+      # barra nada aqui (continue-on-error): a Rodada lê o ENSAIO_IMG_OK, não gera diário nem mensal, refaz as curvas, segue com a folha da
+      # tarde e sai vermelha no fim.
+      - name: Ensaio · imagem do diário
+        id: ensaio_img
+        if: ${{ !cancelled() && steps.decide.outputs.pesado == 'true' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        run: python3 scripts/boletim/ensaio_boletim.py --so-imagem
       - name: Entradas pesadas
         id: pesadas
         if: steps.decide.outputs.pesado == 'true'
@@ -101,6 +110,7 @@ jobs:
           SEMEIA: ${{ inputs.semeia }}
           FEITOS: ${{ inputs.feitos }}
           PESADO_OK: ${{ steps.pesadas.outcome }}
+          ENSAIO_IMG_OK: ${{ steps.ensaio_img.outcome }}
           TARDE_OK: ${{ steps.tarde.outcome }}
         run: |
           python3 scripts/boletim/prepara.py scripts/boletim/boletim_aprovado.py scripts/boletim/boletim_ci.py

@@ -22,7 +22,7 @@ TROCAS = [
      "_R = {'modo': MODO, 'dia': DIA, 'complexo': {k: cx.get(k) for k in ('tot', 'meta', 'pct', 'proj_pct', 'bateu', 'prev')},\n"
      "      'ppa': {k: pp.get(k) for k in ('tot', 'meta', 'pct', 'proj_pct', 'bateu', 'prev')}}\n"
      "if MODO == 'diario':\n"
-     "    _R.update(liq=liq, meta_dia=meta_d, ons_mwh=o.get('cortado_mwh'), limitado=LD, pr=p, disp=dsp)\n"
+     "    _R.update(liq=liq, meta_dia=meta_d, ons_mwh=o.get('cortado_mwh'), limitado=LD, pr=p, disp=dsp, ons_estado=ONS_EST, iqony=IQD)\n"
      "else:\n"
      "    _R.update(imp_mes=imp_mes, pr=pm, pr_sem_corte=pcm, disp=dsm)\n"
      "json.dump(_R, open(os.path.join(AQUI, f'{saida}{suf}_resumo.json'), 'w', encoding='utf-8'), ensure_ascii=False, default=str)   # boletim-desempenho\n"

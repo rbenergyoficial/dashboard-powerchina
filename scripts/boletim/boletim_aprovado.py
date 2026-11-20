@@ -214,9 +214,11 @@ def barras_ger_irr(dias, W=1000):
         x = 30 + i * bw + bw * .16; w = bw * .68; foco = d == DIA and MODO == 'diario'
         g.append(f'<rect x="{x:.1f}" y="{Y(liq):.1f}" width="{w:.1f}" height="{Y(0)-Y(liq):.1f}" rx="4" fill="{mix(GER, 46 if foco else 26)}" stroke="{mix(GER, 75 if foco else 45)}"/>')
         if ct > 0: g.append(f'<rect x="{x:.1f}" y="{Y(liq+ct):.1f}" width="{w:.1f}" height="{max(Y(liq)-Y(liq+ct)-2,1):.1f}" rx="4" fill="{mix(CORTE, 26)}" stroke="{mix(CORTE, 55)}"/>')
+        pend = d not in ONS_DIAS   # boletim-ons-pendente: o dia que o ONS não publicou sai hachurado, nunca como dia sem corte
+        if pend: g.append(f'<rect class="ons-pendente" x="{x:.1f}" y="{Y(liq)-18:.1f}" width="{w:.1f}" height="16" rx="4" fill="url(#onspend)" stroke="{mix(CORTE, 55)}" stroke-dasharray="3 2"/>')
         g.append(f'<line x1="{x-4:.1f}" x2="{x+w+4:.1f}" y1="{Y(meta):.1f}" y2="{Y(meta):.1f}" stroke="{mix(T2,85)}" stroke-width="2"/>')
         if foco or n <= 7:
-            g.append(f'<text x="{x+w/2:.1f}" y="{Y(liq+ct)-9:.1f}" text-anchor="middle" class="sv-val">{nf(liq,0)}</text>')
+            g.append(f'<text x="{x+w/2:.1f}" y="{min(Y(liq+ct), Y(liq)-18 if pend else 1e9)-9:.1f}" text-anchor="middle" class="sv-val">{nf(liq,0)}</text>')
     if n > 20: g = [x.replace('class="sv-ax"', 'class="sv-ax" style="font-size:10px"') for x in g]
     irr = [IRD.get(d, {}).get('gti') for d in dias]; itop = max(v or 0 for v in irr) * 1.15
     YI = lambda v: H1 + H2 - 26 - (H2 - 36) * v / itop
@@ -225,6 +227,9 @@ def barras_ger_irr(dias, W=1000):
         if v: g.append(f'<rect x="{x:.1f}" y="{YI(v):.1f}" width="{w:.1f}" height="{YI(0)-YI(v):.1f}" rx="3" fill="{mix(IRR, 22)}" stroke="{mix(IRR, 45)}"/>'
                        f'<text x="{x+w/2:.1f}" y="{YI(v)-5:.1f}" text-anchor="middle" class="sv-ax2">{nf(v,1)}</text>')
         g.append(f'<text x="{x+w/2:.1f}" y="{H1+H2-6}" text-anchor="middle" class="sv-ax" {f"style=\"fill:{T1};font-weight:700\"" if d==DIA and MODO=='diario' else ""}>{int(d[8:]) if len({x[:7] for x in dias}) == 1 else ddmm(d)}</text>')
+    if any(d not in ONS_DIAS for d in dias):
+        g.insert(0, f'<defs><pattern id="onspend" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+                    f'<line x1="0" y1="0" x2="0" y2="6" stroke="{mix(CORTE, 70)}" stroke-width="2"/></pattern></defs>')
     return f'<svg viewBox="0 0 {W} {H1+H2}" style="width:100%;height:auto;display:block">{"".join(g)}</svg>'
 
 def bench(blocos, W=1000):
@@ -402,6 +407,37 @@ for _f in os.listdir(AQUI):
     if _f.startswith('ons_restricao_') and _f.endswith('.json'):
         _c = json.load(open(os.path.join(AQUI, _f), encoding='utf-8'))['consolidado']
         for _x in (_ast.literal_eval(_c) if isinstance(_c, str) else _c): ONS30[_x['ts'].replace(' ', 'T')] = _x
+# boletim-ons-pendente (19/11/2026): o diário sai às 08:00, antes de o ONS publicar o dia anterior. Dia fora do arquivo do ONS = PENDENTE:
+# mostra as ordens de limitação recebidas pela Iqony (restricao_iqony.json, opcional) com "apuração do ONS pendente"; nunca "sem limitação"
+ONS_DIAS = {_k[:10] for _k in ONS30}
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import fila as _F
+IQ = None
+if os.path.exists(os.path.join(AQUI, 'gestao__restricao_iqony.json')):
+    try:
+        IQ = json.load(open(os.path.join(AQUI, 'gestao__restricao_iqony.json'), encoding='utf-8-sig'))
+    except Exception as _e:   # noqa: BLE001  (ilegível = sem o registro das ordens; o diário sai assim mesmo)
+        print('::warning::ordens da Iqony ilegíveis: ' + str(_e)[:200])
+def ons_do_dia(dia):
+    """('publicado', None) ou ('pendente', ordens da Iqony do dia | None = sem o registro das ordens)"""
+    if dia in ONS_DIAS: return 'publicado', None
+    if IQ and isinstance(IQ, dict) and not _F.cobre_dia(IQ, dia):   # RW-006: arquivo congelado antes do fim do dia: aviso, marca e rodada vermelha
+        _m = 'ordens da Iqony gravadas antes do fim de %s (gerado_em %s, ultimo_pulso %s)' % (dia, IQ.get('gerado_em'), (IQ.get('coletor') or {}).get('ultimo_pulso'))
+        print('::warning::' + _m); open(os.path.join(AQUI, 'gestao__restricao_iqony.erro'), 'w', encoding='utf-8').write(_m[:300])
+    try: return 'pendente', _F.iqony_dia(IQ, dia)
+    except (Exception, SystemExit) as e:   # noqa: BLE001  (fora da forma = sem o registro)
+        print('::warning::ordens da Iqony fora da forma: ' + str(e)[:200]); return 'pendente', None
+def degraus_dia(dia, h0=5, h1=19):
+    """o limite das ordens da Iqony em degrau no eixo do dia: [(min_ini, min_fim, MW)], só com o ONS pendente"""
+    est, iq = ons_do_dia(dia)
+    if est != 'pendente' or not iq: return []
+    dg = iq.get('degraus') or []; out = []
+    for k, (m, pot) in enumerate(dg):
+        m0, m1 = max(m, h0 * 60), min(dg[k + 1][0] if k + 1 < len(dg) else h1 * 60, h1 * 60)
+        if pot is not None and m1 > m0: out.append((m0, m1, float(pot)))
+    return out
+def hm(m): return f'{m // 60:02d}:{m % 60:02d}'
 I30 = {}
 for _x in json.load(open(os.path.join(AQUI, 'irr_plano_30min.json'), encoding='utf-8'))['serie']:
     _k = next((k for k in _x if k.startswith('gti_w_C')), None)
@@ -436,13 +472,17 @@ def curva_dia(dia, W=1000):
     ts = slots(dia); n = len(ts); H1, H2 = 300, 110; L, R = 46, 12; bw = (W - L - R) / n
     g = [mw('Complexo', t) for t in ts]; on = [ONS30.get(t, {}) for t in ts]
     lim = [f_(o.get('lim')) for o in on]; ref = [f_(o.get('gref')) for o in on]
-    top = max([v or 0 for v in g] + [v or 0 for v in lim] + [v or 0 for v in ref] + [50]) * 1.1
+    dg = degraus_dia(dia)   # ONS pendente: o degrau das ordens da Iqony (vazio com o ONS publicado)
+    top = max([v or 0 for v in g] + [v or 0 for v in lim] + [v or 0 for v in ref] + [p for _, _, p in dg] + [50]) * 1.1
     X = lambda i: L + i * bw; Y = lambda v: H1 - 24 - (H1 - 40) * v / top
+    XM = lambda m: L + (m - 300) / 30 * bw
     s = []
     for v in (0, 100, 200, 300):
         if v < top: s.append(f'<line x1="{L}" x2="{W-R}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" stroke="{LINHA}"/><text x="{L-6}" y="{Y(v)+4:.1f}" text-anchor="end" class="sv-ax">{v}</text>')
     for i, l in enumerate(lim):
         if l is not None: s.append(f'<rect x="{X(i):.1f}" y="{Y(top/1.1):.1f}" width="{bw:.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,16)}"/>')
+    for m0, m1, p in dg:
+        s.append(f'<rect class="iq-faixa" x="{XM(m0):.1f}" y="{Y(top/1.1):.1f}" width="{XM(m1)-XM(m0):.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,16)}"/>')
     pts = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(g) if v is not None]
     if pts:
         path = 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in pts)
@@ -451,6 +491,10 @@ def curva_dia(dia, W=1000):
     if rp: s.append(f'<path d="M {" L ".join(f"{x:.1f} {y:.1f}" for x, y in rp)}" stroke="{T3}" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>')
     for i, l in enumerate(lim):
         if l is not None: s.append(f'<line x1="{X(i):.1f}" x2="{X(i)+bw:.1f}" y1="{Y(l):.1f}" y2="{Y(l):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
+    for k, (m0, m1, p) in enumerate(dg):
+        s.append(f'<line class="iq-degrau" x1="{XM(m0):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(p):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
+        if k + 1 < len(dg) and dg[k + 1][0] == m1:
+            s.append(f'<line x1="{XM(m1):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(dg[k+1][2]):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
     ih = [I30.get(t) for t in ts]; itop = max([v or 0 for v in ih] + [100]) * 1.15
     YI = lambda v: H1 + H2 - 22 - (H2 - 30) * v / itop
     ip = [(X(i) + bw / 2, YI(v)) for i, v in enumerate(ih) if v is not None]
@@ -466,6 +510,11 @@ def curva_dia(dia, W=1000):
     rest = [t for t, l in zip(ts, lim) if l is not None]
     resumo = (f'{len(rest)*0.5:.1f} h com limite do ONS, de {rest[0][11:16]} a {(dt.datetime.fromisoformat(rest[-1]) + dt.timedelta(minutes=30)):%H:%M}; '
               f'limite mínimo {nf(min(l for l in lim if l is not None),1)} MW').replace('.', ',', 1) if rest else 'sem limite do ONS no dia'
+    est, iq = ons_do_dia(dia)
+    if est == 'pendente':   # nunca "sem limite do ONS no dia" antes de o ONS publicar
+        resumo = (f'{nf(iq["h"],1)} h sob ordens do ONS (Iqony), de {hm(dg[0][0])} a {hm(dg[-1][1])}; limite mínimo {nf(min(p for _, _, p in dg),0)} MW; '
+                  'apuração do ONS pendente') if dg else \
+                 ('nenhuma ordem do ONS recebida no dia; apuração do ONS pendente' if iq else 'sem registro das ordens do ONS; apuração do ONS pendente')
     pico = max((v for v in g if v is not None), default=0)
     return f'<svg viewBox="0 0 {W} {H1+H2}" style="width:100%;height:auto;display:block">{"".join(s)}</svg>', resumo, pico
 
@@ -474,6 +523,7 @@ def mini_ufv(u, dia, W=310, H=150):
     g = [mw(u, t) for t in ts]; lim = [f_(ONS30.get(t, {}).get('lim')) for t in ts]
     top = max([v or 0 for v in g] + [1]) * 1.15; X = lambda i: 4 + i * bw; Y = lambda v: H - 18 - (H - 26) * v / top
     s = [f'<rect x="{X(i):.1f}" y="4" width="{bw:.1f}" height="{H-22}" fill="{mix(CORTE,14)}"/>' for i, l in enumerate(lim) if l is not None]
+    s += [f'<rect class="iq-mini" x="{X(0) + (m0 - 300) / 30 * bw:.1f}" y="4" width="{(m1 - m0) / 30 * bw:.1f}" height="{H-22}" fill="{mix(CORTE,14)}"/>' for m0, m1, _ in degraus_dia(dia)]
     pts = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(g) if v is not None]; c = COR[u]
     if pts:
         p = 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in pts)
@@ -506,9 +556,16 @@ def painel_curva_dia(dia):
     svg, resumo, pico = curva_dia(dia)
     leg = (f'<small><span style="color:{rot(GER)}">■</span> geração MW · <span style="color:{rot(CORTE)}">━</span> limite do ONS · '
            f'<span style="color:{rot(CORTE)}">▮</span> intervalo limitado · ┅ referência do ONS · <span style="color:{rot(IRR)}">■</span> irradiação</small>')
+    sub_u = 'MW a cada 30 min · faixa lilás = limite do ONS no conjunto'
+    if ons_do_dia(dia)[0] == 'pendente':   # a legenda lista só as séries que estão na curva (sem a referência do ONS, que não publicou)
+        dg = degraus_dia(dia)
+        leg = (f'<small><span style="color:{rot(GER)}">■</span> geração MW · '
+               + (f'<span style="color:{rot(CORTE)}">━</span> limite das ordens (Iqony) · <span style="color:{rot(CORTE)}">▮</span> período sob ordem · ' if dg else '')
+               + f'<span style="color:{rot(IRR)}">■</span> irradiação</small>')
+        sub_u = 'MW a cada 30 min · faixa lilás = ordens do ONS (Iqony) no conjunto' if dg else 'MW a cada 30 min'
     return (f'<div class="pn"><div class="pt"><h2>Curva do dia {ddmm(dia)} · Complexo</h2>{leg}</div>{svg}'
             f'<div class="leg" style="justify-content:flex-start">{resumo} · pico de {nf(pico,1)} MW · medição de 30 min</div></div>'
-            f'<div class="pn"><div class="pt"><h2>Curva do dia por usina</h2><small>MW a cada 30 min · faixa lilás = limite do ONS no conjunto</small></div>'
+            f'<div class="pn"><div class="pt"><h2>Curva do dia por usina</h2><small>{sub_u}</small></div>'
             f'<div class="grade">{"".join(mini_ufv(u, dia) for u in US)}</div></div>')
 
 def painel_mes_ufv(dias, titulo):
@@ -517,6 +574,16 @@ def painel_mes_ufv(dias, titulo):
 
 def card_limitado(dia, o):
     """o valor do ONS quando ele apurou energia; senão, a estimativa do SIGO, dita como estimativa"""
+    est, iq = ons_do_dia(dia)
+    if est == 'pendente':   # o ONS ainda não publicou: as ordens da Iqony, nunca "0,0 h · sem limite"
+        if iq and iq['h'] > 0:
+            return kpi(CORTE, 'Limitação do ONS · ordens da Iqony', nf(iq['h'], 1), 'h',
+                       (f'limite mínimo {nf(iq["lmin"],0)} MW · ' if iq.get('lmin') is not None else '') + 'apuração do ONS pendente'
+                       + (' · coletor das ordens parado' if iq.get('coletor') == 'parado' else ''))
+        if iq:
+            return kpi(CORTE, 'Limitação do ONS', '<span style=font-size:19px>nenhuma ordem</span>', '',
+                       'apuração do ONS pendente' + (' · coletor das ordens parado' if iq.get('coletor') == 'parado' else ''))
+        return kpi(CORTE, 'Limitação do ONS', '<span style=font-size:19px>apuração pendente</span>', '', 'sem registro das ordens recebidas')
     ld = limitado_dia(dia); ons = o.get('cortado_mwh')
     if ons and ons > 0:
         return kpi(CORTE, 'Impedido pelo ONS no dia', nf(ons, 2), 'MWh', f'{nf(ld["h"],1)} h de limitação' + (f' · estimativa SIGO {nf(ld["est"],2)}' if ld['est'] else ''))
@@ -532,6 +599,10 @@ hr_mes = sum(SD.get(d, {}).get('horas_restricao', 0) or 0 for d in dias_mes)
 b_m = corte_bench(dias_mes); pm, pcm = pr_dias(US, dias_mes); dsm = disp_dias(US, dias_mes)
 irm = [IRD[d]['gti'] for d in dias_mes if d in IRD]
 LEG = f'<small><span style="color:{rot(GER)}">■</span> geração MWh · <span style="color:{rot(CORTE)}">■</span> impedido pelo ONS · ━ meta do dia · <span style="color:{rot(IRR)}">■</span> irradiação kWh/m²</small>'
+if any(d not in ONS_DIAS for d in dias_mes):   # boletim-ons-pendente: a hachura do dia que o ONS não publicou entra na legenda
+    LEG = LEG.replace(' · ━ meta do dia', f' · <span style="color:{rot(CORTE)}">▨</span> ONS pendente · ━ meta do dia')
+ULT_ONS = max((d for d in dias_mes if d in ONS_DIAS), default=None)   # o último dia do mês que o ONS publicou
+SEM_MES_ONS = '<div class="mo-z">nenhum dia do mês apurado pelo ONS ainda</div>'   # o dia 1º lido no dia 2: nunca "—%"
 MES_NOME = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'][d0.month - 1]
 
 if MODO == 'diario':
@@ -541,7 +612,20 @@ if MODO == 'diario':
     dif = (liq / meta_d - 1) * 100
     f.append(('▲' if dif >= 0 else '▼', OK if dif >= 0 else ATN, f'Geração de <b>{nf(liq,2)} MWh</b>, {nf(abs(dif),0)}% {"acima" if dif>=0 else "abaixo"} da meta do dia.'))
     if liq >= max(cx['s']) and D > 1: f.append(('★', GER, '<b>Melhor dia do mês</b> até agora.'))
-    if (o.get('cortado_mwh') or 0) > 0:
+    ONS_EST, IQD = ons_do_dia(DIA)   # boletim-ons-pendente: o estado do ONS no dia, um só para texto, cartão, curva, fatos e regional
+    if ONS_EST == 'pendente':
+        if IQD and IQD['h'] > 0 and IQD['n']:
+            f.append(('◆', CORTE, f'ONS: <b>{IQD["n"]} {"ordem" if IQD["n"] == 1 else "ordens"} de limitação</b> {"recebida" if IQD["n"] == 1 else "recebidas"} pela Iqony, '
+                                  f'{nf(IQD["h"],1)} h sob limite' + (f', mínimo {nf(IQD["lmin"],0)} MW' if IQD.get('lmin') is not None else '') + '. Apuração do ONS pendente.'))
+        elif IQD and IQD['h'] > 0:
+            f.append(('◆', CORTE, f'ONS: o dia começou sob a ordem do dia anterior, <b>{nf(IQD["h"],1)} h sob limite</b> (Iqony). Apuração do ONS pendente.'))
+        elif IQD:
+            f.append(('◆', CORTE, 'ONS: <b>nenhuma ordem de limitação</b> recebida no dia. Apuração do ONS pendente.'))
+        else:
+            f.append(('◆', CORTE, 'ONS: <b>apuração pendente</b>; o registro das ordens recebidas está indisponível.'))
+        if IQD and IQD.get('coletor') == 'parado':   # sem a ressalva, "nenhuma ordem" com o coletor parado seria um "sem limitação" por falta de coleta
+            f[-1] = f[-1][:2] + (f[-1][2] + ' Aviso: o coletor das ordens está parado; podem faltar ordens.',)
+    elif (o.get('cortado_mwh') or 0) > 0:
         f.append(('◆', CORTE, f'ONS impediu <b>{nf(o["cortado_mwh"],2)} MWh</b> ({nf(b_d["nosso"],1)}%); Abaiara {nf(b_d["abaiara"],1)}% e Nordeste {nf(b_d["ne"],1)}%.'))
     elif LD['h'] > 0 and LD['est']:
         f.append(('◆', CORTE, f'ONS limitou a usina por <b>{nf(LD["h"],1)} h</b> (limite entre {nf(LD["lmin"],1)} e {nf(LD["lmax"],1)} MW); estimativa de <b>{nf(LD["est"],2)} MWh</b> não gerados.'))
@@ -559,15 +643,15 @@ if MODO == 'diario':
  {kpi(COR['Complexo'],'PR do dia',nf(p,1),'%',f'no mês {nf(pm,1)}% · sem o corte {nf(pcm,1)}%')}
  {kpi(OK,'Disponibilidade do dia',nf(dsp,2),'%',f'no mês {nf(dsm,2)}%')}
  {card_limitado(DIA, o)}
- {kpi(CORTE,'Impedido no mês',nf(imp_mes,2),'MWh',f'{nf(hr_mes,1)} h de restrição')}
+ {kpi(CORTE,'Impedido no mês',nf(imp_mes,2),'MWh',f'{nf(hr_mes,1)} h de restrição' + (f' · {ddmm(DIA)} pendente' if ONS_EST == 'pendente' else ''))}
  {kpi(COR['Complexo'],'Acumulado do mês',nf(cx['tot'],2),'MWh',f'PPA {nf(pp["tot"],2)} MWh')}
  {card_p50(dias_mes, cx['tot'], imp_mes)}
 </div>
 {painel_curva_dia(DIA)}
 <div class="pn"><div class="pt"><h2>Dia a dia de {MES_NOME} · Complexo</h2>{LEG}</div>{barras_ger_irr(dias_mes)}</div>
 {painel_mes_ufv(dias_mes, f'Dia a dia de {MES_NOME} por usina')}
-<div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'Dia {ddmm(DIA)}', b_d), (f'Mês até {ddmm(DIA)}', b_m)])}</div>
-{painel_motivo([(f'Dia {ddmm(DIA)}', [DIA]), (f'Mês até {ddmm(DIA)}', dias_mes)])}
+<div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'Dia {ddmm(DIA)}', b_d), (f'Mês até {ddmm(DIA)}', b_m)]) if ONS_EST == 'publicado' else bench([(f'Mês até {ddmm(ULT_ONS)}', b_m)]) if ULT_ONS else SEM_MES_ONS}</div>
+{painel_motivo([(f'Dia {ddmm(DIA)}', [DIA]), (f'Mês até {ddmm(DIA)}', dias_mes)] if ONS_EST == 'publicado' else [(f'Mês até {ddmm(ULT_ONS)}', dias_mes)] if ULT_ONS else [])}
 <div class="pn"><div class="pt"><h2>Usinas · dia e mês</h2><small>geração do dia e do mês · PR do mês sem o corte · disponibilidade do mês</small></div>
  <div class="ush2"><div></div><div>dia</div><div>mês</div><div>PR mês</div><div>disp. mês</div></div>{usinas2(DIA, dias_mes)}</div>
 {fatos_html(f, ddmm(DIA))}"""

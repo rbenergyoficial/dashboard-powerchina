@@ -3,7 +3,8 @@
 orquestra uma rodada do pipeline.
 
 Calendário:
-  · diário do dia anterior a partir das 07:00, UMA vez, com o que houver (o que o ONS ainda não publicou sai estimado); sem segunda
+  · diário do dia anterior a partir das 08:00, UMA vez, com o que houver (o ONS que ainda não publicou sai pelas ordens recebidas pela
+    Iqony, com a apuração oficial pendente; lote boletim-ons-pendente); sem segunda
     edição quando o ONS publica. Rodada que falhou ou não rodou se recupera: os dias anteriores ainda não feitos, até TETO_DIAS;
   · no dia 1º (recuperável até o dia TETO_MENSAL_DIA), o MENSAL do mês fechado e o RD do mês (PDF PT e EN, só emitido no acervo); nas viradas que fecham período, também o
     TRIMESTRAL (jan, abr, jul, out), o SEMESTRAL (jan, jul) e o ANUAL (jan). RD ainda não emitido não trava o mensal: entra na fila
@@ -277,9 +278,88 @@ def fatos(executivo, dia, estado):
     return out
 
 
+# ───────────────────────── o ONS que ainda não publicou ─────────────────────────
+# Lote boletim-ons-pendente (humano, 19/11/2026): o diário sai às 08:00 e o ONS publica o dia anterior depois. O dia tem três estados, um só
+# para texto, cartão, curva, fatos, regional e dia a dia:
+#   'publicado'          o ONS publicou o dia: o número apurado, como sempre;
+#   'pendente' + ordens  as ordens de limitação recebidas pela Iqony (restricao_iqony.json, a conta da folha das 17:30), "apuração pendente";
+#   'pendente' sem ordem nenhuma ordem recebida (ou sem o registro das ordens): NUNCA "sem limitação", que só o ONS publicado com zero diz.
+# Resumo sem `ons_estado` vale como pendente sem o registro (nunca afirma "sem limitação").
+def cobre_dia(iq, dia):
+    """RW-001: o registro só vale para o dia se a hora MAIS ANTIGA entre as legíveis de gerado_em (o arquivo gravado) e coletor.ultimo_pulso
+    (o coletor deu sinal) é posterior ao fim do eixo do dia (19:00 de Brasília = 22:00 UTC). Um campo só legível basta (o formato do
+    publicador não foi conferido); nenhum legível, ou arquivo congelado antes disso, = sem o registro (nunca "nenhuma ordem")."""
+    lim = dt.datetime.fromisoformat(dia + 'T22:00:00+00:00')
+    hs = []
+    for v in (iq.get('gerado_em'), (iq.get('coletor') or {}).get('ultimo_pulso')):
+        try:
+            t = dt.datetime.fromisoformat(str(v).replace('Z', '+00:00'))
+        except ValueError:
+            continue   # campo ausente ou noutra forma: vale a outra hora; nenhuma das duas legível = sem o registro
+        hs.append(t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc))
+    return bool(hs) and min(hs) >= lim
+
+
+def iqony_dia(iq, dia):
+    """As ordens de limitação do ONS recebidas pela Iqony no dia fechado, na conta da folha das 17:30 (curva1730: degrau das ordens, passo
+    de 5 min das 05:00 às 19:00). None = sem o registro das ordens (arquivo ausente)."""
+    if not iq or not cobre_dia(iq, dia):
+        return None
+    import curva1730 as CV
+    ords = CV.ordens(iq, dia)
+    fim_dia = CV.H1 * 60
+    L = [CV.limite_em(ords, CV.minuto(h)) for h in CV.SLOTS]
+    restr = [o for o in ords if o['pot'] is not None and o['min'] < fim_dia]
+    novas = [o for o in restr if not o['herdada']]
+    validas = [o for o in ords if o['min'] < fim_dia]
+    return {'n': len(novas), 'h': round(sum(1 for v in L if v is not None) * 5 / 60, 1),
+            'lmin': min((o['pot'] for o in restr), default=None), 'ini': novas[0]['h'] if novas else None,
+            'fim': validas[-1]['h'] if novas else None, 'herdada': any(o['herdada'] for o in restr),
+            'motivos': sorted({o['mot'] for o in restr if o['mot']}), 'coletor': (iq.get('coletor') or {}).get('estado'),
+            'degraus': [[o['min'], o['pot']] for o in validas]}
+
+
+def estado_ons(r):
+    """'publicado' · 'ordens' (pendente, com tempo sob ordem) · 'nenhuma' (pendente, registro sem ordem) · 'sem_registro'"""
+    if r.get('ons_estado') == 'publicado':
+        return 'publicado'
+    iq = r.get('iqony')
+    if not isinstance(iq, dict):
+        return 'sem_registro'
+    return 'ordens' if (iq.get('h') or 0) > 0 else 'nenhuma'
+
+
+def linha_pendente(r, idi):
+    """a frase do ONS que ainda não publicou o dia (pt ou en)"""
+    e, iq = estado_ons(r), r.get('iqony') or {}
+    num = nf if idi == 'pt' else nf_en
+    if e == 'ordens':
+        n = iq.get('n') or 0
+        if idi == 'pt':
+            q = (f'{n} ordem de limitação' if n == 1 else f'{n} ordens de limitação') if n else 'o dia começou sob a ordem do dia anterior'
+            s = f'ONS: {q}, {num(iq.get("h"), 1)} h sob limite' + (f', mínimo {num(iq["lmin"], 0)} MW' if iq.get('lmin') is not None else '') \
+                + ' (Iqony). Apuração oficial pendente.'
+        else:
+            q = (f'{n} limitation order' + ('' if n == 1 else 's')) if n else 'the day started under the order of the previous day'
+            s = f'ONS: {q}, {num(iq.get("h"), 1)} h under limit' + (f', minimum {num(iq["lmin"], 0)} MW' if iq.get('lmin') is not None else '') \
+                + ' (Iqony). Official figure pending.'
+    elif e == 'nenhuma':
+        s = ('ONS: nenhuma ordem de limitação recebida (apuração oficial pendente).' if idi == 'pt'
+             else 'ONS: no limitation order received (official figure pending).')
+    else:
+        s = ('ONS: apuração oficial pendente; o registro das ordens recebidas está indisponível.' if idi == 'pt'
+             else 'ONS: official figure pending; the record of the orders received is unavailable.')
+    if e != 'sem_registro' and iq.get('coletor') == 'parado':
+        s += (' Aviso: o coletor das ordens está parado; podem faltar ordens.' if idi == 'pt'
+              else ' Warning: the order collector is stopped; orders may be missing.')
+    return s
+
+
 # ───────────────────────── textos ─────────────────────────
 def linha_limitacao(r):
     """A frase da limitação do ONS no dia, pela regra do humano (nunca "ONS apurou 0")."""
+    if estado_ons(r) != 'publicado':
+        return linha_pendente(r, 'pt')
     ons = r.get('ons_mwh') or 0
     ld = r.get('limitado') or {}
     if ons > 0:
@@ -331,6 +411,8 @@ def data_en(d):
 
 
 def linha_limitacao_en(r):
+    if estado_ons(r) != 'publicado':
+        return linha_pendente(r, 'en')
     ons = r.get('ons_mwh') or 0
     ld = r.get('limitado') or {}
     if ons > 0:

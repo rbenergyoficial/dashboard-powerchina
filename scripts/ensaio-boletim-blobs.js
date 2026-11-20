@@ -112,6 +112,58 @@ async function casos(B) {
       ok(erro && /Iqony/.test(erro.message), 'as ordens da Iqony ' + rot + ' param a baixa da tarde (o limite não se inventa)');
       ok(!dados.pedidos.includes('way2_recent.json'), 'as ordens da Iqony ' + rot + ': a medição de 5 min (7,25 MB) nem é pedida (pedidos: ' + dados.pedidos.join(' ') + ')');
     }
+    // 7. o diário (boletim-ons-pendente): o pesado baixa as ordens da Iqony como OPCIONAIS; ausentes ou fora da forma, o pesado segue sem elas
+    const pes = {}; for (const n of B.PESADO.exige) pes[n] = gz({ ok: 1 });
+    B._usaConteiner(falso(pes));
+    B._usaGestao(falso({ 'restricao_iqony.json': Buffer.from(JSON.stringify(iq)) }));
+    erro = null;
+    try { await B.baixa(path.join(tmp, 'p'), 'pesado', agora); } catch (e) { erro = e; }
+    ok(!erro && fs.existsSync(path.join(tmp, 'p', 'gestao__restricao_iqony.json')) && fs.existsSync(path.join(tmp, 'p', 'executivo.json')),
+      'o pesado baixa as ordens da Iqony junto (o dia que o ONS não publicou sai pelas ordens)' + (erro ? ' (' + erro.message + ')' : ''));
+    for (const [rot, gb] of [['ausentes', {}], ['fora da forma', { 'restricao_iqony.json': Buffer.from(JSON.stringify({ versao: 2, eventos: [] })) }]]) {
+      B._usaConteiner(falso(pes));
+      B._usaGestao(falso(gb));
+      erro = null;
+      const dir = path.join(tmp, 'p' + rot.replace(/ /g, ''));
+      try { await B.baixa(dir, 'pesado', agora); } catch (e) { erro = e; }
+      ok(!erro && fs.existsSync(path.join(dir, 'executivo.json')) && !fs.existsSync(path.join(dir, 'gestao__restricao_iqony.json')),
+        'as ordens da Iqony ' + rot + ' não param o pesado e não viram arquivo' + (erro ? ' (' + erro.message + ')' : ''));
+      ok(!fs.existsSync(path.join(dir, 'gestao__restricao_iqony.erro')), 'as ordens da Iqony ' + rot + ' são "sem o registro", não erro de leitura');
+    }
+    // RW-002: 403, rede e contêiner inexistente NÃO são ausência: o pesado segue, mas deixa a marca de erro (a rodada sai vermelha no fim)
+    const e403 = new Error('forbidden'); e403.statusCode = 403; e403.code = 'AuthorizationPermissionMismatch';
+    const erede = new Error('socket hang up'); erede.code = 'ECONNRESET';
+    const econt = new Error('container'); econt.statusCode = 404; econt.code = 'ContainerNotFound';
+    for (const [rot, ex] of [['403', e403], ['rede', erede], ['contêiner inexistente', econt]]) {
+      B._usaConteiner(falso(pes));
+      B._usaGestao(falso({ 'restricao_iqony.json': ex }));
+      erro = null;
+      const dir = path.join(tmp, 'pe' + rot.replace(/ /g, ''));
+      try { await B.baixa(dir, 'pesado', agora); } catch (e) { erro = e; }
+      ok(!erro && fs.existsSync(path.join(dir, 'executivo.json')) && fs.existsSync(path.join(dir, 'gestao__restricao_iqony.erro')),
+        'as ordens da Iqony com ' + rot + ': o pesado segue e deixa a marca de erro (não vale como ausente)' + (erro ? ' (' + erro.message + ')' : ''));
+    }
+    // RE-015 (7b): o pesado tomou 403 e a tarde, na mesma execução, leu as ordens: a marca de erro some (nada de vermelho falso)
+    {
+      const dir = path.join(tmp, 'p7b');
+      B._usaConteiner(falso(pes)); B._usaGestao(falso({ 'restricao_iqony.json': e403 }));
+      try { await B.baixa(dir, 'pesado', agora); } catch (e) { }
+      const marcou = fs.existsSync(path.join(dir, 'gestao__restricao_iqony.erro'));
+      B._usaConteiner(falso({ 'way2_recent.json': gz({ dados: [] }) })); B._usaGestao(falso({ 'restricao_iqony.json': Buffer.from(JSON.stringify(iq)) }));
+      erro = null;
+      try { await B.baixa(dir, 'tarde', agora); } catch (e) { erro = e; }
+      ok(marcou && !erro && !fs.existsSync(path.join(dir, 'gestao__restricao_iqony.erro')) && fs.existsSync(path.join(dir, 'gestao__restricao_iqony.json')),
+        'o 403 do pesado deixa a marca e a leitura que dá certo depois (a tarde) a apaga' + (erro ? ' (' + erro.message + ')' : ''));
+    }
+    // RE-015 (7c): gzip quebrado das ordens = fora da forma (aviso, sem marca e sem arquivo), como o JSON quebrado
+    {
+      const dir = path.join(tmp, 'p7c');
+      B._usaConteiner(falso(pes)); B._usaGestao(falso({ 'restricao_iqony.json': Buffer.from([0x1f, 0x8b, 1, 2, 3]) }));
+      erro = null;
+      try { await B.baixa(dir, 'pesado', agora); } catch (e) { erro = e; }
+      ok(!erro && !fs.existsSync(path.join(dir, 'gestao__restricao_iqony.erro')) && !fs.existsSync(path.join(dir, 'gestao__restricao_iqony.json')),
+        'as ordens da Iqony com gzip quebrado: fora da forma, aviso sem marca de erro' + (erro ? ' (' + erro.message + ')' : ''));
+    }
     B._usaGestao(null);
   } finally { console.log = log; fs.rmSync(tmp, { recursive: true, force: true }); }
   return falhas;
@@ -128,6 +180,13 @@ const PLANTIOS = [
   ['a medição desce antes das ordens', "  if (grupo === 'tarde') await baixaIqony(pasta);\n  for (const nome of [...exige, ...opcional]) {\n    const dest = path.join(pasta, nome.replace(/\\//g, '__'));\n    let buf;\n    try { buf = await c.getBlobClient(nome).downloadToBuffer(); }\n    catch (e) {\n      if (ausente(e) && opcional.includes(nome)) { console.log('sem', nome, '(opcional)'); continue; }\n      throw new Error('entrada do boletim ausente ou ilegível: ' + nome + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')');\n    }\n    let puro;\n    try {\n      puro = descomprime(buf);\n      if (nome.endsWith('.json')) {\n        const o = JSON.parse(puro.toString('utf8').replace(/^\\uFEFF/, ''));   // JSON quebrado para aqui, não na rodada\n        if (DERIVADOS.includes(nome) && (!o || o.esquema !== 1)) throw new Error('esquema ' + (o && o.esquema));\n      }\n    } catch (e) {\n      if (DERIVADOS.includes(nome)) { console.log('::warning::' + nome + ' ilegível (' + e.message.slice(0, 120) + '): a rodada refaz do zero'); continue; }\n      throw new Error('entrada do boletim ilegível: ' + nome + ' (' + e.message.slice(0, 120) + ')');\n    }\n    fs.writeFileSync(dest, puro);\n    console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));\n  }",
    "  for (const nome of [...exige, ...opcional]) {\n    const dest = path.join(pasta, nome.replace(/\\//g, '__'));\n    let buf;\n    try { buf = await c.getBlobClient(nome).downloadToBuffer(); }\n    catch (e) {\n      if (ausente(e) && opcional.includes(nome)) { console.log('sem', nome, '(opcional)'); continue; }\n      throw new Error('entrada do boletim ausente ou ilegível: ' + nome + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')');\n    }\n    let puro;\n    try {\n      puro = descomprime(buf);\n      if (nome.endsWith('.json')) {\n        const o = JSON.parse(puro.toString('utf8').replace(/^\\uFEFF/, ''));   // JSON quebrado para aqui, não na rodada\n        if (DERIVADOS.includes(nome) && (!o || o.esquema !== 1)) throw new Error('esquema ' + (o && o.esquema));\n      }\n    } catch (e) {\n      if (DERIVADOS.includes(nome)) { console.log('::warning::' + nome + ' ilegível (' + e.message.slice(0, 120) + '): a rodada refaz do zero'); continue; }\n      throw new Error('entrada do boletim ilegível: ' + nome + ' (' + e.message.slice(0, 120) + ')');\n    }\n    fs.writeFileSync(dest, puro);\n    console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));\n  }\n  if (grupo === 'tarde') await baixaIqony(pasta);"],
   ['as ordens fora da forma passam', "if (!o || o.versao !== 1 || !Array.isArray(o.eventos) || !Array.isArray(o.campos)) throw", "if (false) throw"],
+  // boletim-ons-pendente
+  ['o pesado não baixa as ordens da Iqony', "    try { await baixaIqony(pasta); }", "    try { }"],
+  ['as ordens ausentes param o pesado', "      if (e.ausente || e.forma) console.log('::warning::'", "      if (e.ausente || e.forma) throw e; else if (false) console.log('::warning::'"],
+  ['qualquer falha das ordens vale como ausente', "      if (e.ausente || e.forma) console.log('::warning::'", "      if (true) console.log('::warning::'"],
+  ['a leitura que dá certo não apaga a marca', "  fs.rmSync(path.join(pasta, GESTAO.erro), { force: true });", ""],
+  ['o gzip quebrado das ordens vira erro de leitura', "  try { puro = descomprime(buf); } catch (e) { throw Object.assign(", "  puro = descomprime(buf); if (0) { throw Object.assign("],
+  ['o 404 de contêiner vale como ausente', "{ ausente: ausente(e) }", "{ ausente: e.statusCode === 404 }"],
 ];
 
 (async () => {

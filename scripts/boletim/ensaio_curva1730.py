@@ -376,7 +376,7 @@ PLANTIOS_CURVA = [
 ]
 
 PLANTIOS_RODADA = [
-    ('a recusa do RD sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados:", "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_enviados:"),
+    ('a recusa do RD sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:", "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_enviados or erro_iqony or erro_img:"),
     ('a recusa do RD derruba a rodada', "            F.valida_item(item)   # RW-401: a recusa é erro deste RD, não da rodada\n        except (Exception, SystemExit) as e:   # noqa: BLE001\n",
      "            F.valida_item(item)   # RW-401: a recusa é erro deste RD, não da rodada\n        except ZeroDivisionError as e:   # noqa: BLE001\n"),
     ('o catálogo ilegível derruba a rodada', "    except (Exception, SystemExit) as e:   # noqa: BLE001  (o catálogo ilegível: nenhum RD nesta rodada, a rodada segue)", "    except ZeroDivisionError as e:   # noqa: BLE001"),
@@ -405,9 +405,9 @@ PLANTIOS_RODADA = [
     ('o passo das pesadas que falhou é ignorado', "            if os.environ.get('PESADO_OK') not in (None, '', 'success', 'skipped'):", "            if False:"),
     ('a falha da folha derruba a rodada', "        except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO do curva1730 também)",
      "        except ZeroDivisionError as e:   # noqa: BLE001"),
-    ('a falha da folha sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados:",
-     "    if barrados or erro_curvas or erro_diario or erro_rd or erro_enviados:"),
-    ('a cópia que falha sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados:",
+    ('a falha da folha sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:",
+     "    if barrados or erro_curvas or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:"),
+    ('a cópia que falha sai verde', "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:",
      "    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd:"),
     ('a validação da folha fica fora do try', "            for n_ in novos_i:   # RW-401: as guardas de texto aqui dentro: a recusa é erro da folha, não da rodada\n                F.valida_item(n_)\n", ""),
     ('a validação do diário fica fora do try', "            for n_ in novos_i:   # RW-401: as guardas de texto do item (e dos fatos dele) aqui dentro: a recusa é erro DESTE item\n                F.valida_item(n_)\n", ""),

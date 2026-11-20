@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /* boletim-blobs.js · o transporte do Boletim de Desempenho no pipeline, pelo contêiner `dados`.
  *   node scripts/boletim-blobs.js baixa <pasta> leve     o que decide a rodada: estado, fila, índice, os dois arquivos do ONS, catálogo
- *   node scripts/boletim-blobs.js baixa <pasta> pesado   o que gera o boletim: executivo, PR, disponibilidade, irradiação, medição, logotipo
+ *   node scripts/boletim-blobs.js baixa <pasta> pesado   o que gera o boletim: executivo, PR, disponibilidade, irradiação, medição, e as
+ *                                                        ordens da Iqony como OPCIONAIS (boletim-ons-pendente: o dia que o ONS ainda
+ *                                                        não publicou sai pelas ordens recebidas; ausentes = aviso, o diário segue)
  *   node scripts/boletim-blobs.js baixa <pasta> tarde    a folha das 17:30 (boletim-1730): a medição de 5 min e as ORDENS DA IQONY, que o
  *                                                        Gestão publica em siddgestaodocs/indicadores/restricao_iqony.json (leitura pelo OIDC,
  *                                                        lib-conteiner.conteinerEm; a identidade do pipeline tem Reader só nesse contêiner)
@@ -20,7 +22,7 @@ const PESADO = { exige: ['executivo.json', 'pr_ufv.json', 'sg_disp_dia.json', 'i
 const TARDE = { exige: ['way2_recent.json'], opcional: [] };
 // as ordens da Iqony (a fonte do degrau do RDO, decisão do humano de 07/11): outra conta, gravadas sem gzip pelo Gestão
 const GESTAO = { conta: process.env.GESTAO_CONTA_URL || 'https://siddgestaodocs.blob.core.windows.net', conteiner: 'indicadores',
-  blob: 'restricao_iqony.json', local: 'gestao__restricao_iqony.json' };
+  blob: 'restricao_iqony.json', local: 'gestao__restricao_iqony.json', erro: 'gestao__restricao_iqony.erro' };
 const ULTIMOS = ['boletim/fila.json', 'boletim/indice.json', 'boletim/estado.json'];   // sobem por último, nesta ordem
 const GZIP = ['boletim/curvas.json'];   // a página lê este pela API, que repassa o gzip: sobe comprimido (Content-Encoding)
 const DERIVADOS = ['boletim/curvas.json'];   // refeito pela rodada: ilegível vale como ausente (::warning::), nunca derruba o diário
@@ -90,18 +92,31 @@ async function baixa(pasta, grupo, agora) {
     fs.writeFileSync(dest, puro);
     console.log('baixado', nome, puro.length, 'bytes' + (puro !== buf ? ' (gzip)' : ''));
   }
+  // o diário (boletim-ons-pendente): as ordens são OPCIONAIS; sem elas o dia que o ONS não publicou sai "sem o registro das ordens",
+  // nunca "sem limitação", e o diário não para
+  if (grupo === 'pesado') {
+    try { await baixaIqony(pasta); }
+    catch (e) {
+      // RW-002: só o blob ausente (404 BlobNotFound) e o arquivo ilegível ou fora da forma são "sem o registro" de verdade. 403, token, rede e
+      // contêiner inexistente deixam a marca <erro>: o diário sai sem o registro das ordens e a rodada sai vermelha no fim (rodada.py)
+      if (e.ausente || e.forma) console.log('::warning::' + e.message + ' (opcional no diário: o dia que o ONS não publicou sai sem o registro das ordens)');
+      else { fs.writeFileSync(path.join(pasta, GESTAO.erro), String(e.message).slice(0, 300)); console.log('::error::' + e.message + ' (o diário sai sem o registro das ordens; a rodada sai vermelha)'); }
+    }
+  }
 }
 
 /* as ordens da Iqony: sem elas a folha das 17:30 não sai (o limite não se inventa); a forma é conferida aqui, não na rodada */
 async function baixaIqony(pasta) {
   let buf;
   try { buf = await abreGestao().getBlobClient(GESTAO.blob).downloadToBuffer(); }
-  catch (e) { throw new Error('ordens da Iqony ausentes ou ilegíveis: ' + GESTAO.conteiner + '/' + GESTAO.blob + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')'); }
-  const puro = descomprime(buf);
+  catch (e) { throw Object.assign(new Error('ordens da Iqony ausentes ou ilegíveis: ' + GESTAO.conteiner + '/' + GESTAO.blob + ' (' + (e.code || (e.details && e.details.errorCode) || e.statusCode || e.message) + ')'), { ausente: ausente(e) }); }
+  let puro;
+  try { puro = descomprime(buf); } catch (e) { throw Object.assign(new Error('ordens da Iqony com gzip quebrado: ' + e.message.slice(0, 120)), { forma: true }); }
   let o;
-  try { o = JSON.parse(puro.toString('utf8').replace(/^﻿/, '')); } catch (e) { throw new Error('ordens da Iqony ilegíveis: ' + e.message.slice(0, 120)); }
-  if (!o || o.versao !== 1 || !Array.isArray(o.eventos) || !Array.isArray(o.campos)) throw new Error('ordens da Iqony fora da forma (versao ' + (o && o.versao) + ')');
+  try { o = JSON.parse(puro.toString('utf8').replace(/^﻿/, '')); } catch (e) { throw Object.assign(new Error('ordens da Iqony ilegíveis: ' + e.message.slice(0, 120)), { forma: true }); }
+  if (!o || o.versao !== 1 || !Array.isArray(o.eventos) || !Array.isArray(o.campos)) throw Object.assign(new Error('ordens da Iqony fora da forma (versao ' + (o && o.versao) + ')'), { forma: true });
   fs.writeFileSync(path.join(pasta, GESTAO.local), puro);
+  fs.rmSync(path.join(pasta, GESTAO.erro), { force: true });   // RW-008: a leitura que deu certo depois (a tarde) apaga a marca de erro do pesado
   console.log('baixado', GESTAO.conteiner + '/' + GESTAO.blob, puro.length, 'bytes ·', o.eventos.length, 'eventos · gerado', o.gerado_em);
 }
 

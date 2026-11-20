@@ -212,6 +212,8 @@ def main():
             # do item fica aqui dentro (as entradas, o gera, a marca, o texto, o índice, os fatos e o vídeo); o resultado só entra em feitos,
             # novos, índice e barrados depois que a iteração inteira deu certo. A falha vai para `erros`, não vira feito (a rodada seguinte
             # tenta de novo) e a rodada sai 1 só no FIM, depois de gravar
+            if os.environ.get('ENSAIO_IMG_OK') not in (None, '', 'success', 'skipped'):   # RE-011: o ensaio da imagem do diário reprovou
+                raise RuntimeError('o ensaio da imagem do diário reprovou (passo: %s)' % os.environ.get('ENSAIO_IMG_OK'))
             if os.environ.get('PESADO_OK') not in (None, '', 'success', 'skipped'):   # o passo "Entradas pesadas" do workflow falhou
                 raise RuntimeError('as entradas pesadas não foram baixadas (passo: %s)' % os.environ.get('PESADO_OK'))
             if executivo is None:
@@ -300,6 +302,20 @@ def main():
             ENVIADOS.pop(iid, None)
         else:
             a_copiar.append(iid)
+    erro_img = None
+    # RW-010 (boletim-ons-pendente): o ensaio da imagem do diário reprovou. Diário e mensal já não saíram (o try de cada item); a rodada sai
+    # vermelha no fim mesmo sem item, para a passada que só refaz as curvas não ficar verde
+    if os.environ.get('ENSAIO_IMG_OK') not in (None, '', 'success', 'skipped'):
+        erro_img = 'o ensaio da imagem do diário reprovou (passo: %s)' % os.environ.get('ENSAIO_IMG_OK')
+        erros.append({'id': 'ensaio-imagem', 'quando': agora.isoformat(timespec='minutes'), 'motivo': erro_img})
+        print('::error::' + erro_img)
+    erro_iqony = None
+    # boletim-ons-pendente (RW-002): as ordens da Iqony não desceram por credencial, rede ou contêiner (não por ausência do blob). O diário já
+    # saiu "sem o registro das ordens" (verdade, não "sem limitação"); a rodada sai vermelha no fim para alguém ver
+    if os.path.exists(os.path.join(DIR, 'gestao__restricao_iqony.erro')) and any(n.get('tipo') == 'diario' for n in novos):
+        erro_iqony = (open(os.path.join(DIR, 'gestao__restricao_iqony.erro'), encoding='utf-8', errors='replace').read() or 'falha')[:300]
+        erros.append({'id': 'iqony', 'quando': agora.isoformat(timespec='minutes'), 'motivo': 'ordens da Iqony não lidas: ' + erro_iqony})
+        print('::error::o diário saiu sem o registro das ordens da Iqony: ' + erro_iqony)
     erro_curvas = None
     # a página do SIGO desenha as curvas do boletim: a mesma conta do boletim.py, só a demanda ativa por entidade. São DERIVADAS:
     # falha aqui, inclusive na leitura da medição, não derruba o diário (fila, índice e estado seguem gravados; a rodada sai vermelha no fim)
@@ -360,7 +376,7 @@ def main():
     print('rodada', agora.isoformat(timespec='minutes'), '·', len(novos), 'novo(s):', ', '.join(n['id'] for n in novos) or 'nada')
     if barrados:
         print('::error::boletim barrado pela guarda de português (não enviado, tenta de novo na próxima rodada): ' + ', '.join(barrados))
-    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados:
+    if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:
         sys.exit(1)
 
 
