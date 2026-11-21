@@ -52,6 +52,7 @@ jobs:
         id: ensaio
         run: |
           python3 scripts/boletim/ensaio_boletim.py --sem-imagem
+          python3 scripts/boletim/ensaio_desempenho_envio.py
           node scripts/ensaio-boletim-blobs.js
       - name: Entradas leves
         env:
@@ -85,7 +86,7 @@ jobs:
       # se a decisão saiu; ela sabe pelo PESADO_OK e pelo TARDE_OK o que não desceu, registra o erro de cada um e sai vermelha no fim.
       - name: Pacotes do render
         if: ${{ !cancelled() && steps.decide.outcome == 'success' && (steps.decide.outputs.pesado == 'true' || steps.decide.outputs.tarde == 'true') }}
-        run: python3 -m pip install --quiet pillow==11.0.0 pypdf==5.1.0 imageio-ffmpeg==0.5.1
+        run: python3 -m pip install --quiet pillow==11.0.0 pypdf==5.1.0 imageio-ffmpeg==0.5.1 openpyxl==3.1.5
       # O ensaio da folha roda em TODA execução (não depende da decisão, que usa a mesma regra da fila): sem ele, uma regra que nunca gera a
       # folha ficaria verde para sempre. Não precisa dos pacotes do render.
       - name: Ensaio · folha da tarde

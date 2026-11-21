@@ -23,6 +23,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, AQUI)
 import fila as F  # noqa: E402
 import curvas as C  # noqa: E402
+import desempenho_rodada as DR  # noqa: E402  (SIGO · Desempenho na mesma fila, lote desempenho-envio)
 
 DIR = os.environ.get('BOLETIM_DIR') or os.getcwd()
 SAI = os.path.join(DIR, 'saida', 'boletim')
@@ -177,8 +178,9 @@ def main():
         # as curvas de 30 min da página: sem o arquivo, ou parado antes de ontem, a rodada desce a medição e o refaz
         cv = C.velho(le_curvas(), (agora.date() - dt.timedelta(days=1)).isoformat(), agora.date().isoformat())
         tc = F.tarefa_curva(agora, estado)   # a folha das 17:30 (boletim-1730): entradas próprias, as da tarde
-        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts + tc) or 'nenhuma', '· curvas da página:', 'refazer' if cv else 'em dia')
-        saida_gh(pesado='true' if ts or cv else 'false', tarde='true' if tc else 'false', agora=agora.isoformat(timespec='minutes'))
+        td = DR.tarefas(agora, estado)   # desempenho-envio: o diário e o mensal do SIGO · Desempenho leem o executivo (entradas pesadas)
+        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts + tc + td) or 'nenhuma', '· curvas da página:', 'refazer' if cv else 'em dia')
+        saida_gh(pesado='true' if ts or cv or td else 'false', tarde='true' if tc else 'false', agora=agora.isoformat(timespec='minutes'))
         return
     fila = le('boletim/fila.json', {'itens': []})
     indice = le('boletim/indice.json', {'diario': {}, 'mensal': {}})
@@ -302,6 +304,26 @@ def main():
             ENVIADOS.pop(iid, None)
         else:
             a_copiar.append(iid)
+    erro_desempenho = None
+    # desempenho-envio (20/11/2026): o registro diário e o mensal do SIGO · Desempenho, na MESMA fila. A semeadura é a primeira rodada depois do
+    # PROMOVER: grava desempenho_desde = hoje, e nada anterior a ela vai ao grupo. Falha aqui é erro DESTE item: não barra o Boletim, não vira
+    # feito (a rodada seguinte tenta de novo) e a rodada sai vermelha no fim. A guarda do item roda aqui dentro: a junta_fila não a pega.
+    if not estado.get('desempenho_desde'):
+        estado = dict(estado, desempenho_desde=agora.date().isoformat())
+        print('desempenho: semeado em', estado['desempenho_desde'])
+    for modo, ref in DR.tarefas(agora, dict(estado, feitos=feitos)):
+        iid = f'{modo}-{ref}'
+        try:
+            if executivo is None:
+                raise RuntimeError('as entradas pesadas não foram baixadas (passo: %s)' % os.environ.get('PESADO_OK'))
+            item = F.valida_item(DR.gera_item(DIR, SAI, modo, ref, agora, AQUI))
+        except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO do gerador também)
+            erro_desempenho = (str(e) or type(e).__name__)[:300]
+            erros.append({'id': iid, 'quando': agora.isoformat(timespec='minutes'), 'motivo': erro_desempenho})
+            print('::error::%s não gerado: %s' % (iid, erro_desempenho))
+            continue
+        novos.append(item)
+        feitos.append(f'{modo}:{ref}')
     erro_img = None
     # RW-010 (boletim-ons-pendente): o ensaio da imagem do diário reprovou. Diário e mensal já não saíram (o try de cada item); a rodada sai
     # vermelha no fim mesmo sem item, para a passada que só refaz as curvas não ficar verde
@@ -377,6 +399,8 @@ def main():
     if barrados:
         print('::error::boletim barrado pela guarda de português (não enviado, tenta de novo na próxima rodada): ' + ', '.join(barrados))
     if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:
+        sys.exit(1)
+    if erro_desempenho:   # desempenho-envio: linha própria (a de cima é âncora dos ensaios do Boletim)
         sys.exit(1)
 
 

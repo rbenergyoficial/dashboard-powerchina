@@ -18,7 +18,7 @@ const fs = require('fs'), path = require('path'), zlib = require('zlib');
 
 const LEVE = { exige: ['acervo/catalogo.json'], opcional: ['boletim/estado.json', 'boletim/fila.json', 'boletim/indice.json', 'boletim/curvas.json'] };
 const PESADO = { exige: ['executivo.json', 'pr_ufv.json', 'sg_disp_dia.json', 'irr_ufv.json', 'benchmark_ne.json', 'way2_30min.json',
-  'irr_plano_30min.json'], opcional: [] };   // o logotipo do cabeçalho vem do repositório (scripts/boletim/logo_intrepid_800.png)
+  'irr_plano_30min.json'], opcional: ['estacao_dia.json', 'way2_saude.json', 'sager_disp_30min.json'] };   // os opcionais: o SIGO · Desempenho (desempenho-envio)   // o logotipo do cabeçalho vem do repositório (scripts/boletim/logo_intrepid_800.png)
 const TARDE = { exige: ['way2_recent.json'], opcional: [] };
 // as ordens da Iqony (a fonte do degrau do RDO, decisão do humano de 07/11): outra conta, gravadas sem gzip pelo Gestão
 const GESTAO = { conta: process.env.GESTAO_CONTA_URL || 'https://siddgestaodocs.blob.core.windows.net', conteiner: 'indicadores',
@@ -26,7 +26,8 @@ const GESTAO = { conta: process.env.GESTAO_CONTA_URL || 'https://siddgestaodocs.
 const ULTIMOS = ['boletim/fila.json', 'boletim/indice.json', 'boletim/estado.json'];   // sobem por último, nesta ordem
 const GZIP = ['boletim/curvas.json'];   // a página lê este pela API, que repassa o gzip: sobe comprimido (Content-Encoding)
 const DERIVADOS = ['boletim/curvas.json'];   // refeito pela rodada: ilegível vale como ausente (::warning::), nunca derruba o diário
-const TIPO = { '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.mp4': 'video/mp4' };
+const TIPO = { '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg', '.pdf': 'application/pdf', '.mp4': 'video/mp4',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.txt': 'text/plain; charset=utf-8' };
 
 let CONT = null;   // o ensaio injeta um contêiner falso
 let GCONT = null;  // e o do Gestão
