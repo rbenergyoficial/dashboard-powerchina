@@ -17,12 +17,22 @@ on:
         description: 'ensaio: le o dado de verdade e NAO publica (1 = sim)'
         required: false
         default: ''
+      way2_de:
+        description: 'retroativo dos MEDIDORES: refaz os circuitos desde AAAA-MM-DD (preenchido = roda so o retroativo, nao o supervisorio)'
+        required: false
+        default: ''
+      way2_ate:
+        description: 'retroativo dos medidores: ultimo dia, AAAA-MM-DD (vazio = 2026-10-31, o teto; depois dele o gerador recusa)'
+        required: false
+        default: ''
 concurrency:
   # por branch: um dispatch de outra branch (que falha na guarda do main) nao cancela nem desloca a fila do main
   group: gen-alarmes-scada-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   gen:
+    # com `way2_de` preenchido o disparo e so do retroativo dos medidores (o job de baixo)
+    if: ${{ !github.event.inputs.way2_de }}
     runs-on: ubuntu-latest
     # 🔐 SEM A CHAVE DA CONTA: o ensaio (le o cofre) e o gerador (le o cofre e a publicacao anterior, grava em `dados`) levam o OIDC do
     #    proprio job no env DO PASSO (AZURE_CLIENT_ID e AZURE_TENANT_ID: identificadores, nao credenciais).
@@ -104,3 +114,43 @@ jobs:
         with:
           path: .cache-banco/ensaio/backup-dados-scada
           key: ensaio-alarmes-scada-${{ hashFiles('.cache-banco/ensaio/backup-dados-scada/*.meta') }}
+  # RETROATIVO DOS MEDIDORES (lote alarmes-way2-retro, 22/11/2026): refaz hist/alarmes_way2_AAAA_MM.json de `way2_de` a `way2_ate`, lendo
+  # o dia consolidado do medidor (hist/way2_<dia>.json, ~4 MB por dia). Mora aqui, e nao no way2-recent.yml, porque la a rodada de 5 min
+  # cancela a que esta em curso; este workflow nao cancela e tem 90 min. So por disparo manual. O gerador recusa `way2_ate` depois de
+  # 31/10/2026 (de novembro em diante o mes e da rodada de 5 min), grava os meses uma vez so, no fim, e nao toca no alarmes_way2.json.
+  # Com `ensaio=1` le o dado de verdade e grava no disco do runner.
+  # ⚠️ Disparar longe das 08:17 e das 12:41 BRT: a fila deste workflow guarda UMA rodada pendente, e a diaria do supervisorio esperaria.
+  way2_retro:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.way2_de != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    timeout-minutes: 90
+    steps:
+      - name: So roda a partir do main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::este workflow so roda a partir do main: a credencial federada vale so para o main"
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with: { node-version: '20' }
+      - run: npm i @azure/storage-blob@12
+      # A regra de cada intervalo, a rodada de 5 min e o retroativo (janela, dia que falta, virada de mes, borda, sobreposto), com plantios.
+      - name: Ensaio · regra, gerador e retroativo dos medidores (sem rede)
+        run: node scripts/ensaio-alarme-circuito.js --forjados && node scripts/ensaio-gen-alarmes-way2.js && node scripts/ensaio-alarmes-way2-retro.js
+      # As datas chegam pelo env, nunca interpoladas no comando; o gerador confere o formato e a janela antes de ler qualquer coisa.
+      - name: Refazer hist/alarmes_way2_AAAA_MM.json (retroativo dos medidores)
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          HIST_DE: ${{ github.event.inputs.way2_de }}
+          HIST_ATE: ${{ github.event.inputs.way2_ate }}
+          # No ensaio a saida vai para um diretorio do runner e o blob de producao nao e tocado.
+          LOCAL_HIST_DIR: ${{ github.event.inputs.ensaio == '1' && '/tmp/alarmes-way2' || '' }}
+        run: |
+          if [ -n "${LOCAL_HIST_DIR}" ]; then mkdir -p "${LOCAL_HIST_DIR}"; fi
+          node scripts/gen-alarmes-way2.js
+          if [ -n "${LOCAL_HIST_DIR}" ]; then echo '--- ensaio, nada publicado:'; ls -laR "${LOCAL_HIST_DIR}"; cat "${LOCAL_HIST_DIR}/retro_way2_resumo.json"; fi
