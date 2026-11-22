@@ -163,6 +163,44 @@ def saida_gh(**kv):
                 f.write(f'{k}={v}\n')
 
 
+def recupera_mensal(rec, agora, executivo, ons, ons_ruins, indice, render, erros):
+    """boletim-recupera-mensal (humano, 22/11/2026: o mensal de outubro nunca saiu, porque o pipeline entrou no ar em 08/11, a rodada só
+    recupera o mensal até o dia TETO_MENSAL_DIA e a semeadura marcou mensal:2026-10-31 como enviado à mão). O mensal de um mês FECHADO,
+    pedido à mão no workflow_dispatch (recupera_mensal=AAAA-MM): gera nos dois temas e nas duas línguas, guarda em boletim/mensal/AAAA-MM/ e
+    entra no índice (o "Baixar PDF" da página acha). NÃO vai à fila do grupo nem mexe em `feitos`. Recusa mês aberto ou futuro, mês sem o
+    arquivo do ONS (o corte sairia zero) e inglês com português. Devolve o erro (texto) ou None; o erro entra em `erros`."""
+    import calendar
+    import re
+    rec = (rec or '').strip()
+    if not rec:
+        return None
+    iid = 'mensal-recuperado-' + rec
+    try:
+        if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', rec):
+            raise RuntimeError('recupera_mensal tem de ser AAAA-MM (recebido %r)' % rec)
+        if rec >= agora.date().isoformat()[:7]:
+            raise RuntimeError('o mês %s não está fechado' % rec)
+        if executivo is None or os.environ.get('PESADO_OK') not in (None, '', 'success', 'skipped'):
+            raise RuntimeError('as entradas pesadas não foram baixadas (passo: %s)' % os.environ.get('PESADO_OK'))
+        if ons_ruins:
+            raise RuntimeError('arquivo do ONS ilegível: ' + ', '.join(sorted(ons_ruins)))
+        if not any(d.startswith(rec) for d in ons):
+            raise RuntimeError('sem o arquivo do ONS de %s (a rodada só desce o mês corrente e o anterior)' % rec)
+        ultimo = '%s-%02d' % (rec, calendar.monthrange(int(rec[:4]), int(rec[5:]))[1])
+        _, _, sobra, pasta = gera('mensal', ultimo, render)
+        ENVIADOS.pop('mensal-' + ultimo, None)   # não vai ao grupo: nada para enviados/
+        if sobra:
+            raise RuntimeError('inglês com português: ' + ', '.join(sorted(sobra)))
+    except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO do gera também)
+        msg = (str(e) or type(e).__name__)[:300]
+        erros.append({'id': iid, 'quando': agora.isoformat(timespec='minutes'), 'motivo': 'mensal recuperado: ' + msg})
+        print('::error::mensal recuperado de %s não gerado: %s' % (rec, msg))
+        return msg
+    indice.setdefault('mensal', {})[rec] = {'pasta': pasta, 'ons': ultimo in ons, 'gerado': agora.isoformat(timespec='minutes')}
+    print('mensal recuperado:', rec, '->', pasta, '(no índice; não vai ao grupo)')
+    return None
+
+
 def main():
     agora = agora_brt()
     render = '--sem-render' not in sys.argv
@@ -179,8 +217,10 @@ def main():
         cv = C.velho(le_curvas(), (agora.date() - dt.timedelta(days=1)).isoformat(), agora.date().isoformat())
         tc = F.tarefa_curva(agora, estado)   # a folha das 17:30 (boletim-1730): entradas próprias, as da tarde
         td = DR.tarefas(agora, estado)   # desempenho-envio: o diário e o mensal do SIGO · Desempenho leem o executivo (entradas pesadas)
-        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts + tc + td) or 'nenhuma', '· curvas da página:', 'refazer' if cv else 'em dia')
-        saida_gh(pesado='true' if ts or cv or td else 'false', tarde='true' if tc else 'false', agora=agora.isoformat(timespec='minutes'))
+        rec = os.environ.get('BOLETIM_RECUPERA_MENSAL', '').strip()   # boletim-recupera-mensal: o mensal pedido à mão também precisa do pesado
+        print('tarefas:', ', '.join(f'{m}:{d}' for m, d in ts + tc + td) or 'nenhuma', '· curvas da página:', 'refazer' if cv else 'em dia',
+              ('· mensal recuperado à mão: ' + rec) if rec else '')
+        saida_gh(pesado='true' if ts or cv or td or rec else 'false', tarde='true' if tc else 'false', agora=agora.isoformat(timespec='minutes'))
         return
     fila = le('boletim/fila.json', {'itens': []})
     indice = le('boletim/indice.json', {'diario': {}, 'mensal': {}})
@@ -263,6 +303,7 @@ def main():
             ENVIADOS.pop(iid, None)
         else:
             a_copiar.append(iid)
+    erro_recupera = recupera_mensal(os.environ.get('BOLETIM_RECUPERA_MENSAL', ''), agora, executivo, ons, ons_ruins, indice, render, erros)
     erro_tarde = None
     for _, dia in F.tarefa_curva(agora, dict(estado, feitos=feitos)):
         # a folha das 17:30 (boletim-1730): o dia corrente, uma vez. É ADICIONAL: falha aqui não barra o resto da rodada (o diário recuperado,
@@ -401,6 +442,8 @@ def main():
     if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:
         sys.exit(1)
     if erro_desempenho:   # desempenho-envio: linha própria (a de cima é âncora dos ensaios do Boletim)
+        sys.exit(1)
+    if erro_recupera:   # boletim-recupera-mensal: linha própria, pelo mesmo motivo
         sys.exit(1)
 
 

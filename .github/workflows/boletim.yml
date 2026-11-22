@@ -24,6 +24,10 @@ on:
         description: 'com semeia: o que já foi ao grupo à mão, separado por vírgula (diario:AAAA-MM-DD, mensal:AAAA-MM-DD, rd:CODIGO)'
         type: string
         default: 'diario:2026-11-06,ons:2026-11-06,mensal:2026-10-31'
+      recupera_mensal:
+        description: 'mensal de um mês FECHADO pedido à mão (AAAA-MM): gera, guarda e entra no índice da página; não vai ao grupo do WeCom'
+        type: string
+        default: ''
 permissions:
   contents: read
   id-token: write
@@ -64,6 +68,7 @@ jobs:
         env:
           BOLETIM_DIR: ${{ runner.temp }}/bd
           SEMEIA: ${{ inputs.semeia }}
+          BOLETIM_RECUPERA_MENSAL: ${{ inputs.recupera_mensal }}
         run: |
           if [ "$SEMEIA" = "true" ]; then python3 scripts/boletim/rodada.py --precisa --semeia; else python3 scripts/boletim/rodada.py --precisa; fi
       # A imagem do diário (os estados do ONS, boletim-ons-pendente) é ensaiada aqui, quando as entradas pesadas descem. Reprovada, ela não
@@ -109,6 +114,7 @@ jobs:
           FONTE_DIR: /usr/share/fonts/truetype/dejavu
           CHROME: google-chrome
           SEMEIA: ${{ inputs.semeia }}
+          BOLETIM_RECUPERA_MENSAL: ${{ inputs.recupera_mensal }}
           FEITOS: ${{ inputs.feitos }}
           PESADO_OK: ${{ steps.pesadas.outcome }}
           ENSAIO_IMG_OK: ${{ steps.ensaio_img.outcome }}
