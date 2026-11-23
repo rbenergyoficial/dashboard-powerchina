@@ -316,7 +316,9 @@ SLOTS_ = [f'{h:02d}:{m:02d}' for h in range(5, 19) for m in (0, 30)]
 # boletim-pdf-executivo (22/11/2026): medido de novo depois que a coluna "PR sem o corte" POR USINA saiu do diário (a divisão da energia impedida
 # por usina não é confiável). Contra o HEAD a85b748 mudam só 10 trechos por dia: o subtítulo do painel das usinas e os nove valores (81,7% -> 80,0%,
 # o PR publicado). Antes: ba082ac9e458… (01/11) e dab4af05b6b0… (02/11).
-OURO_VIS = {'2026-11-01': 'fbb37ae596718db458920ee328036769a164c563f13458fafda5aec71bf744e8', '2026-11-02': '77311277f190b5de8fb46aa34f7ebbb3102d09eaaea2a7615cf39ca205c2e1ed'}
+# boletim-p75 (23/11/2026): medido de novo com o P75 no cartão do estudo ("P50 · P75 · P90 do projeto"). Contra o HEAD b499fee mudam só 2
+# trechos por dia: o título do cartão e o subtítulo (+ "P75 67,1%" em 01/11, "P75 68,7%" em 02/11). Antes: fbb37ae59671… e 77311277f190….
+OURO_VIS = {'2026-11-01': '8ada61b930a43bc963c6f2ef0ea9f655a02fbbdec4b5b085f3a445e5a5031137', '2026-11-02': '3a615d1780896316a09502671ee9458fbdbbc3890ee0c5c310d11bfb9c0c53de'}
 _EV_BOM = [['2026-11-02', '09:00:00', 'limite', 120, 'ENE', 'ENE_FREQ', 'COSR-NE', 'rdo', None, None],
            ['2026-11-02', '13:00:00', 'fim', None, None, None, 'COSR-NE', 'rdo', None, None],
            ['2026-11-03', '10:50:00', 'limite', 282, 'ENE', 'FLUXO', 'COSR-NE', 'rdo', None, None],

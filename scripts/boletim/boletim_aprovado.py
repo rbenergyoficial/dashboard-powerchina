@@ -280,13 +280,14 @@ def usinas(dias):
 PV_P50 = {'01': 85.587, '02': 76.824, '03': 84.108, '04': 80.187, '05': 75.905, '06': 71.020, '07': 71.323, '08': 87.375,
           '09': 91.944, '10': 94.639, '11': 91.356, '12': 88.147}   # GWh, PVsyst do estudo de viabilidade (fev/2023), o mesmo do SIGO Dados
 P90_FATOR = 959.0 / 998.416
+P75_FATOR = 977.7 / 998.416   # boletim-p75 (23/11/2026): o P75 do estudo, na mesma proporção do P50 (padrão do painel executivo)
 def p50_dias(dias):
     import calendar
     return sum(PV_P50[d[5:7]] * 1000 / calendar.monthrange(int(d[:4]), int(d[5:7]))[1] for d in dias)
 def card_p50(dias, entregue, impedido):
-    p50 = p50_dias(dias); p90 = p50 * P90_FATOR
-    return kpi(T3, 'P50 · P90 do projeto', nf(entregue / p50 * 100, 1), '% do P50',
-               f'com o impedido {nf((entregue + impedido) / p50 * 100, 1)}% · P90 {nf(entregue / p90 * 100, 1)}%')
+    p50 = p50_dias(dias); p75 = p50 * P75_FATOR; p90 = p50 * P90_FATOR
+    return kpi(T3, 'P50 · P75 · P90 do projeto', nf(entregue / p50 * 100, 1), '% do P50',
+               f'com o impedido {nf((entregue + impedido) / p50 * 100, 1)}% · P75 {nf(entregue / p75 * 100, 1)}% · P90 {nf(entregue / p90 * 100, 1)}%')
 
 def kpi(cor, k, v, u, sub):
     return f'<div class="kc" style="--c:{cor}"><div class="k">{k}</div><b>{v}<small> {u}</small></b><p>{sub}</p></div>'

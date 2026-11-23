@@ -57,7 +57,7 @@ F = {
  'Impedido no mês': 'Curtailed this month', 'Acumulado do mês': 'Month to date', 'Geração do dia': 'Day generation', 'Geração do mês': 'Month generation',
  'Irradiação do dia': 'Day irradiation', 'Irradiação do mês': 'Month irradiation', 'Disponibilidade do dia': 'Day availability', 'Disponibilidade': 'Availability',
  'PR do dia': 'Day PR', 'PR do mês': 'Month PR', 'PR mês': 'Month PR', 'Corte do mês': 'Month curtailment', 'PPA no mês': 'PPA this month',
- 'P50 · P90 do projeto': 'Project P50 · P90', 'Usinas · dia e mês': 'Plants · day and month', 'Usinas no mês': 'Plants this month', 'Fatos relevantes': 'Key facts',
+ 'P50 · P75 · P90 do projeto': 'Project P50 · P75 · P90', 'Usinas · dia e mês': 'Plants · day and month', 'Usinas no mês': 'Plants this month', 'Fatos relevantes': 'Key facts',
  'Melhor dia do mês': 'Best day of the month', 'Melhor dia:': 'Best day:', 'recorde histórico': 'all-time record', 'meta batida em': 'target reached on',
  'previsão de bater:': 'forecast to reach:', 'no ritmo atual não bate no mês': 'at the current pace it misses this month', 'faltaram': 'short by',
  'dia fechado · evolução de': 'closed day · progress of', 'mês fechado': 'closed month', 'gerado no SIGO em': 'generated in SIGO on',
