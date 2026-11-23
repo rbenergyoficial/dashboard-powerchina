@@ -270,4 +270,5 @@ jobs:
         env: { DADOS_SAS: '' }
         run: |
           python3 scripts/boletim/ensaio_boletim.py
+          python3 scripts/boletim/ensaio_tela.py   # boletim-pdf-executivo: a tela executiva anexa ao diario
           node scripts/ensaio-boletim-blobs.js

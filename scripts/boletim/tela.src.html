@@ -1,0 +1,643 @@
+<!doctype html>
+<html lang="en" data-modo="tela">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITULO__</title>
+<style>
+/* Boletim de Desempenho · tela executiva (modelo; o tela.py injeta o dado do dia, a fonte e o logotipo). Arquivo ÚNICO, sem nada de fora:
+   abre sem rede (a fonte Archivo, licença SIL OFL 1.1, vai embutida). Página editorial de uma coluna, sem cartões. O "instrumento do dia"
+   ocupa a largura toda (curva, irradiância e as nove usinas na mesma régua de tempo); abaixo, pares de gráficos separados por fio. Uma
+   família (Archivo) em duas larguras: normal no texto, condensada em rótulo e eixo. Cores só do aurora.json. */
+@font-face{font-family:"Archivo";font-style:normal;font-weight:300 800;font-stretch:62% 125%;font-display:swap;src:url(data:font/woff2;base64,__FONTE__) format("woff2")}
+@page{margin:0}
+:root{
+  --bg:#FFFFFF; --sunk:#F2F4F7; --ink:#05070A; --ink2:#232A33; --ink3:#434B57; --ink4:#6E7683; --line:#DFE3E8; --line2:#C3CAD3;
+  --ger:#BF7E04; --cx:#B85137; --ppa:#498DF2; --corte:#7A6FB5; --ok:#43966B; --ruim:#E02F44;
+  --m1:#B6056C; --m2:#A58C03; --m3:#22907C; --m4:#4E5435; --m5:#AB43D0; --m6:#B08374; --m7:#9E84A6; --m8:#7453FE; --m9:#049AA4;
+  --f:"Archivo","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0A0B0D; --sunk:#111317; --ink:#FAFBFC; --ink2:#DCE1E8; --ink3:#A3ABB8; --ink4:#8B93A1; --line:#25272C; --line2:#3A3E46;
+  --ger:#F5A623; --cx:#B85137; --ppa:#498DF2; --corte:#A79BE8; --ok:#2BB673; --ruim:#E02F44;
+  --m1:#F0509C; --m2:#F3D020; --m3:#01816E; --m4:#DBE3BF; --m5:#AB43D0; --m6:#C79889; --m7:#DABFE3; --m8:#7453FE; --m9:#2CDBE8; color-scheme:dark}
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+[hidden]{display:none!important}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:15px;line-height:1.5;font-variant-numeric:tabular-nums;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+.pg{max-width:1180px;margin:0 auto}
+.mast{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 16px;flex-wrap:wrap;padding-block:22px 12px;border-bottom:1px solid var(--ink)}
+.marca{font-size:13px;color:var(--ink3);letter-spacing:.02em}
+.marca .lg{display:inline-block;line-height:0;margin-bottom:7px}
+.marca img{display:block;height:36px;width:auto}
+:root[data-theme="dark"] .marca .lg{background:#FFFFFF;padding:6px 10px;border-radius:4px}
+.marca span{display:block}
+.mast-d{display:flex;align-items:center;gap:10px 18px;flex-wrap:wrap;justify-content:flex-end;color:var(--ink3);font-size:13px}
+.ctl{display:flex;gap:10px}
+[data-modo="foto"] .ctl{display:none}
+.pend{display:inline-block;margin-left:10px;padding:2px 9px;border:1px solid color-mix(in srgb,var(--corte) 60%,transparent);background:color-mix(in srgb,var(--corte) 14%,transparent);
+  color:color-mix(in srgb,var(--corte) 55%,var(--ink));border-radius:3px;letter-spacing:.06em;white-space:nowrap}
+.nota{font-size:12.5px;color:var(--ink3);margin:8px 0 0;max-width:62em}
+.nota i{display:inline-block;width:12px;height:12px;margin-right:7px;vertical-align:-1px;background:repeating-linear-gradient(45deg,var(--corte) 0 2px,transparent 2px 5px)}
+.kv.tx{font-size:clamp(17px,1.7vw,21px);white-space:normal;line-height:1.25;padding-block:4px}
+.lng{display:flex;border:1px solid var(--line2);border-radius:3px;overflow:hidden}
+.lng button{font:inherit;font-size:12px;font-weight:600;letter-spacing:.06em;padding:4px 10px;background:transparent;color:var(--ink3);border:0;cursor:pointer}
+.lng button[aria-pressed="true"]{background:color-mix(in srgb,var(--ink) 9%,transparent);color:var(--ink)}
+.lng button:focus-visible{outline:2px solid var(--ppa);outline-offset:-2px}
+.ico{display:inline-flex;align-items:center;justify-content:center;width:31px;height:27px;padding:0;background:transparent;color:var(--ink2);border:1px solid var(--line2);border-radius:3px;cursor:pointer}
+.ico:hover{background:color-mix(in srgb,var(--ink) 9%,transparent);color:var(--ink)}
+.ico:focus-visible{outline:2px solid var(--ppa);outline-offset:1px}
+.ico svg{display:block;width:16px;height:16px}
+html:lang(zh-Hans){--f:"Archivo","PingFang SC","Microsoft YaHei","Noto Sans SC","Segoe UI",system-ui,-apple-system,sans-serif}
+.ante{margin:26px 0 6px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+h1{font-size:clamp(25px,3.6vw,40px);line-height:1.12;font-weight:700;letter-spacing:-.015em;margin:0;max-width:22em;text-wrap:balance;font-stretch:94%}
+.kp{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));margin-top:26px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.kp>div{padding:14px 14px 15px 0;min-width:0}
+.kp>div+div{padding-left:14px;border-left:1px solid var(--line)}
+.kr{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);font-weight:600;font-stretch:88%}
+.kv{font-size:clamp(23px,2.45vw,31px);font-weight:600;line-height:1.1;letter-spacing:-.02em;margin-top:5px;white-space:nowrap;font-stretch:90%}
+.kv small{font-size:.42em;font-weight:500;letter-spacing:0;color:var(--ink3);margin-left:5px}
+.kv i{font-style:normal;color:var(--line2);font-weight:300;margin:0 .22em}
+.ks{font-size:13px;color:var(--ink3);margin-top:4px;line-height:1.4}
+.ks b{font-weight:600;color:var(--ink2)}
+.ks .up{color:var(--ok);font-weight:700} .ks .dn{color:var(--ruim);font-weight:700}
+section{margin-top:40px}
+.par{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 44px;margin-top:0}
+.par>section{border-top:1px solid var(--line);padding-top:18px}
+.cheio{border-top:1px solid var(--line);padding-top:18px}
+h2{font-size:19px;line-height:1.25;font-weight:700;margin:0;letter-spacing:-.005em;text-wrap:balance;max-width:38em}
+.sub{font-size:13px;color:var(--ink3);margin:5px 0 12px;max-width:62em}
+.leg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--ink3);margin:0 0 6px;font-stretch:88%}
+.leg span{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.leg i{display:inline-block;width:12px;height:12px;flex:none}
+.g{position:relative;touch-action:pan-y}
+.g svg{display:block;width:100%;overflow:visible}
+svg text{font-family:var(--f);font-stretch:82%;font-size:11.5px;fill:var(--ink3)}
+svg text.hal{paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
+svg text.v{fill:var(--ink);font-weight:600} svg text.n{fill:var(--ink2)} svg text.t13{font-size:13px} svg text.b{font-weight:700;fill:var(--ink)}
+#tip{position:fixed;z-index:20;pointer-events:none;background:var(--sunk);border:1px solid var(--line2);padding:9px 11px;font-size:12.5px;line-height:1.5;
+  min-width:150px;max-width:260px;box-shadow:0 6px 22px rgba(0,0,0,.18);color:var(--ink2)}
+#tip b{color:var(--ink);font-weight:700} #tip .h{font-weight:700;color:var(--ink);margin-bottom:3px;font-size:12px;letter-spacing:.04em}
+#tip table{border-collapse:collapse;width:100%} #tip td{padding:0 0 0 0} #tip td+td{text-align:right;padding-left:14px;color:var(--ink);font-weight:600}
+#tip .gr{display:grid;grid-template-columns:repeat(3,auto);gap:0 12px;margin-top:5px;padding-top:5px;border-top:1px solid var(--line);font-size:11.5px}
+.rod{margin-top:44px;border-top:1px solid var(--ink);padding-top:10px;font-size:12px;color:var(--ink3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.rod p{margin:0;max-width:70em}
+.meta{display:grid;grid-template-columns:236px 236px minmax(0,1fr);gap:0 26px;align-items:center}
+.meta>div{min-width:0}
+.sp{height:30px;margin-top:9px}
+.sp svg{display:block;width:100%;overflow:visible}
+@media (max-width:900px){.meta{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px} .meta>#g-leq{grid-column:1/-1}}
+@keyframes risca{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes surge{from{opacity:0}to{opacity:1}}
+@keyframes cresce{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes estica{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.anim .risca{stroke-dasharray:1;animation:risca 1.5s cubic-bezier(.4,0,.2,1) backwards}
+.anim .surge{animation:surge .5s ease backwards}
+.anim .cresce{transform-box:fill-box;transform-origin:50% 100%;animation:cresce .7s cubic-bezier(.2,.7,.2,1) backwards}
+.anim .estica{transform-box:fill-box;transform-origin:0 50%;animation:estica .8s cubic-bezier(.2,.7,.2,1) backwards}
+@media (prefers-reduced-motion: reduce){.anim .risca,.anim .surge,.anim .cresce,.anim .estica{animation:none}}
+@media (max-width:1000px){.kp{grid-template-columns:repeat(3,minmax(0,1fr))} .kp>div:nth-child(3n+1){border-left:0;padding-left:0} .kp>div:nth-child(n+4){border-top:1px solid var(--line)}}
+@media (max-width:900px){.par{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:520px){.kp{grid-template-columns:repeat(2,minmax(0,1fr))} .kp>div:nth-child(even){border-left:1px solid var(--line);padding-left:12px} .kp>div:nth-child(odd){border-left:0;padding-left:0}
+  .kp>div:nth-child(n+3){border-top:1px solid var(--line)} .kv{white-space:normal} .pend{margin:6px 0 0;display:table}
+  .meta{grid-template-columns:minmax(0,1fr)}}
+@media print{.ctl{display:none} #tip{display:none} body{padding-bottom:24px}}
+</style>
+</head>
+<body>
+<div class="pg anim" id="pg">
+  <header class="mast">
+    <div class="marca"><span class="lg"><img alt="Intrepid Participações S.A." src="data:image/png;base64,__LOGO__"></span><span id="m-sub"></span></div>
+    <div class="mast-d"><span id="m-data"></span>
+      <div class="ctl"><button id="b-tema" class="ico" type="button"></button>
+      <div class="lng" role="group" aria-label="Language"><button id="b-pt" type="button">PT</button><button id="b-en" type="button">EN</button><button id="b-zh" type="button" lang="zh-Hans">中文</button></div></div></div>
+  </header>
+  <p class="ante" id="ante"></p>
+  <h1 id="h1"></h1>
+  <div class="kp" id="kp"></div>
+
+  <section class="cheio"><h2 id="t-dia"></h2><p class="sub" id="s-dia"></p><div class="leg" id="l-dia"></div><div class="g" id="g-dia"></div></section>
+  <section class="cheio"><h2 id="t-leq"></h2><p class="sub" id="s-leq"></p><div class="leg" id="l-leq"></div>
+    <div class="meta"><div class="g" id="g-gcx"></div><div class="g" id="g-gpp"></div><div class="g" id="g-leq"></div></div></section>
+  <div class="par" style="margin-top:40px">
+    <section style="margin-top:0"><h2 id="t-pon"></h2><p class="sub" id="s-pon"></p><div class="g" id="g-pon"></div><p class="nota" id="n-pon" hidden></p>
+      <h2 id="t-viz" style="font-size:15px;margin-top:22px"></h2><div class="g" id="g-viz" style="margin-top:6px"></div></section>
+    <section style="margin-top:0"><h2 id="t-mes"></h2><p class="sub" id="s-mes"></p><div class="leg" id="l-mes"></div><div class="g" id="g-mes"></div></section>
+  </div>
+  <section class="cheio"><h2 id="t-usi"></h2><p class="sub" id="s-usi"></p><div class="leg" id="l-usi"></div><div class="g" id="g-usi"></div></section>
+  <footer class="rod"><p id="rod1"></p><p id="rod2"></p></footer>
+</div>
+<div id="tip" hidden></div>
+<script id="dados" type="application/json">__DADOS__</script>
+<script>
+(function(){
+'use strict';
+var D = JSON.parse(document.getElementById('dados').textContent);
+/* língua e tema: o endereço (?lang=pt|en&theme=dark|light) manda; depois a escolha guardada do leitor; depois o padrão do arquivo
+   (ao grupo vai o inglês no escuro). No modo foto (a imagem e o PDF do envio) vale só o padrão do arquivo, sem animação. */
+var RAIZ = document.documentElement, FOTO = RAIZ.getAttribute('data-modo') === 'foto';
+var q = new URLSearchParams(location.search);
+function guardado(k){ if (FOTO) return null; try { return localStorage.getItem(k); } catch (e) { return null; } }
+function um(lista, cand){ for (var i = 0; i < cand.length; i++) if (lista.indexOf(cand[i]) >= 0) return cand[i]; return lista[0]; }
+var LANG = um(['en','pt','zh'], [q.get('lang'), guardado('bolLang'), D.padrao && D.padrao.lang]);
+var TEMA = um(['dark','light'], [q.get('theme'), guardado('bolTema'), D.padrao && D.padrao.tema]);
+RAIZ.setAttribute('data-theme', TEMA);
+if (FOTO) document.getElementById('pg').classList.remove('anim');
+var FALTA = 0;   /* textos pedidos em chinês sem o chinês escrito: a guarda (tela.py) recusa se houver */
+function L(pt, en, zh){ if (LANG === 'zh'){ if (zh == null){ FALTA++; return en; } return zh; } return LANG === 'pt' ? pt : en; }
+var ICO_SOL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3L17 7M7 17l-1.7 1.7"/></svg>';
+var ICO_LUA = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.2A8.3 8.3 0 0 1 9.8 4a8.3 8.3 0 1 0 10.2 10.2z"/></svg>';
+function nf(v, c){ if (v == null || isNaN(v)) return '—'; c = c == null ? 2 : c; return Number(v).toLocaleString(LANG === 'pt' ? 'pt-BR' : 'en-US', {minimumFractionDigits:c, maximumFractionDigits:c}); }
+function pc(v, c){ return nf(v, c == null ? 1 : c) + (LANG === 'pt' ? ' %' : '%'); }
+var MES_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+var MES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+var MES_ENL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+var MM = Number(D.dia.slice(5,7)), AA = D.dia.slice(0,4), DD = D.D, NT = D.NT;
+function fd(d){ return LANG === 'pt' ? String(d).padStart(2,'0') + '/' + String(MM).padStart(2,'0') : LANG === 'zh' ? MM + '月' + d + '日' : d + ' ' + MES_EN[MM-1]; }
+function mesNome(){ return LANG === 'pt' ? MES_PT[MM-1] : LANG === 'zh' ? MM + '月' : MES_ENL[MM-1]; }
+function Mes(){ var s = mesNome(); return s.charAt(0).toUpperCase() + s.slice(1); }
+function $(id){ return document.getElementById(id); }
+function r1(v){ return Math.round(v * 10) / 10; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function mix(c, p, base){ return 'color-mix(in srgb,' + c + ' ' + p + '%,' + (base || 'transparent') + ')'; }
+function heat(p){ return mix('var(--ger)', Math.round(5 + 95 * Math.max(0, Math.min(1, p))), 'var(--sunk)'); }
+function mono(pts){
+  var n = pts.length, i; if (n < 3) return 'M' + pts.map(function(p){ return r1(p[0]) + ',' + r1(p[1]); }).join('L');
+  var dx = [], m = [], t = [];
+  for (i = 0; i < n-1; i++){ dx[i] = pts[i+1][0] - pts[i][0]; m[i] = (pts[i+1][1] - pts[i][1]) / dx[i]; }
+  t[0] = m[0]; t[n-1] = m[n-2];
+  for (i = 1; i < n-1; i++) t[i] = m[i-1] * m[i] <= 0 ? 0 : (m[i-1] + m[i]) / 2;
+  for (i = 0; i < n-1; i++){ if (m[i] === 0){ t[i] = 0; t[i+1] = 0; continue; } var a = t[i]/m[i], b = t[i+1]/m[i], s = a*a + b*b; if (s > 9){ var k = 3/Math.sqrt(s); t[i] = k*a*m[i]; t[i+1] = k*b*m[i]; } }
+  var d = 'M' + r1(pts[0][0]) + ',' + r1(pts[0][1]);
+  for (i = 0; i < n-1; i++){ var h = dx[i]/3; d += 'C' + r1(pts[i][0]+h) + ',' + r1(pts[i][1]+h*t[i]) + ' ' + r1(pts[i+1][0]-h) + ',' + r1(pts[i+1][1]-h*t[i+1]) + ' ' + r1(pts[i+1][0]) + ',' + r1(pts[i+1][1]); }
+  return d;
+}
+/* ---------- balão ---------- */
+var tip = $('tip');
+function showTip(ev, html){ tip.innerHTML = html; tip.hidden = false; var w = tip.offsetWidth, h = tip.offsetHeight, x = ev.clientX + 16, y = ev.clientY - h - 14;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - 16; if (x < 8) x = 8; if (y < 8) y = ev.clientY + 18; tip.style.left = x + 'px'; tip.style.top = y + 'px'; }
+function hideTip(){ tip.hidden = true; }
+function liga(el, fn, sai){ el.addEventListener('pointermove', fn); el.addEventListener('pointerdown', fn); el.addEventListener('pointerleave', function(){ hideTip(); if (sai) sai(); }); }
+
+/* ---------- o que o dia diz (tudo do dado) ---------- */
+var US = ['M1','M2','M3','M4','M5','M6','M7','M8','M9'];
+var NS = D.slots.length, T0 = 300, T1 = T0 + NS * 30;
+var GER = D.cx_mw.map(function(v){ return Math.max(0, v || 0); });
+/* ---------- o estado do ONS no dia: um só para o título, o número, a curva, a ponte, o dia a dia e o PR ----------
+   'publicado' (o ONS apurou o dia) · 'ordens' (pendente, com tempo sob ordem registrada pela Iqony) · 'nenhuma' (pendente, registro sem
+   ordem) · 'sem_registro' (pendente, sem o registro). O diário das 08:00 é sempre pendente: nesses três estados a tela não mostra
+   limite, potencial nem energia não gerada do ONS, e nunca diz que o dia foi "sem limite". */
+var EST = D.ons.estado, PUB = EST === 'publicado', IQ = D.ons.iq, DEG = PUB ? [] : (D.ons.degraus || []);
+var PARADO = !PUB && IQ && IQ.coletor === 'parado';
+var TEMPOT = PUB && D.LD.pr != null;   /* o potencial pela irradiância usa o PR do dia FORA do limite, que só existe com o ONS publicado */
+var POT = D.irr.map(function(v){ return TEMPOT ? Math.min(D.placa_total * (v || 0) / 1000 * D.LD.pr, 343.77) : 0; });
+var LIM = D.lim, iLim = []; if (PUB) LIM.forEach(function(v, i){ if (v != null) iLim.push(i); });
+function hm(m){ return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); }
+var JAN = iLim.length ? [T0 + iLim[0]*30, T0 + (iLim[iLim.length-1] + 1)*30] : null;
+var iPico = GER.indexOf(Math.max.apply(null, GER));
+var limV = iLim.map(function(i){ return Math.round(LIM[i]); }), limMin = limV.length ? Math.min.apply(null, limV) : null, limMax = limV.length ? Math.max.apply(null, limV) : null;
+var JORD = DEG.length ? [DEG[0][0], DEG[DEG.length-1][1]] : null;   /* a janela das ordens da Iqony (minutos do dia) */
+var MESD = D.mes, HOJE = MESD[MESD.length-1];
+var PEND = MESD.filter(function(m){ return !m.ons; }).map(function(m){ return Number(m.d.slice(8)); });   /* os dias do mês que o ONS ainda não publicou */
+var ULT = D.ons.ult ? Number(D.ons.ult.slice(8)) : null;   /* o último dia do mês que o ONS publicou */
+var cortDia = PUB ? (HOJE.cort || 0) : null;
+var pos = 1 + MESD.filter(function(m){ return m.liq > D.liq; }).length;
+var dif = (D.liq / D.meta_d - 1) * 100;
+var acima = MESD.filter(function(m){ return m.liq >= m.meta; }).length;
+var cumC = [], cumP = [], a = 0, b = 0; MESD.forEach(function(m){ a += m.liq; b += m.ppa; cumC.push(a / D.cx.meta * 100); cumP.push(b / D.pp.meta * 100); });
+var ritmo = DD / NT * 100, metaPer = D.meta_d * DD;
+var p50 = D.p50_mes_ate, ent = D.cx.tot, cor = D.imp_mes, out = p50 - cor - ent;
+var p75 = p50 * D.p75_fator, p90 = p50 * D.p90_fator;   /* o estudo dá o P75 e o P90 do ano; o período sai na mesma proporção do P50 (padrão do painel executivo) */
+var uDia = {}, uRend = {}; US.forEach(function(u){ uDia[u] = D.us_dia[u][DD-1]; uRend[u] = uDia[u] / D.placa[u]; });
+function trunc2(v){ return v == null ? null : Math.floor(v * 100) / 100; }
+var CAPT = 343.77, fcDia = D.liq / (CAPT * 24) * 100, fcMes = ent / (CAPT * 24 * DD) * 100, uFC = {}, uFCm = {};
+US.forEach(function(u){ uFC[u] = uDia[u] / (D.cap_mw[u] * 24) * 100; uFCm[u] = D.us_dia[u].reduce(function(p, v){ return p + v; }, 0) / (D.cap_mw[u] * 24 * DD) * 100; });
+var LIV = D.livres || [], ordLiv = US.slice().sort(function(x, y){ return D.pr_us_livre[y] - D.pr_us_livre[x]; });
+function junta(a, e){ return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + e + a[a.length - 1]; }
+function dias(n){ return LANG === 'zh' ? MM + '月' + n.map(function(x){ return x + '日'; }).join('、') : LANG === 'pt' ? junta(n.map(function(x){ return String(x).padStart(2, '0'); }), ' e ') + '/' + String(MM).padStart(2, '0') : junta(n.map(String), ' and ') + ' ' + MES_EN[MM-1]; }
+function diasLiv(){ return dias(LIV.map(function(d){ return Number(d.slice(8)); })); }
+/* a meta do mês em palavras: batida, prevista dentro do mês, ou fora do alcance no ritmo atual */
+function estMeta(r){ return r.bateu ? 'bateu' : (r.proj_pct >= 100 && r.prev != null && r.prev <= NT) ? 'prev' : 'nao'; }
+function fraseMeta(nome, r){ var e = estMeta(r);
+  return e === 'bateu' ? L(nome + ' bateu a meta de ' + mesNome() + ' em ' + fd(Number(r.bateu.slice(8))), nome + ' reached the ' + Mes() + ' target on ' + fd(Number(r.bateu.slice(8))), nome + ' 已于 ' + fd(Number(r.bateu.slice(8))) + ' 完成' + mesNome() + '目标')
+    : e === 'prev' ? L(nome + ' deve bater a meta de ' + mesNome() + ' em ' + fd(r.prev), nome + ' is set to reach the ' + Mes() + ' target on ' + fd(r.prev), nome + ' 预计于 ' + fd(r.prev) + ' 完成' + mesNome() + '目标')
+    : L(nome + ' projeta ' + pc(r.proj_pct) + ' da meta de ' + mesNome(), nome + ' projects ' + pc(r.proj_pct) + ' of the ' + Mes() + ' target', nome + ' 预计完成' + mesNome() + '目标的 ' + pc(r.proj_pct)); }
+function avisoParado(){ return PARADO ? L(' Aviso: o coletor das ordens está parado; podem faltar ordens.', ' Warning: the order collector is stopped; orders may be missing.',' 注意：指令采集已停止，可能缺少指令。') : ''; }
+
+/* ---------- textos ---------- */
+function textos(){
+  $('b-pt').setAttribute('aria-pressed', LANG === 'pt'); $('b-en').setAttribute('aria-pressed', LANG === 'en'); $('b-zh').setAttribute('aria-pressed', LANG === 'zh');
+  /* o tema num botão só: o ícone mostra para onde o clique leva (sol no escuro, lua no claro) */
+  var bt = $('b-tema'), rotT = TEMA === 'dark' ? L('Mudar para o tema claro','Switch to the light theme','切换为浅色主题') : L('Mudar para o tema escuro','Switch to the dark theme','切换为深色主题');
+  bt.setAttribute('aria-label', rotT); bt.setAttribute('title', rotT); bt.innerHTML = TEMA === 'dark' ? ICO_SOL : ICO_LUA;
+  RAIZ.lang = LANG === 'pt' ? 'pt-BR' : LANG === 'zh' ? 'zh-Hans' : 'en';
+  document.title = L('Mauriti · Boletim Diário de Desempenho · ', 'Mauriti · Daily Performance Bulletin · ','Mauriti · 每日绩效简报 · ') + D.dia;
+  $('m-sub').textContent = L('Conjunto Fotovoltaico Mauriti · 343,77 MW', 'Mauriti Photovoltaic Complex · 343.77 MW','Mauriti 光伏电站群 · 343.77 MW');
+  var dt = new Date(D.dia + 'T12:00:00');
+  $('m-data').textContent = dt.toLocaleDateString(LANG === 'pt' ? 'pt-BR' : LANG === 'zh' ? 'zh-CN' : 'en-GB', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+  $('ante').innerHTML = esc(L('Boletim Diário de Desempenho · dia fechado · ' + DD + ' de ' + NT + ' dias de ' + mesNome(), 'Daily Performance Bulletin · closed day · day ' + DD + ' of ' + NT + ' in ' + mesNome(), '每日绩效简报 · 已结日 · ' + mesNome() + '第 ' + DD + ' 天（共 ' + NT + ' 天）')) +
+    (PUB ? '' : '<span class="pend">' + esc(L('ONS: apuração de ' + fd(DD) + ' pendente', 'ONS: ' + fd(DD) + ' figure pending', 'ONS：' + fd(DD) + ' 核算待发布')) + '</span>');
+  var ordP = ['Melhor','Segundo melhor','Terceiro melhor'], ordE = ['Best','Second-best','Third-best'], ordZ = ['最佳发电日','第二佳发电日','第三佳发电日'];
+  var rk = pos <= 3 ? L(ordP[pos-1] + ' dia de ' + mesNome(), ordE[pos-1] + ' day of ' + mesNome(), mesNome() + ordZ[pos-1]) : L(pos + 'º melhor dia de ' + mesNome(), 'Day ranked ' + pos + ' in ' + mesNome(), mesNome() + '发电量排名第 ' + pos + ' 位');
+  var dm = L(nf(Math.abs(dif),0) + ' % ' + (dif >= 0 ? 'acima' : 'abaixo') + ' da meta', nf(Math.abs(dif),0) + '% ' + (dif >= 0 ? 'above' : 'below') + ' target', (dif >= 0 ? '高于' : '低于') + '目标 ' + nf(Math.abs(dif),0) + '%');
+  /* o ONS no título: o limite só com o dia publicado; pendente, só o que a Iqony registrou */
+  var ons = PUB ? (D.LD.h > 0 ? L(', com ' + nf(D.LD.h,1) + ' h sob limite do ONS', ', with ' + nf(D.LD.h,1) + ' h under ONS limit', '，ONS 限电 ' + nf(D.LD.h,1) + ' 小时') : '')
+    : EST === 'ordens' ? L(', com ' + nf(IQ.h,1) + ' h sob ordem de limitação do ONS', ', with ' + nf(IQ.h,1) + ' h under ONS limitation orders', '，其中 ' + nf(IQ.h,1) + ' 小时处于 ONS 限电指令下') : '';
+  $('h1').textContent = rk + L(': ',': ','：') + dm + ons + L('.','.','。');
+  var up = dif >= 0;
+  function kp(k, r, v, un, sub, tx){ return '<div><div class="kr">' + r + '</div><div class="kv' + (tx ? ' tx' : '') + '">' + v + (un ? '<small>' + un + '</small>' : '') + '</div><div class="ks">' + sub + '</div><div class="sp" data-k="' + k + '"></div></div>'; }
+  var pendTx = L('apuração do ONS pendente','ONS figure pending','ONS 核算待发布'), parTx = PARADO ? ' · ' + L('coletor das ordens parado','order collector stopped','指令采集已停止') : '', kOns;
+  if (PUB){
+    var sOns = cortDia > 0 ? '<b>' + nf(cortDia) + ' MWh</b> ' + L('impedidos, apuração do ONS','curtailed, ONS figure','限电损失（ONS 核算）') + (D.LD.est ? ' · ' + L('estimativa SIGO ≈ ','SIGO estimate ≈ ','SIGO 估算 ≈ ') + nf(D.LD.est) : '')
+      : (D.LD.h > 0 && D.LD.est != null) ? '≈ <b>' + nf(D.LD.est) + ' MWh</b> ' + L('não gerados, pela estimativa do SIGO','not generated, SIGO estimate','未发电量（SIGO 估算）')
+      : D.LD.h > 0 ? L('sem estimativa de energia','no energy estimate','无电量估算') : L('sem limite do ONS no dia','no ONS limit on the day','当日无 ONS 限电');
+    kOns = kp('ons', L('Limite do ONS no dia','ONS limit, day','当日 ONS 限电'), nf(D.LD.h,1), 'h', sOns);
+  } else if (EST === 'ordens'){
+    kOns = kp('ons', L('Ordens do ONS no dia','ONS orders, day','当日 ONS 指令'), nf(IQ.h,1), 'h', '<b>' + (IQ.n ? (IQ.n === 1 ? L('1 ordem recebida','1 order received','收到 1 条指令') : IQ.n + L(' ordens recebidas',' orders received',' 条指令已收到')) : L('sob a ordem do dia anterior','under the previous day’s order','沿用前一日指令')) + '</b> (Iqony)' +
+      (IQ.lmin != null ? ' · ' + L('mínimo ','minimum ','最低 ') + nf(IQ.lmin,0) + ' MW' : '') + ' · ' + pendTx + parTx);
+  } else if (EST === 'nenhuma'){
+    kOns = kp('ons', L('Ordens do ONS no dia','ONS orders, day','当日 ONS 指令'), L('nenhuma ordem','no order','无指令'), '', L('recebida pela Iqony','received by Iqony','Iqony 记录') + ' · ' + pendTx + parTx, 1);
+  } else {
+    kOns = kp('ons', L('Limite do ONS no dia','ONS limit, day','当日 ONS 限电'), L('apuração pendente','figure pending','核算待发布'), '', L('sem registro das ordens recebidas','no record of the orders received','无指令接收记录'), 1);
+  }
+  var dispM = L('no mês ','month ','本月 ') + '<b>' + pc(trunc2(D.disp_mes),2) + '</b>';
+  $('kp').innerHTML =
+    kp('ger', L('Geração do dia','Day generation','当日发电量'), nf(D.liq), 'MWh', '<span class="' + (up ? 'up' : 'dn') + '">' + (up ? '+' : '−') + pc(Math.abs(dif)) + '</span> ' + L('sobre a meta de ','vs. the target of ','对比目标 ') + '<b>' + nf(D.meta_d) + ' MWh</b>') +
+    kp('mes', Mes() + L(' · acumulado',' · to date',' · 累计'), nf(D.cx.pct,1), L('% da meta','% of target','% 目标'), '<b>' + nf(ent) + '</b> ' + L('de','of','/') + ' ' + nf(D.cx.meta) + ' MWh · ' + L('ritmo linear ','linear pace ','线性进度 ') + pc(ritmo)) +
+    kOns +
+    kp('pr', L('PR do dia','Day PR','当日 PR'), nf(D.pr_dia,1), '%', L('no mês ','month ','本月 ') + '<b>' + pc(D.pr_mes) + '</b> · ' + pc(D.pr_mes_sc) + (PEND.length ? L(' sem o corte já apurado',' without the curtailment already settled','（不含已核算限电）') : L(' sem o corte',' without curtailment','（不含限电）'))) +
+    kp('fc', L('Fator de capacidade','Capacity factor','容量系数'), nf(fcDia,1), '%', L('no mês ','month ','本月 ') + '<b>' + pc(fcMes) + '</b> · ' + L('sobre 343,77 MW','on 343.77 MW','按 343.77 MW 计')) +
+    (D.disp_dia != null ? kp('disp', L('Disponibilidade','Availability','可用率'), nf(trunc2(D.disp_dia)), '%', dispM)
+      : kp('disp', L('Disponibilidade','Availability','可用率'), esc(L(D.txt.disp_pend.pt, D.txt.disp_pend.en, D.txt.disp_pend.zh || D.txt.disp_pend.en)), '', dispM, 1));
+  /* o título do instrumento do dia, por estado */
+  var tDia, jl = janelas(iLim.map(function(i){ return [T0 + i*30, T0 + i*30 + 30]; })), jo = janelas(DEG);
+  function quando(j){ return j.length === 1 ? L('Das ' + hm(j[0][0]) + ' às ' + hm(j[0][1]), 'From ' + hm(j[0][0]) + ' to ' + hm(j[0][1]), hm(j[0][0]) + ' 至 ' + hm(j[0][1]) + '，') : L('Em ' + j.length + ' janelas entre ' + hm(j[0][0]) + ' e ' + hm(j[j.length-1][1]), 'In ' + j.length + ' windows between ' + hm(j[0][0]) + ' and ' + hm(j[j.length-1][1]), hm(j[0][0]) + ' 至 ' + hm(j[j.length-1][1]) + ' 之间的 ' + j.length + ' 个时段，'); }
+  if (PUB && JAN) tDia = quando(jl) + L(' o ONS limitou o complexo ' + (limMin === limMax ? 'a ' + limMin + ' MW' : 'entre ' + limMin + ' e ' + limMax + ' MW'), ' the ONS limited the complex to ' + (limMin === limMax ? limMin + ' MW' : 'between ' + limMin + ' and ' + limMax + ' MW'), 'ONS 将电站群出力限制在 ' + (limMin === limMax ? limMin + ' MW' : limMin + '–' + limMax + ' MW'));
+  else if (PUB) tDia = L('Dia sem limite do ONS: a geração seguiu o sol', 'No ONS limit on the day: output followed the sun','当日无 ONS 限电：出力随日照变化');
+  else if (EST === 'ordens') tDia = (jo.length ? quando(jo) + L(' o complexo operou',' the complex ran','电站群') : L('O complexo operou ' + nf(IQ.h,1) + ' h','The complex ran ' + nf(IQ.h,1) + ' h', '电站群有 ' + nf(IQ.h,1) + ' 小时')) + L(' sob ordem de limitação do ONS; a apuração do ONS está pendente', ' under ONS limitation orders; the ONS figure is pending','在 ONS 限电指令下运行；ONS 核算待发布');
+  else if (EST === 'nenhuma') tDia = L('Nenhuma ordem de limitação do ONS recebida no dia; a apuração do ONS está pendente', 'No limitation order received from the ONS on the day; the ONS figure is pending','当日未收到 ONS 限电指令；ONS 核算待发布');
+  else tDia = L('Apuração do ONS pendente; o registro das ordens recebidas está indisponível', 'ONS figure pending; the record of the orders received is unavailable','ONS 核算待发布；指令接收记录不可用');
+  $('t-dia').textContent = tDia + (PUB ? '' : L('.','.','。') + avisoParado());
+  var regua = L(' Na mesma régua de tempo: a irradiância no plano dos módulos e cada usina, em % da sua potência instalada.', ' On the same time ruler: plane-of-array irradiance and each plant, as % of its installed capacity.','同一时间轴上：组件平面辐照度及各电站出力（占装机容量 %）。');
+  $('s-dia').textContent = L('Potência média de 30 min do complexo.', 'Complex output, 30-min average.','电站群 30 分钟平均功率。') +
+    (PUB ? (TEMPOT && JAN ? L(' A faixa hachurada é a energia não gerada pela estimativa do SIGO.', ' The hatched band is the energy not generated, by the SIGO estimate.','阴影带为 SIGO 估算的未发电量。') : '')
+      : (EST === 'ordens' ? L(' O degrau é o limite das ordens recebidas pela Iqony.', ' The step is the limit of the orders received by Iqony.','阶梯线为 Iqony 收到的指令限值。') : '') +
+        L(' O limite, o potencial e a energia impedida entram quando o ONS publicar o dia.', ' The limit, the potential and the curtailed energy come in once the ONS publishes the day.','ONS 发布当日数据后，将显示限值、潜在出力和限电损失电量。')) + regua;
+  $('l-dia').innerHTML = '<span><i style="background:' + mix('var(--ger)',55) + ';border-top:2px solid var(--ger)"></i>' + L('Geração','Generation','发电') + '</span>' +
+    (PUB && JAN ? '<span><i style="height:0;border-top:2px solid var(--corte)"></i>' + L('Limite do ONS','ONS limit','ONS 限值') + '</span>' : '') +
+    (EST === 'ordens' ? '<span><i style="height:0;border-top:2px dashed var(--corte)"></i>' + L('Limite das ordens recebidas (Iqony)','Limit of the orders received (Iqony)','已收指令限值（Iqony）') + '</span>' : '') +
+    (TEMPOT ? '<span><i style="height:0;border-top:1.5px dashed var(--ink4)"></i>' + L('Potencial estimado pela irradiância','Potential estimated from irradiance','按辐照度估算的潜在出力') + '</span>' : '') +
+    (TEMPOT && JAN ? '<span><i style="background:repeating-linear-gradient(45deg,var(--corte) 0 2px,transparent 2px 5px)"></i>' + L('Não gerado (estimativa)','Not generated (estimate)','未发电量（估算）') + '</span>' : '') +
+    '<span style="margin-left:auto"><i style="width:64px;background:linear-gradient(90deg,' + heat(0) + ',' + heat(.5) + ',' + heat(1) + ')"></i>' + L('0 a 100 % da potência · 0 a 1.100 W/m²','0 to 100% of capacity · 0 to 1,100 W/m²','装机容量 0–100% · 0–1,100 W/m²') + '</span>';
+  var eP = estMeta(D.pp), eC = estMeta(D.cx);
+  $('t-leq').textContent = (eP === 'prev' && eC === 'prev') ? L('PPA deve bater a meta de ' + mesNome() + ' em ' + fd(D.pp.prev) + '; o Complexo, em ' + fd(D.cx.prev), 'PPA is set to reach the ' + Mes() + ' target on ' + fd(D.pp.prev) + '; the Complex, on ' + fd(D.cx.prev), 'PPA 预计于 ' + fd(D.pp.prev) + ' 完成' + mesNome() + '目标；电站群预计于 ' + fd(D.cx.prev))
+    : fraseMeta('PPA', D.pp) + L('; ','; ','；') + fraseMeta(L('o Complexo','the Complex','电站群'), D.cx);
+  $('s-leq').textContent = L('Energia acumulada em % da meta do mês. O leque é a projeção pelo ritmo dos dias fechados, com o erro histórico de ±' + nf(D.erro_pp,1) + ' pontos.',
+    'Cumulative energy as % of the month target. The fan is the projection at the pace of the closed days, with the historical error of ±' + nf(D.erro_pp,1) + ' points.', '累计电量占当月目标的百分比。扇形为按已结日进度的预测，历史误差 ±' + nf(D.erro_pp,1) + ' 个百分点。');
+  $('l-leq').innerHTML = '<span><i style="height:0;border-top:2.5px solid var(--cx)"></i>' + L('Complexo','Complex','电站群') + '</span><span><i style="height:0;border-top:2.5px solid var(--ppa)"></i>PPA</span>' +
+    '<span><i style="height:0;border-top:1.5px dashed var(--ink4)"></i>' + L('Ritmo linear da meta','Linear target pace','目标线性进度') + '</span>' +
+    '<span>' + L('Arcos: 0 a 150 % da meta do mês · traço = meta · ponto = projeção','Arcs: 0 to 150% of the month target · tick = target · dot = projection','圆弧：当月目标的 0–150% · 刻线 = 目标 · 圆点 = 预测') + '</span>';
+  /* a ponte: o impedido é só o dos dias que o ONS já apurou */
+  var pE = nf(ent/p50*100,0), pC = nf(cor/p50*100,0), mais = PEND.length > 1, ficou = pC === '1' ? ' ficou' : ' ficaram', was = pC === '1' ? ' was' : ' were';
+  $('t-pon').textContent = ULT == null ? L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues; o corte do ONS ainda não foi apurado no mês', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered; the ONS curtailment of the month is not settled yet', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh；本月 ONS 限电尚未核算')
+    : PEND.length ? L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues e ' + pC + ficou + ' no corte do ONS já apurado', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered and ' + pC + was + ' curtailed by the ONS on the days already settled', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh，已核算的 ONS 限电占 ' + pC + ' MWh')
+    : L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues e ' + pC + ficou + ' no corte do ONS', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered and ' + pC + was + ' curtailed by the ONS', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh，ONS 限电占 ' + pC + ' MWh');
+  $('s-pon').textContent = L(Mes() + ' até ' + fd(DD) + ', em MWh. Esperado: P50 do estudo do projeto para os ' + DD + ' dias, sem corte. P75 e P90 na proporção anual do estudo.',
+    Mes() + ' to ' + fd(DD) + ', MWh. Expected: P50 of the project study for the ' + DD + ' days, without curtailment. P75 and P90 at the annual ratio of the study.',
+    '截至 ' + fd(DD) + '，单位 MWh。预期：项目研究的 P50（' + DD + ' 天，不含限电）。P75 和 P90 按研究的年度比例折算。');
+  var np = $('n-pon'); np.hidden = !PEND.length;
+  np.innerHTML = PEND.length ? '<i></i>' + esc(L(dias(PEND) + (mais ? ' aguardam' : ' aguarda') + ' a apuração do ONS: a energia impedida ' + (mais ? 'desses dias' : 'desse dia') + ' ainda não entrou em “Impedido pelo ONS” e aparece em “Outras diferenças”.',
+    dias(PEND) + (mais ? ' await' : ' awaits') + ' the ONS figure: the energy curtailed on ' + (mais ? 'those days' : 'that day') + ' is not yet in “Curtailed by the ONS” and shows under “Other differences”.', dias(PEND) + ' 待 ONS 核算：其限电损失电量尚未计入“ONS 限电量”，暂列于“其他差异”。')) : '';
+  var B = D.bench_mes || {}, temB = B.nosso != null && B.abaiara != null && B.ne != null;
+  var rel = !temB ? '' : (B.nosso < B.abaiara && B.nosso < B.ne) ? L('abaixo de Abaiara e do Nordeste','below Abaiara and the Northeast','低于 Abaiara 和东北地区') : (B.nosso > B.abaiara && B.nosso > B.ne) ? L('acima de Abaiara e do Nordeste','above Abaiara and the Northeast','高于 Abaiara 和东北地区') : L('entre Abaiara e o Nordeste','between Abaiara and the Northeast','介于 Abaiara 与东北地区之间');
+  $('t-viz').textContent = !temB ? L('Corte no mês: nenhum dia apurado pelo ONS ainda','Curtailment this month: no day settled by the ONS yet','本月限电：ONS 尚未核算任何一天')
+    : L('Corte no mês: Mauriti ','Curtailment this month: Mauriti ','本月限电率：Mauriti ') + rel + (PEND.length && ULT ? L(' (até ' + fd(ULT) + ', último dia apurado pelo ONS)', ' (to ' + fd(ULT) + ', last day settled by the ONS)', '（截至 ' + fd(ULT) + '，ONS 最近核算日）') : '');
+  $('t-mes').textContent = L(acima + ' dos ' + DD + ' dias de ' + mesNome() + ' fecharam acima da meta', acima + ' of the ' + DD + ' days of ' + Mes() + ' closed above target', mesNome() + '已结 ' + DD + ' 天中，' + acima + ' 天高于目标');
+  $('s-mes').textContent = L('Geração e energia impedida pelo ONS, MWh por dia. Embaixo, a irradiação de cada dia (kWh/m²).', 'Generation and energy curtailed by the ONS, MWh per day. Below, each day’s irradiation (kWh/m²).','每日发电量及 ONS 限电量（MWh）。下方为每日辐照量（kWh/m²）。') +
+    (PEND.length ? L(' O dia hachurado aguarda a apuração do ONS.', ' The hatched day awaits the ONS figure.','阴影日待 ONS 核算。') : '');
+  $('l-mes').innerHTML = '<span><i style="background:' + mix('var(--ger)',45) + ';border:1px solid ' + mix('var(--ger)',75) + '"></i>' + L('Geração','Generation','发电') + '</span>' +
+    '<span><i style="background:' + mix('var(--corte)',45) + ';border:1px solid ' + mix('var(--corte)',75) + '"></i>' + L('Impedido pelo ONS','Curtailed by the ONS','ONS 限电量') + '</span>' +
+    (PEND.length ? '<span><i style="background:repeating-linear-gradient(45deg,var(--corte) 0 2px,transparent 2px 5px);border:1px dashed var(--corte)"></i>' + L('ONS pendente','ONS pending','ONS 待核算') + '</span>' : '') +
+    '<span><i style="height:0;border-top:1.5px solid var(--ink3)"></i>' + L('Meta do dia','Day target','当日目标') + '</span>';
+  /* o PR por usina só nos dias APURADOS pelo ONS sem energia impedida: dia pendente não conta como dia sem corte */
+  var fcd = L(' Embaixo de cada usina, o fator de capacidade e a disponibilidade do mês.', ' Below each plant, month capacity factor and availability.','各电站下方为本月容量系数和可用率。');
+  if (LIV.length){ var hi = ordLiv[0], lo = ordLiv[ordLiv.length-1];
+    $('t-usi').textContent = L('Nos dias sem corte, o PR das nove usinas vai de ' + pc(D.pr_us_livre[lo]) + ' (' + lo + ') a ' + pc(D.pr_us_livre[hi]) + ' (' + hi + ')',
+      'On days without curtailment, the PR of the nine plants ranges from ' + pc(D.pr_us_livre[lo]) + ' (' + lo + ') to ' + pc(D.pr_us_livre[hi]) + ' (' + hi + ')', '无限电日，九座电站的 PR 介于 ' + pc(D.pr_us_livre[lo]) + '（' + lo + '）与 ' + pc(D.pr_us_livre[hi]) + '（' + hi + '）之间');
+    $('s-usi').textContent = L('PR de cada usina nos dias de ' + mesNome() + ' apurados pelo ONS sem energia impedida (' + diasLiv() + '), contra o PR do complexo nesses mesmos dias.' + (PEND.length ? ' ' + dias(PEND) + (mais ? ' aguardam a apuração do ONS e não entram.' : ' aguarda a apuração do ONS e não entra.') : ''),
+      'PR of each plant on the ' + Mes() + ' days settled by the ONS with no curtailed energy (' + diasLiv() + '), against the complex PR on those same days.' + (PEND.length ? ' ' + dias(PEND) + (mais ? ' await the ONS figure and are left out.' : ' awaits the ONS figure and is left out.') : ''), mesNome() + '经 ONS 核算且无限电损失的日期（' + diasLiv() + '）各电站的 PR，与同期电站群 PR 对比。' + (PEND.length ? dias(PEND) + ' 待 ONS 核算，未计入。' : '')) + fcd;
+  } else {
+    $('t-usi').textContent = L('Ainda não há dia de ' + mesNome() + ' apurado pelo ONS sem energia impedida', 'No ' + Mes() + ' day settled by the ONS without curtailed energy yet', mesNome() + '尚无经 ONS 核算且无限电损失的日期');
+    $('s-usi').textContent = L('O PR por usina aparece quando houver um dia apurado pelo ONS sem energia impedida.', 'The PR by plant appears once there is a day settled by the ONS without curtailed energy.','出现经 ONS 核算且无限电损失的日期后，将显示各电站 PR。') + fcd;
+  }
+  $('l-usi').innerHTML = LIV.length ? '<span><i style="border-radius:50%;background:var(--ink2)"></i>' + L('PR da usina nos dias sem corte','Plant PR on days without curtailment','电站 PR（无限电日）') + '</span>' +
+    '<span><i style="width:0;height:13px;border-left:1.5px solid var(--ink3)"></i>' + L('Complexo nos mesmos dias','Complex on the same days','同期电站群') + '</span>' : '';
+  $('rod1').textContent = L('Fonte: geração pela medição de faturamento (energia líquida, 30 min). Limite, energia impedida e comparação regional: dados abertos do ONS. Potencial estimado: irradiância × potência de placa × PR do próprio dia fora do limite. P50, P75 e P90: estudo PVsyst do projeto. Metas: Valor Garantido do mês. Fator de capacidade: energia ÷ (343,77 MW × horas do período).',
+    'Source: generation from billing metering (net energy, 30 min). Limit, curtailed energy and regional comparison: ONS open data. Estimated potential: irradiance × nameplate power × the day’s own PR outside the limit. P50, P75 and P90: project PVsyst study. Targets: Guaranteed Value of the month. Capacity factor: energy ÷ (343.77 MW × hours in the period).', '数据来源：发电量取自计费计量（净电量，30 分钟）。限值、限电损失电量和区域对比：ONS 公开数据。潜在出力估算：辐照度 × 组件容量 × 当日限电时段外的 PR。P50、P75、P90：项目 PVsyst 研究。目标：当月保证值。容量系数：电量 ÷（343.77 MW × 时段小时数）。') +
+    (PUB ? '' : L(' Ordens de limitação do dia: registro da Iqony, enquanto o ONS não publica a apuração.', ' Limitation orders of the day: Iqony record, until the ONS publishes its figure.','当日限电指令：Iqony 记录（ONS 发布核算前）。'));
+  var g = String(D.gerado || '').match(/^(\d\d)\/(\d\d)\/(\d{4}) (\d\d:\d\d)$/);
+  $('rod2').textContent = 'SIGO · ' + (g ? L('gerado em ' + D.gerado, 'generated on ' + Number(g[1]) + ' ' + MES_EN[Number(g[2]) - 1] + ' ' + g[3] + ' ' + g[4] + ' BRT', '生成于 ' + g[3] + '年' + Number(g[2]) + '月' + Number(g[1]) + '日 ' + g[4] + '（巴西利亚时间）') : fd(DD) + '/' + AA);
+}
+/* janelas contíguas [[ini, fim]] (minutos do dia) de uma lista de trechos [ini, fim, …] em ordem */
+function janelas(tr){ var o = []; tr.forEach(function(t){ var u = o[o.length-1]; if (u && u[1] === t[0]) u[1] = t[1]; else o.push([t[0], t[1]]); }); return o; }
+
+/* ---------- 1. o instrumento do dia ---------- */
+function gDia(){
+  var el = $('g-dia'), W = el.clientWidth, peq = W < 620, Lm = peq ? 30 : 40, Rm = peq ? 6 : 128;
+  var hA = peq ? 220 : 300, yA = 8, yB = yA + hA + 14, hB = 14, yC = yB + hB + 12, rh = 17, rg = 2, hC = US.length * (rh + rg) - rg, yX = yC + hC + 16, H = yX + 6;
+  var pw = W - Lm - Rm, X = function(m){ return Lm + (m - T0) / (T1 - T0) * pw; }, sw = pw / NS, YM = 420, Y = function(v){ return yA + hA - hA * v / YM; };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-dia').textContent) + '"><defs>' +
+    '<linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--ger)" stop-opacity=".42"/><stop offset="1" stop-color="var(--ger)" stop-opacity=".04"/></linearGradient>' +
+    '<pattern id="hx" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.2" height="5" fill="var(--corte)"/></pattern>' +
+    (JAN ? '<clipPath id="cj"><rect x="' + r1(X(JAN[0])) + '" y="' + yA + '" width="' + r1(X(JAN[1]) - X(JAN[0])) + '" height="' + hA + '"/></clipPath>' : '') + '</defs>';
+  var cx = function(i){ return X(T0 + i*30 + 15); };
+  var pg = GER.map(function(v, i){ return [cx(i), Y(v)]; }), pp = POT.map(function(v, i){ return [cx(i), Y(Math.max(v, GER[i]))]; }), pr = POT.map(function(v, i){ return [cx(i), Y(v)]; });
+  var base = 'L' + r1(pg[NS-1][0]) + ',' + Y(0) + 'L' + r1(pg[0][0]) + ',' + Y(0) + 'Z';
+  if (JAN) s += '<rect class="surge" x="' + r1(X(JAN[0])) + '" y="' + yA + '" width="' + r1(X(JAN[1]) - X(JAN[0])) + '" height="' + (yC + hC - yA) + '" fill="' + mix('var(--corte)', 7) + '"/>';
+  if (JAN && TEMPOT) s += '<g data-nger="1" clip-path="url(#cj)" class="surge" style="animation-delay:1.2s"><path d="' + mono(pp) + base + '" fill="' + mix('var(--corte)', 22) + '"/><path d="' + mono(pp) + base + '" fill="url(#hx)" opacity=".8"/></g>';
+  /* ONS pendente: a faixa de cada janela sob ordem (Iqony), sem potencial nem energia não gerada */
+  var JO = janelas(DEG);
+  JO.forEach(function(j){ s += '<rect class="surge" data-jord="1" x="' + r1(X(j[0])) + '" y="' + yA + '" width="' + r1(X(j[1]) - X(j[0])) + '" height="' + (yC + hC - yA) + '" fill="' + mix('var(--corte)', 7) + '"/>'; });
+  s += '<path d="' + mono(pg) + base + '" fill="var(--bg)"/><path class="surge" style="animation-delay:.5s" d="' + mono(pg) + base + '" fill="url(#gg)"/>';
+  [0, 100, 200, 300].forEach(function(v){ s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(Y(v)) + '" y2="' + r1(Y(v)) + '" stroke="var(--line)" stroke-width="' + (v ? .8 : 1) + '"' + (v ? ' stroke-opacity=".7"' : '') + '/>' +
+    '<text x="' + (Lm - 6) + '" y="' + r1(Y(v) + 4) + '" text-anchor="end">' + v + '</text>'; });
+  s += '<text x="' + (Lm - 6) + '" y="' + (yA + 4) + '" text-anchor="end">MW</text>';
+  if (TEMPOT) s += '<path data-pot="1" d="' + mono(pr) + '" fill="none" stroke="var(--ink4)" stroke-width="1.2" stroke-dasharray="4 3"/>';
+  s += '<path class="risca" pathLength="1" d="' + mono(pg) + '" fill="none" stroke="var(--ger)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
+  if (JAN){
+    var d = '', runs = [], prev = null;
+    iLim.forEach(function(i, k){ var y = r1(Y(LIM[i])), x0 = r1(X(T0 + i*30)), x1 = r1(X(T0 + i*30 + 30)); d += (k ? 'L' : 'M') + x0 + ',' + y + 'L' + x1 + ',' + y;
+      var rv = Math.round(LIM[i]); if (prev && prev.v === rv) prev.b = i; else { prev = {v: rv, a: i, b: i}; runs.push(prev); } });
+    s += '<path class="risca" pathLength="1" style="animation-delay:.9s" d="' + d + '" fill="none" stroke="var(--corte)" stroke-width="1.8" stroke-linejoin="miter"/>';
+    var mn = Math.min.apply(null, runs.map(function(r){ return r.v; })), lg = runs.reduce(function(p, r){ return (r.b - r.a) > (p.b - p.a) ? r : p; }, runs[0]);
+    runs.forEach(function(r){ if (r !== lg && r.v !== mn) return; var xm = (X(T0 + r.a*30) + X(T0 + r.b*30 + 30)) / 2;
+      s += r === lg ? '<text class="n t13" x="' + r1(xm) + '" y="' + r1(Y(r.v) + 17) + '" text-anchor="middle">' + L('limite ','limit ','限值 ') + r.v + ' MW</text>'
+        : '<text class="n hal" x="' + r1(xm) + '" y="' + r1(Y(r.v) - 5) + '" text-anchor="middle">' + r.v + '</text>'; });
+    var xc = (X(JAN[0]) + X(JAN[1])) / 2;
+    s += '<text class="b t13" x="' + r1(xc) + '" y="' + (yA + 15) + '" text-anchor="middle">' + L('Sob limite do ONS · ','Under ONS limit · ','ONS 限电 · ') + hm(JAN[0]) + '–' + hm(JAN[1]) + '</text>';
+    if (D.LD.est != null && !peq) s += '<text x="' + r1(xc) + '" y="' + (yA + 31) + '" text-anchor="middle">' + nf(D.LD.h,1) + ' h · ≈ ' + nf(D.LD.est) + L(' MWh não gerados (estimativa)',' MWh not generated (estimate)',' MWh 未发电量（估算）') + '</text>';
+  }
+  if (DEG.length){   /* o degrau das ordens recebidas pela Iqony (tracejado: não é a apuração do ONS) */
+    var dd = '', lgo = DEG.reduce(function(p, t){ return (t[1] - t[0]) > (p[1] - p[0]) ? t : p; }, DEG[0]);
+    DEG.forEach(function(t, k){ var y = r1(Y(t[2])), novo = !k || DEG[k-1][1] !== t[0]; dd += (novo ? 'M' : 'L') + r1(X(t[0])) + ',' + y + 'L' + r1(X(t[1])) + ',' + y; });
+    s += '<path data-ordens="' + DEG.length + '" class="surge" style="animation-delay:.9s" d="' + dd + '" fill="none" stroke="var(--corte)" stroke-width="1.8" stroke-dasharray="5 3" stroke-linejoin="miter"/>';
+    s += '<text class="n t13 hal" x="' + r1((X(lgo[0]) + X(lgo[1])) / 2) + '" y="' + r1(Y(lgo[2]) - 6) + '" text-anchor="middle">' + L('ordem ','order ','指令 ') + nf(lgo[2], 0) + ' MW</text>';
+    var xo = (X(JO[0][0]) + X(JO[JO.length-1][1])) / 2;
+    s += '<text class="b t13" x="' + r1(xo) + '" y="' + (yA + 15) + '" text-anchor="middle">' + L('Sob ordem do ONS · ','Under ONS order · ','ONS 指令 · ') + hm(JO[0][0]) + '–' + hm(JO[JO.length-1][1]) + '</text>';
+    if (!peq) s += '<text x="' + r1(xo) + '" y="' + (yA + 31) + '" text-anchor="middle">' + nf(IQ.h,1) + ' h · ' + L('registro da Iqony · apuração do ONS pendente','Iqony record · ONS figure pending','Iqony 记录 · ONS 核算待发布') + '</text>';
+  } else if (!PUB){
+    s += '<text class="b t13" x="' + r1(Lm + pw / 2) + '" y="' + (yA + 15) + '" text-anchor="middle">' + (EST === 'ordens' ? L('Sob ordem do ONS (Iqony)','Under ONS order (Iqony)','ONS 指令下（Iqony）') : EST === 'nenhuma' ? L('Nenhuma ordem recebida (Iqony)','No order received (Iqony)','未收到指令（Iqony）') : L('Sem registro das ordens','No record of the orders','无指令记录')) + '</text>' +
+      (peq ? '' : '<text x="' + r1(Lm + pw / 2) + '" y="' + (yA + 31) + '" text-anchor="middle">' + L('apuração do ONS pendente','ONS figure pending','ONS 核算待发布') + '</text>');
+  }
+  s += '<circle cx="' + r1(pg[iPico][0]) + '" cy="' + r1(pg[iPico][1]) + '" r="4.5" fill="var(--ger)" stroke="var(--bg)" stroke-width="2"/>' +
+    '<text class="v hal" x="' + r1(pg[iPico][0] - 9) + '" y="' + r1(pg[iPico][1] - 9) + '" text-anchor="end">' + L('pico ','peak ','峰值 ') + nf(GER[iPico]) + ' MW</text>';
+  var iR = Math.min(NS - 5, 22);
+  if (!peq) s += '<text class="v t13" x="' + r1(cx(iR) + 12) + '" y="' + r1(Y(GER[iR]) - 4) + '">' + L('Geração','Generation','发电') + '</text><text x="' + r1(cx(iR) + 12) + '" y="' + r1(Y(GER[iR]) + 11) + '">' + nf(D.liq) + ' MWh</text>';
+  /* irradiância */
+  var imax = Math.max.apply(null, D.irr);
+  D.irr.forEach(function(v, i){ s += '<rect class="surge" style="animation-delay:' + (i*22) + 'ms;fill:' + heat((v||0)/1100) + '" x="' + r1(X(T0 + i*30) + .5) + '" y="' + yB + '" width="' + r1(sw - 1) + '" height="' + hB + '"/>'; });
+  s += '<text x="' + (Lm - 6) + '" y="' + (yB + 11) + '" text-anchor="end">' + L('Sol','Sun','日照') + '</text>';
+  if (!peq) s += '<text x="' + (Lm + pw + 8) + '" y="' + (yB + 11) + '">' + L('máx. ','max ','最大 ') + nf(imax,0) + ' W/m²</text><text x="' + (Lm + pw + 8) + '" y="' + (yC - 4) + '" style="font-size:10.5px">' + L('MWh no dia','MWh, day','当日 MWh') + '</text><text x="' + (W - 2) + '" y="' + (yC - 4) + '" text-anchor="end" style="font-size:10.5px">' + L('FC','CF','CF') + '</text>';
+  /* matriz das usinas */
+  US.forEach(function(u, k){ var y = yC + k * (rh + rg);
+    D.us_mw[u].forEach(function(v, i){ s += '<rect class="surge" style="animation-delay:' + (200 + i*22 + k*12) + 'ms;fill:' + heat(Math.max(0, v || 0) / D.cap_mw[u]) + '" x="' + r1(X(T0 + i*30) + .5) + '" y="' + y + '" width="' + r1(sw - 1) + '" height="' + rh + '"/>'; });
+    s += '<circle cx="' + (peq ? 4 : 6) + '" cy="' + (y + rh/2) + '" r="3" fill="var(--' + u.toLowerCase() + ')"/><text class="n" x="' + (Lm - 6) + '" y="' + (y + rh/2 + 4) + '" text-anchor="end">' + u + '</text>';
+    if (!peq) s += '<text class="n" x="' + (Lm + pw + 8) + '" y="' + (y + rh/2 + 4) + '">' + nf(uDia[u]) + '</text><text class="v" x="' + (W - 2) + '" y="' + (y + rh/2 + 4) + '" text-anchor="end">' + pc(uFC[u]) + '</text>'; });
+  (JAN ? [JAN[0], JAN[1]] : []).concat(JO.reduce(function(p, j){ return p.concat(j); }, [])).forEach(function(m){ s += '<line x1="' + r1(X(m)) + '" x2="' + r1(X(m)) + '" y1="' + yA + '" y2="' + (yC + hC) + '" stroke="var(--corte)" stroke-width="1" stroke-opacity=".55"/>'; });
+  for (var m = T0; m <= T1; m += (peq ? 240 : 120)) s += '<text x="' + r1(X(m)) + '" y="' + yX + '" text-anchor="' + (m === T0 ? 'start' : m >= T1 ? 'end' : 'middle') + '">' + hm(m) + '</text>';
+  s += '<rect id="hl" x="0" y="' + yA + '" width="' + r1(sw) + '" height="' + (yC + hC - yA) + '" fill="' + mix('var(--ink)', 7) + '" stroke="var(--ink)" stroke-width="1" visibility="hidden" pointer-events="none"/>' +
+    '<rect id="ov" x="' + Lm + '" y="' + yA + '" width="' + pw + '" height="' + (yC + hC - yA) + '" fill="transparent"/></svg>';
+  el.innerHTML = s;
+  var hl = el.querySelector('#hl'), ov = el.querySelector('#ov');
+  liga(ov, function(ev){ var bx = ov.getBoundingClientRect(), i = Math.max(0, Math.min(NS - 1, Math.floor((ev.clientX - bx.left) / bx.width * NS)));
+    hl.setAttribute('x', r1(X(T0 + i*30))); hl.setAttribute('visibility', 'visible');
+    var h = '<div class="h">' + hm(T0 + i*30) + '–' + hm(T0 + i*30 + 30) + '</div><table><tr><td>' + L('Geração','Generation','发电') + '</td><td>' + nf(GER[i]) + ' MW</td></tr>' +
+      (PUB && LIM[i] != null ? '<tr><td>' + L('Limite do ONS','ONS limit','ONS 限值') + '</td><td>' + nf(LIM[i]) + ' MW</td></tr>' : '') +
+      DEG.filter(function(t){ return t[0] < T0 + i*30 + 30 && t[1] > T0 + i*30; }).slice(0, 1).map(function(t){ return '<tr><td>' + L('Ordem recebida (Iqony)','Order received (Iqony)','已收指令（Iqony）') + '</td><td>' + nf(t[2], 0) + ' MW</td></tr>'; }).join('') +
+      (TEMPOT ? '<tr><td>' + L('Potencial estimado','Estimated potential','潜在出力估算') + '</td><td>' + nf(POT[i]) + ' MW</td></tr>' : '') + '<tr><td>' + L('Irradiância','Irradiance','辐照度') + '</td><td>' + nf(D.irr[i],0) + ' W/m²</td></tr></table><div class="gr">' +
+      US.map(function(u){ return '<span>' + u + ' <b>' + nf(Math.max(0, D.us_mw[u][i] || 0) / D.cap_mw[u] * 100, 0) + '%</b></span>'; }).join('') + '</div>';
+    showTip(ev, h); }, function(){ hl.setAttribute('visibility', 'hidden'); });
+}
+
+/* ---------- 2. leque da meta ---------- */
+function gLeque(){
+  var el = $('g-leq'), W = el.clientWidth, peq = W < 430, Lm = 34, Rm = peq ? 52 : 138, top = 10, hh = 290, H = top + hh + 24, pw = W - Lm - Rm;
+  var X = function(d){ return Lm + d / NT * pw; }, Y = function(v){ return top + hh - hh * v / 150; };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-leq').textContent) + '">';
+  [0, 50, 100, 150].forEach(function(v){ s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(Y(v)) + '" y2="' + r1(Y(v)) + '" stroke="' + (v === 100 ? 'var(--ink3)' : 'var(--line)') + '" stroke-width="' + (v === 100 ? 1.2 : .8) + '"/>' +
+    '<text x="' + (Lm - 6) + '" y="' + r1(Y(v) + 4) + '" text-anchor="end">' + v + '%</text>'; });
+  s += '<text class="n" x="' + (Lm + 4) + '" y="' + r1(Y(100) - 5) + '">' + L('meta do mês','month target','当月目标') + '</text>';
+  s += '<line x1="' + X(0) + '" y1="' + Y(0) + '" x2="' + X(NT) + '" y2="' + Y(100) + '" stroke="var(--ink4)" stroke-width="1.2" stroke-dasharray="4 3"/>';
+  s += '<line x1="' + r1(X(DD)) + '" x2="' + r1(X(DD)) + '" y1="' + top + '" y2="' + Y(0) + '" stroke="var(--line2)" stroke-width="1"/><text x="' + r1(X(DD)) + '" y="' + (Y(0) + 16) + '" text-anchor="middle" class="b">' + fd(DD) + '</text>';
+  s += '<text x="' + X(0) + '" y="' + (Y(0) + 16) + '">' + fd(1) + '</text><text x="' + X(NT) + '" y="' + (Y(0) + 16) + '" text-anchor="end">' + fd(NT) + '</text>';
+  function serie(cum, r, cor, nome, k){
+    var pts = [[X(0), Y(0)]].concat(cum.map(function(v, i){ return [X(i + 1), Y(v)]; })), fim = cum[cum.length-1], e = D.erro_pp, x0 = X(DD), x1 = X(NT);
+    var o = '<path class="surge" style="animation-delay:1.1s" d="M' + r1(x0) + ',' + r1(Y(fim)) + 'L' + r1(x1) + ',' + r1(Y(Math.min(150, r.proj_pct + e))) + 'L' + r1(x1) + ',' + r1(Y(r.proj_pct - e)) + 'Z" fill="' + mix(cor, 20) + '"/>' +
+      '<line class="surge" style="animation-delay:1.1s" x1="' + r1(x0) + '" y1="' + r1(Y(fim)) + '" x2="' + r1(x1) + '" y2="' + r1(Y(r.proj_pct)) + '" stroke="' + cor + '" stroke-width="1.6" stroke-dasharray="2 4" stroke-linecap="round"/>' +
+      '<path class="risca" pathLength="1" style="animation-delay:' + (k * .25) + 's" d="' + mono(pts) + '" fill="none" stroke="' + cor + '" stroke-width="2.4" stroke-linecap="round"/>' +
+      '<circle cx="' + r1(x0) + '" cy="' + r1(Y(fim)) + '" r="4.5" fill="' + cor + '" stroke="var(--bg)" stroke-width="2"/>' +
+      '<text class="v t13 hal" x="' + r1(x0 - 9) + '" y="' + r1(Y(fim) - 8) + '" text-anchor="end">' + pc(fim) + '</text>';
+    if (r.proj_pct > 100 && fim < 100 && estMeta(r) === 'prev'){ var dx = DD + (100 - fim) / (r.proj_pct - fim) * (NT - DD);
+      o += '<circle class="surge" style="animation-delay:1.5s" cx="' + r1(X(dx)) + '" cy="' + r1(Y(100)) + '" r="4" fill="var(--bg)" stroke="' + cor + '" stroke-width="2"/>' +
+        '<text class="v hal surge" style="animation-delay:1.5s" x="' + r1(X(dx) + (k ? 8 : -8)) + '" y="' + r1(Y(100) + (k ? 17 : -9)) + '" text-anchor="' + (k ? 'start' : 'end') + '">' + fd(r.prev) + '</text>'; }
+    var ye = Y(Math.min(146, r.proj_pct));
+    o += '<text class="b t13" x="' + (x1 + 8) + '" y="' + r1(ye + 1) + '">' + (peq ? pc(r.proj_pct, 0) : nome) + '</text>';
+    if (!peq) o += '<text class="n" x="' + (x1 + 8) + '" y="' + r1(ye + 16) + '">' + L('projeção ','projection ','预测 ') + pc(r.proj_pct) + '</text><text x="' + (x1 + 8) + '" y="' + r1(ye + 30) + '">' + L('faixa ','band ','区间 ') + nf(r.proj_pct - e, 0) + '–' + pc(r.proj_pct + e, 0) + '</text>';
+    return o;
+  }
+  s += serie(cumP, D.pp, 'var(--ppa)', 'PPA', 1) + serie(cumC, D.cx, 'var(--cx)', L('Complexo','Complex','电站群'), 0);
+  s += '<rect id="ov2" x="' + Lm + '" y="' + top + '" width="' + r1(X(DD) - Lm + 6) + '" height="' + hh + '" fill="transparent"/><line id="cr2" y1="' + top + '" y2="' + Y(0) + '" stroke="var(--ink)" stroke-width="1" visibility="hidden" pointer-events="none"/></svg>';
+  el.innerHTML = s;
+  var ov = el.querySelector('#ov2'), cr = el.querySelector('#cr2'), acC = 0, acP = 0, ac = MESD.map(function(m){ acC += m.liq; acP += m.ppa; return [acC, acP]; });
+  liga(ov, function(ev){ var bx = el.querySelector('svg').getBoundingClientRect(), d = Math.max(1, Math.min(DD, Math.round((ev.clientX - bx.left - Lm) / pw * NT)));
+    cr.setAttribute('x1', r1(X(d))); cr.setAttribute('x2', r1(X(d))); cr.setAttribute('visibility', 'visible');
+    showTip(ev, '<div class="h">' + L('Até ','To ','截至 ') + fd(d) + '</div><table><tr><td>' + L('Complexo','Complex','电站群') + '</td><td>' + pc(cumC[d-1]) + '</td></tr><tr><td></td><td>' + nf(ac[d-1][0]) + ' MWh</td></tr><tr><td>PPA</td><td>' + pc(cumP[d-1]) +
+      '</td></tr><tr><td></td><td>' + nf(ac[d-1][1]) + ' MWh</td></tr><tr><td>' + L('Ritmo linear','Linear pace','线性进度') + '</td><td>' + pc(d / NT * 100) + '</td></tr></table>'); }, function(){ cr.setAttribute('visibility', 'hidden'); });
+}
+
+/* ---------- 3. ponte da energia do mês ---------- */
+function gPonte(){
+  var el = $('g-pon'), W = el.clientWidth, peq = W < 470, bh = 24, lh = 17, gp = 13, rows = [
+    {n: L('Esperado pelo projeto (P50)','Expected by the project (P50)','项目预期（P50）'), a: 0, b: p50, f: mix('var(--ink4)', 30), st: mix('var(--ink4)', 70), v: nf(p50) + ' MWh', dentro: 1},
+    /* o impedido é só o dos dias que o ONS apurou: com dia pendente, o rótulo diz até quando e a linha de baixo leva a hachura */
+    {n: L('Impedido pelo ONS','Curtailed by the ONS','ONS 限电量') + (PEND.length && ULT ? L(' · apurado até ' + fd(ULT), ' · settled to ' + fd(ULT), ' · 核算至 ' + fd(ULT)) : ''), a: p50 - cor, b: p50, f: mix('var(--corte)', 48), st: 'var(--corte)',
+      v: ULT == null ? L('apuração pendente','figure pending','核算待发布') : '−' + nf(cor) + ' MWh · ' + pc(cor / p50 * 100)},
+    {n: peq ? L('Outras diferenças','Other differences','其他差异') : L('Outras diferenças (irradiação fora do ano típico e demais perdas)','Other differences (irradiation off the typical year and other losses)','其他差异（辐照偏离典型年及其他损失）'), a: Math.min(ent, p50 - cor), b: Math.max(ent, p50 - cor),
+      f: mix('var(--ink4)', 14), st: mix('var(--ink4)', 55), v: (out >= 0 ? '−' : '+') + nf(Math.abs(out)) + ' MWh · ' + pc(Math.abs(out) / p50 * 100), pend: PEND.length},
+    {n: L('Entregue','Delivered','已送出'), a: 0, b: ent, f: mix('var(--ger)', 48), st: 'var(--ger)', v: nf(ent) + ' MWh · ' + pc(ent / p50 * 100), dentro: 1}];
+  var H0 = rows.length * (lh + bh + gp) + 20, H = H0 + (peq ? 136 : 76), MX = Math.max(p50, ent, metaPer), X = function(v){ return 1 + v / MX * (W - 2); };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-pon').textContent) + '"><defs><pattern id="hxp" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.2" height="5" fill="var(--corte)"/></pattern></defs>';
+  rows.forEach(function(r, i){ var y = i * (lh + bh + gp), yb = y + lh, x0 = X(r.a), x1 = X(r.b);
+    s += '<text class="n t13" x="1" y="' + (y + 12) + '">' + esc(r.n) + '</text>' +
+      '<rect class="estica" style="animation-delay:' + (i * .22) + 's" x="' + r1(x0) + '" y="' + yb + '" width="' + r1(x1 - x0) + '" height="' + bh + '" fill="' + r.f + '" stroke="' + r.st + '" stroke-width="1"/>' +
+      (r.pend ? '<rect data-ponte-pend="' + r.pend + '" x="' + r1(x0) + '" y="' + yb + '" width="' + r1(x1 - x0) + '" height="' + bh + '" fill="url(#hxp)" opacity=".45"/>' : '') +
+      '<text class="v t13" x="' + r1(r.dentro ? x1 - 8 : x0 - 8) + '" y="' + (yb + bh/2 + 4.5) + '" text-anchor="end">' + r.v + '</text>';
+    if (i < rows.length - 1){ var xc = X(i === 0 ? p50 : rows[i].a); s += '<line x1="' + r1(xc) + '" x2="' + r1(xc) + '" y1="' + (yb + bh) + '" y2="' + (yb + bh + gp + lh) + '" stroke="var(--line2)" stroke-width="1" stroke-dasharray="2 3"/>'; } });
+  var yl = (rows.length - 1) * (lh + bh + gp) + lh, xm = X(metaPer);
+  s += '<line x1="' + r1(xm) + '" x2="' + r1(xm) + '" y1="' + (yl - 4) + '" y2="' + (yl + bh + 4) + '" stroke="var(--ink)" stroke-width="2"/>' +
+    '<text class="n" x="' + (xm < 330 ? 1 : r1(xm)) + '" y="' + (yl + bh + 18) + '" text-anchor="' + (xm < 330 ? 'start' : 'end') + '">' + L('meta dos ' + DD + ' dias ','target for the ' + DD + ' days ', DD + ' 天目标 ') + nf(metaPer) + ' MWh · ' + L('entregue ','delivered ','已送出 ') + (ent >= metaPer ? '+' : '−') + pc(Math.abs(ent / metaPer - 1) * 100) + '</text>';
+  /* o quadro do estudo, no padrão do painel executivo: entregue contra o P50, o P75 e o P90; traço cheio = P50, pontilhado = P75, tracejado = P90 */
+  var temC = ULT != null, qd = [
+    [L('Entregue ÷ P50','Delivered ÷ P50','已送出 ÷ P50'), pc(ent / p50 * 100), nf(p50, 0) + ' MWh'],
+    [PEND.length ? L('Com o impedido já apurado','With the curtailment settled so far','含已核算限电量') : L('Com o impedido','With the curtailed energy','含限电量'),
+      temC ? pc((ent + cor) / p50 * 100) : L('pendente','pending','待核算'), temC ? L('do P50','of P50','占 P50') : L('apuração do ONS','ONS figure','ONS 核算')],
+    [L('Entregue ÷ P75','Delivered ÷ P75','已送出 ÷ P75'), pc(ent / p75 * 100), nf(p75, 0) + ' MWh'],
+    [L('Entregue ÷ P90','Delivered ÷ P90','已送出 ÷ P90'), pc(ent / p90 * 100), nf(p90, 0) + ' MWh']];
+  var nc = peq ? 2 : 4, cw = W / nc;
+  qd.forEach(function(c, i){ var x = 1 + (i % nc) * cw, y = H0 + 12 + Math.floor(i / nc) * 60;
+    s += '<line data-pxx="' + i + '" x1="' + r1(x) + '" x2="' + r1(x + cw - 16) + '" y1="' + y + '" y2="' + y + '" stroke="var(--ink' + (i === 3 ? 3 : 2) + ')" stroke-width="1.6"' + (i === 2 ? ' stroke-dasharray="0.1 3.4" stroke-linecap="round"' : i === 3 ? ' stroke-dasharray="5 4"' : '') + '/>' +
+      '<text x="' + r1(x) + '" y="' + (y + 17) + '">' + c[0] + '</text><text class="v" x="' + r1(x) + '" y="' + (y + 38) + '" style="font-size:18px">' + c[1] + '</text><text x="' + r1(x) + '" y="' + (y + 53) + '">' + c[2] + '</text>'; });
+  s += '</svg>';
+  el.innerHTML = s;
+  /* vizinhos */
+  var ev = $('g-viz'), B = D.bench_mes || {};
+  if (B.nosso == null || B.abaiara == null || B.ne == null){ ev.innerHTML = ''; return; }   /* nenhum dia do mês apurado pelo ONS: sem "—%" */
+  /* no celular os três rótulos vão em linhas embaixo do eixo (ao lado do ponto, o do Nordeste saía da tela) */
+  var W2 = ev.clientWidth, peqV = W2 < 430, Hh = peqV ? 92 : 74, yy = peqV ? 14 : 38, mx = Math.max(30, Math.ceil(Math.max(B.nosso, B.abaiara, B.ne) / 10) * 10), X2 = function(v){ return 14 + v / mx * (W2 - 28); };
+  var pts = [{n: 'Mauriti', v: B.nosso, c: 'var(--cx)', p: -1, an: 'end'}, {n: 'Abaiara', v: B.abaiara, c: 'var(--ink4)', p: 1, an: 'middle'}, {n: L('Nordeste (solar)','Northeast (solar)','东北地区（光伏）'), v: B.ne, c: 'var(--ink4)', p: -1, an: 'start'}];
+  var t = '<svg viewBox="0 0 ' + W2 + ' ' + Hh + '" height="' + Hh + '" role="img" aria-label="' + esc($('t-viz').textContent) + '"><line x1="' + X2(0) + '" x2="' + X2(mx) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--line2)" stroke-width="1"/>';
+  [0, mx / 3, mx * 2 / 3, mx].map(Math.round).forEach(function(v){ t += '<line x1="' + r1(X2(v)) + '" x2="' + r1(X2(v)) + '" y1="' + (yy - 4) + '" y2="' + (yy + 4) + '" stroke="var(--line2)"/><text x="' + r1(X2(v)) + '" y="' + (yy + 30) + '" text-anchor="middle" style="font-size:10.5px">' + v + '%</text>'; });
+  pts.forEach(function(p, k){ var dx = p.an === 'end' ? 5 : p.an === 'start' ? -5 : 0, lx = k === 2 ? r1(W2 / 2) : 0, ly = k ? 84 : 66, cl = (p.n === 'Mauriti' ? 'b' : 'n') + ' t13', rot = esc(p.n) + ' ' + pc(p.v);
+    t += '<circle cx="' + r1(X2(p.v)) + '" cy="' + yy + '" r="' + (p.n === 'Mauriti' ? 6.5 : 5) + '" fill="' + p.c + '" stroke="var(--bg)" stroke-width="2"/>' +
+      (peqV ? '<circle cx="' + (lx + 6) + '" cy="' + (ly - 4.5) + '" r="4" fill="' + p.c + '"/><text class="' + cl + '" x="' + (lx + 16) + '" y="' + ly + '">' + rot + '</text>'
+        : '<text class="' + cl + '" x="' + r1(X2(p.v) + dx) + '" y="' + (p.p < 0 ? yy - 13 : yy + 19) + '" text-anchor="' + p.an + '">' + rot + '</text>'); });
+  ev.innerHTML = t + '</svg>';
+}
+
+/* ---------- 4. dia a dia ---------- */
+function gMes(){
+  var el = $('g-mes'), W = el.clientWidth, peq = W < 430, Lm = 34, Rm = 4, top = 22, hh = 232, yS = top + hh + 8, hS = 20, H = yS + hS + 20, pw = W - Lm - Rm, bw = pw / NT, YM = Math.max(3500, Math.ceil(Math.max.apply(null, MESD.map(function(m){ return m.liq + (m.cort || 0); })) / 500) * 500);
+  var Y = function(v){ return top + hh - hh * v / YM; }, X = function(d){ return Lm + (d - 1) * bw; };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-mes').textContent) + '"><defs><pattern id="hxm" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.2" height="5" fill="var(--corte)"/></pattern></defs>';
+  [0, 1000, 2000, 3000].forEach(function(v){ s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(Y(v)) + '" y2="' + r1(Y(v)) + '" stroke="var(--line)" stroke-width="' + (v ? .8 : 1) + '"/><text x="' + (Lm - 6) + '" y="' + r1(Y(v) + 4) + '" text-anchor="end">' + nf(v, 0) + '</text>'; });
+  var best = MESD.reduce(function(p, m){ return m.liq > p.liq ? m : p; }, MESD[0]), gmax = Math.max.apply(null, MESD.map(function(m){ return m.gti || 0; }));
+  MESD.forEach(function(m, i){ var d = i + 1, x = X(d) + bw * .16, w = bw * .68, hoje = d === DD, yg = Y(m.liq), c = m.cort || 0;
+    s += '<rect class="cresce" style="animation-delay:' + (i * 30) + 'ms" x="' + r1(x) + '" y="' + r1(yg) + '" width="' + r1(w) + '" height="' + r1(Y(0) - yg) + '" fill="' + (hoje ? 'var(--ger)' : mix('var(--ger)', 42)) + '" stroke="' + mix('var(--ger)', hoje ? 100 : 75) + '" stroke-width="1"/>';
+    if (c > 0){ var hc = Y(0) - Y(c); if (hc > 2.5) s += '<rect class="cresce" style="animation-delay:' + (i * 30 + 250) + 'ms" x="' + r1(x) + '" y="' + r1(yg - hc) + '" width="' + r1(w) + '" height="' + r1(hc - 2) + '" fill="' + mix('var(--corte)', 42) + '" stroke="' + mix('var(--corte)', 75) + '" stroke-width="1"/>'; }
+    /* o dia que o ONS ainda não publicou: hachura tracejada sobre a barra, nunca um dia "sem corte" */
+    if (!m.ons) s += '<rect data-pend="' + d + '" class="surge" x="' + r1(x) + '" y="' + r1(yg - 13) + '" width="' + r1(w) + '" height="11" fill="url(#hxm)" stroke="var(--corte)" stroke-width="1" stroke-dasharray="3 2"/>';
+    s += '<rect class="surge" style="animation-delay:' + (i * 30) + 'ms;fill:' + heat((m.gti || 0) / 10.5) + '" x="' + r1(X(d) + 1) + '" y="' + yS + '" width="' + r1(bw - 2) + '" height="' + hS + '"/>';
+    if (bw >= 26) s += '<text x="' + r1(X(d) + bw/2) + '" y="' + (yS + 14) + '" text-anchor="middle" style="font-size:10.5px;fill:' + ((m.gti || 0) / 10.5 > .55 ? 'var(--bg)' : 'var(--ink2)') + '">' + nf(m.gti, 1) + '</text>'; });
+  for (var d = DD + 1; d <= NT; d++) s += '<line x1="' + r1(X(d) + bw * .3) + '" x2="' + r1(X(d) + bw * .7) + '" y1="' + Y(0) + '" y2="' + Y(0) + '" stroke="var(--line2)" stroke-width="2"/>';
+  s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(Y(D.meta_d)) + '" y2="' + r1(Y(D.meta_d)) + '" stroke="var(--ink3)" stroke-width="1.3"/>' +
+    '<text class="n" x="' + (Lm + pw) + '" y="' + r1(Y(D.meta_d) - 6) + '" text-anchor="end">' + L('meta do dia ','day target ','当日目标 ') + nf(D.meta_d) + ' MWh</text>';
+  s += '<text class="v t13 hal" x="' + r1(X(DD) + bw/2) + '" y="' + r1(Y(HOJE.liq) - (HOJE.ons ? 7 : 19)) + '" text-anchor="middle">' + nf(HOJE.liq) + '</text>';
+  var db = Number(best.d.slice(8)); if (db !== DD) s += '<text class="n hal" x="' + r1(Math.max(X(db) + bw/2, Lm + 44)) + '" y="' + r1(Y(best.liq + (best.cort || 0)) - 7) + '" text-anchor="middle">' + L('melhor ','best ','最佳 ') + nf(best.liq) + '</text>';
+  for (d = 1; d <= NT; d++) if (!peq || d === 1 || d % 5 === 0) s += '<text x="' + r1(X(d) + bw/2) + '" y="' + (yS + hS + 15) + '" text-anchor="middle"' + (d === DD ? ' class="b"' : '') + '>' + d + '</text>';
+  s += '<text x="' + (Lm - 6) + '" y="' + (yS + 14) + '" text-anchor="end" style="font-size:10px">kWh/m²</text><rect id="ov4" x="' + Lm + '" y="' + top + '" width="' + r1(bw * DD) + '" height="' + (yS + hS - top) + '" fill="transparent"/>' +
+    '<rect id="hl4" y="' + top + '" width="' + r1(bw) + '" height="' + (yS + hS - top) + '" fill="' + mix('var(--ink)', 6) + '" visibility="hidden" pointer-events="none"/></svg>';
+  el.innerHTML = s;
+  var ov = el.querySelector('#ov4'), hl = el.querySelector('#hl4');
+  liga(ov, function(ev){ var bx = el.querySelector('svg').getBoundingClientRect(), d = Math.max(1, Math.min(DD, Math.floor((ev.clientX - bx.left - Lm) / bw) + 1)), m = MESD[d-1], df = (m.liq / m.meta - 1) * 100;
+    hl.setAttribute('x', r1(X(d))); hl.setAttribute('visibility', 'visible');
+    showTip(ev, '<div class="h">' + fd(d) + '</div><table><tr><td>' + L('Geração','Generation','发电') + '</td><td>' + nf(m.liq) + ' MWh</td></tr><tr><td>' + L('Sobre a meta','Vs. target','对比目标') + '</td><td>' + (df >= 0 ? '+' : '−') + pc(Math.abs(df)) + '</td></tr><tr><td>' +
+      L('Impedido pelo ONS','Curtailed by ONS','ONS 限电量') + '</td><td>' + (!m.ons ? L('apuração pendente','figure pending','核算待发布') : m.cort > 0 ? nf(m.cort) + ' MWh' : '—') + '</td></tr><tr><td>' + L('Horas de restrição','Restriction hours','限电小时数') + '</td><td>' +
+      (m.ons ? nf(m.h, 1) + ' h' : (d === DD && IQ ? nf(IQ.h, 1) + ' h (Iqony)' : L('pendente','pending','待核算'))) + '</td></tr><tr><td>' + L('Irradiação','Irradiation','辐照量') + '</td><td>' + nf(m.gti) + ' kWh/m²</td></tr><tr><td>' + L('Fator de capacidade','Capacity factor','容量系数') + '</td><td>' + pc(m.liq / (CAPT * 24) * 100) + '</td></tr></table>'); },
+    function(){ hl.setAttribute('visibility', 'hidden'); });
+}
+
+/* ---------- minigráfico de cada número ---------- */
+function sparks(){
+  var defs = {
+    ger: {v: MESD.map(function(m){ return m.liq; }), c: 'var(--ger)', ref: D.meta_d},
+    mes: {v: cumC, c: 'var(--cx)', v2: cumC.map(function(_, i){ return (i + 1) / NT * 100; }), zero: 1},
+    ons: {v: MESD.map(function(m){ return m.ons ? (m.h || 0) : null; }), c: 'var(--corte)', bars: 1},   /* nulo = dia que o ONS não publicou */
+    pr: {v: D.pr_serie, c: 'var(--ink3)', semArea: 1},
+    fc: {v: MESD.map(function(m){ return m.liq / (CAPT * 24) * 100; }), c: 'var(--ger)', bars: 1},
+    disp: {v: D.disp_serie, c: 'var(--ink3)', min: 99.5, max: 100, semArea: 1}
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('.sp'), function(el){ var o = defs[el.getAttribute('data-k')]; if (!o || !o.v) return;
+    var bruto = o.v.slice(); if (!o.bars) while (bruto.length > 2 && bruto[bruto.length-1] == null) bruto.pop();   /* a linha para no último dia com valor */
+    var W = el.clientWidth, H = 30, n = bruto.length, v = bruto.map(function(x, i){ return x == null ? (bruto[i-1] || 0) : x; });
+    var all = v.concat(o.v2 || []).concat(o.ref != null ? [o.ref] : []), mn = o.bars || o.zero ? 0 : Math.min.apply(null, all), mx = Math.max.apply(null, all);
+    if (o.min != null) mn = Math.min(o.min, mn); if (o.max != null) mx = o.max; if (mx === mn) mx = mn + 1;
+    var X = function(i){ return 3 + i / (n - 1) * (W - 8); }, Y = function(x){ return H - 4 - (x - mn) / (mx - mn) * (H - 9); }, s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" aria-hidden="true">';
+    if (o.bars){ var bw = (W - 6) / n; v.forEach(function(x, i){ var y = Y(x);
+      s += bruto[i] == null ? '<rect data-sp-pend="1" x="' + r1(3 + i * bw + bw * .15) + '" y="' + (H - 11) + '" width="' + r1(bw * .7) + '" height="7" fill="none" stroke="' + o.c + '" stroke-width="1" stroke-dasharray="2 1.5"/>'
+        : '<rect x="' + r1(3 + i * bw + bw * .15) + '" y="' + r1(y) + '" width="' + r1(bw * .7) + '" height="' + r1(Math.max(1, H - 4 - y)) + '" fill="' + (i === n - 1 ? o.c : mix(o.c, 45)) + '"/>'; }); }
+    else { var pts = v.map(function(x, i){ return [X(i), Y(x)]; });
+      if (o.ref != null) s += '<line x1="3" x2="' + (W - 5) + '" y1="' + r1(Y(o.ref)) + '" y2="' + r1(Y(o.ref)) + '" stroke="var(--ink4)" stroke-width="1" stroke-dasharray="3 3"/>';
+      if (o.v2) s += '<path d="' + mono(o.v2.map(function(x, i){ return [X(i), Y(x)]; })) + '" fill="none" stroke="var(--ink4)" stroke-width="1" stroke-dasharray="3 3"/>';
+      s += '<path d="' + mono(pts) + 'L' + r1(pts[n-1][0]) + ',' + (H - 2) + 'L' + r1(pts[0][0]) + ',' + (H - 2) + 'Z" fill="' + (o.semArea ? 'none' : mix(o.c, 14)) + '"/><path d="' + mono(pts) + '" fill="none" stroke="' + o.c + '" stroke-width="1.6" stroke-linejoin="round"/>' +
+        '<circle cx="' + r1(pts[n-1][0]) + '" cy="' + r1(pts[n-1][1]) + '" r="3" fill="' + o.c + '" stroke="var(--bg)" stroke-width="1.5"/>'; }
+    el.innerHTML = s + '</svg>'; });
+}
+
+/* ---------- 2a. arcos da meta do mês (o desenho da Visão Executiva) ---------- */
+function arco(cx, cy, R, a0, a1){ var p = function(a){ var t = a * Math.PI / 180; return r1(cx + R * Math.cos(t)) + ',' + r1(cy + R * Math.sin(t)); }; return 'M' + p(a0) + 'A' + r1(R) + ',' + r1(R) + ' 0 ' + (a1 - a0 > 180 ? 1 : 0) + ' 1 ' + p(a1); }
+function gArco(id, r, cor, nome, k){
+  var el = $(id), W = el.clientWidth, S = Math.min(W, 236), H = S + 40, cx = W / 2, cy = S / 2 + 8, R = S * 0.40, esp = Math.max(9, S * 0.058), N = 45, MAXP = 150, A0 = 135, SW = 270, e = D.erro_pp;
+  var ang = function(p){ return A0 + SW * Math.min(MAXP, Math.max(0, p)) / MAXP; }, pol = function(a, rr){ var t = a * Math.PI / 180; return [cx + rr * Math.cos(t), cy + rr * Math.sin(t)]; };
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc(nome + ' ' + pc(r.pct)) + '"><defs><radialGradient id="rg' + k + '"><stop offset="0" stop-color="' + cor + '" stop-opacity=".26"/><stop offset="1" stop-color="' + cor + '" stop-opacity="0"/></radialGradient></defs>' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + r1(R - esp) + '" fill="url(#rg' + k + ')"/>';
+  var cheios = Math.max(1, Math.round(Math.min(MAXP, r.pct) / MAXP * N));
+  for (var i = 0; i < N; i++){ var on = i < cheios;
+    s += '<path class="surge" style="animation-delay:' + (i * 22) + 'ms" d="' + arco(cx, cy, R, A0 + i * SW / N + .7, A0 + (i + 1) * SW / N - .7) + '" fill="none" stroke="' + (on ? cor : 'var(--line)') + '" stroke-opacity="' + (on && i < cheios - 1 ? .62 : 1) + '" stroke-width="' + r1(esp) + '"/>'; }
+  var am = ang(100), p0 = pol(am, R - esp / 2 - 3), p1 = pol(am, R + esp / 2 + 7), pt = pol(am, R + esp / 2 + 12);
+  s += '<line x1="' + r1(p0[0]) + '" y1="' + r1(p0[1]) + '" x2="' + r1(p1[0]) + '" y2="' + r1(p1[1]) + '" stroke="var(--ink)" stroke-width="2"/><text class="n" x="' + r1(pt[0] + 2) + '" y="' + r1(pt[1]) + '">' + L('meta','target','目标') + '</text>';
+  var ar = ang(ritmo), q0 = pol(ar, R - esp / 2 - 2), q1 = pol(ar, R + esp / 2 + 2);
+  s += '<line x1="' + r1(q0[0]) + '" y1="' + r1(q0[1]) + '" x2="' + r1(q1[0]) + '" y2="' + r1(q1[1]) + '" stroke="var(--ink2)" stroke-width="1.2" stroke-dasharray="2 2"/>';
+  var pp = pol(ang(r.proj_pct), R + esp / 2 + 6);
+  s += '<circle class="surge" style="animation-delay:1.1s" cx="' + r1(pp[0]) + '" cy="' + r1(pp[1]) + '" r="4.2" fill="var(--bg)" stroke="' + cor + '" stroke-width="2"/>';
+  var z0 = pol(A0, R), z1 = pol(A0 + SW, R);
+  s += '<text x="' + r1(z0[0]) + '" y="' + r1(z0[1] + esp / 2 + 13) + '" text-anchor="middle">0</text><text x="' + r1(z1[0]) + '" y="' + r1(z1[1] + esp / 2 + 13) + '" text-anchor="middle">' + MAXP + '%</text>';
+  s += '<circle cx="' + r1(cx - nome.length * (LANG === 'zh' ? 8.4 : 4.6) - 11) + '" cy="' + r1(cy - R * .44 - 4) + '" r="3.5" fill="' + cor + '"/><text x="' + cx + '" y="' + r1(cy - R * .44) + '" text-anchor="middle" style="font-size:11px;font-weight:700;letter-spacing:.14em;fill:var(--ink2)">' + esc(nome.toUpperCase()) + '</text>' +
+    '<text x="' + cx + '" y="' + r1(cy + S * .055) + '" text-anchor="middle" style="font-size:' + r1(S * .185) + 'px;font-weight:700;fill:var(--ink);font-stretch:90%;letter-spacing:-.02em">' + nf(r.pct, 1) + '<tspan style="font-size:.5em;font-weight:500;fill:var(--ink3)" dx="3">%</tspan></text>' +
+    '<text x="' + cx + '" y="' + r1(cy + S * .055 + 18) + '" text-anchor="middle">' + L('da meta do mês','of the month target','当月目标完成率') + '</text>' +
+    '<text class="n" x="' + cx + '" y="' + r1(cy + R * .80) + '" text-anchor="middle">' + nf(r.tot) + ' MWh</text>';
+  s += '<text class="n" x="' + cx + '" y="' + (S + 14) + '" text-anchor="middle">' + L('projeção ','projection ','预测 ') + pc(r.proj_pct) + ' · ' + L('faixa ','band ','区间 ') + nf(r.proj_pct - e, 0) + '–' + pc(r.proj_pct + e, 0) + '</text>' +
+    '<text class="b t13" x="' + cx + '" y="' + (S + 32) + '" text-anchor="middle">' + (estMeta(r) === 'bateu' ? L('meta batida em ','target reached on ','目标已完成：') + fd(Number(r.bateu.slice(8))) : estMeta(r) === 'prev' ? L('deve bater a meta em ','set to reach target on ','预计完成目标：') + fd(r.prev) : L('no ritmo atual não bate a meta','at the current pace it misses the target','按当前进度无法完成目标')) + '</text>';
+  s += '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/></svg>';
+  el.innerHTML = s;
+  liga(el.querySelector('svg'), function(ev){ showTip(ev, '<div class="h">' + esc(nome) + ' · ' + mesNome() + '</div><table><tr><td>' + L('Entregue','Delivered','已送出') + '</td><td>' + nf(r.tot) + ' MWh</td></tr><tr><td>' + L('Meta do mês','Month target','当月目标') + '</td><td>' + nf(r.meta) +
+    ' MWh</td></tr><tr><td>' + L('Falta','To go','差额') + '</td><td>' + nf(Math.max(0, r.meta - r.tot)) + ' MWh</td></tr><tr><td>' + L('Ritmo linear','Linear pace','线性进度') + '</td><td>' + pc(ritmo) + '</td></tr><tr><td>' + L('Projeção','Projection','预测') + '</td><td>' + pc(r.proj_pct) + '</td></tr></table>'); });
+}
+function gArcos(){ gArco('g-gcx', D.cx, 'var(--cx)', L('Complexo','Complex','电站群'), 0); gArco('g-gpp', D.pp, 'var(--ppa)', 'PPA', 1); }
+
+/* ---------- 5. PR por usina nos dias sem corte: marcador redondo em torno do complexo ---------- */
+function gUsinas(){
+  var el = $('g-usi'), W = el.clientWidth, peq = W < 560, Lm = peq ? 34 : 92, Rm = peq ? 6 : 18, top = 34, hh = 196, n = US.length, yT = top + hh + 30, H = yT + 30, pw = W - Lm - Rm;
+  if (!LIV.length){   /* nenhum dia apurado sem energia impedida: só o fator de capacidade e a disponibilidade do mês, sem PR inventado */
+    var s0 = '<svg viewBox="0 0 ' + W + ' 96" height="96" role="img" aria-label="' + esc($('t-usi').textContent) + '">', b0 = pw / n;
+    if (!peq) s0 += '<text x="0" y="62" style="font-size:11px">' + L('FC do mês','Month CF','本月 CF') + '</text><text x="0" y="80" style="font-size:11px">' + L('Disponibilidade','Availability','可用率') + '</text>';
+    US.forEach(function(u, i){ var x = Lm + b0 * (i + .5), c = 'var(--' + u.toLowerCase() + ')';
+      s0 += '<circle cx="' + r1(x) + '" cy="22" r="' + (peq ? 13 : 17) + '" fill="' + mix(c, 26, 'var(--bg)') + '" stroke="' + c + '" stroke-width="1.7"/><text class="b" x="' + r1(x) + '" y="26" text-anchor="middle" style="font-size:' + (peq ? 10.5 : 12) + 'px">' + u + '</text>' +
+        '<text class="n" x="' + r1(x) + '" y="62" text-anchor="middle">' + (peq ? nf(uFCm[u], 1) : pc(uFCm[u])) + '</text><text class="n" x="' + r1(x) + '" y="80" text-anchor="middle">' + (peq ? nf(trunc2(D.disp_us_mes[u]), 2) : pc(trunc2(D.disp_us_mes[u]), 2)) + '</text>'; });
+    el.innerHTML = s0 + '</svg>'; return; }
+  var vs = US.map(function(u){ return D.pr_us_livre[u]; }).concat([D.pr_cx_livre]), mn = Math.floor((Math.min.apply(null, vs) - 2.5) / 5) * 5, mx = Math.ceil((Math.max.apply(null, vs) + 2.5) / 5) * 5;
+  var Y = function(v){ return top + hh - (v - mn) / (mx - mn) * hh; }, bw = pw / n, ref = D.pr_cx_livre, yr = Y(ref), rb = peq ? 13 : 17;
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-usi').textContent) + '">';
+  for (var v = mn; v <= mx; v += 5) s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(Y(v)) + '" y2="' + r1(Y(v)) + '" stroke="var(--line)" stroke-width=".8"/><text x="' + (Lm - 8) + '" y="' + r1(Y(v) + 4) + '" text-anchor="end">' + v + '%</text>';
+  s += '<line x1="' + Lm + '" x2="' + (Lm + pw) + '" y1="' + r1(yr) + '" y2="' + r1(yr) + '" stroke="var(--ink3)" stroke-width="1.4"/><text class="n hal t13" x="' + (Lm + pw) + '" y="' + r1(yr - 7) + '" text-anchor="end">' + L('Complexo ','Complex ','电站群 ') + pc(ref) + '</text>';
+  if (!peq) s += '<text x="0" y="' + yT + '" style="font-size:11px">' + L('FC do mês','Month CF','本月 CF') + '</text><text x="0" y="' + (yT + 18) + '" style="font-size:11px">' + L('Disponibilidade','Availability','可用率') + '</text>';
+  ordLiv.forEach(function(u, i){ var x = Lm + bw * (i + .5), b = D.pr_us_livre[u], y = Y(b), c = 'var(--' + u.toLowerCase() + ')', ac = b >= ref;
+    s += '<line class="surge" style="animation-delay:' + (i * 70) + 'ms" x1="' + r1(x) + '" x2="' + r1(x) + '" y1="' + r1(yr) + '" y2="' + r1(y) + '" stroke="' + mix(c, 75) + '" stroke-width="2"/>' +
+      '<circle class="surge" style="animation-delay:' + (i * 70 + 250) + 'ms" cx="' + r1(x) + '" cy="' + r1(y) + '" r="' + rb + '" fill="' + mix(c, 26, 'var(--bg)') + '" stroke="' + c + '" stroke-width="1.7"/>' +
+      '<text class="b" x="' + r1(x) + '" y="' + r1(y + 4) + '" text-anchor="middle" style="font-size:' + (peq ? 10.5 : 12) + 'px">' + u + '</text>' +
+      '<text class="v hal t13" x="' + r1(x) + '" y="' + r1(ac ? y - rb - 7 : y + rb + 16) + '" text-anchor="middle">' + (peq ? nf(b, 1) : pc(b)) + '</text>' +
+      '<text class="n" x="' + r1(x) + '" y="' + yT + '" text-anchor="middle">' + (peq ? nf(uFCm[u], 1) : pc(uFCm[u])) + '</text><text class="n" x="' + r1(x) + '" y="' + (yT + 18) + '" text-anchor="middle">' + (peq ? nf(trunc2(D.disp_us_mes[u]), 2) : pc(trunc2(D.disp_us_mes[u]), 2)) + '</text>' +
+      '<rect data-u="' + u + '" x="' + r1(x - bw / 2) + '" y="' + (top - 26) + '" width="' + r1(bw) + '" height="' + (H - top + 26) + '" fill="transparent"/>'; });
+  el.innerHTML = s + '</svg>';
+  Array.prototype.forEach.call(el.querySelectorAll('rect[data-u]'), function(r){ liga(r, function(ev){ var u = r.getAttribute('data-u');
+    showTip(ev, '<div class="h">' + u + ' · ' + nf(D.cap_mw[u], 3) + ' MW · ' + nf(D.placa[u], 2) + ' MWp</div><table><tr><td>' + L('PR nos dias sem corte','PR, days w/o curtailment','无限电日 PR') + '</td><td>' + pc(D.pr_us_livre[u]) + '</td></tr><tr><td>' +
+      L('PR publicado do mês','Published month PR','本月公布 PR') + '</td><td>' + pc(D.pr_us_mes[u]) + '</td></tr><tr><td>' + L('Fator de capacidade do mês','Month capacity factor','本月容量系数') + '</td><td>' + pc(uFCm[u]) + '</td></tr><tr><td>' +
+      L('Fator de capacidade do dia','Day capacity factor','当日容量系数') + '</td><td>' + pc(uFC[u]) + '</td></tr><tr><td>' + L('Disponibilidade do mês','Month availability','本月可用率') + '</td><td>' + pc(trunc2(D.disp_us_mes[u]), 2) + '</td></tr><tr><td>' +
+      L('Geração no dia','Day generation','当日发电量') + '</td><td>' + nf(uDia[u]) + ' MWh</td></tr></table>'); }); });
+}
+
+function tudo(){ FALTA = 0; textos(); gDia(); gArcos(); gLeque(); gPonte(); gMes(); gUsinas(); sparks(); RAIZ.setAttribute('data-zh-falta', FALTA); RAIZ.setAttribute('data-ok', LANG + ':' + TEMA + ':' + EST); }
+tudo();
+/* modo foto: a altura da página depois de a fonte embutida carregar (o tela.py lê para tirar a imagem e o PDF de página única) */
+if (FOTO && document.fonts && document.fonts.ready) document.fonts.ready.then(function(){ RAIZ.setAttribute('data-h', Math.ceil(document.body.getBoundingClientRect().height)); });
+setTimeout(function(){ $('pg').classList.remove('anim'); }, 3200);
+var tm, lw = innerWidth; addEventListener('resize', function(){ if (innerWidth === lw) return; lw = innerWidth; clearTimeout(tm); tm = setTimeout(function(){ $('pg').classList.remove('anim'); gDia(); gArcos(); gLeque(); gPonte(); gMes(); gUsinas(); sparks(); }, 120); });
+function lingua(l){ LANG = l; try { localStorage.setItem('bolLang', l); } catch (e) {} $('pg').classList.remove('anim'); tudo(); }
+function tema(t){ TEMA = t; try { localStorage.setItem('bolTema', t); } catch (e) {} RAIZ.setAttribute('data-theme', t); $('pg').classList.remove('anim'); tudo(); }
+$('b-pt').addEventListener('click', function(){ lingua('pt'); }); $('b-en').addEventListener('click', function(){ lingua('en'); });
+$('b-zh').addEventListener('click', function(){ lingua('zh'); });
+$('b-tema').addEventListener('click', function(){ tema(TEMA === 'dark' ? 'light' : 'dark'); });
+})();
+</script>
+</body>
+</html>

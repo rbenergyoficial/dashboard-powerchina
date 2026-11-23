@@ -26,6 +26,9 @@ TROCAS = [
      "else:\n"
      "    _R.update(imp_mes=imp_mes, pr=pm, pr_sem_corte=pcm, disp=dsm)\n"
      "json.dump(_R, open(os.path.join(AQUI, f'{saida}{suf}_resumo.json'), 'w', encoding='utf-8'), ensure_ascii=False, default=str)   # boletim-desempenho\n"
+     # boletim-pdf-executivo: o dado da tela executiva sai das variáveis DESTE processo (tela_extrai.py), só quando a rodada pede
+     "if MODO == 'diario' and os.environ.get('BOLETIM_TELA_JSON'):\n"
+     "    import tela_extrai as _TX; _TX.grava(globals(), os.environ['BOLETIM_TELA_JSON'])   # boletim-pdf-executivo\n"
      "print('ok', saida + suf, len(partes), 'partes'"),
     (" {kpi(OK,'Disponibilidade do dia',nf(dsp,2),'%',f'no mês {nf(dsm,2)}%')}",
      " {kpi(OK,'Disponibilidade do dia',nf(dsp,2) if dsp is not None else '<span style=font-size:19px>apuração às 10h</span>',"

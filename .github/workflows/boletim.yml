@@ -80,6 +80,14 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: python3 scripts/boletim/ensaio_boletim.py --so-imagem
+      # A tela executiva (boletim-pdf-executivo) vai ao grupo como arquivo HTML ANEXO ao diário. O ensaio dela roda aqui, só quando há o que
+      # gerar; reprovado, não barra nada (continue-on-error): a Rodada lê o ENSAIO_TELA_OK, manda o boletim SEM o anexo e sai vermelha no fim.
+      - name: Ensaio · tela executiva
+        id: ensaio_tela
+        continue-on-error: true
+        if: ${{ !cancelled() && steps.decide.outputs.pesado == 'true' }}
+        timeout-minutes: 6
+        run: python3 scripts/boletim/ensaio_tela.py
       - name: Entradas pesadas
         id: pesadas
         if: steps.decide.outputs.pesado == 'true'
@@ -118,6 +126,7 @@ jobs:
           FEITOS: ${{ inputs.feitos }}
           PESADO_OK: ${{ steps.pesadas.outcome }}
           ENSAIO_IMG_OK: ${{ steps.ensaio_img.outcome }}
+          ENSAIO_TELA_OK: ${{ steps.ensaio_tela.outcome }}
           TARDE_OK: ${{ steps.tarde.outcome }}
         run: |
           python3 scripts/boletim/prepara.py scripts/boletim/boletim_aprovado.py scripts/boletim/boletim_ci.py

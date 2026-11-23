@@ -27,6 +27,10 @@ import desempenho_rodada as DR  # noqa: E402  (SIGO · Desempenho na mesma fila,
 
 DIR = os.environ.get('BOLETIM_DIR') or os.getcwd()
 SAI = os.path.join(DIR, 'saida', 'boletim')
+# boletim-pdf-executivo: o diário leva, junto da imagem e do PDF, o arquivo HTML da tela executiva (tela.py). BOLETIM_TELA=0 tira o
+# anexo sem mexer em código.
+TELA = os.environ.get('BOLETIM_TELA', '1') != '0'
+TELA_ERROS = {}   # id do item -> por que a tela executiva não foi anexada (o boletim vai sem ela e a rodada sai vermelha)
 
 
 def le_curvas():
@@ -87,8 +91,12 @@ def gera(modo, dia, render):
     os.makedirs(pasta, exist_ok=True)
     arg = 'diario' if modo == 'diario' else 'mensal'
     base = 'diario' if modo == 'diario' else f'mensal_{dia[:7]}'
+    tela_json = os.path.join(pasta, 'tela.json') if modo == 'diario' and TELA else None   # boletim-pdf-executivo: o dado da tela executiva
     for tema in ('claro', 'escuro'):
         env = dict(os.environ, TEMA=tema, BOLETIM_DIR=DIR, PYTHONIOENCODING='utf-8')
+        env.pop('BOLETIM_TELA_JSON', None)
+        if tela_json and tema == 'claro':   # o dado sai do MESMO processo que desenha o diário e grava o resumo do texto (tela_extrai.py)
+            env['BOLETIM_TELA_JSON'] = tela_json
         r = subprocess.run([sys.executable, os.path.join(AQUI, 'boletim_ci.py'), arg, dia], env=env, capture_output=True, text=True, encoding='utf-8')
         if r.returncode:
             raise SystemExit(f'RECUSADO: o boletim {modo} {dia} ({tema}) falhou: ' + r.stderr[-600:])
@@ -121,6 +129,24 @@ def gera(modo, dia, render):
                 if idi == 'en':
                     raiz, ext = os.path.splitext(n); n = raiz + '_en' + ext
                 a_enviar(f'{modo}-{dia}', p, os.path.join(dst, n))   # RW-302: copiado só se o item entrar em novos
+    if tela_json:
+        # boletim-pdf-executivo (humano, 22/11/2026: "HTML interativo junto do branco"): o grupo segue recebendo a imagem e o PDF brancos; a
+        # tela executiva vai como ARQUIVO HTML anexo, em inglês (o português fica guardado ao lado). Ela é um extra: a tela que a guarda recusa
+        # NÃO barra o boletim; o item vai sem o anexo, o motivo fica em TELA_ERROS e a rodada sai vermelha no fim
+        try:
+            import tela as TL
+            if os.environ.get('ENSAIO_TELA_OK') not in (None, '', 'success', 'skipped'):   # o ensaio da tela reprovou no workflow
+                raise RuntimeError('o ensaio da tela executiva reprovou (passo: %s)' % os.environ.get('ENSAIO_TELA_OK'))
+            if not os.path.exists(tela_json):
+                raise RuntimeError('o cálculo do diário não gravou o dado da tela executiva')
+            tl = TL.gera(pasta, tela_json)
+            guardado['tela'] = {idi: {'html': rel(arqs['html'])} for idi, arqs in tl.items()}
+            hoje = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=3)).date().isoformat()
+            for idi, arqs in tl.items():
+                a_enviar(f'{modo}-{dia}', arqs['html'], os.path.join(SAI, 'enviados', hoje, idi.upper(), os.path.basename(arqs['html'])))
+        except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO da guarda da tela também)
+            guardado.pop('tela', None)
+            TELA_ERROS[f'{modo}-{dia}'] = (str(e) or type(e).__name__)[:300]
     return resumo, guardado, sorted(sobra), rel(pasta)
 
 
@@ -241,6 +267,7 @@ def main():
     novos, feitos, erros = [], list(estado.get('feitos', [])), list(estado.get('erros', []))[-200:]
     barrados = []
     erro_diario = None
+    erro_tela = None   # boletim-pdf-executivo: o boletim que foi sem o anexo da tela executiva
     a_copiar = []   # RW-401 (b): os ids cujos arquivos vão para enviados/ depois que a fila for gravada
     for modo, dia in F.tarefas(agora, estado, ons):
         if modo == 'diario' and F.ESPERA_DIA_COMPLETO and agora.hour < F.HORA_LIMITE_ESPERA:
@@ -268,9 +295,10 @@ def main():
                 # inglês com português não vai ao grupo e NÃO vira feito: a rodada seguinte tenta de novo e segue vermelha até corrigir
                 erros_i.append({'id': iid, 'quando': agora.isoformat(timespec='minutes'), 'motivo': 'inglês com português: ' + ', '.join(sobra)})
             else:
-                en = guardado.get('en', {})
+                import tela as TL
+                imagens, arquivos = TL.para_o_grupo(guardado)   # boletim-pdf-executivo: as partes e o PDF brancos, mais o HTML da tela executiva
                 novos_i.append({'id': iid, 'tipo': modo, 'dia': dia, 'texto': F.texto_en(modo, resumo),
-                                'imagens': en.get('imagens', []), 'arquivos': [en['pdf']] if en.get('pdf') else [],
+                                'imagens': imagens, 'arquivos': arquivos,
                                 'guardado': guardado})
             chave = 'mensal' if modo == 'mensal' else 'diario'
             ind_i = (chave, dia if chave == 'diario' else dia[:7], {'pasta': pasta, 'ons': dia in ons, 'gerado': agora.isoformat(timespec='minutes')})
@@ -303,6 +331,10 @@ def main():
             ENVIADOS.pop(iid, None)
         else:
             a_copiar.append(iid)
+        if iid in TELA_ERROS:   # boletim-pdf-executivo: o boletim foi sem o anexo da tela executiva; fica o erro e a rodada sai vermelha
+            erro_tela = TELA_ERROS.pop(iid)
+            erros.append({'id': 'tela-' + iid, 'quando': agora.isoformat(timespec='minutes'), 'motivo': 'tela executiva não anexada: ' + erro_tela})
+            print('::error::%s de %s foi sem o HTML da tela executiva: %s' % (modo, dia, erro_tela))
     erro_recupera = recupera_mensal(os.environ.get('BOLETIM_RECUPERA_MENSAL', ''), agora, executivo, ons, ons_ruins, indice, render, erros)
     erro_tarde = None
     for _, dia in F.tarefa_curva(agora, dict(estado, feitos=feitos)):
@@ -442,6 +474,8 @@ def main():
     if barrados or erro_curvas or erro_tarde or erro_diario or erro_rd or erro_enviados or erro_iqony or erro_img:
         sys.exit(1)
     if erro_desempenho:   # desempenho-envio: linha própria (a de cima é âncora dos ensaios do Boletim)
+        sys.exit(1)
+    if erro_tela:   # boletim-pdf-executivo: idem
         sys.exit(1)
     if erro_recupera:   # boletim-recupera-mensal: linha própria, pelo mesmo motivo
         sys.exit(1)

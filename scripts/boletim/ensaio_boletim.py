@@ -313,7 +313,10 @@ SLOTS_ = [f'{h:02d}:{m:02d}' for h in range(5, 19) for m in (0, 30)]
 # RE-001: o TEXTO VISÍVEL inteiro do dia publicado (sem a hora de geração), sha256, medido em 20/11/2026 rodando o boletim_aprovado.py e o
 # prepara.py do HEAD 2671721 sobre esta forja (com as ordens da Iqony presentes, que o publicado ignora). Mudou o desenho de propósito? Meça
 # de novo com o código aprovado e troque aqui, dizendo no livro por quê.
-OURO_VIS = {'2026-11-01': 'ba082ac9e458d7ecbfcff80620487bf74655645a7fd25396c4eda85a720cd3e2', '2026-11-02': 'dab4af05b6b01774fa5b97a0a5328606dde4f16597f6bfeb147e26c55a817776'}
+# boletim-pdf-executivo (22/11/2026): medido de novo depois que a coluna "PR sem o corte" POR USINA saiu do diário (a divisão da energia impedida
+# por usina não é confiável). Contra o HEAD a85b748 mudam só 10 trechos por dia: o subtítulo do painel das usinas e os nove valores (81,7% -> 80,0%,
+# o PR publicado). Antes: ba082ac9e458… (01/11) e dab4af05b6b0… (02/11).
+OURO_VIS = {'2026-11-01': 'fbb37ae596718db458920ee328036769a164c563f13458fafda5aec71bf744e8', '2026-11-02': '77311277f190b5de8fb46aa34f7ebbb3102d09eaaea2a7615cf39ca205c2e1ed'}
 _EV_BOM = [['2026-11-02', '09:00:00', 'limite', 120, 'ENE', 'ENE_FREQ', 'COSR-NE', 'rdo', None, None],
            ['2026-11-02', '13:00:00', 'fim', None, None, None, 'COSR-NE', 'rdo', None, None],
            ['2026-11-03', '10:50:00', 'limite', 282, 'ENE', 'FLUXO', 'COSR-NE', 'rdo', None, None],

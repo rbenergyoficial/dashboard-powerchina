@@ -16,7 +16,7 @@ F = {
  'Source: Generation: billing metering (net energy). Curtailment, potential and regional comparison: ONS data (Abaiara = Abaiara 230 kV complex; Northeast = solar plants of the subsystem). PR = injected energy ÷ (nameplate power × plane-of-array irradiation); "without curtailment" adds the curtailed energy. Availability: inverters available in the sunny half hours, weighted by power. Estimated limited energy (when the ONS does not assess it): irradiation × nameplate power × PR of the same day outside the limitation. Target: Guaranteed Value of the month. Projection = pace of the closed days × days of the month; band = average projection error on the same day of the month over',
  'Energética: excesso de geração no sistema · Confiabilidade elétrica: limite operativo da rede · Restrição elétrica: equipamento externo indisponível · Sistêmica × Local: se a causa está no sistema ou na região do conjunto':
  'Energy: excess generation in the system · Electrical reliability: grid operating limit · Electrical restriction: external equipment unavailable · Systemic × Local: whether the cause is in the system or in the region of the complex',
- 'geração do dia e do mês · PR do mês sem o corte · disponibilidade do mês': 'day and month generation · month PR without curtailment · month availability',
+ 'geração do dia e do mês · PR do mês · disponibilidade do mês': 'day and month generation · month PR · month availability',
  'MW a cada 30 min · faixa lilás = limite do ONS no conjunto': 'MW every 30 min · lilac band = ONS limit on the complex',
  'razão e origem declaradas pelo ONS em cada intervalo': 'reason and origin declared by the ONS in each interval',
  'no ritmo fraco, não bate': 'at the weak pace, it misses',

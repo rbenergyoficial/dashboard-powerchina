@@ -375,14 +375,16 @@ semana_nome = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'dom
 
 
 def usinas2(dia, dias):
-    """dia e mês lado a lado: geração do dia, geração do mês, PR do mês sem o corte, disponibilidade do mês"""
+    """dia e mês lado a lado: geração do dia, geração do mês, PR do mês (o publicado), disponibilidade do mês.
+    boletim-pdf-executivo (22/11/2026): o "PR sem o corte" POR USINA saiu do diário; a divisão da energia impedida por usina não é confiável
+    (fica só o número do complexo, no cartão do PR)."""
     rows = []
     for u in US:
         g1 = LIQ.get((u, dia), (0,))[0]; gm = sum(LIQ.get((u, d), (0,))[0] for d in dias)
         p, pc = pr_dias([u], dias); ds = disp_dias([u], dias); c = COR[u]
         rows.append(f"""<div class="us2"><div class="us-n"><i style="background:{c}"></i>{u}</div>
   <div class="us-g">{nf(g1,2)} <small>MWh</small></div><div class="us-g">{nf(gm,2)} <small>MWh</small></div>
-  <div class="us-bar"><div class="us-f" style="width:{min(pc or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(pc,1)}%</span></div>
+  <div class="us-bar"><div class="us-f" style="width:{min(p or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(p,1)}%</span></div>
   <div class="us-d">{nf(ds,2)}%</div></div>""")
     return ''.join(rows)
 CSS += f""".us2{{display:grid;grid-template-columns:70px 130px 150px 1fr 90px;align-items:center;gap:14px;padding:7px 0;border-top:1px solid {LINHA}}}
@@ -652,7 +654,7 @@ if MODO == 'diario':
 {painel_mes_ufv(dias_mes, f'Dia a dia de {MES_NOME} por usina')}
 <div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'Dia {ddmm(DIA)}', b_d), (f'Mês até {ddmm(DIA)}', b_m)]) if ONS_EST == 'publicado' else bench([(f'Mês até {ddmm(ULT_ONS)}', b_m)]) if ULT_ONS else SEM_MES_ONS}</div>
 {painel_motivo([(f'Dia {ddmm(DIA)}', [DIA]), (f'Mês até {ddmm(DIA)}', dias_mes)] if ONS_EST == 'publicado' else [(f'Mês até {ddmm(ULT_ONS)}', dias_mes)] if ULT_ONS else [])}
-<div class="pn"><div class="pt"><h2>Usinas · dia e mês</h2><small>geração do dia e do mês · PR do mês sem o corte · disponibilidade do mês</small></div>
+<div class="pn"><div class="pt"><h2>Usinas · dia e mês</h2><small>geração do dia e do mês · PR do mês · disponibilidade do mês</small></div>
  <div class="ush2"><div></div><div>dia</div><div>mês</div><div>PR mês</div><div>disp. mês</div></div>{usinas2(DIA, dias_mes)}</div>
 {fatos_html(f, ddmm(DIA))}"""
     semana = ['segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado', 'domingo'][d0.weekday()]
