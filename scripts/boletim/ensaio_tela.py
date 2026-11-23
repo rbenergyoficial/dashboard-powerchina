@@ -217,6 +217,11 @@ def casos(TLm=TL, modelo=None, extrai_src=None, prepara_src=None, rodada=RODADA,
         pass
     except (Exception, SystemExit) as e:   # noqa: BLE001
         falhas.append('o diário não pôde ser lido (%s)' % str(e)[:200])
+    # 6b. o mensal (boletim-mensal-pr, 23/11/2026): o painel "Usinas no mês" mostra o PR publicado, nunca o "PR sem o corte" por usina
+    apr = APROVADO if aprovado is None else aprovado
+    us_m = apr[apr.index('def usinas(dias):'):apr.index('def usinas2(')] if 'def usinas(dias):' in apr and 'def usinas2(' in apr else ''
+    ok('<span>{nf(p,1)}%</span>' in us_m and 'nf(pc,1)' not in us_m and 'min(pc ' not in us_m and '<small>geração · PR do mês · disponibilidade</small>' in apr
+       and 'PR sem o corte · disponibilidade' not in apr, 'o mensal mostra o PR publicado por usina, sem o "PR sem o corte" por usina')
     # 7. as ligações: a rodada anexa a tela sem deixar que ela barre o boletim; o workflow ensaia antes e avisa a rodada
     ok("tl = TL.gera(pasta, tela_json)" in rodada and "imagens, arquivos = TL.para_o_grupo(guardado)" in rodada, 'a rodada gera a tela e monta o item pelo para_o_grupo')
     ok("        except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO da guarda da tela também)\n            guardado.pop('tela', None)\n            TELA_ERROS[" in rodada,
@@ -262,7 +267,9 @@ PLANTIOS = [
     ('a guarda aceita o desenho que não terminou', 'tela', "    if t.get('ok') != '%s:%s:%s' % (lang, tema, est):", "    if False:", ('nenhuma',), 'a guarda recusa o desenho que não terminou'),
     ('a guarda aceita arquivo que pede rede', 'tela', "    if m:\n        raise SystemExit('RECUSADO: tela: o arquivo pede algo de fora", "    if False:\n        raise SystemExit('RECUSADO: tela: o arquivo pede algo de fora", ('nenhuma',), 'bloqueado na China'),
     ('o HTML da tela não vai ao grupo', 'tela', "    if t.get('html'):\n        arquivos.append(t['html'])", "    if False:\n        arquivos.append(t['html'])", ('pub',), 'anexo, o HTML da tela'),
-    ('o "PR sem o corte" por usina volta ao diário', 'aprovado', '"></div><span>{nf(p,1)}%</span></div>', '"></div><span>{nf(pc,1)}%</span></div>', ('pub',), 'o diário mostra o PR publicado por usina'),
+    ('o "PR sem o corte" por usina volta ao diário', 'aprovado', '{nf(gm,2)} <small>MWh</small></div>\n  <div class="us-bar"><div class="us-f" style="width:{min(p or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(p,1)}%</span>', '{nf(gm,2)} <small>MWh</small></div>\n  <div class="us-bar"><div class="us-f" style="width:{min(p or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(pc,1)}%</span>', ('pub',), 'o diário mostra o PR publicado por usina'),
+    ('o "PR sem o corte" por usina volta ao mensal', 'aprovado', '{nf(g,2)} <small>MWh</small></div>\n  <div class="us-bar"><div class="us-f" style="width:{min(p or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(p,1)}%</span>',
+     '{nf(g,2)} <small>MWh</small></div>\n  <div class="us-bar"><div class="us-f" style="width:{min(pc or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(pc,1)}%</span>', ('pub',), 'o mensal mostra o PR publicado por usina'),
     ('o cálculo não grava o dado da tela', 'prepara', "    import tela_extrai as _TX; _TX.grava(globals(), os.environ['BOLETIM_TELA_JSON'])", "    pass", ('pub',), 'o dado da tela não saiu'),
     ('a tela recusada barra o boletim', 'rodada', "        except (Exception, SystemExit) as e:   # noqa: BLE001  (o RECUSADO da guarda da tela também)", "        except ZeroDivisionError as e:   # noqa: BLE001  (o RECUSADO da guarda da tela também)", ('pub',), 'não barra o boletim'),
     ('o boletim sem a tela sai verde', 'rodada', "    if erro_tela:   # boletim-pdf-executivo: idem\n        sys.exit(1)", "", ('pub',), 'deixa a rodada vermelha'),

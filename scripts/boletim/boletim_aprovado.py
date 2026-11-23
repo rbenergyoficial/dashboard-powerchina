@@ -267,13 +267,15 @@ def painel_motivo(blocos):
             f'Restrição elétrica: equipamento externo indisponível · Sistêmica × Local: se a causa está no sistema ou na região do conjunto</div></div>')
 
 def usinas(dias):
+    """o mês por usina: geração, PR do mês (o publicado), disponibilidade. boletim-mensal-pr (23/11/2026): o "PR sem o corte" POR USINA
+    saiu do mensal, como saiu do diário; a divisão da energia impedida por usina não é confiável (fica só o número do complexo)."""
     rows = []
     for u in US:
         g = sum(LIQ.get((u, d), (0,))[0] for d in dias)
         p, pc = pr_dias([u], dias); ds = disp_dias([u], dias); c = COR[u]
         rows.append(f'''<div class="us"><div class="us-n"><i style="background:{c}"></i>{u}</div>
   <div class="us-g">{nf(g,2)} <small>MWh</small></div>
-  <div class="us-bar"><div class="us-f" style="width:{min(pc or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(pc,1)}%</span></div>
+  <div class="us-bar"><div class="us-f" style="width:{min(p or 0,100):.1f}%;background:{mix(c,26)};border-color:{mix(c,55)}"></div><span>{nf(p,1)}%</span></div>
   <div class="us-d">{nf(ds,2)}%</div></div>''')
     return ''.join(rows)
 
@@ -696,7 +698,7 @@ else:
 {painel_mes_ufv(dias_mes, f'Dia a dia de {MES_NOME} por usina')}
 <div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'{MES_NOME.capitalize()}', b_m), (f'Mês anterior ({mant:%m/%Y})', corte_bench(dias_ant))])}</div>
 {painel_motivo([(MES_NOME.capitalize(), dias_mes), (f'Mês anterior ({mant:%m/%Y})', dias_ant)])}
-<div class="pn"><div class="pt"><h2>Usinas no mês</h2><small>geração · PR sem o corte · disponibilidade</small></div>
+<div class="pn"><div class="pt"><h2>Usinas no mês</h2><small>geração · PR do mês · disponibilidade</small></div>
  <div class="ush"><div></div><div style="text-align:right">geração</div><div>PR</div><div>disp.</div></div>{usinas(dias_mes)}</div>
 {fatos_html(f, f'{MES_NOME}/{MES[:4]}')}"""
     CAB = ('Relatório mensal de desempenho', f'{MES_NOME} de {MES[:4]}', f'mês fechado · {NT} dias')

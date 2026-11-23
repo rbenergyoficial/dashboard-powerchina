@@ -48,7 +48,7 @@ F = {
  'Relatório diário de desempenho': 'Daily performance report', 'Relatório mensal de desempenho': 'Monthly performance report',
  'Corte do ONS · comparação regional': 'ONS curtailment · regional comparison', 'Corte do ONS · motivo e origem': 'ONS curtailment · reason and origin',
  'Meta do mês · realizado e projeção': 'Month target · actual and projection', 'Curva do dia por usina': 'Day curve by plant',
- 'energia impedida ÷ (gerada + impedida)': 'curtailed energy ÷ (generated + curtailed)', 'geração · PR sem o corte · disponibilidade': 'generation · PR without curtailment · availability',
+ 'energia impedida ÷ (gerada + impedida)': 'curtailed energy ÷ (generated + curtailed)', 'geração · PR do mês · disponibilidade': 'generation · month PR · availability',
  'impedido pelo ONS, rateio por usina': 'curtailed by the ONS, allocated by plant', 'geração por dia (cor da usina)': 'generation per day (plant colour)',
  'impedido pelo ONS': 'curtailed by the ONS', 'intervalo limitado': 'limited interval', 'referência do ONS': 'ONS reference', 'limite do ONS': 'ONS limit',
  'marca na borda = meta (100%)': 'mark on the edge = target (100%)', 'tracejado = meta linear do mês': 'dashed = linear month target',
