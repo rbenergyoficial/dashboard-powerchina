@@ -179,10 +179,15 @@ function retemDias(refDiaUfv, ruins, desdeAntes, agoraIso) {
  *    nao teve limitacao: a retencao nao mexe no corte, so tira 15/10 do `ref_dia_ufv` e do `ref_hora`. O dia segue RETIDO (fora das
  *    duas series) e a segunda rota do ensaio segue julgando que os dois arquivos discordam; so o vencimento deixa de reprovar.
  *    A declaracao vale SO para os numeros declarados: se o operador republicar, os numeros mudam, a declaracao deixa de cobrir o dia e
- *    o vencimento volta a valer (se os dois passarem a fechar, o dia sai da retencao sozinho). */
+ *    o vencimento volta a valer (se os dois passarem a fechar, o dia sai da retencao sozinho).
+ *    16/11/2026, o MESMO quadro (decisao do humano, 24/11/2026, PROMOVER retido-1611): retido desde 17/11 19:13Z; por usina 1.968,70 x
+ *    conjunto 1.722,17 MWh (o conjunto ja com 09:30 e 10:30, publicados zerados, trocados pela soma das usinas); as duas abaixo da
+ *    verificada do dia (2.101,19 MWh); dia sem limitacao; o arquivo do conjunto relido em 24/11 (gravado 03:57Z) sem republicacao. */
 const DESCOMPASSO_DECLARADO = {
   '2026-10-15': { ref_mwh: 2805, gref_mwh: 2555.17, decisao: 'humano, 26/10/2026 (janela-restricao)',
     evidencia: 'por usina 2805,01 x conjunto 2555,17 MWh; verificada 2917,32; arquivos do operador regravados 26/10 15:07Z sem mudanca' },
+  '2026-11-16': { ref_mwh: 1968.7, gref_mwh: 1722.17, decisao: 'humano, 24/11/2026 (retido-1611)',
+    evidencia: 'por usina 1968,70 x conjunto 1722,17 MWh (1487,31 cru + 09:30 e 10:30 pela soma); verificada 2101,19; conjunto relido 24/11 03:57Z sem mudanca' },
 };
 const declarado = (x) => { const d = x && DESCOMPASSO_DECLARADO[x.dia];
   return !!d && Math.abs(Number(x.ref_mwh) - d.ref_mwh) <= FOLGA_DIA && Math.abs(Number(x.gref_mwh) - d.gref_mwh) <= FOLGA_DIA; };

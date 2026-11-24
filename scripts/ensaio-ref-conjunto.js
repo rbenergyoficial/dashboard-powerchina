@@ -188,12 +188,18 @@ function julgaRetencao(lib) {
   if (lib.retidosVencidos([Object.assign({}, dec, { ref_mwh: 2850 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 15/10 com outro numero (republicado) nao venceu');
   if (lib.retidosVencidos([Object.assign({}, dec, { gref_mwh: 2700 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 15/10 com outro gref nao venceu');
   if (lib.retidosVencidos([Object.assign({}, dec, { dia: '2026-10-16' })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: outro dia com os numeros declarados nao venceu');
+  // 16/11 (retido-1611): declarado com os numeros dele; republicado (outro ref ou gref), vence de novo
+  const d16 = { dia: '2026-11-16', ref_mwh: 1968.7, gref_mwh: 1722.17, desde: antes };
+  if (lib.retidosVencidos([d16], t0 + 1000 * H).length) e.push('retidosVencidos: o descompasso declarado de 16/11 venceu');
+  if (lib.retidosVencidos([Object.assign({}, d16, { gref_mwh: 1487.31 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 16/11 com o gref cru (sem a troca) nao venceu');
+  if (lib.retidosVencidos([Object.assign({}, d16, { ref_mwh: 2101.19 })], t0 + 1000 * H).length !== 1) e.push('retidosVencidos: 16/11 republicado nao venceu');
   /* a SEGUNDA ROTA do dia retido (RE-042), com os dois arquivos do operador forjados: as nove usinas somam 100 MWh no dia e o
      conjunto 25 (a revisao velha). O legitimo passa; o defeito nosso, o gref de outro lugar, o dia que fecha, o dia ainda no
      ref_hora, a usina faltando no arquivo e o retido sem segunda rota reprovam. */
   const D = '2026-10-01', agoraMs = Date.parse(agora);
   const cruU = () => ({ '2026-10': USINAS.map((u) => ({ ts: D + ' 12:00:00', u: u.replace('M', 'CEFMT'), ge: 200 / 9 })) });
   const conj = (g) => [{ ts: D + ' 12:00:00', gref: g, ger: 40, disp: 343.5 }];
+  const conjZ = () => conj(50).concat([{ ts: D + ' 12:30:00', gref: 0, ger: 40, disp: 0 }]);
   const base = () => ({ ref_dia_ufv: [{ dia: '2026-10-02', ufv: 'Complexo', ref_mwh: 1 }], ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 25, desde: agora }],
     serie_diaria: [{ dia: D, ref_retido: 1 }, { dia: '2026-10-02', ref_retido: 0 }] });
   const fontes = (o) => Object.assign({ cruUsina: cruU(), conjunto: conj(50), refHoraDias: new Set(['2026-10-02']) }, o || {});
@@ -215,6 +221,13 @@ function julgaRetencao(lib) {
     ['a marca ausente no dia retido', Object.assign(base(), { serie_diaria: [{ dia: D, ref_retido: 0 }, { dia: '2026-10-02', ref_retido: 0 }] }), fontes(), true],
     ['a marca num dia que nao esta retido', Object.assign(base(), { serie_diaria: [{ dia: D, ref_retido: 1 }, { dia: '2026-10-02', ref_retido: 1 }] }), fontes(), true],
     ['a serie_diaria sem o campo da marca', Object.assign(base(), { serie_diaria: [{ dia: D }, { dia: '2026-10-02' }] }), fontes(), true],
+    // retido-1611: o conjunto com um patamar publicado zerado (12:30, gref 0 e disp 0) que o executivo trocou pela soma das usinas (30 MW):
+    // gref do dia = 50*0,5 + 30*0,5 = 40. Com a lista publicada, passa; sem ela, ou com outra soma, reprova.
+    ['patamar zerado trocado pela soma (a lista publicada)', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 40, desde: agora }],
+      ref_conjunto_pela_soma: [{ ts: D + ' 12:30', gref_publicado: 0, disp_publicada: 0, ger: 40, soma_usinas: 30 }] }), fontes({ conjunto: conjZ() }), false],
+    ['patamar zerado sem a lista publicada (o gref do executivo de outro lugar)', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 40, desde: agora }] }), fontes({ conjunto: conjZ() }), true],
+    ['patamar zerado com outra soma na lista', Object.assign(base(), { ref_dias_retidos: [{ dia: D, ref_mwh: 100, gref_mwh: 40, desde: agora }],
+      ref_conjunto_pela_soma: [{ ts: D + ' 12:30', gref_publicado: 0, disp_publicada: 0, ger: 40, soma_usinas: 60 }] }), fontes({ conjunto: conjZ() }), true],
   ];
   for (const [nome, E5, F5, reprova] of CASOS_R) {
     const r = julgaRetidos(E5, agoraMs, lib, F5);
@@ -479,8 +492,13 @@ function julgaRetidos(E, agoraMs, lib, fontes) {
     const faltam = USINAS.filter((u) => por[u] == null);
     if (faltam.length) { e.push(id + ': o arquivo por usina do operador nao tem ' + faltam.join(',') + ' no dia'); continue; }
     const somaU = USINAS.reduce((s2, u) => s2 + por[u], 0);
+    /* o gref do conjunto COM a troca que o executivo publicou (`ref_conjunto_pela_soma`, a mesma `aplicaLista` do gen-pr e do benchmark):
+       o patamar publicado zerado (gref 0, disp 0) entra pela soma das usinas, como no gerador. Sem isso, dia retido com patamar absorvido
+       reprovava sempre (16/11/2026: cru 1.487,31 x 1.722,17 com 09:30 e 10:30 pela soma; PROMOVER retido-1611). Copia: nao muda a fonte. */
+    const doDia = (fontes.conjunto || []).filter((r) => String(r.ts).slice(0, 10) === x.dia).map((r) => Object.assign({}, r));
+    lib.aplicaLista(doDia, E.ref_conjunto_pela_soma || []);
     let grefCru = 0, nCru = 0;
-    for (const r of fontes.conjunto || []) if (String(r.ts).slice(0, 10) === x.dia) { grefCru += (Number(r.gref) || 0) * 0.5; nCru++; }
+    for (const r of doDia) { grefCru += (Number(r.gref) || 0) * 0.5; nCru++; }
     if (Math.abs(somaU - x.ref_mwh) > 0.011) e.push(id + ': a referencia retida (' + x.ref_mwh + ') nao e a soma das usinas do arquivo do operador ('
       + somaU.toFixed(2) + ') — o defeito e NOSSO, nao do operador');
     if (!nCru) e.push(id + ': o arquivo do conjunto nao tem o dia');
