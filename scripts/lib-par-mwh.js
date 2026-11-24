@@ -84,13 +84,20 @@ function conferePares(out) {
     if (cx && cx.cortado_mwh != null && us.length && us.every(x => x.cortado_mwh != null && x.corte_reconciliado === 1)) {
       const s = us.reduce((a, x) => a + x.cortado_mwh, 0);
       if (Math.abs(s - cx.cortado_mwh) > FECHA) mau.push(m + ': usinas somam ' + s.toFixed(2) + ' MWh de corte contra ' + cx.cortado_mwh + ' do conjunto');
-      const bru = us.filter(x => x.cortado_bruto_mwh > 0);
-      const sb = bru.reduce((a, x) => a + x.cortado_bruto_mwh, 0);
-      // so a usina de MAIOR corte leva a sobra (gen-executivo); as outras erram no maximo um arredondamento
-      const maior = bru.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
-      if (sb > 0) bru.forEach(x => { const esp = x.cortado_bruto_mwh * cx.cortado_mwh / sb;
-        const tol = x === maior ? propMaior(bru.length) : PROP;
-        if (Math.abs(esp - x.cortado_mwh) > tol) mau.push(m + ' ' + x.ufv + ': corte ' + x.cortado_mwh + ' MWh fora da proporcao do bruto (' + esp.toFixed(2) + ')'); });
+      // com a referencia RECALIBRADA (corte-ufv-recalibrado, `fator_ref` na linha) o total de cada GRUPO e o da referencia crua e o fator
+      // so redistribui dentro dele: a proporcao e por grupo, contra a soma publicada do grupo. Sem fator, a regra antiga (um fator so).
+      const recal = us.some(x => x.fator_ref != null);
+      const blocos = recal ? [['M2', 'M3', 'M4', 'M5', 'M6', 'M8'], ['M1', 'M7', 'M9']].map(g => us.filter(x => g.includes(x.ufv))) : [us];
+      blocos.forEach(B => {
+        const bru = B.filter(x => x.cortado_bruto_mwh > 0);
+        const sb = bru.reduce((a, x) => a + x.cortado_bruto_mwh, 0);
+        const alvo = recal ? B.reduce((a, x) => a + x.cortado_mwh, 0) : cx.cortado_mwh;
+        // so a usina de MAIOR corte leva a sobra (gen-executivo); as outras erram no maximo um arredondamento
+        const maior = bru.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
+        if (sb > 0) bru.forEach(x => { const esp = x.cortado_bruto_mwh * alvo / sb;
+          const tol = x === maior ? propMaior(bru.length) : PROP;
+          if (Math.abs(esp - x.cortado_mwh) > tol) mau.push(m + ' ' + x.ufv + ': corte ' + x.cortado_mwh + ' MWh fora da proporcao do bruto (' + esp.toFixed(2) + ')'); });
+      });
     }
     [['PPA', ['M2', 'M3', 'M4', 'M5', 'M6', 'M8']], ['ML', ['M1', 'M7', 'M9']]].forEach(([g, mem]) => {
       const lg = d(g); if (!lg || lg.cortado_mwh == null || lg.corte_estimado) return;

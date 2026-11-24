@@ -389,6 +389,7 @@ async function writeOut(obj, nome, opts) {
   // O detalhe lido aqui fica em `CRU_LIDO` e o laco do CRU, mais adiante, o reaproveita: nenhum arquivo e baixado duas vezes.
   const RC = require('./lib-ref-conjunto.js');
   const CRU_LIDO = {};
+  const DIAS_FORA_FATOR = new Set();   // dias que nao fecham com o conjunto: fora do fator da referencia por usina (corte-ufv-recalibrado)
   const CONJ_PELA_SOMA = [];   // publicado em `ref_conjunto_pela_soma`: quem refaz o conjunto cru (o ensaio da disp) aplica o mesmo
   {
     const mesesRef = [...new Set(restr.consolidado.map(r => String(r.ts).slice(0, 7)))]
@@ -411,6 +412,11 @@ async function writeOut(obj, nome, opts) {
     const n = RC.corrigeConjunto(restr.consolidado, absorvidos);
     if (n) console.log('conjunto: ' + n + ' patamar(es) com nenhuma ou uma parcela, gref pela soma das usinas e disp nao publicada: '
       + absorvidos.slice(0, 10).map(x => x.ts + ' (' + x.gref + ' -> ' + x.soma + ' MW)').join(', '));
+    // os dias cuja referencia somada das usinas NAO fecha com a do conjunto ja corrigido: a mesma regra que mais adiante os RETEM
+    // (fora do ref_dia_ufv e do ref_hora). Aqui so para ficarem FORA do fator da referencia por usina (corte-ufv-recalibrado):
+    // a referencia por usina deles esta quebrada e puxaria o fator do mes inteiro.
+    const { grefDia: gd0 } = RC.grefConjuntoPorDia(restr.consolidado, rh, { desde: REF_DESDE, usinas: PPA.concat(ML), refDia: rd });
+    RC.diasQueNaoFecham(Object.entries(rd).map(([dia, ref_mwh]) => ({ dia, ref_mwh })), gd0).forEach(x => DIAS_FORA_FATOR.add(x.dia));
   }
 
   // ---------- dia corrente, quase ao vivo ----------
@@ -710,6 +716,19 @@ async function writeOut(obj, nome, opts) {
   const corteDiario = [];     // a virada da estratégia PPA x ML ao longo do tempo
   const corteDiarioUfv = [];  // o MESMO dia aberto por usina — campo novo, ao lado, nunca no lugar
   const MOTIVO_UFV = [];      // mes -> usina/contrato -> MWh por motivo (PROMOVER motivo-entidade)
+  // 🔴 RECALIBRACAO DA REFERENCIA POR USINA no corte diario (corte-ufv-recalibrado, 23/11/2026). A referencia que o ONS publica
+  // para cada usina sai de uma funcao de produtividade ajustada com historico contaminado (o M3 com metade do circuito C2 de
+  // set/25 a jul/26, o M7 pela tag, o M9 pelo PPC; NT-0088): em nov/26, fora da limitacao e com sol, referencia / verificada =
+  // M3 0,840 · M9 0,875 · M7 0,902 · demais 0,978–1,069, com irradiancia igual. O corte do GRUPO fecha; a parte de cada usina
+  // nao: a M3 recebia metade do corte das iguais. Cada usina tem a referencia dividida pela razao do PROPRIO mes (Σ ge ÷ Σ gv
+  // nas meias horas de sol fora do limite) ANTES do max(0, ge − gv); a reconciliacao ao total do grupo de cada dia continua
+  // a mesma, entao o total nao muda — so a divisao entre as usinas.
+  //   SOL_REF        so meia hora com irradiancia >= 100 W/m2 entra no fator (madrugada e crepusculo dao razao instavel)
+  //   PISO_FATOR_REF menos que isso de meias horas livres no mes (inicio do mes aberto, mes todo limitado): o fator e o do
+  //                  ultimo mes que teve o piso (a funcao do ONS so muda uma vez por ano); sem nenhum, nao recalibra (1)
+  //   antes de REF_DESDE (mar/26) a referencia por usina vem nula ou quebrada e nada e recalibrado (fator_ref nulo)
+  const SOL_REF = 100, PISO_FATOR_REF = 60;
+  const fatorRefAnt = {};     // usina -> { f, mes }: o ultimo fator com o piso, para o mes que nao chega a ele
   // REF_DESDE (a referencia crua por usina so a partir de mar/26) e declarada no topo, junto da correcao do conjunto
   const refDia = {};          // dia -> usina -> { ge, gv, irr, inv } · CRU, como o ONS publica
   // a MESMA fonte, meia hora a meia hora (`ref_hora.json`, 24/09/2026): o detalhe do dia no painel da referencia.
@@ -726,6 +745,7 @@ async function writeOut(obj, nome, opts) {
     const porDia = {};
     const porDiaUfv = {};       // dia -> usina -> { ge, gv } · a mesma conta do porDia, sem colapsar a usina
     const razMes = {};          // usina -> motivo -> MWh: o deficit (ge - gv) das meias horas limitadas, pelo motivo do conjunto
+    const fatMes = {};          // usina -> { ge, gv, n }: o par livre de sol que recalibra a referencia (corte-ufv-recalibrado)
     for (const r of C) {
       const u = String(r.u).replace('CEFMT', 'M');          // CEFMT1..9 == M1..M9 (confirmado pela assinatura de capacidade)
       const irr = num(r.irr); let g = num(r.ge); const v = num(r.gv); let rec = false;
@@ -809,6 +829,15 @@ async function writeOut(obj, nome, opts) {
         const pu = porDiaUfv[dia_] || (porDiaUfv[dia_] = {});
         const cu = pu[alvo] || (pu[alvo] = { ge: 0, gv: 0 });
         cu.ge += g * H; cu.gv += v * H;
+        // o par da RECALIBRACAO da referencia (corte-ufv-recalibrado): a MESMA usina `alvo`, so meia hora de sol valido
+        // (>= SOL_REF W/m2, sem marca de invalido nas duas grafias) e FORA da limitacao do conjunto, onde a usina gera tudo o
+        // que pode e a verificada mede o que a referencia deveria dizer. O dia EXCLUIDO fica fora: a limitacao dele nao esta
+        // no LIM_TS, e o corte dele entraria no fator como se fosse geracao livre. O dia que nao fecha com o conjunto (DIAS_FORA_FATOR) idem.
+        if (dia_ >= REF_DESDE && !DIAS_EXCLUIDOS.has(dia_) && !DIAS_FORA_FATOR.has(dia_) && g > 0 && irr >= SOL_REF && !LIM_TS.has(String(r.ts))
+            && String(r.inv) !== 'True' && String(r.inv) !== '1') {
+          const fr = fatMes[alvo] || (fatMes[alvo] = { ge: 0, gv: 0, n: 0 });
+          fr.ge += g * H; fr.gv += v * H; fr.n++;
+        }
         // PROMOVER motivo-entidade: na meia hora limitada, o deficit da usina vai para o motivo do CONJUNTO naquela meia
         // hora — o operador apura o motivo para o conjunto, e a limitacao atinge todas as usinas ao mesmo tempo. A mesma
         // usina `alvo` do corte diario (o registro "M7" nas tres vidas). Com sinal: meia hora em que a referencia da
@@ -879,10 +908,26 @@ async function writeOut(obj, nome, opts) {
     // declara "o conjunto e integro; a abertura por usina NAO"), e o M3 vem com a referencia ABAIXO da
     // verificada em 43 dos 75 dias. No grupo essa sobra compensa o deficit dos vizinhos; aberta por
     // usina, nao compensa. O valor antes do ajuste fica em `cortado_bruto_mwh`, para auditoria.
+    // o fator de cada usina no mes (ver SOL_REF / PISO_FATOR_REF): `fator_ref` = Σ ge ÷ Σ gv usado, `fator_ref_mes` = o mes de onde ele veio
+    const fatorRef = {};
+    if (mes >= REF_DESDE.slice(0, 7)) {
+      const us = new Set(Object.values(porDiaUfv).flatMap(o => Object.keys(o)));
+      us.forEach(u => { const fr = fatMes[u];
+        if (fr && fr.n >= PISO_FATOR_REF && fr.ge > 0 && fr.gv > 0) {
+          fatorRef[u] = { f: fr.ge / fr.gv, mes, n: fr.n }; fatorRefAnt[u] = fatorRef[u]; }
+        else if (fatorRefAnt[u]) fatorRef[u] = Object.assign({}, fatorRefAnt[u], { n: fr ? fr.n : 0 });
+      });
+      console.log('fator da referencia ' + mes + (DIAS_FORA_FATOR.size ? ' (fora: ' + [...DIAS_FORA_FATOR].filter(d => d.startsWith(mes)).join(' ') + ')' : '') + ': ' + [...us].sort().map(u => u + ' ' + (fatorRef[u]
+        ? fatorRef[u].f.toFixed(3) + (fatorRef[u].mes !== mes ? ' (de ' + fatorRef[u].mes + ')' : '') : '—')
+        + ' n=' + ((fatMes[u] || {}).n || 0)).join(' · '));
+    }
+    IRR[mes].fatorRef = fatorRef;   // o MESMO fator recalibra o balde limitado do mensal por usina (serie_ufv), mais adiante
     Object.entries(porDiaUfv).sort().forEach(([dia, porU]) => {
       const linhas = Object.keys(porU).sort().map(ufv => { const c = porU[ufv];
+        const fr = fatorRef[ufv], geR = fr ? c.ge / fr.f : c.ge;   // a referencia recalibrada so entra no bruto
         return { dia, mes, ufv, grupo: PPA.includes(ufv) ? 'PPA' : 'ML',
-          potencial_mwh: r2(c.ge), cortado_bruto_mwh: r2(Math.max(0, c.ge - c.gv)), _ge: c.ge, _gv: c.gv,
+          potencial_mwh: r2(c.ge), cortado_bruto_mwh: r2(Math.max(0, geR - c.gv)),
+          fator_ref: fr ? Math.round(fr.f * 1e4) / 1e4 : null, fator_ref_mes: fr ? fr.mes : null, _ge: c.ge, _gv: c.gv,
           razoes_mwh: Object.fromEntries(Object.entries(c.raz || {}).map(([k, x]) => [k, r2(Math.max(0, x))])) }; });
       for (const g of ['PPA', 'ML']) {
         const L = linhas.filter(l => l.grupo === g); if (!L.length) continue;
@@ -1620,9 +1665,15 @@ async function writeOut(obj, nome, opts) {
           // substituicao — senao o corte misturaria bases: potencial estimado contra janela medida.
           const frL = x.ge > 0 ? x.geL / x.ge : 0;
           const frLv = x.gv > 0 ? x.gvL / x.gv : frL;
-          const geLu = usaIrma ? gePot * frL : x.geL;
+          // 🔴 o balde limitado do mensal com a referencia RECALIBRADA (corte-ufv-recalibrado, humano 23/11: 'Sim, neste lote'): o MESMO
+          // fator do corte diario, para o mensal e a soma dos dias dizerem a mesma divisao. Nao vale onde o potencial vem das irmas nem no
+          // M7 estimado (ali nao ha referencia propria a corrigir). O potencial publicado continua o do ONS.
+          const fR = (!usaIrma && !x.ge_estimado && I.fatorRef) ? I.fatorRef[u] : null;
+          const geLu = usaIrma ? gePot * frL : (fR ? x.geL / fR.f : x.geL);
           const gvLu = usaIrma ? real * frLv : x.gvL;
           const l = linha(u, gePot, real, x.geP, x.gvP, x.parN, x.parOk, liq, meta, geLu, gvLu);
+          l.fator_ref = fR ? Math.round(fR.f * 1e4) / 1e4 : null; l.fator_ref_mes = fR ? fR.mes : null;
+          l._brutoCru = r2(Math.max(0, geLu * (fR ? fR.f : 1) - gvLu));   // o bruto com a referencia CRUA: decide so o total de cada GRUPO
           // PPA nos meses de ge ruim: o cálculo dá 0,0% para as seis usinas — FALSO (o complexo cortou
           // 5,86% em out/25). E aqui não dá para estimar como no ML: as usinas do PPA SÃO a referência,
           // usá-las contra si mesmas seria circular. Fica VAZIO, com a nota dizendo por quê.
@@ -1664,6 +1715,19 @@ async function writeOut(obj, nome, opts) {
           if (temM) {
             const fM = alvoM / somaM;
             comCorte.forEach(l => { l.cortado_bruto_mwh = l.cortado_mwh; l.cortado_mwh = r2(l.cortado_mwh * fM); });
+            // 🔴 o TOTAL DE CADA GRUPO fica o da referencia crua, como no corte diario (corte-ufv-recalibrado): o fator so redistribui DENTRO
+            // do PPA e do ML. Sem isto a recalibracao mudaria a divisao PPA x ML do mes (PPA no ano 94,44 -> 94,85 GWh) e, por tabela, a
+            // parcela do ML que estima set/25 a fev/26 — decisao de contrato que o lote nao tomou.
+            if (comCorte.some(l => l.fator_ref != null)) {
+              const somaCru = comCorte.reduce((a, l) => a + l._brutoCru, 0), fCru = somaCru > 0 ? alvoM / somaCru : 0;
+              // o PPA fecha no centavo do seu total; o ML leva o resto do conjunto; em cada grupo a usina de maior corte leva a sobra
+              const tPPA = r2(comCorte.filter(l => PPA.includes(l.ufv)).reduce((a, l) => a + l._brutoCru * fCru, 0));
+              for (const [G, T] of [[PPA, tPPA], [ML, r2(alvoM - tPPA)]]) { const LG = comCorte.filter(l => G.includes(l.ufv)); if (!LG.length) continue;
+                const sG = LG.reduce((a, l) => a + l.cortado_bruto_mwh, 0);
+                LG.forEach(l => { l.cortado_mwh = r2(sG > 0 ? l.cortado_bruto_mwh * T / sG : l._brutoCru * fCru); });
+                const dG = r2(T - LG.reduce((a, l) => a + l.cortado_mwh, 0));
+                if (dG !== 0) { const mG = LG.slice().sort((x, y) => y.cortado_mwh - x.cortado_mwh)[0]; mG.cortado_mwh = r2(mG.cortado_mwh + dG); } }
+            }
             const difM = r2(alvoM - comCorte.reduce((a, l) => a + l.cortado_mwh, 0));
             if (difM !== 0) { const maiorM = comCorte.slice().sort((a, b) => b.cortado_mwh - a.cortado_mwh)[0];
               maiorM.cortado_mwh = r2(maiorM.cortado_mwh + difM); }
@@ -1687,7 +1751,9 @@ async function writeOut(obj, nome, opts) {
         linhasUfv.forEach(l => { l.corte_reconciliado = recOk ? 1 : 0;
           l.corte_reconc_fator = recOk ? Math.round(fatorRec * 1e6) / 1e6 : null;
           l.corte_reconc_nota = recOk
-            ? 'Corte ajustado na proporcao do proprio valor para somar o total do conjunto, que e o numero aferido do ONS no nivel da subestacao. Valor bruto em cortado_bruto_gwh.'
+            ? (l.fator_ref != null
+              ? 'Corte com a referencia do ONS da usina recalibrada pela razao do proprio mes (fator_ref) e ajustado na proporcao do proprio valor para somar o total do seu contrato; os contratos somam o total do conjunto, que e o numero aferido do ONS no nivel da subestacao. A divisao entre as usinas e estimativa. Valor bruto em cortado_bruto_gwh.'
+              : 'Corte ajustado na proporcao do proprio valor para somar o total do conjunto, que e o numero aferido do ONS no nivel da subestacao. Valor bruto em cortado_bruto_gwh.')
             : 'Reconciliacao nao aplicada neste mes: ha usina sem corte publicado, a soma seria incompleta.'; });
         // GUARDA DE FECHAMENTO: e ela que impede a regressao. Sem isso estamos a um refactor de
         // repetir o bug — duas contas paralelas que voltam a divergir sem ninguem perceber.
@@ -1707,7 +1773,7 @@ async function writeOut(obj, nome, opts) {
               + ' GWh contra corte do conjunto ' + r2(alvoCorte) + ' GWh (tolerancia ' + r2(tolG) + ')');
           }
         }
-        linhasUfv.forEach(l => out.push(l));
+        linhasUfv.forEach(l => { delete l._brutoCru; out.push(l); });
         // ---- complexo ----
         { const ge = Object.values(I.porUfv).reduce((a, x) => a + x.ge, 0);
           const gv = Object.values(I.porUfv).reduce((a, x) => a + x.gv, 0);
