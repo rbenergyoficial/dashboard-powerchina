@@ -143,6 +143,109 @@ def problemas(t, dado, lang, tema=TEMA):
     return out
 
 
+# ---------------- abas com o boletim completo (humano, 24/11/2026: "monte o boletim completo com abas novas no mesmo painel"; "Ficam todas") ----
+# As abas novas são as quatro partes do diário APROVADO que a rodada já gerou na pasta do dia (as mesmas que vão ao grupo como imagem),
+# em PT e EN e nos dois temas: nenhum número novo. A aba mostra a versão da língua e do tema escolhidos no topo (em 中文, a inglesa).
+ABAS = [  # (id, PT, EN, 中文) na ordem das partes do diário
+    ('p1', 'Meta e números do dia', 'Target and day figures', '目标与当日数据'),
+    ('p2', 'Curva do dia', 'Day curve', '当日曲线'),
+    ('p3', 'Dia a dia do mês', 'Month day by day', '本月逐日'),
+    ('p4', 'Corte, usinas e fatos', 'Curtailment, plants and facts', '限电、电站与要点'),
+]
+CSS_ABAS = """<style>
+.abas{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 0;padding:4px;border:1px solid var(--line);border-radius:999px;width:fit-content;max-width:100%}
+.abas button{font:inherit;font-size:13px;font-weight:600;padding:6px 14px;border:0;border-radius:999px;background:transparent;color:var(--ink3);cursor:pointer;white-space:nowrap}
+.abas button[aria-selected="true"]{background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink)}
+.abas button:focus-visible{outline:2px solid var(--ppa);outline-offset:1px}
+.aba-f{display:block;width:100%;border:0;margin-top:20px;background:transparent}
+.aba-n{font-size:12.5px;color:var(--ink3);margin:10px 0 0}
+[data-modo="foto"] .abas{display:none}
+@media (max-width:640px){.abas{border-radius:12px}.abas button{padding:6px 10px;font-size:12px}}
+</style>"""
+JS_ABAS = r"""<script>
+(function(){
+'use strict';
+var A = JSON.parse(document.getElementById('abas-dados').textContent), R = document.documentElement, atual = 'exec';
+var NOMES = __NOMES__;
+function lg(){ var l = (R.lang || 'en').slice(0, 2); return l === 'pt' ? 'pt' : l === 'zh' ? 'zh' : 'en'; }
+function rotulos(){ var l = lg(), k = l === 'pt' ? 1 : l === 'zh' ? 3 : 2;
+  Array.prototype.forEach.call(document.querySelectorAll('.abas button'), function(b){ var n = NOMES[b.getAttribute('data-aba')]; if (n) b.textContent = n[k]; });
+  var nt = document.getElementById('aba-nota'); nt.textContent = l === 'zh' ? '此页签为英文版（来自每日报告）。' : l === 'pt' ? 'Painéis do boletim diário, como no PDF.' : 'Panels of the daily bulletin, as in the PDF.'; }
+function enche(id){ var f = document.getElementById('f-' + id); if (!f) return; var l = lg() === 'pt' ? 'pt' : 'en', t = R.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  var chave = l + ':' + t; if (f.getAttribute('data-chave') === chave) return; f.setAttribute('data-chave', chave);
+  f.onload = function(){ try { f.style.height = (f.contentDocument.documentElement.scrollHeight + 4) + 'px'; } catch (e) { f.style.height = '1600px'; } };
+  f.srcdoc = A[l][t][Number(id.slice(1)) - 1]; }
+function mostra(id){ atual = id;
+  Array.prototype.forEach.call(document.querySelectorAll('.abas button'), function(b){ b.setAttribute('aria-selected', b.getAttribute('data-aba') === id); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-painel]'), function(p){ p.hidden = p.getAttribute('data-painel') !== id; });
+  if (id !== 'exec') enche(id);
+  if (id === 'exec') dispatchEvent(new Event('resize')); }
+document.querySelector('.abas').addEventListener('click', function(ev){ var b = ev.target.closest('button[data-aba]'); if (b) mostra(b.getAttribute('data-aba')); });
+new MutationObserver(function(){ rotulos(); if (atual !== 'exec') enche(atual); }).observe(R, {attributes: true, attributeFilter: ['lang', 'data-theme']});
+addEventListener('load', rotulos); setTimeout(function(){ rotulos(); var q = new URLSearchParams(location.search).get('aba'); if (q && NOMES[q]) mostra(q); }, 0);
+})();
+</script>"""
+
+
+def _limpa(h):
+    """a parte sem o logotipo (o topo da tela já tem), sem o cabeçalho repetido e sem a fonte do Google (bloqueada na China)"""
+    h = re.sub(r'<img src="data:image/png;base64,[A-Za-z0-9+/=]+">', '', h)
+    h = re.sub(r'<link [^>]*fonts\.googleapis\.com[^>]*>', '', h)
+    st = '<style>.cab{display:none!important}html,body{margin:0}</style>'
+    return h.replace('</head>', st + '</head>', 1) if '</head>' in h else st + h
+
+
+def partes_da_pasta(pasta):
+    """{'pt'|'en': {'light'|'dark': [p1..p4]}} das partes do diário na pasta do dia; None se não há nenhuma; RECUSADO se faltar alguma"""
+    nomes = {(lg, tm, i): os.path.join(pasta, 'diario_%s_p%d%s.html' % ('claro' if tm == 'light' else 'escuro', i, '_en' if lg == 'en' else ''))
+             for lg in ('pt', 'en') for tm in ('light', 'dark') for i in range(1, len(ABAS) + 1)}
+    ha = [k for k, v in nomes.items() if os.path.exists(v)]
+    if not ha:
+        return None
+    if len(ha) != len(nomes):
+        raise SystemExit('RECUSADO: tela: faltam partes do diário para as abas: %s' % sorted(set(nomes) - set(ha))[:4])
+    out = {lg: {tm: [] for tm in ('light', 'dark')} for lg in ('pt', 'en')}
+    for k in sorted(nomes, key=lambda k: k[2]):
+        out[k[0]][k[1]].append(_limpa(io.open(nomes[k], encoding='utf-8').read()))
+    return out
+
+
+def com_abas(html, partes):
+    """a tela com a barra de abas: Executivo (a tela de sempre) + as partes do diário"""
+    nav = '<nav class="abas" role="tablist" aria-label="Bulletin"><button type="button" data-aba="exec" aria-selected="true">Executive</button>' + \
+        ''.join('<button type="button" data-aba="%s" aria-selected="false">%s</button>' % (a[0], a[2]) for a in ABAS) + '</nav>'
+    a0, a1 = html.index('  <p class="ante" id="ante"></p>'), html.index('  <footer class="rod">')
+    paineis = ''.join('<div data-painel="%s" hidden><p class="aba-n" id="%s"></p><iframe class="aba-f" id="f-%s" title="%s"></iframe></div>\n'
+                      % (a[0], 'aba-nota' if i == 0 else 'aba-nota-%d' % i, a[0], a[2]) for i, a in enumerate(ABAS))
+    html = html[:a0] + nav + '\n<div data-painel="exec">\n' + html[a0:a1] + '</div>\n' + paineis + html[a1:]
+    dados = json.dumps(partes, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')
+    nomes = json.dumps(dict({'exec': ['exec', 'Executivo', 'Executive', '概览']}, **{a[0]: list(a) for a in ABAS}), ensure_ascii=False)
+    bloco = CSS_ABAS + '\n<script id="abas-dados" type="application/json">' + dados + '</script>\n' + JS_ABAS.replace('__NOMES__', nomes) + '\n'
+    i = html.index('<script id="dados"')   # antes do dado e do script da tela: o script da tela continua sendo o ÚLTIMO (tela_dom.js)
+    html = html[:i] + bloco + html[i:]
+    m = FORA.search(re.sub(r'base64,[A-Za-z0-9+/=]+', 'base64,', html))
+    if m:
+        raise SystemExit('RECUSADO: tela: uma aba pede algo de fora (%s); tem de abrir sem rede' % m.group(0))
+    return html
+
+
+def problemas_abas(html, partes):
+    """as recusas das abas: cada aba com o seu painel e o dado das quatro partes nas duas línguas e nos dois temas"""
+    out = []
+    if html.count('data-aba="') != len(ABAS) + 1 or html.count('class="aba-f"') != len(ABAS):
+        out.append('as abas não saíram inteiras (%d botões, %d painéis)' % (html.count('data-aba="'), html.count('class="aba-f"')))
+    m = re.search(r'<script id="abas-dados" type="application/json">(.*?)</script>', html, re.S)
+    try:
+        d = json.loads(m.group(1)) if m else {}
+    except ValueError:
+        d = {}
+    if not all(len(((d.get(lg) or {}).get(tm)) or []) == len(ABAS) for lg in ('pt', 'en') for tm in ('light', 'dark')):
+        out.append('o dado das abas não tem as %d partes em PT e EN nos dois temas' % len(ABAS))
+    elif d != partes:
+        out.append('o dado das abas não é o das partes do diário do dia')
+    return out
+
+
 def _chrome():
     return os.environ.get('CHROME') or shutil.which('google-chrome') or shutil.which('chromium') or r'C:\Program Files\Google\Chrome\Application\chrome.exe'
 
@@ -187,9 +290,13 @@ def gera(pasta, caminho_json, render=False):
     vai como arquivo anexo; a imagem da tela (rende) serve à conferência do desenho."""
     dado = json.load(open(caminho_json, encoding='utf-8'))
     out, ruins = {}, []
+    partes = partes_da_pasta(pasta)   # as abas com o boletim completo (24/11/2026); None = sem as partes na pasta, a tela sai sem abas
     for lang in ('pt', 'en'):
         arq = os.path.join(pasta, NOME[lang] % dado['dia'] + '.html')
-        io.open(arq, 'w', encoding='utf-8', newline='\n').write(monta(dado, lang))
+        h = monta(dado, lang) if partes is None else com_abas(monta(dado, lang), partes)
+        io.open(arq, 'w', encoding='utf-8', newline='\n').write(h)
+        if partes is not None:
+            ruins += ['%s: %s' % (lang.upper(), p) for p in problemas_abas(h, partes)]
         ruins += ['%s: %s' % (lang.upper(), p) for p in problemas(le(arq), dado, lang)]
         ruins += ['%s (celular): %s' % (lang.upper(), p) for p in problemas(le(arq, largura=390), dado, lang)]
         if lang == 'en':   # o chinês é lido do MESMO arquivo que vai ao grupo (o leitor troca no botão 中文)

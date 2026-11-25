@@ -14,6 +14,7 @@ Regras ensaiadas:
   · a tela é um ANEXO: vai junto das partes e do PDF; se a guarda ou este ensaio reprovam, o boletim vai sem ela e a rodada sai vermelha.
     python ensaio_tela.py"""
 import io
+import re
 import json
 import os
 import subprocess
@@ -281,6 +282,71 @@ PLANTIOS = [
 FONTES = {'modelo': MODELO, 'extrai': EXTRAI, 'tela': TELA_PY, 'prepara': PREPARA, 'rodada': RODADA, 'wf': WF, 'aprovado': APROVADO}
 
 
+# ---------------- abas com o boletim completo (24/11/2026) ----------------
+def ensaio_abas(TLm=TL, completo=True):
+    """as abas: com as 16 partes do diário na pasta (PT/EN × claro/escuro × p1..p4) a tela sai com 5 abas e o dado das partes limpo
+    (sem logotipo, sem a fonte do Google); faltando uma parte, RECUSA; sem nenhuma, a tela sai sem abas"""
+    falhas = []
+    ok = lambda c, m: falhas.append(m) if not c else None   # noqa: E731
+    d, _ = dado('pub')
+    with tempfile.TemporaryDirectory() as pasta:
+        tj = os.path.join(pasta, 'tela.json'); json.dump(d, open(tj, 'w', encoding='utf-8'))
+        TLm.MODELO = os.path.join(AQUI, 'tela.src.html')
+        try:   # sem partes: a tela de sempre (só na passada completa: os plantios mexem nas abas, e o gera inteiro custa ~1 min)
+            if not completo:
+                raise StopIteration
+            r = TLm.gera(pasta, tj)
+            ok('data-aba="' not in io.open(r['en']['html'], encoding='utf-8').read(), 'abas: sem as partes do diário a tela sai sem abas')
+        except StopIteration:
+            pass
+        except (Exception, SystemExit) as e:   # noqa: BLE001
+            falhas.append('abas: a tela sem partes não saiu (%s)' % str(e)[:200])
+        for lg in ('pt', 'en'):
+            for tm in ('claro', 'escuro'):
+                for i in range(1, 5):
+                    io.open(os.path.join(pasta, 'diario_%s_p%d%s.html' % (tm, i, '_en' if lg == 'en' else '')), 'w', encoding='utf-8').write(
+                        '<html><head><link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet"></head><body><div class="cab">'
+                        '<img src="data:image/png;base64,QUJD"></div><p>MARCA-%s-%s-%d</p></body></html>' % (lg, tm, i))
+        try:   # completo: pelo gera (a guarda inteira); plantios: monta + abas + a guarda das abas e UMA leitura da tela
+            if completo:
+                r = TLm.gera(pasta, tj)
+                arq = r['en']['html']
+            else:
+                arq = os.path.join(pasta, 'x_en.html')
+                hx = TLm.com_abas(TLm.monta(d, 'en'), TLm.partes_da_pasta(pasta))
+                io.open(arq, 'w', encoding='utf-8', newline='\n').write(hx)
+                pa = TLm.problemas_abas(hx, TLm.partes_da_pasta(pasta))
+                if pa:
+                    raise SystemExit('; '.join(pa))
+            h = io.open(arq, encoding='utf-8').read()
+            ok(h.count('data-aba="') == 5 and h.count('class="aba-f"') == 4, 'abas: a tela sai com 5 abas e 4 painéis')
+            m = re.search(r'<script id="abas-dados" type="application/json">(.*?)</script>', h, re.S)
+            a = json.loads(m.group(1)) if m else {}
+            ok(all('MARCA-%s-%s-%d' % (lg, tm, i + 1) in ((a.get(lg) or {}).get(t) or [''] * 4)[i]
+                   for lg in ('pt', 'en') for tm, t in (('claro', 'light'), ('escuro', 'dark')) for i in range(4)),
+               'abas: cada aba leva a parte certa (língua, tema e número)')
+            ok('fonts.googleapis' not in h and 'QUJD' not in h, 'abas: sem a fonte do Google e sem o logotipo repetido')
+            t = TLm.le(arq)
+            ok(t.get('ok') == 'en:dark:publicado', 'abas: a tela executiva continua desenhando (%s)' % t.get('ok'))
+        except (Exception, SystemExit) as e:   # noqa: BLE001
+            falhas.append('abas: a tela com as partes não saiu (%s)' % str(e)[:300])
+        os.remove(os.path.join(pasta, 'diario_escuro_p3_en.html'))
+        try:
+            rec = EB.recusa(TLm.partes_da_pasta, pasta)
+        except Exception as e:   # noqa: BLE001  (a parte que falta estoura em vez de recusar)
+            rec = False
+        ok(rec, 'abas: faltando uma parte do diário, a tela é recusada')
+    return falhas
+
+
+PLANTIOS_ABAS = [
+    ('uma aba some', "    ('p4', 'Corte, usinas e fatos',", "    # ('p4', 'Corte, usinas e fatos',", 'a tela sai com 5 abas'),
+    ('a fonte do Google fica na aba', r"    h = re.sub(r'<link [^>]*fonts\.googleapis\.com[^>]*>', '', h)" + "\n", '', 'a tela com as partes não saiu'),
+    ('o script das abas vira o último', "    i = html.index('<script id=\"dados\"')   # antes do dado", "    i = html.index('</body>')   # antes do dado", 'a tela com as partes não saiu'),
+    ('a parte que falta passa', "    if len(ha) != len(nomes):\n        raise SystemExit('RECUSADO: tela: faltam partes", "    if False:\n        raise SystemExit('RECUSADO: tela: faltam partes", 'faltando uma parte'),
+]
+
+
 def main():
     falhas = casos()
     for f in falhas:
@@ -295,6 +361,23 @@ def main():
         try:
             kw = {'modelo': {'modelo': novo}, 'extrai': {'extrai_src': novo}, 'prepara': {'prepara_src': novo}, 'rodada': {'rodada': novo}, 'wf': {'wf': novo}, 'aprovado': {'aprovado': novo}}.get(onde, {})
             fp = casos(modulo(novo, 'tela_x') if onde == 'tela' else TL, so=so, **kw)
+        except (Exception, SystemExit) as e:   # noqa: BLE001
+            fp = ['estourou: %s' % str(e)[:200]]
+        pegou = [f for f in fp if motivo in f]
+        if pegou:
+            print('  plantio "%s": reprovado, como devia (%s)' % (nome, pegou[0][:140]))
+        else:
+            print('  PLANTIO PASSOU:', nome, '· esperado um motivo com "%s"; veio: %s' % (motivo, '; '.join(fp)[:300] or 'nada')); ruim = True
+    fa = ensaio_abas()
+    for f in fa:
+        print('  FALHA:', f)
+    ruim = ruim or bool(fa)
+    print('abas com o boletim completo:', 'REPROVADAS' if fa else 'aprovadas')
+    for nome, de, para, motivo in PLANTIOS_ABAS:
+        if TELA_PY.count(de) != 1:
+            print('  PLANTIO SEM ÂNCORA:', nome); ruim = True; continue
+        try:
+            fp = ensaio_abas(modulo(TELA_PY.replace(de, para), 'tela_x'), completo=False)
         except (Exception, SystemExit) as e:   # noqa: BLE001
             fp = ['estourou: %s' % str(e)[:200]]
         pegou = [f for f in fp if motivo in f]
