@@ -131,8 +131,8 @@ def problemas(t, dado, lang, tema=TEMA):
             out.append('a curva do dia saiu sem o degrau das ordens da Iqony')
     if dado.get('disp_dia') is None and F.DISP_PENDENTE[lang] not in t['textos'].get('kp', ''):
         out.append('a disponibilidade que ainda não chegou não saiu como "%s"' % F.DISP_PENDENTE[lang])
-    if t['html'].get('g-pon', '').count('data-pxx=') != 4:
-        out.append('a ponte do mês saiu sem o quadro P50 · P75 · P90')
+    if 'data-pxx=' in t['html'].get('g-pon', '') or t['html'].get('g-viz'):   # boletim-tela-limpa (24/11/2026): a régua e o quadro saíram
+        out.append('a ponte do mês voltou com o quadro P50 · P75 · P90 ou a régua do corte')
     pend = [m['d'] for m in dado['mes'] if not m['ons']]
     if any(d in pend for d in dado.get('livres') or []):
         out.append('dia pendente contado como dia sem corte no PR por usina')

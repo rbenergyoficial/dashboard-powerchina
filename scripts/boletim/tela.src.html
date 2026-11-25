@@ -121,8 +121,7 @@ svg text.v{fill:var(--ink);font-weight:600} svg text.n{fill:var(--ink2)} svg tex
   <section class="cheio"><h2 id="t-leq"></h2><p class="sub" id="s-leq"></p><div class="leg" id="l-leq"></div>
     <div class="meta"><div class="g" id="g-gcx"></div><div class="g" id="g-gpp"></div><div class="g" id="g-leq"></div></div></section>
   <div class="par" style="margin-top:40px">
-    <section style="margin-top:0"><h2 id="t-pon"></h2><p class="sub" id="s-pon"></p><div class="g" id="g-pon"></div><p class="nota" id="n-pon" hidden></p>
-      <h2 id="t-viz" style="font-size:15px;margin-top:22px"></h2><div class="g" id="g-viz" style="margin-top:6px"></div></section>
+    <section style="margin-top:0"><h2 id="t-pon"></h2><p class="sub" id="s-pon"></p><div class="g" id="g-pon"></div><p class="nota" id="n-pon" hidden></p></section>
     <section style="margin-top:0"><h2 id="t-mes"></h2><p class="sub" id="s-mes"></p><div class="leg" id="l-mes"></div><div class="g" id="g-mes"></div></section>
   </div>
   <section class="cheio"><h2 id="t-usi"></h2><p class="sub" id="s-usi"></p><div class="leg" id="l-usi"></div><div class="g" id="g-usi"></div></section>
@@ -303,16 +302,12 @@ function textos(){
   $('t-pon').textContent = ULT == null ? L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues; o corte do ONS ainda não foi apurado no mês', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered; the ONS curtailment of the month is not settled yet', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh；本月 ONS 限电尚未核算')
     : PEND.length ? L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues e ' + pC + ficou + ' no corte do ONS já apurado', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered and ' + pC + was + ' curtailed by the ONS on the days already settled', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh，已核算的 ONS 限电占 ' + pC + ' MWh')
     : L('De cada 100 MWh esperados pelo projeto, ' + pE + ' foram entregues e ' + pC + ficou + ' no corte do ONS', 'Of every 100 MWh expected by the project, ' + pE + ' were delivered and ' + pC + was + ' curtailed by the ONS', '项目预期的每 100 MWh 中，已送出 ' + pE + ' MWh，ONS 限电占 ' + pC + ' MWh');
-  $('s-pon').textContent = L(Mes() + ' até ' + fd(DD) + ', em MWh. Esperado: P50 do estudo do projeto para os ' + DD + ' dias, sem corte. P75 e P90 na proporção anual do estudo.',
-    Mes() + ' to ' + fd(DD) + ', MWh. Expected: P50 of the project study for the ' + DD + ' days, without curtailment. P75 and P90 at the annual ratio of the study.',
-    '截至 ' + fd(DD) + '，单位 MWh。预期：项目研究的 P50（' + DD + ' 天，不含限电）。P75 和 P90 按研究的年度比例折算。');
+  $('s-pon').textContent = L(Mes() + ' até ' + fd(DD) + ', em MWh. Esperado: P50 do estudo do projeto para os ' + DD + ' dias, sem corte.',
+    Mes() + ' to ' + fd(DD) + ', MWh. Expected: P50 of the project study for the ' + DD + ' days, without curtailment.',
+    '截至 ' + fd(DD) + '，单位 MWh。预期：项目研究的 P50（' + DD + ' 天，不含限电）。');
   var np = $('n-pon'); np.hidden = !PEND.length;
   np.innerHTML = PEND.length ? '<i></i>' + esc(L(dias(PEND) + (mais ? ' aguardam' : ' aguarda') + ' a apuração do ONS: a energia impedida ' + (mais ? 'desses dias' : 'desse dia') + ' ainda não entrou em “Impedido pelo ONS” e aparece em “Outras diferenças”.',
     dias(PEND) + (mais ? ' await' : ' awaits') + ' the ONS figure: the energy curtailed on ' + (mais ? 'those days' : 'that day') + ' is not yet in “Curtailed by the ONS” and shows under “Other differences”.', dias(PEND) + ' 待 ONS 核算：其限电损失电量尚未计入“ONS 限电量”，暂列于“其他差异”。')) : '';
-  var B = D.bench_mes || {}, temB = B.nosso != null && B.abaiara != null && B.ne != null;
-  var rel = !temB ? '' : (B.nosso < B.abaiara && B.nosso < B.ne) ? L('abaixo de Abaiara e do Nordeste','below Abaiara and the Northeast','低于 Abaiara 和东北地区') : (B.nosso > B.abaiara && B.nosso > B.ne) ? L('acima de Abaiara e do Nordeste','above Abaiara and the Northeast','高于 Abaiara 和东北地区') : L('entre Abaiara e o Nordeste','between Abaiara and the Northeast','介于 Abaiara 与东北地区之间');
-  $('t-viz').textContent = !temB ? L('Corte no mês: nenhum dia apurado pelo ONS ainda','Curtailment this month: no day settled by the ONS yet','本月限电：ONS 尚未核算任何一天')
-    : L('Corte no mês: Mauriti ','Curtailment this month: Mauriti ','本月限电率：Mauriti ') + rel + (PEND.length && ULT ? L(' (até ' + fd(ULT) + ', último dia apurado pelo ONS)', ' (to ' + fd(ULT) + ', last day settled by the ONS)', '（截至 ' + fd(ULT) + '，ONS 最近核算日）') : '');
   $('t-mes').textContent = L(acima + ' dos ' + DD + ' dias de ' + mesNome() + ' fecharam acima da meta', acima + ' of the ' + DD + ' days of ' + Mes() + ' closed above target', mesNome() + '已结 ' + DD + ' 天中，' + acima + ' 天高于目标');
   $('s-mes').textContent = L('Geração e energia impedida pelo ONS, MWh por dia. Embaixo, a irradiação de cada dia (kWh/m²).', 'Generation and energy curtailed by the ONS, MWh per day. Below, each day’s irradiation (kWh/m²).','每日发电量及 ONS 限电量（MWh）。下方为每日辐照量（kWh/m²）。') +
     (PEND.length ? L(' O dia hachurado aguarda a apuração do ONS.', ' The hatched day awaits the ONS figure.','阴影日待 ONS 核算。') : '');
@@ -458,7 +453,7 @@ function gLeque(){
 
 /* ---------- 3. ponte da energia do mês ---------- */
 function gPonte(){
-  var el = $('g-pon'), W = el.clientWidth, peq = W < 470, bh = 24, lh = 17, gp = 13, rows = [
+  var el = $('g-pon'), W = el.clientWidth, peq = W < 470, bh = 30, lh = 17, gp = 19, rows = [   /* barras mais altas: a ponte ocupa a altura do dia a dia ao lado (sem vão, 24/11/2026) */
     {n: L('Esperado pelo projeto (P50)','Expected by the project (P50)','项目预期（P50）'), a: 0, b: p50, f: mix('var(--ink4)', 30), st: mix('var(--ink4)', 70), v: nf(p50) + ' MWh', dentro: 1},
     /* o impedido é só o dos dias que o ONS apurou: com dia pendente, o rótulo diz até quando e a linha de baixo leva a hachura */
     {n: L('Impedido pelo ONS','Curtailed by the ONS','ONS 限电量') + (PEND.length && ULT ? L(' · apurado até ' + fd(ULT), ' · settled to ' + fd(ULT), ' · 核算至 ' + fd(ULT)) : ''), a: p50 - cor, b: p50, f: mix('var(--corte)', 48), st: 'var(--corte)',
@@ -466,7 +461,7 @@ function gPonte(){
     {n: peq ? L('Outras diferenças','Other differences','其他差异') : L('Outras diferenças (irradiação fora do ano típico e demais perdas)','Other differences (irradiation off the typical year and other losses)','其他差异（辐照偏离典型年及其他损失）'), a: Math.min(ent, p50 - cor), b: Math.max(ent, p50 - cor),
       f: mix('var(--ink4)', 14), st: mix('var(--ink4)', 55), v: (out >= 0 ? '−' : '+') + nf(Math.abs(out)) + ' MWh · ' + pc(Math.abs(out) / p50 * 100), pend: PEND.length},
     {n: L('Entregue','Delivered','已送出'), a: 0, b: ent, f: mix('var(--ger)', 48), st: 'var(--ger)', v: nf(ent) + ' MWh · ' + pc(ent / p50 * 100), dentro: 1}];
-  var H0 = rows.length * (lh + bh + gp) + 20, H = H0 + (peq ? 136 : 76), MX = Math.max(p50, ent, metaPer), X = function(v){ return 1 + v / MX * (W - 2); };
+  var H0 = rows.length * (lh + bh + gp) + 20, H = H0, MX = Math.max(p50, ent, metaPer), X = function(v){ return 1 + v / MX * (W - 2); };
   var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="' + esc($('t-pon').textContent) + '"><defs><pattern id="hxp" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.2" height="5" fill="var(--corte)"/></pattern></defs>';
   rows.forEach(function(r, i){ var y = i * (lh + bh + gp), yb = y + lh, x0 = X(r.a), x1 = X(r.b);
     s += '<text class="n t13" x="1" y="' + (y + 12) + '">' + esc(r.n) + '</text>' +
@@ -477,32 +472,9 @@ function gPonte(){
   var yl = (rows.length - 1) * (lh + bh + gp) + lh, xm = X(metaPer);
   s += '<line x1="' + r1(xm) + '" x2="' + r1(xm) + '" y1="' + (yl - 4) + '" y2="' + (yl + bh + 4) + '" stroke="var(--ink)" stroke-width="2"/>' +
     '<text class="n" x="' + (xm < 330 ? 1 : r1(xm)) + '" y="' + (yl + bh + 18) + '" text-anchor="' + (xm < 330 ? 'start' : 'end') + '">' + L('meta dos ' + DD + ' dias ','target for the ' + DD + ' days ', DD + ' 天目标 ') + nf(metaPer) + ' MWh · ' + L('entregue ','delivered ','已送出 ') + (ent >= metaPer ? '+' : '−') + pc(Math.abs(ent / metaPer - 1) * 100) + '</text>';
-  /* o quadro do estudo, no padrão do painel executivo: entregue contra o P50, o P75 e o P90; traço cheio = P50, pontilhado = P75, tracejado = P90 */
-  var temC = ULT != null, qd = [
-    [L('Entregue ÷ P50','Delivered ÷ P50','已送出 ÷ P50'), pc(ent / p50 * 100), nf(p50, 0) + ' MWh'],
-    [PEND.length ? L('Com o impedido já apurado','With the curtailment settled so far','含已核算限电量') : L('Com o impedido','With the curtailed energy','含限电量'),
-      temC ? pc((ent + cor) / p50 * 100) : L('pendente','pending','待核算'), temC ? L('do P50','of P50','占 P50') : L('apuração do ONS','ONS figure','ONS 核算')],
-    [L('Entregue ÷ P75','Delivered ÷ P75','已送出 ÷ P75'), pc(ent / p75 * 100), nf(p75, 0) + ' MWh'],
-    [L('Entregue ÷ P90','Delivered ÷ P90','已送出 ÷ P90'), pc(ent / p90 * 100), nf(p90, 0) + ' MWh']];
-  var nc = peq ? 2 : 4, cw = W / nc;
-  qd.forEach(function(c, i){ var x = 1 + (i % nc) * cw, y = H0 + 12 + Math.floor(i / nc) * 60;
-    s += '<line data-pxx="' + i + '" x1="' + r1(x) + '" x2="' + r1(x + cw - 16) + '" y1="' + y + '" y2="' + y + '" stroke="var(--ink' + (i === 3 ? 3 : 2) + ')" stroke-width="1.6"' + (i === 2 ? ' stroke-dasharray="0.1 3.4" stroke-linecap="round"' : i === 3 ? ' stroke-dasharray="5 4"' : '') + '/>' +
-      '<text x="' + r1(x) + '" y="' + (y + 17) + '">' + c[0] + '</text><text class="v" x="' + r1(x) + '" y="' + (y + 38) + '" style="font-size:18px">' + c[1] + '</text><text x="' + r1(x) + '" y="' + (y + 53) + '">' + c[2] + '</text>'; });
   s += '</svg>';
   el.innerHTML = s;
-  /* vizinhos */
-  var ev = $('g-viz'), B = D.bench_mes || {};
-  if (B.nosso == null || B.abaiara == null || B.ne == null){ ev.innerHTML = ''; return; }   /* nenhum dia do mês apurado pelo ONS: sem "—%" */
-  /* no celular os três rótulos vão em linhas embaixo do eixo (ao lado do ponto, o do Nordeste saía da tela) */
-  var W2 = ev.clientWidth, peqV = W2 < 430, Hh = peqV ? 92 : 74, yy = peqV ? 14 : 38, mx = Math.max(30, Math.ceil(Math.max(B.nosso, B.abaiara, B.ne) / 10) * 10), X2 = function(v){ return 14 + v / mx * (W2 - 28); };
-  var pts = [{n: 'Mauriti', v: B.nosso, c: 'var(--cx)', p: -1, an: 'end'}, {n: 'Abaiara', v: B.abaiara, c: 'var(--ink4)', p: 1, an: 'middle'}, {n: L('Nordeste (solar)','Northeast (solar)','东北地区（光伏）'), v: B.ne, c: 'var(--ink4)', p: -1, an: 'start'}];
-  var t = '<svg viewBox="0 0 ' + W2 + ' ' + Hh + '" height="' + Hh + '" role="img" aria-label="' + esc($('t-viz').textContent) + '"><line x1="' + X2(0) + '" x2="' + X2(mx) + '" y1="' + yy + '" y2="' + yy + '" stroke="var(--line2)" stroke-width="1"/>';
-  [0, mx / 3, mx * 2 / 3, mx].map(Math.round).forEach(function(v){ t += '<line x1="' + r1(X2(v)) + '" x2="' + r1(X2(v)) + '" y1="' + (yy - 4) + '" y2="' + (yy + 4) + '" stroke="var(--line2)"/><text x="' + r1(X2(v)) + '" y="' + (yy + 30) + '" text-anchor="middle" style="font-size:10.5px">' + v + '%</text>'; });
-  pts.forEach(function(p, k){ var dx = p.an === 'end' ? 5 : p.an === 'start' ? -5 : 0, lx = k === 2 ? r1(W2 / 2) : 0, ly = k ? 84 : 66, cl = (p.n === 'Mauriti' ? 'b' : 'n') + ' t13', rot = esc(p.n) + ' ' + pc(p.v);
-    t += '<circle cx="' + r1(X2(p.v)) + '" cy="' + yy + '" r="' + (p.n === 'Mauriti' ? 6.5 : 5) + '" fill="' + p.c + '" stroke="var(--bg)" stroke-width="2"/>' +
-      (peqV ? '<circle cx="' + (lx + 6) + '" cy="' + (ly - 4.5) + '" r="4" fill="' + p.c + '"/><text class="' + cl + '" x="' + (lx + 16) + '" y="' + ly + '">' + rot + '</text>'
-        : '<text class="' + cl + '" x="' + r1(X2(p.v) + dx) + '" y="' + (p.p < 0 ? yy - 13 : yy + 19) + '" text-anchor="' + p.an + '">' + rot + '</text>'); });
-  ev.innerHTML = t + '</svg>';
+  /* a régua do corte regional saiu (humano, 24/11/2026: "Tire a régua do corte e os 4 números de baixo") */
 }
 
 /* ---------- 4. dia a dia ---------- */

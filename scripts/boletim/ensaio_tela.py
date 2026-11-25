@@ -142,11 +142,9 @@ def casos(TLm=TL, modelo=None, extrai_src=None, prepara_src=None, rodada=RODADA,
             br = lambda v: ('%.1f' % v).replace('.', ',') + ' %'   # noqa: E731
             ok(abs((dp.get('p75_fator') or 0) - 977.7 / 998.416) < 1e-6 and abs((dp.get('p90_fator') or 0) - 959.0 / 998.416) < 1e-6,
                'o dado traz os fatores do estudo: P75 = 977,7 ÷ 998,416 e P90 = 959,0 ÷ 998,416 (%s, %s)' % (dp.get('p75_fator'), dp.get('p90_fator')))
-            gp_ = tx('pub', 'g-pon')
-            quer = ('Entregue ÷ P50', 'Entregue ÷ P75', 'Entregue ÷ P90', br(ent_ / p50_ * 100), br(ent_ / (p50_ * 977.7 / 998.416) * 100), br(ent_ / (p50_ * 959.0 / 998.416) * 100))
-            ok(all(s in gp_ for s in quer) and hx('pub', 'g-pon').count('data-pxx=') == 4 and hx('pub', 'g-pon', 'en', 390).count('data-pxx=') == 4,
-               'a ponte traz o quadro P50 · P75 · P90 com as três razões do entregue (quer %s; veio %s)' % (quer[3:], gp_[-170:]))
-            ok('已送出 ÷ P75' in tx('pub', 'g-pon', 'zh') and '电站群' in tx('pub', 'l-leq', 'zh') and '当日发电量' in tx('pub', 'kp', 'zh'), 'o chinês traduz os números do topo, a legenda e a ponte')
+            ok('Entregue ÷ P75' not in tx('pub', 'g-pon') and 'data-pxx=' not in hx('pub', 'g-pon') and not hx('pub', 'g-viz') and not tx('pub', 't-viz'),
+               'a aba Executivo sai sem o quadro P50 · P75 · P90 e sem a régua do corte (humano, 24/11/2026)')
+            ok('项目预期' in tx('pub', 'g-pon', 'zh') and '电站群' in tx('pub', 'l-leq', 'zh') and '当日发电量' in tx('pub', 'kp', 'zh'), 'o chinês traduz os números do topo, a legenda e a ponte')
         if 'ordens' in D:   # pendente com ordens: as ordens da Iqony no número, no título, na curva, na ponte, no dia a dia e no PR
             ok('2,3 h' in tx('ordens', 'kp') and '2 ordens recebidas' in tx('ordens', 'kp') and '282 MW' in tx('ordens', 'kp'), 'ordens: o número mostra as 2 ordens, 2,3 h e o mínimo de 282 MW')
             ok('10:50' in tx('ordens', 't-dia') and '13:06' in tx('ordens', 't-dia') and 'pendente' in tx('ordens', 't-dia'), 'ordens: o título diz a janela das ordens e que a apuração está pendente')
@@ -164,8 +162,8 @@ def casos(TLm=TL, modelo=None, extrai_src=None, prepara_src=None, rodada=RODADA,
         if 'semreg' in D:
             ok('sem registro das ordens' in tx('semreg', 'kp') and 'indisponível' in tx('semreg', 't-dia'), 'semreg: sem o registro das ordens a tela diz que ele está indisponível')
         if 'mes0' in D:   # o dia 1º lido no dia 2: nenhum dia do mês apurado
-            ok('Ainda não há dia' in tx('mes0', 't-usi') and 'nenhum dia apurado' in tx('mes0', 't-viz') and not hx('mes0', 'g-viz') and 'apuração pendente' in tx('mes0', 'g-pon'),
-               'mes0: sem dia apurado no mês, a tela não inventa PR por usina, corte regional nem energia impedida')
+            ok('Ainda não há dia' in tx('mes0', 't-usi') and 'apuração pendente' in tx('mes0', 'g-pon'),
+               'mes0: sem dia apurado no mês, a tela não inventa PR por usina, nem energia impedida')
         base = 'nenhuma' if 'nenhuma' in D else next(iter(D), None)
         if base:
             d = D[base][0]
@@ -253,7 +251,7 @@ PLANTIOS = [
     ('a versão em inglês sai em português', 'modelo', "function L(pt, en, zh){ if (LANG === 'zh'){ if (zh == null){ FALTA++; return en; } return zh; } return LANG === 'pt' ? pt : en; }", "function L(pt, en, zh){ return pt; }", ('pub',), 'inglês com português'),
     ('um texto da tela fica sem o chinês', 'modelo', "L('Geração do dia','Day generation','当日发电量')", "L('Geração do dia','Day generation')", ('pub',), 'a guarda aprova a tela em chinês'),
     ('o chinês sai em português', 'modelo', "if (LANG === 'zh'){ if (zh == null){ FALTA++; return en; } return zh; }", "if (LANG === 'zh') return pt;", ('pub',), 'a guarda aprova a tela em chinês'),
-    ('o quadro P50 · P75 · P90 some da ponte', 'modelo', "  qd.forEach(function(c, i){", "  [].forEach(function(c, i){", ('pub',), 'o quadro P50 · P75 · P90'),
+    ('o quadro P50 · P75 · P90 volta à ponte', 'modelo', "  s += '</svg>';\n  el.innerHTML = s;\n  /* a régua do corte", "  s += '<line data-pxx=\"0\"/></svg>';\n  el.innerHTML = s;\n  /* a régua do corte", ('pub',), 'sem o quadro P50 · P75 · P90'),
     ('o P75 sai com o fator do P90', 'extrai', "r(P75_FATOR, 8)", "r(G['P90_FATOR'], 8)", ('pub',), 'os fatores do estudo'),
     ('a disponibilidade que não chegou vira "—"', 'modelo', "    (D.disp_dia != null ? kp('disp'", "    (true ? kp('disp'", ('nenhuma',), 'disponibilidade pendente'),
     ('a ressalva do coletor parado some', 'modelo', "var PARADO = !PUB && IQ && IQ.coletor === 'parado';", "var PARADO = false;", ('parado',), 'leva a ressalva'),
