@@ -1,12 +1,16 @@
 /*
  * gen-inversores.js — confiabilidade dos inversores Sungrow -> dados/inversores.json (fonte da aba "Inversores").
- * Lê 2 planilhas do container inversores-raw: P1 (Inverter Failure Control / substituições) e
- * P2 (Registro_Falhas_Inversores / eventos do iSolarCloud). Identifica P1/P2 pelo CONTEÚDO (cabeçalhos),
- * não pelo nome. Limpa/normaliza, aplica taxonomia e PRÉ-CALCULA todas as análises (pct/cor/rótulo prontos).
- * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=inversores-raw · OUT_CONTAINER=dados · OUT_BLOB=inversores.json.
- * Modo teste local: LOCAL_DIR (pasta com os 2 xlsx) / LOCAL_OUT (arquivo de saída).
+ * P1 (substituições, estoque e catálogo de códigos): o arquivo que o SIGO refaz a cada lançamento, `acervo/inversores.json`
+ *    no contêiner `dados` (lote inversores-sigo, 24/11/2026). A planilha de controle (.xlsm) parou de ser preenchida na virada
+ *    de 24/11; a cópia dela que ainda chega ao inversores-raw é IGNORADA de propósito.
+ * P2 (alarmes): a planilha Registro_Falhas_Inversores do container inversores-raw até o corte, e a base nova dali em diante.
+ * Limpa/normaliza, aplica taxonomia e PRÉ-CALCULA todas as análises (pct/cor/rótulo prontos).
+ * Env: a credencial pela lib-conteiner (DADOS_STORAGE, ou o OIDC do job) · RAW_CONTAINER=inversores-raw · OUT_CONTAINER=dados · OUT_BLOB=inversores.json
+ *      · SIGO_BLOB=acervo/inversores.json.
+ * Modo teste local: LOCAL_DIR (pasta com a planilha P2) / LOCAL_SIGO (o arquivo do SIGO, .json ou .json.gz) / LOCAL_OUT (arquivo de saída).
  */
 const XLSX = require('xlsx');
+const crypto = require('crypto');
 const AB = require('./lib-alarmes-inversor.js');
 const rot = require('./lib-rotulos.js');   // rotulo de mes nas tres linguas (paginas EN/中文)
 const RAW_CONTAINER = process.env.RAW_CONTAINER || 'inversores-raw';
@@ -16,6 +20,7 @@ const RAW_CONTAINER = process.env.RAW_CONTAINER || 'inversores-raw';
 const NAO_FINAL = /em\s*revis|revis[aã]o|(^|[^a-z])old([^a-z]|$)|antig|backup|c[oó]pia|(^|[^a-z])copy([^a-z]|$)|rascunho|^~\$/i;
 const OUT_CONTAINER = process.env.OUT_CONTAINER || 'dados';
 const OUT_BLOB = process.env.OUT_BLOB || 'inversores.json';
+const SIGO_BLOB = process.env.SIGO_BLOB || 'acervo/inversores.json';
 const HOJE = new Date(Date.now() - 3 * 3600 * 1000); HOJE.setUTCHours(0, 0, 0, 0);
 
 // ---------- blob I/O (espelha gen-scada.js) ----------
@@ -30,6 +35,13 @@ async function loadRawBuffers() {
   for await (const b of cont.listBlobsFlat()) { if (!/\.xls[xm]$/i.test(b.name)) continue;
     out.push({ name: b.name, mod: (b.properties || {}).lastModified, buf: await streamToBuffer((await cont.getBlobClient(b.name).download()).readableStreamBody) }); }
   return out;
+}
+// o arquivo do SIGO: no contêiner `dados`, o MESMO da saída e da base de alarmes, então a credencial que o job já tem serve (gzip ou não)
+async function leSigo() {
+  const fs = require('fs'), zlib = require('zlib');
+  const b = process.env.LOCAL_SIGO ? fs.readFileSync(process.env.LOCAL_SIGO)
+    : await streamToBuffer((await conteiner(OUT_CONTAINER).getBlobClient(SIGO_BLOB).download()).readableStreamBody);
+  return JSON.parse((b[0] === 0x1f && b[1] === 0x8b ? zlib.gunzipSync(b) : b).toString('utf8'));
 }
 // a base nova de alarmes (lote inversores-alarmes-base): os meses do logger e, só para o mês que ele não cobrir, o do supervisório. Falha de leitura derruba a rodada:
 // cair na planilha em silêncio voltaria o selo e os números para junho sem nada ficar vermelho. LOCAL_HIST_DIR = pasta com hist/ para rodar sem rede
@@ -156,124 +168,94 @@ const MES_ABBR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set',
 const mesLbl = m => MES_ABBR[+m.slice(5, 7) - 1] + '/' + m.slice(2, 4);
 function enrich(arr, colorFn) { const mx = Math.max(...arr.map(x => x.n), 1); arr.forEach((x, i) => { x.pct = Math.max(2, Math.round(x.n / mx * 100)); x.cor = colorFn(x, i, mx); }); }
 
-// ---------- abas novas da planilha P1 (20/08/2026) ----------
-// A REGRA MORA NA PLANILHA, não aqui. FAULT_CODES é o dicionário do manual Sungrow e DESC_MAP são
-// as regras de inferência COM justificativa nomeada. Reescrevê-las dentro do gerador criaria a
-// terceira cópia da mesma regra — e cópia é o que envelhece diferente do original.
-// A aba é achada pelo CABEÇALHO, nunca pelo nome nem pela posição: nome de aba é rótulo humano
-// e muda; o conjunto de colunas é o contrato.
-function abaPorCabecalho(wb, nomes) {
-  for (const sn of wb.SheetNames) { const R = rowsOf(wb.Sheets[sn]);
-    for (let i = 0; i < Math.min(6, R.length); i++) if (nomes.every(x => cIdx(R[i], x) >= 0)) return { sn, R, hr: i }; }
-  return null;
-}
-// ⚠️ CORRECTIVE ACTIONS é o que distingue a aba do dicionário da aba de falhas: as duas têm
-// FAULT CODE e FAULT NAME, e sem esta terceira coluna o dicionário sairia da aba errada.
-function leFaultCodes(wb) {
-  const a = abaPorCabecalho(wb, ['FAULT CODE', 'FAULT NAME', 'CORRECTIVE ACTIONS']); if (!a) return null;
-  const H = a.R[a.hr]; const cc = cIdx(H, 'FAULT CODE'), cn = cIdx(H, 'FAULT NAME'),
-    ca = cIdx(H, 'CORRECTIVE ACTIONS'), cf = cIdx(H, 'ORIGINAL RANGE');
-  const out = [];
-  for (const r of a.R.slice(a.hr + 1)) { const cod = norm(r[cc]); if (!/^\d+$/.test(cod)) continue;
-    out.push({ codigo: cod, nome: norm(r[cn]), acao: norm(r[ca]), faixa: cf >= 0 ? norm(r[cf]) : '' }); }
-  return out.length ? { aba: a.sn, n: out.length, itens: out } : null;
-}
-function leDescMap(wb) {
-  const a = abaPorCabecalho(wb, ['KEYWORD', 'ASSUMED FAULT CODE']); if (!a) return null;
-  const H = a.R[a.hr]; const ck = cIdx(H, 'KEYWORD'), cc = cIdx(H, 'ASSUMED FAULT CODE'), cb = cIdx(H, 'BASIS');
-  const out = [];
-  for (const r of a.R.slice(a.hr + 1)) { const k = norm(r[ck]); if (!k) continue;
-    out.push({ palavra: k, codigo: norm(r[cc]), base: cb >= 0 ? norm(r[cb]) : '' }); }
-  return out.length ? { aba: a.sn, n: out.length, itens: out } : null;
-}
-// dois blocos LADO A LADO na mesma aba (novos à esquerda, reparados à direita). O início de cada
-// bloco sai do título na linha acima do cabeçalho, não de coluna fixa.
-function leEstoqueSN(wb) {
-  const a = abaPorCabecalho(wb, ['NUMERO DE SERIE', 'SITUACAO']); if (!a) return null;
-  const H = a.R[a.hr]; const titulo = a.R[a.hr - 1] || [];
-  const inicio = [];
-  titulo.forEach((v, j) => { if (/NOVO|REPARAD|CONSERT/.test(semAcento(v))) inicio.push({ j, grupo: norm(v) }); });
-  if (!inicio.length) inicio.push({ j: 0, grupo: 'ESTOQUE' });
-  const blocos = [];
-  for (let k = 0; k < inicio.length; k++) {
-    const de = inicio[k].j, ate = k + 1 < inicio.length ? inicio[k + 1].j : H.length;
-    const sub = H.slice(de, ate);
-    const cS = cIdx(sub, 'NUMERO DE SERIE'); if (cS < 0) continue;
-    const cSit = cIdx(sub, 'SITUACAO'), cOrd = cIdx(sub, 'ORDEM'), cCod = cIdx(sub, 'CODIGO'), cSt = cIdx(sub, 'STATUS');
-    const itens = [];
-    for (const r of a.R.slice(a.hr + 1)) { const sn = norm(r[de + cS]); if (!sn) continue;
-      itens.push({ sn, situacao: cSit >= 0 ? norm(r[de + cSit]) : '',
-        ordem: cOrd >= 0 ? (parseInt(norm(r[de + cOrd]), 10) || null) : null,
-        codigo: cCod >= 0 ? norm(r[de + cCod]) : (cSt >= 0 ? norm(r[de + cSt]) : '') }); }
-    blocos.push({ grupo: inicio[k].grupo, n: itens.length,
-      disponiveis: itens.filter(x => /DISPON/.test(semAcento(x.situacao))).length, itens });
+// ---------- P1 · o arquivo do SIGO (lote inversores-sigo, 24/11/2026) ----------
+// A REGRA continua morando FORA daqui: o catálogo de códigos (manual Sungrow) e as regras de inferência vêm no próprio arquivo do
+// SIGO, que os herdou da planilha na carga. Reescrevê-los no gerador criaria uma terceira cópia, e cópia é o que envelhece diferente.
+const USINAS = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'];
+const FASES = ['L1', 'L2', 'L3'];
+const ITEM_INI_SALDO = 166;   // o saldo de fusíveis desconta o consumo da troca nº 166 em diante: o mesmo critério do SIGO
+const RE_DIA = /^\d{4}-\d{2}-\d{2}$/;
+const diaLocal = (v) => { if (v == null || v === '') return null; if (!RE_DIA.test(String(v))) return null;
+  const [y, mo, d] = String(v).split('-').map(Number); const x = new Date(y, mo - 1, d);
+  return (x.getFullYear() === y && x.getMonth() === mo - 1 && x.getDate() === d) ? x : null; };
+const inteiro = (v) => typeof v === 'number' && Number.isInteger(v);
+const shaBase = (B) => { const s = Object.assign({}, B); delete s.meta; return crypto.createHash('sha256').update(JSON.stringify(s)).digest('hex').slice(0, 16); };
+
+// 🔴 O ARQUIVO SÓ ENTRA INTEIRO E COERENTE. Cada conferência que não fecha DERRUBA a rodada e o blob publicado fica como está:
+// painel parado num dia conhecido custa uma correção; painel com troca a menos, saldo errado ou arquivo pela metade custa a
+// confiança na página, e nada ficaria vermelho. Não há volta silenciosa para a planilha: ela parou e mostraria um estado velho.
+function confereSigo(doc) {
+  const erro = (m) => { throw new Error('arquivo do SIGO recusado: ' + m); };
+  if (!doc || typeof doc !== 'object' || !doc.BASE || !doc.META) erro('sem BASE e META');
+  const B = doc.BASE, M = doc.META, L = M.linhas || {};
+  if (!/^SIGO\b/.test(String(M.origem || ''))) erro('a origem não é o SIGO ("' + String(M.origem).slice(0, 60) + '"); o arquivo ainda é o da planilha');
+  if (shaBase(B) !== M.sha256_16) erro('o conteúdo não bate com a impressão digital do próprio arquivo (' + shaBase(B) + ' × ' + M.sha256_16 + ')');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(String(M.modificadoEm || ''))) erro('sem a hora do último lançamento');
+  const S = B.substituicoes;
+  if (!Array.isArray(S) || !S.length) erro('sem trocas');
+  if (S.length !== L.substituicoes) erro(S.length + ' trocas no arquivo × ' + L.substituicoes + ' declaradas');
+  const vistos = new Set();
+  for (const s of S) {
+    const id = 'troca nº ' + s.item + ': ';
+    if (!inteiro(s.item) || s.item < 1) erro('número de troca inválido (' + JSON.stringify(s.item) + ')');
+    if (vistos.has(s.item)) erro('número de troca repetido (' + s.item + ')');
+    vistos.add(s.item);
+    if (!USINAS.includes(s.parque)) erro(id + 'usina fora do conjunto (' + s.parque + ')');
+    if (!/^TS\d{1,2}$/.test(String(s.ts)) || !/^INV\d{1,2}$/.test(String(s.inv))) erro(id + 'posição ilegível (' + s.ts + ' · ' + s.inv + ')');
+    for (const k of ['data', 'dataSubstituicao']) if (s[k] != null && !diaLocal(s[k])) erro(id + k + ' não é dia (' + s[k] + ')');
+    const f = s.fusiveisDanificados;
+    if (!inteiro(f) || f < 0 || f > 3) erro(id + 'fusíveis fora de 0 a 3 (' + JSON.stringify(f) + ')');
+    if (f > 0) { const fa = String(s.fases || '').split('/').map((x) => x.trim());
+      if (fa.length !== f || new Set(fa).size !== f || !fa.every((x) => FASES.includes(x))) erro(id + 'as fases (' + s.fases + ') não batem com ' + f + ' fusível(is)'); }
+    else if (![0, null, ''].includes(s.fases == null ? null : s.fases)) erro(id + 'fases (' + s.fases + ') sem fusível');
+    if (s.origem != null && !['New', 'Repaired'].includes(s.origem)) erro(id + 'tipo do inversor instalado ilegível (' + s.origem + ')');
   }
-  return blocos.length ? { aba: a.sn, blocos } : null;
+  if (!Array.isArray(B.codigos) || B.codigos.length !== L.codigos) erro('catálogo de códigos incompleto');
+  if (!Array.isArray(B.inferencia) || B.inferencia.length !== L.inferencia) erro('regras de inferência incompletas');
+  const E = B.estoqueSerie || {}, R = B.resumoAlmoxarifado || {};
+  if (!Array.isArray(E.novos) || E.novos.length !== L.estoqueNovos || !Array.isArray(E.reparados) || E.reparados.length !== L.estoqueReparados) erro('estoque por série incompleto');
+  const disp = (l) => l.filter((x) => x.situacao === 'DISPONIVEL').length;
+  if (R.novos !== disp(E.novos) || R.reparados !== disp(E.reparados)) erro('o resumo do estoque (' + R.novos + ' novos, ' + R.reparados + ' reparados) não bate com a lista por série');
+  if (!Array.isArray(B.fusiveisMov)) erro('sem os movimentos de fusível');
+  for (const x of B.fusiveisMov) if (!diaLocal(x.data) || !inteiro(x.qtd) || x.qtd === 0) erro('movimento de fusível ilegível (' + JSON.stringify(x).slice(0, 80) + ')');
+  const saldo = B.fusiveisMov.reduce((a, x) => a + x.qtd, 0) - S.filter((s) => s.item >= ITEM_INI_SALDO).reduce((a, s) => a + s.fusiveisDanificados, 0);
+  if (!inteiro(R.fusiveis) || saldo !== R.fusiveis) erro('saldo de fusíveis ' + R.fusiveis + ' × ' + saldo + ' refeito dos movimentos e das trocas do nº ' + ITEM_INI_SALDO + ' em diante');
+  return { trocas: S.length, saldo, modificadoEm: M.modificadoEm, sha: M.sha256_16 };
+}
+
+// o arquivo do SIGO na forma das linhas que a análise sempre usou. Só traduz: nenhuma conta mora aqui.
+function p1DoSigo(doc) {
+  const B = doc.BASE;
+  const p1 = B.substituicoes.map((s) => {
+    const { modo, termico } = modoP1(s.descricaoFalha);
+    const date = diaLocal(s.data); const fut = date && date > HOJE;
+    const codigos = s.codigo == null ? [] : String(s.codigo).split(/[,;\/]/).map((x) => x.trim()).filter((x) => /^\d+$/.test(x));
+    const fusQtd = s.fusiveisDanificados || 0;
+    return { parque: s.parque, ts: tsNorm(s.ts), inv: invNorm(s.inv), modo, termico, date: (date && !fut) ? date : null, sub: diaLocal(s.dataSubstituicao),
+      codigos, fusAval: s.fusiveisDanificados != null, fusDan: fusQtd > 0, fusQtd,
+      // só as fases do fusível danificado: a planilha anotava "0" na coluna das trocas sem fusível, e o "0" entrava como uma fase
+      fases: fusQtd > 0 ? String(s.fases).split('/').map((x) => x.trim().toUpperCase()).filter(Boolean) : [],
+      orig: normOrig(s.origem), codOrig: norm(s.origemCodigo), codNome: norm(s.nomeFalha), comis: norm(s.comissionado) };
+  });
+  const R = B.resumoAlmoxarifado, E = B.estoqueSerie;
+  const estoque = { novo: R.novos, reparado: R.reparados, fusivel: R.fusiveis, origem: 'estoque por número de série (disponíveis)' };
+  const bloco = (grupo, l) => ({ grupo, n: l.length, disponiveis: l.filter((x) => x.situacao === 'DISPONIVEL').length });
+  const estoqueSN = { blocos: [bloco('INVERSORES NOVOS', E.novos), bloco('INVERSORES REPARADOS', E.reparados)] };
+  const nomeDe = new Map(B.codigos.map((x) => [String(x.codigo), norm(x.nome)]));
+  // o que nunca pode chegar ao blob: número de série (retirado, instalado e de estoque), chamado, RNC e os procedimentos do manual
+  const proibidos = new Set();
+  for (const s of B.substituicoes) for (const k of ['sn', 'markup', 'chamado', 'rnc']) { const v = norm(s[k]); if (v.length >= 5) proibidos.add(v); }
+  for (const x of [].concat(E.novos, E.reparados)) { const v = norm(x.serie); if (v.length >= 5) proibidos.add(v); }
+  for (const x of B.codigos) { const v = norm(x.acaoCorretiva); if (v.length >= 40) proibidos.add(v); }
+  return { p1, estoque, estoqueSN, nomeDe, nCodigos: B.codigos.length, nInferencia: B.inferencia.length, proibidos };
 }
 
 // ---------- análise ----------
-function analyze(wb1, wb2, base) {
-  // P1
-  // a aba de falhas sai do CONTEÚDO, não de SheetNames[0]: a planilha ganhou quatro abas em
-  // 20/08/2026 e a ordem delas não é contrato nosso.
-  const abaP1 = (() => { for (const sn of wb1.SheetNames) { const R = rowsOf(wb1.Sheets[sn]);
-      for (let i = 0; i < Math.min(10, R.length); i++) if (cIdx(R[i], 'ITEM') >= 0 && cIdx(R[i], 'SPV') >= 0) return R; }
-    return rowsOf(wb1.Sheets[wb1.SheetNames[0]]); })();
-  const R1 = abaP1;
-  // estoque de sobressalentes: caixa "Spare Parts WareHouse" no topo — rótulos New/Repair (ou Novo/Reparado) + valor na linha seguinte
-  let estoque = null;
-  for (let i = 0; i < Math.min(6, R1.length); i++) { const row = R1[i].map(x => norm(x).toLowerCase());
-    // 🔴 "REPARADOS" virou "REPAROS" na planilha de 20/08 e /^(repair|reparad)/ deixou de casar:
-    // o campo saiu NULO, o painel abriu "No data" e a cobertura de estoque foi calculada só com os
-    // novos — 1,48 mês em vez de ~2,8. Raspar rótulo escrito por humano quebra assim, calado.
-    const iN = row.findIndex(x => /^(new|novo)/.test(x)); const iR = row.findIndex(x => /^(repair|repar)/.test(x));
-    const iF = row.findIndex(x => /^spare\s*fuse|fus[ií]ve/.test(x));
-    if (iN >= 0 || iR >= 0) { const nx = R1[i + 1] || []; const num = v => { const n = parseInt(norm(v).replace(/[^0-9-]/g, ''), 10); return isNaN(n) ? null : n; };
-      estoque = { novo: iN >= 0 ? num(nx[iN]) : null, reparado: iR >= 0 ? num(nx[iR]) : null, fusivel: iF >= 0 ? num(nx[iF]) : null };
-      break; } }
-  // 🔴 QUANDO A ABA ESTRUTURADA EXISTE, ELA MANDA. A própria planilha declara, na instrução do
-  // topo: "TODO o painel Spare Parts (C4:E4) é CALCULADO — todo cadastro é feito na aba
-  // ESTOQUE_SN". Ler a caixa é ler o resultado; ler a aba é ler a origem, e ela tem número de
-  // série e situação em vez de um rótulo que alguém pode reescrever.
-  // ⚠️ O FUSÍVEL continua vindo da caixa: ele não tem cadastro por série na aba.
-  const esSN = leEstoqueSN(wb1);
-  if (esSN) {
-    const acha = (re) => (esSN.blocos.find((b) => re.test(semAcento(b.grupo))) || {}).disponiveis;
-    const nv = acha(/NOVO/), rp = acha(/REPARAD|REPARO|CONSERT/);
-    estoque = estoque || { novo: null, reparado: null, fusivel: null };
-    if (nv != null) estoque.novo = nv;
-    if (rp != null) estoque.reparado = rp;
-    estoque.origem = 'aba ESTOQUE_SN (disponíveis)';
-  } else if (estoque) estoque.origem = 'caixa Spare Parts no topo da planilha';
-  let hr = R1.findIndex(r => cIdx(r, 'FAILURE DESCRIPTION') >= 0 || cIdx(r, 'ITEM') >= 0); if (hr < 0) hr = 5;
-  const cIdxAny = (H, ...ns) => { for (const n of ns) { const i = cIdx(H, n); if (i >= 0) return i; } return -1; };
-  // cabeçalhos aceitam EN (atual) e PT (versões antigas) — a planilha já mudou de idioma uma vez
-  const H1 = R1[hr]; const c = { item: cIdx(H1, 'ITEM'), spv: cIdx(H1, 'SPV'), ts: cIdx(H1, 'TS'), inv: cIdx(H1, 'INV'), desc: cIdx(H1, 'FAILURE DESCRIPTION'), date: cIdx(H1, 'DATE'),
-    sub: cIdxAny(H1, 'Replacement Date', 'Data substituição', 'Data de substituição'),
-    fid: cIdxAny(H1, 'FAILURE ID', 'FAULT CODE', 'Código de falha'), fus: cIdxAny(H1, 'Damaged Fuses', 'Fusíveis danificados'), fase: cIdxAny(H1, 'Phases/Fuses', 'Fases/fusíveis'),
-    // colunas que a planilha ganhou em 20/08/2026: o código passou a ser REGISTRADO em vez de
-    // deduzido da descrição, e vem acompanhado de onde ele saiu e do nome oficial da falha.
-    codOrig: cIdxAny(H1, 'Code Source', 'Origem do código'), codNome: cIdxAny(H1, 'Fault Name', 'Nome da falha'),
-    comis: cIdxAny(H1, 'Commissioned', 'Comissionado'),
-    orig: (() => { const o = cIdxAny(H1, 'New or Repaired', 'Novo/Reparado', 'Novo ou Reparado', 'Origem', 'Tipo de substituição', 'New/Repair'); return o >= 0 ? o : H1.findIndex(h => /reparad|repair/i.test(norm(h))); })() };
-  // 🔴 GUARDA QUE FALHA ALTO. Coluna não encontrada vira -1 e o campo sai vazio sem erro: foi
-  // exatamente assim que a troca de cabeçalho apagaria data, descrição, código, fusíveis e fases
-  // sem nada ficar vermelho. Job vermelho com o cabeçalho impresso custa uma correção; blob
-  // publicado pela metade custa a confiança na página.
-  { const OBRIG = { item: 'ITEM', spv: 'SPV', ts: 'TS', inv: 'INV', desc: 'descrição da falha', date: 'data' };
-    const faltam = Object.keys(OBRIG).filter(k => c[k] < 0);
-    if (faltam.length) throw new Error('P1: coluna obrigatória não encontrada -> ' + faltam.map(k => OBRIG[k]).join(', ')
-      + ' · cabeçalho lido: ' + (H1 || []).map(norm).filter(Boolean).join(' | '));
-    for (const [k, r] of [['sub', 'data de substituição'], ['fid', 'código de falha'], ['fus', 'fusíveis danificados'], ['fase', 'fases']])
-      if (c[k] < 0) console.log('  ATENÇÃO · coluna opcional ausente: ' + r + ' (o campo sai vazio)'); }
-  const p1 = R1.slice(hr + 1).filter(r => norm(r[c.item]) !== '').map(r => { const { modo, termico } = modoP1(r[c.desc]); const date = toDate(r[c.date]); const fut = date && date > HOJE;
-    const fidRaw = norm(r[c.fid]); const codigos = (fidRaw && fidRaw !== '-') ? fidRaw.split(/[,;\/]/).map(s => s.trim()).filter(s => /^\d+$/.test(s)) : [];
-    const fusRaw = norm(r[c.fus]); const fusAval = fusRaw !== ''; const dig = fusRaw.replace(/[^0-9]/g, ''); const fusDan = fusAval && !/n[ãa]o/i.test(fusRaw) && +dig > 0;
-    const fases = norm(r[c.fase]) ? norm(r[c.fase]).split(/[\/,;]/).map(s => s.trim().toUpperCase()).filter(Boolean) : [];
-    return { parque: parkNorm(r[c.spv]), ts: tsNorm(r[c.ts]), inv: invNorm(r[c.inv]), modo, termico, date: (date && !fut) ? date : null, sub: toDate(r[c.sub]),
-      codigos, fusAval, fusDan, fusQtd: fusDan ? (+dig || 0) : 0, fases, orig: c.orig >= 0 ? normOrig(r[c.orig]) : '',
-      codOrig: c.codOrig >= 0 ? norm(r[c.codOrig]) : '', codNome: c.codNome >= 0 ? norm(r[c.codNome]) : '',
-      comis: c.comis >= 0 ? norm(r[c.comis]) : '' }; });
+function analyze(sigo, wb2, base) {
+  // P1 · as trocas, o estoque e o catálogo saem do arquivo do SIGO, já conferido (confereSigo) por quem chama
+  const F1 = p1DoSigo(sigo);
+  const p1 = F1.p1, estoque = F1.estoque;
+
   const p1Term = p1.filter(x => x.termico).length;
   const leads = p1.filter(x => x.date && x.sub && x.sub >= x.date && (x.sub - x.date) / 864e5 < 500).map(x => (x.sub - x.date) / 864e5).sort((a, b) => a - b);
   const P1 = { total: p1.length, termico: p1Term, termico_pct: round(100 * p1Term / (p1.length || 1)), com_data: p1.filter(x => x.date).length, com_troca: p1.filter(x => x.sub).length,
@@ -284,21 +266,20 @@ function analyze(wb1, wb2, base) {
   // FAILURE ID (código nativo do inversor) — Pareto; multi-código ("10, 36") conta cada um
   // O NOME do código vem do dicionário da planilha, não de tabela escrita aqui: 512 códigos do
   // manual Sungrow, e uma cópia nossa ficaria desatualizada na primeira revisão do manual.
-  const DIC = leFaultCodes(wb1);
-  const nomeDe = new Map((DIC ? DIC.itens : []).map(x => [x.codigo, x.nome]));
+  const nomeDe = F1.nomeDe;
   P1.por_codigo = tally(p1.flatMap(x => x.codigos)).slice(0, 12)
     .map(([codigo, n]) => ({ codigo, n, nome: nomeDe.get(codigo) || '' }));
   // ⚠️ Registrado × inferido é ressalva, não enfeite: código deduzido da descrição não tem o
   // mesmo peso do que veio do próprio inversor, e a página precisa poder dizer isso.
-  if (c.codOrig >= 0) P1.por_origem_codigo = tally(p1.map(x => x.codOrig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
-  if (c.comis >= 0) P1.comissionamento = tally(p1.map(x => x.comis).filter(Boolean)).map(([estado, n]) => ({ estado, n }));
+  P1.por_origem_codigo = tally(p1.map(x => x.codOrig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
+  P1.comissionamento = tally(p1.map(x => x.comis).filter(Boolean)).map(([estado, n]) => ({ estado, n }));
   P1.com_codigo = p1.filter(x => x.codigos.length).length;
   // Fusíveis (colunas novas — enchem com o tempo): quantos avaliados, quantos danificaram, fases afetadas
   const fusAv = p1.filter(x => x.fusAval);
   P1.fusiveis = { avaliados: fusAv.length, com_dano: fusAv.filter(x => x.fusDan).length, sem_dano: fusAv.filter(x => !x.fusDan).length,
     fusiveis_total: p1.reduce((a, x) => a + x.fusQtd, 0), por_fase: tally(p1.flatMap(x => x.fases)).map(([fase, n]) => ({ fase, n })) };   // dinâmico: A/B/C ou L1/L2/L3
-  // Origem do inversor de reposição (novo × reparado) — só se a coluna existir na planilha
-  if (c.orig >= 0) P1.por_origem = tally(p1.map(x => x.orig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
+  // Origem do inversor de reposição (novo × reparado)
+  P1.por_origem = tally(p1.map(x => x.orig).filter(Boolean)).map(([origem, n]) => ({ origem, n }));
   // Reposição: falha (DATE) → troca (Replacement Date). Maioria é no MESMO DIA = excelência operacional.
   const comAmbas = p1.filter(x => x.date && x.sub && x.sub >= x.date);
   const diasRep = comAmbas.map(x => Math.round((x.sub - x.date) / 864e5)).filter(d => d >= 0 && d < 500);
@@ -396,15 +377,10 @@ function analyze(wb1, wb2, base) {
   //     "reportado × inferido", e ela já está em `por_origem_codigo`;
   //   - o ESTOQUE sai em CONTAGEM: o painel mostra nível de estoque, nunca número de série.
   //
-  // De cada aba fica a contagem, que serve de prova de que ela foi lida — sem isso, aba que
+  // Do catálogo e das regras fica a contagem, que serve de prova de que vieram no arquivo — sem isso, parte que
   // parasse de chegar viraria silêncio em vez de sinal.
-  //
-  // ⚠️ A aba Dash não entra, a pedido: são KPIs já calculados na planilha, e número derivado que
-  // chega pronto passa a divergir do que a página calcula sem ninguém perceber.
-  const dm = leDescMap(wb1);
-  const es = esSN;                                   // já lida lá em cima, junto com o estoque
-  const dicionario = { fault_codes_lidos: DIC ? DIC.n : 0, desc_map_lidas: dm ? dm.n : 0 };
-  const estoqueSN = es ? { aba: es.aba, blocos: es.blocos.map(b => ({ grupo: b.grupo, n: b.n, disponiveis: b.disponiveis })) } : null;
+  const dicionario = { fault_codes_lidos: F1.nCodigos, desc_map_lidas: F1.nInferencia };
+  const estoqueSN = F1.estoqueSN;
 
   const saida = { atualizado: new Date(HOJE.getTime()).toISOString().slice(0, 10), kpiTiles,
     escopo: { inversores_planta: 1155, inversores_por_parque: INV_POR_PARQUE, modelo: 'Sungrow SG350HX', p1_registros: P1.total, p2_parques: P2.parques, p2_eventos: P2.eventos, estoque }, p1: P1, p2: P2, cruzado,
@@ -412,15 +388,11 @@ function analyze(wb1, wb2, base) {
 
   // ---- guarda de exposição ------------------------------------------------------------------
   // 🔴 "Lembrar de não publicar" não é mecanismo. Esta guarda monta a lista do que é sensível a
-  // partir da PRÓPRIA planilha — número de série, chamado, RNC e os procedimentos do manual — e
+  // partir do PRÓPRIO arquivo de origem — número de série, chamado, RNC e os procedimentos do manual — e
   // ABORTA a rodada se qualquer um chegar à saída. Sem ela, bastaria alguém acrescentar um campo
-  // para o vazamento voltar em silêncio, e o blob é lido sem autenticação por quem tiver a URL.
+  // para o vazamento voltar em silêncio.
   {
-    const proibidos = new Set();
-    const iSN = cIdx(H1, 'SN'), iCh = cIdxAny(H1, 'CHAMADO', 'Ticket'), iRn = cIdxAny(H1, 'RNC PWC', 'RNC');
-    for (const i of [iSN, iCh, iRn]) { if (i < 0) continue;
-      for (const r of R1.slice(hr + 1)) { const v = norm(r[i]); if (v.length >= 5) proibidos.add(v); } }
-    for (const x of (DIC ? DIC.itens : [])) if (x.acao && x.acao.length >= 40) proibidos.add(x.acao);
+    const proibidos = F1.proibidos;
     const txt = JSON.stringify(saida);
     // ⚠️ valor só de dígitos precisa de fronteira: um chamado de 6 dígitos casaria dentro de um
     // epoch e abortaria a rodada por engano — guarda que dá alarme falso é guarda que se desliga.
@@ -433,41 +405,41 @@ function analyze(wb1, wb2, base) {
   return saida;
 }
 
-(async () => {
+async function main() {
+  // 1. o arquivo do SIGO, conferido ANTES de qualquer outra leitura: recusado, a rodada para aqui e o blob publicado fica
+  const sigo = await leSigo();
+  const ok = confereSigo(sigo);
+  console.log('P1 <- SIGO · ' + ok.trocas + ' trocas · último lançamento ' + ok.modificadoEm + ' · saldo de fusíveis ' + ok.saldo + ' · ' + ok.sha);
   const raws = await loadRawBuffers();
-  if (!raws.length) { console.log('Nenhuma planilha .xlsx/.xlsm em "' + RAW_CONTAINER + '" — nada a processar.'); return; }
-  // se o container acumular versões (nome do arquivo tem data), fica sempre com a MAIS RECENTE de cada tipo
-  let wb1, wb2, m1 = -1, m2 = -1, escolhido1 = null, escolhido2 = null;
-  // 🔴 ARQUIVO ILEGIVEL NAO DERRUBA A RODADA. O fluxo do Power Automate aceita agora qualquer
-  // nome que CONTENHA ".xls" — mais largo que o "termina com .xlsx" de antes, de proposito, para
-  // o .xlsm de 5 abas passar. O preco e que um arquivo que nao seja planilha pode aparecer aqui,
-  // e XLSX.read estoura nele. Pular com aviso e o certo: se o que falhou for o P1 de verdade, a
-  // guarda logo abaixo ("faltou P1") ainda derruba o job — o que se perde e so o falso positivo.
+  // 2. a planilha de alarmes (P2): a mais recente; a planilha de controle de falhas (P1) que ainda chega ao contêiner é ignorada
+  let wb2, m2 = -1, escolhido2 = null, p1Ignorados = 0;
+  // 🔴 ARQUIVO ILEGIVEL NAO DERRUBA A RODADA. O fluxo do Power Automate aceita qualquer nome que
+  // CONTENHA ".xls". O preco e que um arquivo que nao seja planilha pode aparecer aqui, e XLSX.read
+  // estoura nele. Pular com aviso e o certo: se o que falhou for o P2 de verdade, a guarda logo
+  // abaixo ("faltou P2") ainda derruba o job — o que se perde e so o falso positivo.
   for (const { name, buf, mod } of raws) {
     let wb; try { wb = XLSX.read(buf, { cellDates: true, type: 'buffer' }); }
     catch (e) { console.log('  ATENCAO · nao consegui ler como planilha, pulando: ' + name + ' (' + e.message.slice(0, 60) + ')'); continue; }
     const cls = classifyWb(wb);
     const t = mod ? new Date(mod).getTime() : 0;
     // 🔴 O CONTAINER ACUMULA. O nome do blob é o nome do arquivo, então cada versão que a equipe
-    // salva vira um arquivo novo aqui — hoje são quatro P1, o mais antigo de 15/07. Escolher "o
-    // mais recente por data de modificação" está certo para VERSÃO, e errado para RASCUNHO: uma
-    // planilha marcada "Em revisao" que seja tocada passa a ganhar de todas, e o painel inteiro
-    // passa a mostrar dado provisório sem nada ficar vermelho.
+    // salva vira um arquivo novo aqui. Escolher "o mais recente por data de modificação" está certo
+    // para VERSÃO, e errado para RASCUNHO: uma planilha marcada "Em revisao" que seja tocada passa a
+    // ganhar de todas, e o painel inteiro passa a mostrar dado provisório sem nada ficar vermelho.
     if (NAO_FINAL.test(name)) { console.log('ignorado (marcado como não final):', name); continue; }
-    if (cls === 'P1') { if (t >= m1) { wb1 = wb; m1 = t; escolhido1 = name; } }
+    if (cls === 'P1') p1Ignorados++;
     else if (cls === 'P2') { if (t >= m2) { wb2 = wb; m2 = t; escolhido2 = name; } }
     else console.log('ignorado (não é P1 nem P2):', name); }
-  console.log('P1 <- ' + (escolhido1 || '(nenhum)') + '   [o mais recente de ' + raws.length + ' arquivo(s) no container]');
-  console.log('P2 <- ' + (escolhido2 || '(nenhum)'));
-  if (!wb1 || !wb2) throw new Error('faltou ' + (!wb1 ? 'P1 (Failure Control)' : '') + (!wb2 ? ' P2 (Registro Falhas)' : '') + ' no container');
+  console.log('P2 <- ' + (escolhido2 || '(nenhum)') + '   [' + raws.length + ' arquivo(s) no container; ' + p1Ignorados + ' planilha(s) de falhas ignorada(s): a fonte das trocas é o SIGO]');
+  if (!wb2) throw new Error('faltou P2 (Registro Falhas) no container');
   const base = await leBaseAlarmes();
-  const out = analyze(wb1, wb2, base);
-  // Frescor da FONTE, para o selo do cabecalho (gen-fontes-saude): quando a equipe salvou cada
-  // planilha e ate onde o dado dela chega. Um registro de eventos parado nao e registro velho —
-  // por isso a data em que a planilha foi salva vai SEPARADA da data do ultimo evento. Sem nome
-  // de arquivo: o blob e publico.
+  const out = analyze(sigo, wb2, base);
+  // Frescor da FONTE, para o selo do cabecalho (gen-fontes-saude) e a malha (gen-malha-estado): o último lançamento
+  // (troca, correção, exclusão ou entrada de estoque) no SIGO e ate onde o dado de alarmes chega. Um registro parado nao e
+  // registro velho — por isso a hora do registro vai SEPARADA da data da última troca. O nome do campo continua o de antes
+  // porque o selo e a malha o leem; o valor passa a ser a hora do último lançamento (BRT no arquivo do SIGO).
   out.fontes = {
-    substituicoes_planilha_em: m1 > 0 ? new Date(m1).toISOString() : null,
+    substituicoes_planilha_em: new Date(sigo.META.modificadoEm + '-03:00').toISOString(),
     alarmes_planilha_em: m2 > 0 ? new Date(m2).toISOString() : null,
     substituicoes_ultima: out.p1.fatos.map(x => x.data).filter(Boolean).sort().pop() || null,
     alarmes_ultimo_mes: out.p2.fatos.map(x => x.mes).filter(Boolean).sort().pop() || null,
@@ -479,9 +451,12 @@ function analyze(wb1, wb2, base) {
   const size = await writeOut(out);
   const d = out.dicionario || {}; const e = out.estoque_sn;
   console.log('inversores.json OK · P1=' + out.p1.total + ' trocas (' + out.p1.termico_pct + '% térmico) · P2=' + out.p2.eventos + ' eventos / ' + out.p2.parques.join(',') + ' · bad-actor ' + ((out.p2.bad_actors[0] || {}).inv) + ' · ' + round(size / 1024) + ' KB');
-  console.log('  abas extras LIDAS · dicionário: ' + (d.fault_codes_lidos || 'AUSENTE') + ' códigos'
-    + ' · regras de inferência: ' + (d.desc_map_lidas || 'AUSENTE')
-    + ' · estoque: ' + (e ? e.blocos.map(b => b.grupo + ' ' + b.disponiveis + '/' + b.n).join(' · ') : 'AUSENTE'));
-  console.log('  publicado: contagens. Fora do blob por ser público: procedimentos do manual, '
-    + 'regras de inferência e números de série.');
-})().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+  console.log('  partes do SIGO LIDAS · dicionário: ' + d.fault_codes_lidos + ' códigos'
+    + ' · regras de inferência: ' + d.desc_map_lidas
+    + ' · estoque: ' + e.blocos.map(b => b.grupo + ' ' + b.disponiveis + '/' + b.n).join(' · ') + ' · fusíveis ' + out.escopo.estoque.fusivel);
+  console.log('  publicado: contagens. Fora do blob: procedimentos do manual, regras de inferência e números de série.');
+}
+
+module.exports = { confereSigo, p1DoSigo, analyze, shaBase, ITEM_INI_SALDO };
+if (require.main === module) main().catch(e => { console.error('ERRO:', e.message); process.exit(1); });
+

@@ -37,6 +37,10 @@ jobs:
       - run: npm i xlsx@0.18.5 @azure/storage-blob@12
       - name: Ensaio · o p2 pela base nova de alarmes (juncao, classes e ponta a ponta)
         run: node scripts/ensaio-inversores-alarmes-base.js
+      # inversores-sigo (24/11/2026): as trocas, o estoque e os fusiveis vem do arquivo que o SIGO refaz a cada lancamento
+      # (`acervo/inversores.json`, no mesmo conteiner `dados`: a credencial do passo de gerar ja le). Sem rede e sem credencial.
+      - name: Ensaio · as trocas pelo arquivo do SIGO (conferencias, vazamento e ponta a ponta)
+        run: node scripts/ensaio-inversores-sigo.js
       - name: Gerar inversores.json
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
@@ -44,4 +48,5 @@ jobs:
           RAW_CONTAINER: inversores-raw
           OUT_CONTAINER: dados
           OUT_BLOB: inversores.json
+          SIGO_BLOB: acervo/inversores.json
         run: node scripts/gen-inversores.js

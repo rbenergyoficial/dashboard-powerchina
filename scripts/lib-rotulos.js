@@ -69,6 +69,8 @@ const DIC = {
   'registrada': { en: 'recorded', zh: '已登记' },
   'Planilha de falhas': { en: 'Failure sheet', zh: '故障表' },
   'salva': { en: 'saved', zh: '保存于' },
+  'Registro de trocas': { en: 'Replacement log', zh: '更换记录' },   // inversores-sigo: o selo passa a ser o do SIGO
+  'atualizado': { en: 'updated', zh: '更新于' },
   'Alarmes até': { en: 'Alarms through', zh: '告警截至' },
   'mês': { en: 'month', zh: '月' },
   'Inversores': { en: 'Inverters', zh: '逆变器' },

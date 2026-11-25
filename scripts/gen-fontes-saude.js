@@ -128,7 +128,7 @@ async function inversores() {
     const CINZA = '#8B93A1';
     return [
       { ic: '🔁', l: 'Última troca', v: f.substituicoes_ultima ? ddmm(f.substituicoes_ultima) : '—', u: 'registrada', c: CINZA },
-      sel({ ic: '📋', l: 'Planilha de falhas', v: ddmm(f.substituicoes_planilha_em), u: 'salva', c: cor(dP1, 30, 60) }, msP1, 30 * D, 60 * D),
+      sel({ ic: '📋', l: 'Registro de trocas', v: ddmm(f.substituicoes_planilha_em), u: 'atualizado', c: cor(dP1, 30, 60) }, msP1, 30 * D, 60 * D),
       sel({ ic: '🔔', l: 'Alarmes até', v: String(m).padStart(2, '0') + '/' + String(y).slice(2), u: 'mês', c: cor(dP2, 45, 75) }, fimMes.getTime(), 45 * D, 75 * D),
     ];
   } catch (e) { return [{ ic: '🔁', l: 'Inversores', v: 'sem leitura', u: '', c: VERMELHO }]; }
