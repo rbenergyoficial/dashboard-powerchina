@@ -203,33 +203,105 @@ def curva(u, r, W=420, H=200):
   <text x="{X(0)}" y="{H-4}" class="sv-ax">01/{MES[5:]}</text><text x="{X(NT)}" y="{H-4}" text-anchor="end" class="sv-ax">{NT}/{MES[5:]}</text></svg>
   <div class="mini-n"><b>{nf(a,2)}</b> MWh {'no mês' if fechado else 'até ' + ddmm(DIA)} · {('sobra ' + nf(a-mm,2)) if a >= mm else ('falta ' + nf(mm-a,2))} MWh</div>'''
 
+def suave(pts):
+    """caminho suave que PASSA por todos os pontos (cúbica monótona de Fritsch-Carlson: a curva nunca ultrapassa o dado)"""
+    if len(pts) < 3: return 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in pts)
+    n = len(pts); h = [(pts[i + 1][0] - pts[i][0]) or 1e-6 for i in range(n - 1)]
+    d = [(pts[i + 1][1] - pts[i][1]) / h[i] for i in range(n - 1)]
+    m = [d[0]] + [0 if d[i - 1] * d[i] <= 0 else (d[i - 1] + d[i]) / 2 for i in range(1, n - 1)] + [d[-1]]
+    for i in range(n - 1):
+        if d[i] == 0: m[i] = m[i + 1] = 0; continue
+        a, b = m[i] / d[i], m[i + 1] / d[i]; q = a * a + b * b
+        if q > 9: t = 3 / q ** .5; m[i], m[i + 1] = t * a * d[i], t * b * d[i]
+    out = [f'M {pts[0][0]:.1f} {pts[0][1]:.1f}']
+    for i in range(n - 1):
+        (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+        out.append(f'C {x0 + h[i] / 3:.1f} {y0 + m[i] * h[i] / 3:.1f} {x1 - h[i] / 3:.1f} {y1 - m[i + 1] * h[i] / 3:.1f} {x1:.1f} {y1:.1f}')
+    return ' '.join(out)
+
+def veu(id_, c, a0, a1=0.0):
+    """degradê vertical de opacidade (o "gradient mode: opacity" do Grafana): a cor da série some até o eixo"""
+    if TEMA == 'claro': a0 = min(a0 * 1.25, .6); a1 = min(a1 * 1.25, .6)
+    return (f'<linearGradient id="{id_}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{c}" stop-opacity="{a0}"/>'
+            f'<stop offset="1" stop-color="{c}" stop-opacity="{a1}"/></linearGradient>')
+
+GRADE = None
+def cor_grade(): return mix(T3, 10)
+
+def grade_y(top, Y, x0, x1, unid='', alvo=4):
+    """grade horizontal fina em passos redondos, rótulo com a unidade à esquerda (eixo do Grafana), e a linha de base"""
+    bruto = max(top, 1) / alvo; e = 10 ** math.floor(math.log10(bruto)); passo = next(k * e for k in (1, 2, 2.5, 5, 10) if k * e >= bruto)
+    s = []; v = 0
+    while v < top / 1.03:
+        s.append(f'<line x1="{x0}" x2="{x1}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" stroke="{BORDA if v == 0 else cor_grade()}"/>'
+                 f'<text x="{x0 - 8}" y="{Y(v) + 4:.1f}" text-anchor="end" class="sv-ax">{nf(v, 0)}{unid}</text>')
+        v += passo
+    return s
+
+def corridas(vals):
+    """trechos contíguos com valor: [(i0, i1)] com i1 exclusivo"""
+    out, i = [], 0
+    while i < len(vals):
+        if vals[i] is None: i += 1; continue
+        j = i
+        while j < len(vals) and vals[j] is not None: j += 1
+        out.append((i, j)); i = j
+    return out
+
+def balao(x, y, txt, c, acima=True, x0=0, x1=1000):
+    """o balão do Grafana sobre o ponto destacado: caixa com o valor, ligada ao ponto por um fio (a caixa não sai do gráfico)"""
+    w = 7.4 * len(txt) + 18; yb = y - 34 if acima else y + 12; xc = min(max(x, x0 + w / 2), x1 - w / 2)
+    return (f'<line x1="{x:.1f}" x2="{x:.1f}" y1="{y:.1f}" y2="{yb + (22 if acima else 0):.1f}" stroke="{mix(c, 70)}" stroke-width="1"/>'
+            f'<rect x="{xc - w / 2:.1f}" y="{yb:.1f}" width="{w:.1f}" height="22" rx="5" fill="{PAINEL}" stroke="{mix(c, 75)}"/>'
+            f'<text x="{xc:.1f}" y="{yb + 15:.1f}" text-anchor="middle" class="sv-ax" style="fill:{T1};font-weight:700">{txt}</text>'
+            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="{c}" stroke="{PAINEL}" stroke-width="2"/>')
+
 def barras_ger_irr(dias, W=1000):
-    """Geração + impedido (barras) com a meta do dia; irradiação logo abaixo, no mesmo eixo de dias (nunca dois eixos)."""
-    H1, H2 = 220, 92; n = len(dias); bw = (W - 50) / n
+    """Geração + impedido (barras empilhadas) com a meta do dia em linha; irradiação logo abaixo, no mesmo eixo de dias (nunca dois eixos).
+    boletim-graficos-grafana (25/11/2026): acabamento do Grafana: barra com degradê de opacidade, o impedido empilhado em lilás translúcido,
+    a meta como série de linha com pontos, grade fina com escala, balão com o valor do dia do boletim; irradiação em linha com área."""
+    H1, H2 = 250, 100; n = len(dias); L, R = 52, 10; bw = (W - L - R) / n
     vals = [(LIQ.get(('Complexo', d), (0, 0, 0)), SD.get(d, {}).get('cortado_mwh', 0) or 0) for d in dias]
-    top = max(l[0] + c for l, c in vals) * 1.1
-    Y = lambda v: H1 - 6 - (H1 - 30) * v / top
-    g = []
+    top = max([l[0] + c for l, c in vals] + [1]) * 1.14
+    Y = lambda v: H1 - 6 - (H1 - 26) * v / top
+    g = grade_y(top, Y, L, W - R)
+    g.append(f'<text x="{L - 8}" y="10" text-anchor="end" class="sv-ax">MWh</text>')
+    mt, bal = [], None
     for i, (d, ((liq, meta, _), ct)) in enumerate(zip(dias, vals)):
-        x = 30 + i * bw + bw * .16; w = bw * .68; foco = d == DIA and MODO == 'diario'
-        g.append(f'<rect x="{x:.1f}" y="{Y(liq):.1f}" width="{w:.1f}" height="{Y(0)-Y(liq):.1f}" rx="4" fill="{mix(GER, 46 if foco else 26)}" stroke="{mix(GER, 75 if foco else 45)}"/>')
-        if ct > 0: g.append(f'<rect x="{x:.1f}" y="{Y(liq+ct):.1f}" width="{w:.1f}" height="{max(Y(liq)-Y(liq+ct)-2,1):.1f}" rx="4" fill="{mix(CORTE, 26)}" stroke="{mix(CORTE, 55)}"/>')
+        x = L + i * bw + bw * .2; w = bw * .6; foco = d == DIA and MODO == 'diario'
+        g.append(f'<rect x="{x:.1f}" y="{Y(liq):.1f}" width="{w:.1f}" height="{Y(0)-Y(liq):.1f}" rx="2" fill="url(#{"vbarf" if foco else "vbar"})"/>'
+                 f'<line x1="{x:.1f}" x2="{x+w:.1f}" y1="{Y(liq):.1f}" y2="{Y(liq):.1f}" stroke="{GER}" stroke-width="1.5"/>')
+        if ct > 0: g.append(f'<rect x="{x:.1f}" y="{Y(liq+ct):.1f}" width="{w:.1f}" height="{max(Y(liq)-Y(liq+ct)-1.5,1):.1f}" rx="2" fill="{mix(CORTE, 34)}"/>')
         pend = d not in ONS_DIAS   # boletim-ons-pendente: o dia que o ONS não publicou sai hachurado, nunca como dia sem corte
-        if pend: g.append(f'<rect class="ons-pendente" x="{x:.1f}" y="{Y(liq)-18:.1f}" width="{w:.1f}" height="16" rx="4" fill="url(#onspend)" stroke="{mix(CORTE, 55)}" stroke-dasharray="3 2"/>')
-        g.append(f'<line x1="{x-4:.1f}" x2="{x+w+4:.1f}" y1="{Y(meta):.1f}" y2="{Y(meta):.1f}" stroke="{mix(T2,85)}" stroke-width="2"/>')
-        if foco or n <= 7:
+        if pend: g.append(f'<rect class="ons-pendente" x="{x:.1f}" y="{Y(liq)-18:.1f}" width="{w:.1f}" height="16" rx="2" fill="url(#onspend)" stroke="{mix(CORTE, 55)}" stroke-dasharray="3 2"/>')
+        if meta: mt.append((x + w / 2, Y(meta)))
+        if foco: bal = (x + w / 2, min(Y(liq + ct), Y(liq) - 18 if pend else 1e9), nf(liq, 0) + ' MWh')
+        elif n <= 7:
             g.append(f'<text x="{x+w/2:.1f}" y="{min(Y(liq+ct), Y(liq)-18 if pend else 1e9)-9:.1f}" text-anchor="middle" class="sv-val">{nf(liq,0)}</text>')
+    if mt:
+        g.append(f'<path d="M {" L ".join(f"{x:.1f} {y:.1f}" for x, y in mt)}" fill="none" stroke="{mix(T2, 80)}" stroke-width="1.5"/>'
+                 + ''.join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.2" fill="{mix(T2, 90)}"/>' for x, y in mt))
+    if bal: g.append(balao(bal[0], bal[1], bal[2], GER, x0=L, x1=W - R))
     if n > 20: g = [x.replace('class="sv-ax"', 'class="sv-ax" style="font-size:10px"') for x in g]
-    irr = [IRD.get(d, {}).get('gti') for d in dias]; itop = max(v or 0 for v in irr) * 1.15
-    YI = lambda v: H1 + H2 - 26 - (H2 - 36) * v / itop
+    irr = [IRD.get(d, {}).get('gti') for d in dias]; itop = max([v or 0 for v in irr] + [1]) * 1.2
+    YI = lambda v: H1 + H2 - 26 - (H2 - 40) * v / itop
+    g.append(f'<line x1="{L}" x2="{W-R}" y1="{YI(0):.1f}" y2="{YI(0):.1f}" stroke="{BORDA}"/>'
+             f'<text x="2" y="{YI(itop/1.2/2)+4:.1f}" class="sv-ax">kWh/m²</text>')
+    ip = [(L + i * bw + bw / 2, YI(v)) for i, v in enumerate(irr) if v]
+    if ip:
+        pa = suave(ip)
+        g.append(f'<path d="{pa} L {ip[-1][0]:.1f} {YI(0):.1f} L {ip[0][0]:.1f} {YI(0):.1f} Z" fill="url(#virrm)"/>'
+                 f'<path d="{pa}" fill="none" stroke="{IRR}" stroke-width="2"/>')
     for i, (d, v) in enumerate(zip(dias, irr)):
-        x = 30 + i * bw + bw * .16; w = bw * .68
-        if v: g.append(f'<rect x="{x:.1f}" y="{YI(v):.1f}" width="{w:.1f}" height="{YI(0)-YI(v):.1f}" rx="3" fill="{mix(IRR, 22)}" stroke="{mix(IRR, 45)}"/>'
-                       f'<text x="{x+w/2:.1f}" y="{YI(v)-5:.1f}" text-anchor="middle" class="sv-ax2">{nf(v,1)}</text>')
-        g.append(f'<text x="{x+w/2:.1f}" y="{H1+H2-6}" text-anchor="middle" class="sv-ax" {f"style=\"fill:{T1};font-weight:700\"" if d==DIA and MODO=='diario' else ""}>{int(d[8:]) if len({x[:7] for x in dias}) == 1 else ddmm(d)}</text>')
+        cx = L + i * bw + bw / 2
+        if v: g.append(f'<circle cx="{cx:.1f}" cy="{YI(v):.1f}" r="2.8" fill="{IRR}" stroke="{PAINEL}" stroke-width="1.2"/>'
+                       f'<text x="{cx:.1f}" y="{YI(v)-8:.1f}" text-anchor="middle" class="sv-ax2">{nf(v,1)}</text>')
+        g.append(f'<text x="{cx:.1f}" y="{H1+H2-6}" text-anchor="middle" class="sv-ax" {f"style=\"fill:{T1};font-weight:700\"" if d==DIA and MODO=='diario' else ""}>{int(d[8:]) if len({x[:7] for x in dias}) == 1 else ddmm(d)}</text>')
+    defs = veu('vbar', GER, .62, .16) + veu('vbarf', GER, .95, .4) + veu('virrm', IRR, .32)
     if any(d not in ONS_DIAS for d in dias):
-        g.insert(0, f'<defs><pattern id="onspend" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
-                    f'<line x1="0" y1="0" x2="0" y2="6" stroke="{mix(CORTE, 70)}" stroke-width="2"/></pattern></defs>')
+        defs += (f'<pattern id="onspend" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+                 f'<line x1="0" y1="0" x2="0" y2="6" stroke="{mix(CORTE, 70)}" stroke-width="2"/></pattern>')
+    g.insert(0, f'<defs>{defs}</defs>')
     return f'<svg viewBox="0 0 {W} {H1+H2}" style="width:100%;height:auto;display:block">{"".join(g)}</svg>'
 
 def bench(blocos, W=1000):
@@ -472,45 +544,54 @@ def limitado_dia(dia):
     return dict(h=hrs, est=est, pr=prd, lmin=min(lims) if lims else None, lmax=max(lims) if lims else None)
 
 def curva_dia(dia, W=1000):
-    """MW da medição a cada 30 min; colunas lilás = intervalos com limite do ONS; o limite em degrau; a referência do ONS tracejada;
+    """boletim-graficos-grafana (25/11/2026): acabamento do Grafana (linha de 2 px com degradê, grade fina nos dois eixos, região anotada,
+    balão no pico). MW da medição a cada 30 min; faixa lilás = intervalos com limite do ONS; o limite em degrau; a referência do ONS tracejada;
     irradiação no plano logo abaixo, no mesmo eixo de horas (nunca dois eixos)."""
-    ts = slots(dia); n = len(ts); H1, H2 = 300, 110; L, R = 46, 12; bw = (W - L - R) / n
+    ts = slots(dia); n = len(ts); H1, H2 = 320, 112; L, R = 62, 14; bw = (W - L - R) / n; YI0 = H1 + H2 - 22
     g = [mw('Complexo', t) for t in ts]; on = [ONS30.get(t, {}) for t in ts]
     lim = [f_(o.get('lim')) for o in on]; ref = [f_(o.get('gref')) for o in on]
     dg = degraus_dia(dia)   # ONS pendente: o degrau das ordens da Iqony (vazio com o ONS publicado)
     top = max([v or 0 for v in g] + [v or 0 for v in lim] + [v or 0 for v in ref] + [p for _, _, p in dg] + [50]) * 1.1
     X = lambda i: L + i * bw; Y = lambda v: H1 - 24 - (H1 - 40) * v / top
     XM = lambda m: L + (m - 300) / 30 * bw
-    s = []
-    for v in (0, 100, 200, 300):
-        if v < top: s.append(f'<line x1="{L}" x2="{W-R}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" stroke="{LINHA}"/><text x="{L-6}" y="{Y(v)+4:.1f}" text-anchor="end" class="sv-ax">{v}</text>')
-    for i, l in enumerate(lim):
-        if l is not None: s.append(f'<rect x="{X(i):.1f}" y="{Y(top/1.1):.1f}" width="{bw:.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,16)}"/>')
+    s = [f'<defs>{veu("vger", GER, .42)}{veu("virr", IRR, .34)}</defs>']
+    for i, t in enumerate(ts):   # grade vertical fina a cada hora cheia (eixo de tempo do Grafana)
+        if t[14:16] == '00': s.append(f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="{Y(top/1.1):.1f}" y2="{YI0:.1f}" stroke="{cor_grade()}"/>')
+    s += grade_y(top, Y, L, W - R, ' MW')
+    for i0, i1 in corridas(lim):   # o período limitado: região anotada (véu + marca no eixo)
+        s.append(f'<rect x="{X(i0):.1f}" y="{Y(top/1.1):.1f}" width="{X(i1)-X(i0):.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,8)}"/>'
+                 f'<rect x="{X(i0):.1f}" y="{Y(0)+2:.1f}" width="{X(i1)-X(i0):.1f}" height="4" rx="2" fill="{mix(CORTE,70)}"/>')
     for m0, m1, p in dg:
-        s.append(f'<rect class="iq-faixa" x="{XM(m0):.1f}" y="{Y(top/1.1):.1f}" width="{XM(m1)-XM(m0):.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,16)}"/>')
+        s.append(f'<rect class="iq-faixa" x="{XM(m0):.1f}" y="{Y(top/1.1):.1f}" width="{XM(m1)-XM(m0):.1f}" height="{Y(0)-Y(top/1.1):.1f}" fill="{mix(CORTE,8)}"/>'
+                 f'<rect x="{XM(m0):.1f}" y="{Y(0)+2:.1f}" width="{XM(m1)-XM(m0):.1f}" height="4" rx="2" fill="{mix(CORTE,70)}"/>')
     pts = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(g) if v is not None]
     if pts:
-        path = 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in pts)
-        s.append(f'<path d="{path} L {pts[-1][0]:.1f} {Y(0):.1f} L {pts[0][0]:.1f} {Y(0):.1f} Z" fill="{mix(GER,24)}"/><path d="{path}" stroke="{mix(GER,95)}" stroke-width="2.5" fill="none"/>')
+        path = suave(pts)
+        s.append(f'<path d="{path} L {pts[-1][0]:.1f} {Y(0):.1f} L {pts[0][0]:.1f} {Y(0):.1f} Z" fill="url(#vger)"/><path d="{path}" stroke="{GER}" stroke-width="2" fill="none"/>')
     rp = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(ref) if v]
-    if rp: s.append(f'<path d="M {" L ".join(f"{x:.1f} {y:.1f}" for x, y in rp)}" stroke="{T3}" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>')
-    for i, l in enumerate(lim):
-        if l is not None: s.append(f'<line x1="{X(i):.1f}" x2="{X(i)+bw:.1f}" y1="{Y(l):.1f}" y2="{Y(l):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
+    if rp: s.append(f'<path d="{suave(rp)}" stroke="{mix(T2,75)}" stroke-width="1.3" stroke-dasharray="5 4" fill="none"/>')
+    for i0, i1 in corridas(lim):   # o limite do ONS em degraus, contínuo dentro do trecho
+        pl = f'M {X(i0):.1f} {Y(lim[i0]):.1f} H {X(i0+1):.1f}' + ''.join(f' V {Y(lim[i]):.1f} H {X(i+1):.1f}' for i in range(i0 + 1, i1))
+        s.append(f'<path d="{pl}" fill="none" stroke="{CORTE}" stroke-width="2"/>')
     for k, (m0, m1, p) in enumerate(dg):
-        s.append(f'<line class="iq-degrau" x1="{XM(m0):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(p):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
+        s.append(f'<line class="iq-degrau" x1="{XM(m0):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(p):.1f}" stroke="{CORTE}" stroke-width="2"/>')
         if k + 1 < len(dg) and dg[k + 1][0] == m1:
-            s.append(f'<line x1="{XM(m1):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(dg[k+1][2]):.1f}" stroke="{mix(CORTE,95)}" stroke-width="3"/>')
-    ih = [I30.get(t) for t in ts]; itop = max([v or 0 for v in ih] + [100]) * 1.15
+            s.append(f'<line x1="{XM(m1):.1f}" x2="{XM(m1):.1f}" y1="{Y(p):.1f}" y2="{Y(dg[k+1][2]):.1f}" stroke="{CORTE}" stroke-width="2"/>')
+    if pts:
+        k = max(range(len(g)), key=lambda i: g[i] or 0)
+        if g[k]: s.append(balao(X(k) + bw / 2, Y(g[k]), f'{nf(g[k],1)} MW · {ts[k][11:16]}', GER))
+    ih = [I30.get(t) for t in ts]; itop = max([v or 0 for v in ih] + [100]) * 1.25
     YI = lambda v: H1 + H2 - 22 - (H2 - 30) * v / itop
+    s.append(f'<line x1="{L}" x2="{W-R}" y1="{YI(0):.1f}" y2="{YI(0):.1f}" stroke="{BORDA}"/>'
+             f'<text x="{L - 8}" y="{YI(itop/1.25/2)+4:.1f}" text-anchor="end" class="sv-ax">W/m²</text>')
     ip = [(X(i) + bw / 2, YI(v)) for i, v in enumerate(ih) if v is not None]
     if ip:
-        pa = 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in ip)
-        s.append(f'<path d="{pa} L {ip[-1][0]:.1f} {YI(0):.1f} L {ip[0][0]:.1f} {YI(0):.1f} Z" fill="{mix(IRR,22)}"/><path d="{pa}" stroke="{mix(IRR,80)}" stroke-width="1.8" fill="none"/>')
+        pa = suave(ip)
+        s.append(f'<path d="{pa} L {ip[-1][0]:.1f} {YI(0):.1f} L {ip[0][0]:.1f} {YI(0):.1f} Z" fill="url(#virr)"/><path d="{pa}" stroke="{IRR}" stroke-width="1.8" fill="none"/>')
         k = max(range(len(ih)), key=lambda i: ih[i] or 0)
-        s.append(f'<text x="{X(k)+bw/2:.1f}" y="{YI(ih[k])-6:.1f}" text-anchor="middle" class="sv-ax2">{nf(ih[k],0)} W/m²</text>')
+        s.append(f'<text x="{X(k)+bw/2:.1f}" y="{YI(ih[k])-9:.1f}" text-anchor="middle" class="sv-ax2">{nf(ih[k],0)} W/m²</text>')
     for i, t in enumerate(ts):
         if t[14:16] == '00' and int(t[11:13]) % 2 == 1: s.append(f'<text x="{X(i):.1f}" y="{H1+H2-4}" text-anchor="middle" class="sv-ax">{t[11:16]}</text>')
-    s.append(f'<text x="{L}" y="12" class="sv-ax">MW</text>')
     # o resumo da restrição do dia, para o título do painel
     rest = [t for t, l in zip(ts, lim) if l is not None]
     resumo = (f'{len(rest)*0.5:.1f} h com limite do ONS, de {rest[0][11:16]} a {(dt.datetime.fromisoformat(rest[-1]) + dt.timedelta(minutes=30)):%H:%M}; '
@@ -524,38 +605,58 @@ def curva_dia(dia, W=1000):
     return f'<svg viewBox="0 0 {W} {H1+H2}" style="width:100%;height:auto;display:block">{"".join(s)}</svg>', resumo, pico
 
 def mini_ufv(u, dia, W=310, H=150):
-    ts = slots(dia); n = len(ts); bw = (W - 8) / n
-    g = [mw(u, t) for t in ts]; lim = [f_(ONS30.get(t, {}).get('lim')) for t in ts]
-    top = max([v or 0 for v in g] + [1]) * 1.15; X = lambda i: 4 + i * bw; Y = lambda v: H - 18 - (H - 26) * v / top
-    s = [f'<rect x="{X(i):.1f}" y="4" width="{bw:.1f}" height="{H-22}" fill="{mix(CORTE,14)}"/>' for i, l in enumerate(lim) if l is not None]
-    s += [f'<rect class="iq-mini" x="{X(0) + (m0 - 300) / 30 * bw:.1f}" y="4" width="{(m1 - m0) / 30 * bw:.1f}" height="{H-22}" fill="{mix(CORTE,14)}"/>' for m0, m1, _ in degraus_dia(dia)]
-    pts = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(g) if v is not None]; c = COR[u]
+    """boletim-graficos-grafana (25/11/2026): mini-painel Grafana: linha de 2 px da cor da usina com degradê até o eixo, grade fina com a
+    escala em MW, horas no eixo, região do limite anotada no eixo, pico marcado"""
+    ts = slots(dia); n = len(ts); L = 30; bw = (W - L - 4) / n
+    g = [mw(u, t) for t in ts]; lim = [f_(ONS30.get(t, {}).get('lim')) for t in ts]; c = COR[u]
+    pk = max([v or 0 for v in g] + [1]); top = pk * 1.18; X = lambda i: L + i * bw; Y = lambda v: H - 20 - (H - 28) * v / top
+    s = [f'<defs>{veu("vu" + u, c, .45)}</defs>']
+    for i, t in enumerate(ts):
+        if t[11:16] in ('08:00', '12:00', '16:00'): s.append(f'<line x1="{X(i):.1f}" x2="{X(i):.1f}" y1="4" y2="{Y(0):.1f}" stroke="{cor_grade()}"/>')
+    s += [f'<rect x="{X(i0):.1f}" y="4" width="{X(i1)-X(i0):.1f}" height="{Y(0)-4:.1f}" fill="{mix(CORTE,8)}"/><rect x="{X(i0):.1f}" y="{Y(0)+2:.1f}" width="{X(i1)-X(i0):.1f}" height="3" rx="1.5" fill="{mix(CORTE,70)}"/>' for i0, i1 in corridas(lim)]
+    s += [f'<rect class="iq-mini" x="{X(0) + (m0 - 300) / 30 * bw:.1f}" y="4" width="{(m1 - m0) / 30 * bw:.1f}" height="{H-24}" fill="{mix(CORTE,8)}"/>' for m0, m1, _ in degraus_dia(dia)]
+    for fr in (.5, 1):   # grade horizontal fina com a escala
+        v = pk * fr
+        s.append(f'<line x1="{L}" x2="{W-4}" y1="{Y(v):.1f}" y2="{Y(v):.1f}" stroke="{cor_grade()}"/><text x="{L-4}" y="{Y(v)+3.5:.1f}" text-anchor="end" class="sv-ax" style="font-size:10px">{nf(v,0)}</text>')
+    pts = [(X(i) + bw / 2, Y(v)) for i, v in enumerate(g) if v is not None]
     if pts:
-        p = 'M ' + ' L '.join(f'{x:.1f} {y:.1f}' for x, y in pts)
-        s.append(f'<path d="{p} L {pts[-1][0]:.1f} {Y(0):.1f} L {pts[0][0]:.1f} {Y(0):.1f} Z" fill="{mix(c,26)}"/><path d="{p}" stroke="{mix(c,95)}" stroke-width="2" fill="none"/>')
-    s.append(f'<line x1="4" x2="{W-4}" y1="{Y(0):.1f}" y2="{Y(0):.1f}" stroke="{BORDA}"/>')
-    s.append(f'<text x="4" y="{H-3}" class="sv-ax" style="font-size:10.5px">05h</text><text x="{W-4}" y="{H-3}" text-anchor="end" class="sv-ax" style="font-size:10.5px">19h</text>')
+        p = suave(pts)
+        s.append(f'<path d="{p} L {pts[-1][0]:.1f} {Y(0):.1f} L {pts[0][0]:.1f} {Y(0):.1f} Z" fill="url(#vu{u})"/><path d="{p}" stroke="{c}" stroke-width="2" fill="none"/>')
+        k = max(range(len(g)), key=lambda i: g[i] or 0)
+        if g[k]: s.append(f'<circle cx="{X(k)+bw/2:.1f}" cy="{Y(g[k]):.1f}" r="3.2" fill="{c}" stroke="{PAINEL}" stroke-width="1.5"/>')
+    s.append(f'<line x1="{L}" x2="{W-4}" y1="{Y(0):.1f}" y2="{Y(0):.1f}" stroke="{BORDA}"/>')
+    s.append(f'<text x="{L}" y="{H-3}" class="sv-ax" style="font-size:10px">05h</text>'
+             + ''.join(f'<text x="{X(i):.1f}" y="{H-3}" text-anchor="middle" class="sv-ax" style="font-size:10px">{t[11:13]}h</text>' for i, t in enumerate(ts) if t[11:16] in ('08:00', '12:00', '16:00'))
+             + f'<text x="{W-4}" y="{H-3}" text-anchor="end" class="sv-ax" style="font-size:10px">19h</text>')
     pico = max((v for v in g if v is not None), default=0); e = LIQ.get((u, dia), (0,))[0]
     return (f'<div class="mu"><div class="mu-t"><b style="color:{rot(c)}">{u}</b><span>{nf(e,2)} MWh · pico {nf(pico,1)} MW</span></div>'
             f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto;display:block">{"".join(s)}</svg></div>')
 
 def mes_ufv(u, dias, W=310, H=150):
-    n = len(dias); bw = (W - 8) / n
+    """boletim-graficos-grafana (25/11/2026): mini-painel Grafana: barra com degradê de opacidade da cor da usina, o impedido empilhado em
+    lilás translúcido, a meta do dia em linha com pontos, grade fina com a escala, o dia do boletim cheio"""
+    n = len(dias); L = 34; bw = (W - L - 4) / n
     v = [(LIQ.get((u, d), (0,))[0], (CDU.get((d, u)) or {}).get('cortado_mwh') or 0, LIQ.get((u, d), (0, 0))[1]) for d in dias]
-    top = max([a + b for a, b, _ in v] + [1]) * 1.12; Y = lambda x: H - 18 - (H - 26) * x / top; c = COR[u]
-    s = []
-    for i, (a, b, m) in enumerate(v):
-        x = 4 + i * bw + bw * .12; w = bw * .76
-        s.append(f'<rect x="{x:.1f}" y="{Y(a):.1f}" width="{w:.1f}" height="{Y(0)-Y(a):.1f}" rx="2" fill="{mix(c,30)}" stroke="{mix(c,60)}" stroke-width=".8"/>')
-        if b > 0: s.append(f'<rect x="{x:.1f}" y="{Y(a+b):.1f}" width="{w:.1f}" height="{max(Y(a)-Y(a+b)-1,.8):.1f}" rx="2" fill="{mix(CORTE,30)}" stroke="{mix(CORTE,60)}" stroke-width=".8"/>')
-    s.append(f'<line x1="4" x2="{W-4}" y1="{Y(0):.1f}" y2="{Y(0):.1f}" stroke="{BORDA}"/>')
-    s.append(f'<text x="4" y="{H-3}" class="sv-ax" style="font-size:10.5px">{int(dias[0][8:])}</text><text x="{W-4}" y="{H-3}" text-anchor="end" class="sv-ax" style="font-size:10.5px">{int(dias[-1][8:])}</text>')
+    mx = max([a + b for a, b, _ in v] + [m or 0 for _, _, m in v] + [1]); top = mx * 1.1; Y = lambda x: H - 18 - (H - 24) * x / top; c = COR[u]
+    s = [f'<defs>{veu("vm" + u, c, .7, .18)}{veu("vmf" + u, c, 1, .45)}</defs>']
+    for fr in (.5, 1):
+        s.append(f'<line x1="{L}" x2="{W-4}" y1="{Y(mx*fr):.1f}" y2="{Y(mx*fr):.1f}" stroke="{cor_grade()}"/><text x="{L-4}" y="{Y(mx*fr)+3.5:.1f}" text-anchor="end" class="sv-ax" style="font-size:10px">{nf(mx*fr,0)}</text>')
+    mt = []
+    for i, (d, (a, b, m)) in enumerate(zip(dias, v)):
+        x = L + i * bw + bw * .18; w = bw * .64; foco = d == DIA and MODO == 'diario'
+        s.append(f'<rect x="{x:.1f}" y="{Y(a):.1f}" width="{w:.1f}" height="{Y(0)-Y(a):.1f}" rx="1.2" fill="url(#{"vmf" if foco else "vm"}{u})"/>'
+                 f'<line x1="{x:.1f}" x2="{x+w:.1f}" y1="{Y(a):.1f}" y2="{Y(a):.1f}" stroke="{c}" stroke-width="1.2"/>')
+        if b > 0: s.append(f'<rect x="{x:.1f}" y="{Y(a+b):.1f}" width="{w:.1f}" height="{max(Y(a)-Y(a+b)-1,.8):.1f}" rx="1.2" fill="{mix(CORTE,32)}"/>')
+        if m: mt.append((x + w / 2, Y(m)))
+    if mt: s.append(f'<path d="M {" L ".join(f"{x:.1f} {y:.1f}" for x, y in mt)}" fill="none" stroke="{mix(T2, 70)}" stroke-width="1.2"/>')
+    s.append(f'<line x1="{L}" x2="{W-4}" y1="{Y(0):.1f}" y2="{Y(0):.1f}" stroke="{BORDA}"/>')
+    s.append(f'<text x="{L}" y="{H-3}" class="sv-ax" style="font-size:10px">{int(dias[0][8:])}</text><text x="{W-4}" y="{H-3}" text-anchor="end" class="sv-ax" style="font-size:10px">{int(dias[-1][8:])}</text>')
     tg = sum(a for a, _, _ in v); tc = sum(b for _, b, _ in v)
     return (f'<div class="mu"><div class="mu-t"><b style="color:{rot(c)}">{u}</b><span>{nf(tg,2)} MWh · impedido {nf(tc,2)}</span></div>'
             f'<svg viewBox="0 0 {W} {H}" style="width:100%;height:auto;display:block">{"".join(s)}</svg></div>')
 
 CSS += f""".grade{{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 18px}} .mu-t{{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}}
-.mu-t b{{font-size:16px}} .mu-t span{{font-size:12px;color:{T3}}}"""
+.mu{{border:1px solid {BORDA};border-radius:8px;padding:8px 10px 4px}} .leg.lg-g{{justify-content:flex-start;font-size:12.5px}} .mu-t b{{font-size:16px}} .mu-t span{{font-size:12px;color:{T3}}}"""
 
 def painel_curva_dia(dia):
     svg, resumo, pico = curva_dia(dia)
@@ -568,14 +669,14 @@ def painel_curva_dia(dia):
                + (f'<span style="color:{rot(CORTE)}">━</span> limite das ordens (Iqony) · <span style="color:{rot(CORTE)}">▮</span> período sob ordem · ' if dg else '')
                + f'<span style="color:{rot(IRR)}">■</span> irradiação</small>')
         sub_u = 'MW a cada 30 min · faixa lilás = ordens do ONS (Iqony) no conjunto' if dg else 'MW a cada 30 min'
-    return (f'<div class="pn"><div class="pt"><h2>Curva do dia {ddmm(dia)} · Complexo</h2>{leg}</div>{svg}'
-            f'<div class="leg" style="justify-content:flex-start">{resumo} · pico de {nf(pico,1)} MW · medição de 30 min</div></div>'
+    return (f'<div class="pn"><div class="pt"><h2>Curva do dia {ddmm(dia)} · Complexo</h2></div>{svg}<div class="leg lg-g">{leg}</div>'
+            f'<div class="leg" style="justify-content:flex-start;margin-top:6px">{resumo} · pico de {nf(pico,1)} MW · medição de 30 min</div></div>'
             f'<div class="pn"><div class="pt"><h2>Curva do dia por usina</h2><small>{sub_u}</small></div>'
             f'<div class="grade">{"".join(mini_ufv(u, dia) for u in US)}</div></div>')
 
 def painel_mes_ufv(dias, titulo):
     return (f'<div class="pn"><div class="pt"><h2>{titulo}</h2><small><span style="color:{rot(T3)}">■</span> geração por dia (cor da usina) · '
-            f'<span style="color:{rot(CORTE)}">■</span> impedido pelo ONS, rateio por usina</small></div><div class="grade">{"".join(mes_ufv(u, dias) for u in US)}</div></div>')
+            f'<span style="color:{rot(CORTE)}">■</span> impedido pelo ONS, rateio por usina · ━ meta do dia</small></div><div class="grade">{"".join(mes_ufv(u, dias) for u in US)}</div></div>')
 
 def card_limitado(dia, o):
     """o valor do ONS quando ele apurou energia; senão, a estimativa do SIGO, dita como estimativa"""
@@ -653,7 +754,7 @@ if MODO == 'diario':
  {card_p50(dias_mes, cx['tot'], imp_mes)}
 </div>
 {painel_curva_dia(DIA)}
-<div class="pn"><div class="pt"><h2>Dia a dia de {MES_NOME} · Complexo</h2>{LEG}</div>{barras_ger_irr(dias_mes)}</div>
+<div class="pn"><div class="pt"><h2>Dia a dia de {MES_NOME} · Complexo</h2></div>{barras_ger_irr(dias_mes)}<div class="leg lg-g">{LEG}</div></div>
 {painel_mes_ufv(dias_mes, f'Dia a dia de {MES_NOME} por usina')}
 <div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'Dia {ddmm(DIA)}', b_d), (f'Mês até {ddmm(DIA)}', b_m)]) if ONS_EST == 'publicado' else bench([(f'Mês até {ddmm(ULT_ONS)}', b_m)]) if ULT_ONS else SEM_MES_ONS}</div>
 {painel_motivo([(f'Dia {ddmm(DIA)}', [DIA]), (f'Mês até {ddmm(DIA)}', dias_mes)] if ONS_EST == 'publicado' else [(f'Mês até {ddmm(ULT_ONS)}', dias_mes)] if ULT_ONS else [])}
@@ -694,7 +795,7 @@ else:
  {kpi(COR['PPA'],'PPA no mês',nf(pp['tot'],2),'MWh',f'{nf(pp["pct"],1)}% da meta')}
  {card_p50(dias_mes, cx['tot'], imp_mes)}
 </div>
-<div class="pn"><div class="pt"><h2>Dia a dia de {MES_NOME} · Complexo</h2>{LEG}</div>{barras_ger_irr(dias_mes)}</div>
+<div class="pn"><div class="pt"><h2>Dia a dia de {MES_NOME} · Complexo</h2></div>{barras_ger_irr(dias_mes)}<div class="leg lg-g">{LEG}</div></div>
 {painel_mes_ufv(dias_mes, f'Dia a dia de {MES_NOME} por usina')}
 <div class="pn"><div class="pt"><h2>Corte do ONS · comparação regional</h2><small>energia impedida ÷ (gerada + impedida)</small></div>{bench([(f'{MES_NOME.capitalize()}', b_m), (f'Mês anterior ({mant:%m/%Y})', corte_bench(dias_ant))])}</div>
 {painel_motivo([(MES_NOME.capitalize(), dias_mes), (f'Mês anterior ({mant:%m/%Y})', dias_ant)])}

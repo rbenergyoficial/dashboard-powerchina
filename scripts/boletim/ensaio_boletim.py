@@ -318,7 +318,11 @@ SLOTS_ = [f'{h:02d}:{m:02d}' for h in range(5, 19) for m in (0, 30)]
 # o PR publicado). Antes: ba082ac9e458… (01/11) e dab4af05b6b0… (02/11).
 # boletim-p75 (23/11/2026): medido de novo com o P75 no cartão do estudo ("P50 · P75 · P90 do projeto"). Contra o HEAD b499fee mudam só 2
 # trechos por dia: o título do cartão e o subtítulo (+ "P75 67,1%" em 01/11, "P75 68,7%" em 02/11). Antes: fbb37ae59671… e 77311277f190….
-OURO_VIS = {'2026-11-01': '8ada61b930a43bc963c6f2ef0ea9f655a02fbbdec4b5b085f3a445e5a5031137', '2026-11-02': '3a615d1780896316a09502671ee9458fbdbbc3890ee0c5c310d11bfb9c0c53de'}
+# boletim-graficos-grafana (25/11/2026): medido de novo com a curva do dia e o dia a dia no acabamento do Grafana. Contra o HEAD bdfc8a5
+# muda só texto de EIXO e de destaque, nenhum número do dado: a escala com unidade ("0 MW"…"300 MW", "MWh", "kWh/m²", "W/m²"), as horas
+# e a escala das miniaturas ("08h", "12h", "16h" e a meia/altura cheia), o balão do pico ("300,0 MW · 11:30") e do dia ("2.000 MWh"),
+# a legenda da curva que desce para baixo do gráfico e "· ━ meta do dia" na legenda das usinas. Antes: 8ada61b930a4… e 3a615d178089….
+OURO_VIS = {'2026-11-01': 'dca9aa9d379822fe690425e9ab431ed50d066f3454f433b1672c4079e96f4f9e', '2026-11-02': '8ff756114266ce1d52492a09b496803318fd38560600333c4bb3375727eacd39'}
 _EV_BOM = [['2026-11-02', '09:00:00', 'limite', 120, 'ENE', 'ENE_FREQ', 'COSR-NE', 'rdo', None, None],
            ['2026-11-02', '13:00:00', 'fim', None, None, None, 'COSR-NE', 'rdo', None, None],
            ['2026-11-03', '10:50:00', 'limite', 282, 'ENE', 'FLUXO', 'COSR-NE', 'rdo', None, None],
